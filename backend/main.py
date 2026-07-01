@@ -58,19 +58,57 @@ _store_lock = threading.Lock()
 RESUME_STATE_FILE = os.path.join(OUTPUT_DIR, "resume_state.json")
 
 # Helpers to manage state safely
+from services.auth import update_user_resume_data
+
 def get_session_data(token: Optional[str]) -> dict:
     key = token or "guest"
     with _store_lock:
         data = _session_store.get(key)
         if data and data.get("data"):
             return data
-        # Fallback to guest if user session is empty
+            
+    # Try fetching from Supabase if token exists
+    if token:
+        user = get_user_by_token(token)
+        if user and user.get("resume_data"):
+            try:
+                resume_dict = json.loads(user["resume_data"])
+                # Recover master_latex locally if exists
+                path = ""
+                master_latex = user.get("master_latex", "")
+                if master_latex:
+                    path = os.path.join(UPLOAD_DIR, f"{user['id']}_master.tex")
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.write(master_latex)
+                
+                with _store_lock:
+                    _session_store[token] = {"data": resume_dict, "path": path}
+                return {"data": resume_dict, "path": path}
+            except Exception as e:
+                print(f"Failed to load resume from Supabase user session: {e}")
+
+    # Fallback to guest if user session is empty
+    with _store_lock:
         return _session_store.get("guest", {"data": {}, "path": ""})
 
 def set_session_data(token: Optional[str], data: dict, path: str):
     key = token or "guest"
     with _store_lock:
         _session_store[key] = {"data": data, "path": path}
+        
+    if token:
+        # Load master latex if available
+        master_latex = ""
+        if path and os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    master_latex = f.read()
+            except Exception as e:
+                print(f"Failed to read master latex: {e}")
+                
+        user = get_user_by_token(token)
+        if user:
+            update_user_resume_data(user["id"], data, master_latex)
 
 # Load stored resume state if exists at startup (initialized to the guest session)
 if os.path.exists(RESUME_STATE_FILE):
