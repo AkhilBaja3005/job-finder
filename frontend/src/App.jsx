@@ -52,11 +52,12 @@ function App() {
   const [tailoredResumeData, setTailoredResumeData] = useState(null);
   const [directMode, setDirectMode] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
-  const [statusLogs, setStatusLogs] = useState([]);
+  const [statusLogs, setStatusLogs] = useState([]); // each entry: { message, ts }
   const [activeTab, setActiveTab] = useState('preview');
   const [keepOriginalMode, setKeepOriginalMode] = useState(false);
   const [rejectionWarning, setRejectionWarning] = useState(null);
   const [forceTailorEnabled, setForceTailorEnabled] = useState(false);
+  const [coverLetterCopied, setCoverLetterCopied] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
 
   const [user, setUser] = useState(null);
@@ -248,6 +249,7 @@ function App() {
     setTailoredResumeData(null);
     setKeepOriginalMode(false);
     setStatusLogs([]);
+    setCompany('');
     setStatusMessage('Connecting to AI agent pipeline...');
 
     try {
@@ -292,7 +294,8 @@ function App() {
             const event = JSON.parse(line);
             if (event.type === 'log') {
               setStatusMessage(event.message);
-              setStatusLogs((prev) => [...prev, event.message]);
+              const ts = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
+              setStatusLogs((prev) => [...prev, { message: event.message, ts }]);
             } else if (event.type === 'error') {
               throw new Error(event.message);
             } else if (event.type === 'result') {
@@ -352,7 +355,8 @@ function App() {
     setLoading(true);
     setRejectionWarning(null);
     setStatusMessage('Tailoring resume LaTeX and running recruiter loop...');
-    setStatusLogs((prev) => [...prev, '🤖 Requesting LaTeX tailoring and page-metric checks...']);
+    const _ts0 = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
+    setStatusLogs((prev) => [...prev, { message: '🤖 Requesting LaTeX tailoring and page-metric checks...', ts: _ts0 }]);
 
     try {
       const headers = { 'Content-Type': 'application/json' };
@@ -397,10 +401,12 @@ function App() {
             const event = JSON.parse(line);
             if (event.type === 'log') {
               setStatusMessage(event.message);
-              setStatusLogs((prev) => [...prev, event.message]);
+              const ts2 = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
+              setStatusLogs((prev) => [...prev, { message: event.message, ts: ts2 }]);
             } else if (event.type === 'rejection_warning') {
               setRejectionWarning(event.message);
-              setStatusLogs((prev) => [...prev, `❌ Warning Paused: ${event.message}`]);
+              const tsW = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
+              setStatusLogs((prev) => [...prev, { message: `❌ Warning Paused: ${event.message}`, ts: tsW }]);
               setStatusMessage('Process paused: Candidate may not be a fit.');
               reader.cancel(); // Terminate the stream cleanly
               return;
@@ -437,7 +443,8 @@ function App() {
     } catch (error) {
       console.error(error);
       setStatusMessage(`Error: ${error.message}`);
-      setStatusLogs((prev) => [...prev, `❌ Pipeline Interrupted: ${error.message}`]);
+      const tsE = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
+      setStatusLogs((prev) => [...prev, { message: `❌ Pipeline Interrupted: ${error.message}`, ts: tsE }]);
     } finally {
       setLoading(false);
     }
@@ -472,7 +479,8 @@ function App() {
   const generateTailoredPdf = async (data) => {
     setLoading(true);
     setStatusMessage('Compiling tailored PDF resume using backend compiler...');
-    setStatusLogs((prev) => [...prev, '🤖 Starting LaTeX PDF compilation...']);
+    const tsC0 = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
+    setStatusLogs((prev) => [...prev, { message: '🤖 Starting LaTeX PDF compilation...', ts: tsC0 }]);
     try {
       const response = await fetch(`${API_BASE}/generate_tailored_resume`, {
         method: 'POST',
@@ -481,7 +489,8 @@ function App() {
       });
       if (response.ok) {
         setStatusMessage('Resume compiled successfully!');
-        setStatusLogs((prev) => [...prev, '✅ Tectonic LaTeX compilation completed.']);
+        const tsC1 = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
+        setStatusLogs((prev) => [...prev, { message: '✅ Tectonic LaTeX compilation completed.', ts: tsC1 }]);
       } else {
         const err = await response.json();
         throw new Error(err.detail || 'Failed to compile');
@@ -489,7 +498,8 @@ function App() {
     } catch (err) {
       console.error('Failed to compile tailored PDF', err);
       setStatusMessage(`Compilation failed: ${err.message}`);
-      setStatusLogs((prev) => [...prev, `⚠️ Compilation error: ${err.message}`]);
+      const tsC2 = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
+      setStatusLogs((prev) => [...prev, { message: `⚠️ Compilation error: ${err.message}`, ts: tsC2 }]);
     } finally {
       setLoading(false);
     }
@@ -682,35 +692,42 @@ function App() {
       ) : (
         <div className="dashboard-grid">
           {/* Left Control Panel */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+
+            {/* Profile header row */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2>Active Profile</h2>
-              <button 
-                className="btn btn-secondary" 
-                style={{ padding: '2px 8px', fontSize: '0.75rem' }} 
+              <h2 style={{ marginBottom: 0 }}>Active Profile</h2>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
                 onClick={() => setConfigStepActive(true)}
               >
-                ⚙️ Configs
+                ⚙️ Settings
               </button>
             </div>
-            
-            <div style={{ background: 'var(--panel-bg)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                Master Resume Profile:
-              </div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: resumeData ? 'var(--accent-green)' : 'var(--accent-red)', marginTop: '4px' }}>
-                {resumeData ? `👤 ${resumeData.name}` : '❌ No Resume Loaded'}
-              </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-                API Key: <span style={{ fontFamily: 'monospace' }}>{geminiApiKey ? '••••••••' + geminiApiKey.slice(-4) : 'Not Configured'}</span>
+
+            {/* Profile status card */}
+            <div className="profile-status">
+              <div className="profile-avatar">👤</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: resumeData ? '#fff' : 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {resumeData ? resumeData.name : 'No Resume Loaded'}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: resumeData ? 'var(--accent-green)' : 'var(--accent-red)', marginTop: '2px' }}>
+                  {resumeData ? '✓ Profile ready' : '↑ Upload a resume to get started'}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
+                  API Key: {geminiApiKey ? '••••••' + geminiApiKey.slice(-4) : 'Not configured'}
+                </div>
               </div>
             </div>
 
-            <h2>Target Application Details</h2>
-            <div>
+            <div className="section-label">Target Job</div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
               <input
                 type="text"
-                placeholder="Job Application URL (LinkedIn, Indeed, etc.)"
+                placeholder="Job Application URL (LinkedIn, Indeed…)"
                 value={jobUrl}
                 onChange={(e) => setJobUrl(e.target.value)}
                 onBlur={handleUrlBlur}
@@ -722,64 +739,91 @@ function App() {
                 onChange={(e) => setJobTitle(e.target.value)}
               />
               <textarea
-                placeholder="Paste Job Description (Optional if URL provided)"
+                placeholder="Paste Job Description (optional if URL provided)"
                 rows="6"
                 value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
               />
-              <button className="btn" style={{ width: '100%' }} onClick={handleAnalyzeJob} disabled={loading}>
-                {loading ? 'Analyzing...' : 'Analyze & Tailor'}
+              <button className="btn" style={{ width: '100%', marginTop: '4px' }} onClick={handleAnalyzeJob} disabled={loading}>
+                {loading ? '⏳ Analyzing…' : '⚡ Analyze & Tailor Resume'}
               </button>
             </div>
           </div>
 
           {/* Right Analysis Panel */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <h2>Analysis & Preview</h2>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <h2 style={{ marginBottom: 0 }}>Analysis & Preview</h2>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             {loading ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '15px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: 'bold' }}>
-                  <svg style={{ animation: 'spin 1s linear infinite', width: '20px', height: '20px' }} viewBox="0 0 24 24" fill="none">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: '700' }}>
+                  <svg style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" style={{ opacity: 0.25 }} />
                     <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  <span>Agent Pipeline Executing...</span>
+                  <span>Agent Pipeline Executing…</span>
                 </div>
-                <div style={{
-                  backgroundColor: '#1A202C',
-                  padding: '15px',
-                  borderRadius: '8px',
-                  fontFamily: 'monospace',
-                  fontSize: '0.82rem',
-                  maxHeight: '280px',
-                  overflowY: 'auto',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  border: '1px solid #2D3748',
-                  color: '#E2E8F0',
-                  textAlign: 'left'
-                }}>
-                  {statusLogs.map((log, index) => {
-                    let color = '#CBD5E0';
-                    if (log.includes('✅')) color = '#48BB78';
-                    if (log.includes('⚠️')) color = '#ECC94B';
-                    if (log.includes('🤖') || log.includes('👀') || log.includes('📐')) color = '#63B3ED';
-                    return (
-                      <div key={index} style={{ color, whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
-                        {log}
-                      </div>
-                    );
-                  })}
+                <div className="log-terminal">
+                  <div className="log-terminal-header">
+                    <div className="log-terminal-dots">
+                      <div className="log-terminal-dot" style={{ background: '#FF5F57' }} />
+                      <div className="log-terminal-dot" style={{ background: '#FFBD2E' }} />
+                      <div className="log-terminal-dot" style={{ background: '#28CA41' }} />
+                    </div>
+                    📋 PIPELINE LOGS
+                  </div>
+                  <div className="log-terminal-body">
+                    {statusLogs.map((entry, index) => {
+                      const msg = typeof entry === 'string' ? entry : entry.message;
+                      const ts = typeof entry === 'object' ? entry.ts : '';
+                      let color = '#CBD5E0';
+                      if (msg.includes('✅')) color = '#48BB78';
+                      if (msg.includes('⚠️') || msg.includes('❌')) color = '#ECC94B';
+                      if (msg.includes('🤖') || msg.includes('👀') || msg.includes('📐')) color = '#63B3ED';
+                      return (
+                        <div key={index} className="log-entry">
+                          <span className="log-entry-ts">{ts}</span>
+                          <span className="log-entry-msg" style={{ color }}>{msg}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ) : !analysisResult ? (
-              <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '60px 0' }}>
-                Upload your resume and input job details to start matching.
+              <div className="empty-state">
+                <div className="empty-state-icon">🎯</div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>Ready to find your fit</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Upload your resume and paste a job description to get your ATS match score and a tailored resume in seconds.</div>
+                </div>
+                <div className="empty-state-steps">
+                  <div className="empty-step">
+                    <div className="empty-step-num">1</div>
+                    <div className="empty-step-label">Upload master resume</div>
+                  </div>
+                  <div className="empty-step">
+                    <div className="empty-step-num">2</div>
+                    <div className="empty-step-label">Paste job URL or description</div>
+                  </div>
+                  <div className="empty-step">
+                    <div className="empty-step-num">3</div>
+                    <div className="empty-step-label">Get tailored resume & score</div>
+                  </div>
+                </div>
               </div>
             ) : (
               <div>
+                {/* ── Job context banner ── */}
+                {(jobTitle || company) && (
+                  <div className="job-banner" style={{ animation: 'slideDown 0.4s ease both' }}>
+                    <span style={{ fontSize: '0.85rem' }}>🎯</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Targeting:</span>
+                    {jobTitle && <span className="job-banner-chip job-banner-role">{jobTitle}</span>}
+                    {company && <span className="job-banner-chip job-banner-company">{company}</span>}
+                  </div>
+                )}
+
                 {/* ── Hybrid ATS Score Dashboard ── */}
                 <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
@@ -801,33 +845,40 @@ function App() {
                         {analysisResult.match_analysis.overall_score}%
                       </span>
                     </div>
-                    <span style={{ marginTop: '8px', fontWeight: '600' }}>Overall Match</span>
-                    <span style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '2px' }}>
+                    <span style={{ marginTop: '8px', fontWeight: '600', fontSize: '0.85rem' }}>Overall Match</span>
+                    <span style={{ fontSize: '0.68rem', opacity: 0.45, marginTop: '2px' }}>
                       40% skills · 35% exp · 25% role
                     </span>
                   </div>
 
                   {/* Score breakdown bars */}
-                  <div style={{ flex: 1, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '12px', justifyContent: 'center' }}>
+                  <div style={{ flex: 1, minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '13px', justifyContent: 'center' }}>
                     {[
                       { label: 'Skills Match', score: analysisResult.match_analysis.skills_score, method: 'Deterministic', detail: analysisResult.match_analysis.keyword_stats?.required_matched ? `${analysisResult.match_analysis.keyword_stats.required_matched} keywords` : null },
                       { label: 'Experience', score: analysisResult.match_analysis.experience_score, method: 'Deterministic', detail: analysisResult.match_analysis.keyword_stats?.candidate_years ? `${analysisResult.match_analysis.keyword_stats.candidate_years}y / ${analysisResult.match_analysis.keyword_stats.required_years || '?'}y req` : null },
                       { label: 'Role Fit', score: analysisResult.match_analysis.role_fit_score, method: 'AI Semantic', detail: 'Domain · Seniority · Industry' },
-                    ].map(({ label, score, method, detail }) => (
+                    ].map(({ label, score, method, detail }, i) => (
                       <div key={label}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{label}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '0.7rem', padding: '1px 6px', borderRadius: '999px', background: method === 'Deterministic' ? 'rgba(100,220,130,0.15)' : 'rgba(120,120,255,0.15)', color: method === 'Deterministic' ? '#64dc82' : '#9090ff' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                          <span style={{ fontSize: '0.83rem', fontWeight: 600 }}>{label}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                            <span style={{ fontSize: '0.68rem', padding: '2px 7px', borderRadius: '999px', background: method === 'Deterministic' ? 'rgba(100,220,130,0.12)' : 'rgba(120,120,255,0.12)', color: method === 'Deterministic' ? '#64dc82' : '#9090ff', fontWeight: 600 }}>
                               {method}
                             </span>
-                            <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{score}%</span>
+                            <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>{score}%</span>
                           </div>
                         </div>
-                        <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '6px', height: '6px', overflow: 'hidden' }}>
-                          <div style={{ width: `${score}%`, height: '100%', borderRadius: '6px', background: score >= 80 ? 'var(--accent-green)' : score >= 55 ? 'var(--accent-primary)' : '#e57373', transition: 'width 0.6s ease' }} />
+                        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '6px', height: '7px', overflow: 'hidden' }}>
+                          <div
+                            className="score-bar-fill"
+                            style={{
+                              width: `${score}%`,
+                              background: score >= 80 ? 'var(--accent-green)' : score >= 55 ? 'var(--accent-primary)' : '#e57373',
+                              animationDelay: `${i * 0.12}s`
+                            }}
+                          />
                         </div>
-                        {detail && <span style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '2px', display: 'block' }}>{detail}</span>}
+                        {detail && <span style={{ fontSize: '0.68rem', opacity: 0.45, marginTop: '3px', display: 'block' }}>{detail}</span>}
                       </div>
                     ))}
                   </div>
@@ -859,52 +910,31 @@ function App() {
 
                 {/* Workspace Panels or Tailor Resume Decision Banner */}
                 {rejectionWarning ? (
-                  <div style={{
-                    marginTop: '30px',
-                    padding: '30px',
-                    borderRadius: '12px',
-                    backgroundColor: 'rgba(229, 115, 115, 0.08)',
-                    border: '1.5px dashed #e57373',
-                    textAlign: 'center',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '15px'
-                  }}>
-                    <h3 style={{ margin: 0, color: '#e57373' }}>⚠️ Candidate Suitability Warning</h3>
-                    <p style={{ maxWidth: '600px', margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
-                      The AI Recruiter checked your resume against the JD requirements and flagged potential mismatches after 3 checks. 
-                      You can review the specific feedback below:
+                  <div className="rejection-warning-panel">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+                      <h3 style={{ margin: 0, color: 'var(--accent-amber)', fontSize: '1rem' }}>Candidate Suitability Warning</h3>
+                    </div>
+                    <p style={{ maxWidth: '600px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
+                      The AI Recruiter flagged potential mismatches after 3 checks. Review the feedback below before proceeding.
                     </p>
-                    <div style={{
-                      backgroundColor: 'rgba(0,0,0,0.15)',
-                      padding: '15px',
-                      borderRadius: '8px',
-                      fontSize: '0.85rem',
-                      fontFamily: 'monospace',
-                      textAlign: 'left',
-                      color: '#E2E8F0',
-                      maxWidth: '650px',
-                      width: '100%',
-                      border: '1px solid rgba(255,255,255,0.05)',
-                      whiteSpace: 'pre-wrap'
-                    }}>
+                    <div className="rejection-feedback-box">
                       {rejectionWarning}
                     </div>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
-                      Would you still like to proceed and generate the tailored resume files anyway?
+                    <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: 0 }}>
+                      Would you still like to proceed and generate the tailored resume anyway?
                     </p>
-                    <div style={{ display: 'flex', gap: '15px', marginTop: '5px' }}>
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
                       <button
                         className="btn"
-                        style={{ padding: '10px 24px', fontWeight: 'bold', background: 'var(--accent-primary)', color: '#fff', cursor: 'pointer' }}
+                        style={{ padding: '10px 22px', fontWeight: 700, background: 'linear-gradient(135deg,#F59E0B,#D97706)', boxShadow: '0 4px 14px rgba(245,158,11,0.3)' }}
                         onClick={() => handleGenerateTailoredResume(true)}
                       >
                         🚀 Yes, Generate Anyway
                       </button>
                       <button
                         className="btn btn-secondary"
-                        style={{ padding: '10px 24px', cursor: 'pointer' }}
+                        style={{ padding: '10px 22px' }}
                         onClick={() => {
                           setRejectionWarning(null);
                           setKeepOriginalMode(true);
@@ -956,51 +986,66 @@ function App() {
                 ) : (
                   <div className="workspace">
                     <div className="workspace-panel">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <div className="mode-toggle" style={{ margin: 0, padding: '2px' }}>
+                      <div className="panel-toolbar">
+                        <div className="mode-toggle">
                           <button
                             className={`mode-btn ${activeTab === 'preview' ? 'active' : ''}`}
-                            style={{ padding: '4px 10px', fontSize: '0.8rem' }}
                             onClick={() => setActiveTab('preview')}
                           >
                             Preview
                           </button>
                           <button
                             className={`mode-btn ${activeTab === 'latex' ? 'active' : ''}`}
-                            style={{ padding: '4px 10px', fontSize: '0.8rem' }}
                             onClick={() => setActiveTab('latex')}
                           >
-                            LaTeX Source
+                            LaTeX
                           </button>
                         </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button className="btn" style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'var(--accent-primary)', color: '#fff' }} onClick={openInOverleaf} disabled={loading}>
-                            Open in Overleaf
-                          </button>
-                        </div>
+                        <button className="btn-overleaf" onClick={openInOverleaf} disabled={loading}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z"/></svg>
+                          Open in Overleaf
+                        </button>
                       </div>
 
                       {activeTab === 'preview' ? (
                         <div className="panel-content">
-                          <h4 style={{ color: 'var(--accent-primary)' }}>{(tailoredResumeData || {}).name || ''}</h4>
-                          <p style={{ fontStyle: 'italic', marginBottom: '10px' }}>
-                            {(tailoredResumeData || {}).summary || ''}
-                          </p>
-                          <strong>Skills: </strong>
-                          <p style={{ marginBottom: '10px' }}>{((tailoredResumeData || {}).skills || []).join(', ')}</p>
-                          <strong>Experience:</strong>
-                          {((tailoredResumeData || {}).experience || []).map((exp, idx) => (
-                            <div key={idx} style={{ marginBottom: '10px' }}>
-                              <div>
-                                <strong>{exp.role}</strong> at {exp.company}
-                              </div>
-                              <ul style={{ paddingLeft: '15px' }}>
-                                {(exp.description || []).map((bullet, bidx) => (
-                                  <li key={bidx}>{bullet}</li>
+                          <div className="resume-preview">
+                            <div className="resume-preview-name">{(tailoredResumeData || {}).name || ''}</div>
+                            {(tailoredResumeData || {}).summary && (
+                              <p style={{ textAlign: 'center', fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '4px', lineHeight: 1.6 }}>
+                                {(tailoredResumeData || {}).summary}
+                              </p>
+                            )}
+                            <hr className="resume-preview-divider" />
+                            {((tailoredResumeData || {}).skills || []).length > 0 && (
+                              <>
+                                <div className="resume-section-title">Skills</div>
+                                <div className="resume-skills-grid">
+                                  {((tailoredResumeData || {}).skills || []).map((skill, i) => (
+                                    <span key={i} className="resume-skill-chip">{skill}</span>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                            {((tailoredResumeData || {}).experience || []).length > 0 && (
+                              <>
+                                <div className="resume-section-title">Experience</div>
+                                {((tailoredResumeData || {}).experience || []).map((exp, idx) => (
+                                  <div key={idx} className="resume-exp-item">
+                                    <div className="resume-exp-header">
+                                      <span className="resume-exp-role">{exp.role}</span>
+                                      <span className="resume-exp-company">@ {exp.company}</span>
+                                    </div>
+                                    <ul className="resume-exp-bullets">
+                                      {(exp.description || []).map((bullet, bidx) => (
+                                        <li key={bidx}>{bullet}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
                                 ))}
-                              </ul>
-                            </div>
-                          ))}
+                              </>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <div className="panel-content" style={{ position: 'relative', background: '#090D1A' }}>
@@ -1022,37 +1067,53 @@ function App() {
                     </div>
 
                     <div className="workspace-panel">
-                      <h3>Generated Cover Letter</h3>
+                      <div className="panel-toolbar">
+                        <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Generated Cover Letter</h3>
+                        <button
+                          className="btn btn-secondary"
+                          style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                          onClick={() => {
+                            navigator.clipboard.writeText(analysisResult.cover_letter || '');
+                            setCoverLetterCopied(true);
+                            setTimeout(() => setCoverLetterCopied(false), 2000);
+                          }}
+                        >
+                          {coverLetterCopied ? '✓ Copied!' : '📋 Copy'}
+                        </button>
+                      </div>
                       <div className="panel-content" style={{ whiteSpace: 'pre-wrap' }}>
                         {analysisResult.cover_letter}
                       </div>
                     </div>
                   </div>
                 )}
-                {/* Execution logs terminal rendering (always visible at bottom of dashboard after analysis) */}
+                {/* Execution logs terminal (always visible after analysis) */}
                 {statusLogs.length > 0 && (
-                  <div style={{
-                    marginTop: '25px',
-                    padding: '16px 20px',
-                    backgroundColor: 'rgba(0, 0, 0, 0.25)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '12px',
-                    fontFamily: 'monospace',
-                    fontSize: '0.82rem',
-                    color: '#E2E8F0',
-                    maxHeight: '180px',
-                    overflowY: 'auto',
-                    textAlign: 'left',
-                    boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.4)'
-                  }}>
-                    <div style={{ color: 'var(--accent-primary)', fontWeight: 'bold', marginBottom: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px' }}>
-                      📋 Pipeline Execution Logs
-                    </div>
-                    {statusLogs.map((log, index) => (
-                      <div key={index} style={{ marginBottom: '4px', lineHeight: '1.45', opacity: log.includes('⚠️') ? 0.95 : 0.75 }}>
-                        {log}
+                  <div className="log-terminal" style={{ marginTop: '22px' }}>
+                    <div className="log-terminal-header">
+                      <div className="log-terminal-dots">
+                        <div className="log-terminal-dot" style={{ background: '#FF5F57' }} />
+                        <div className="log-terminal-dot" style={{ background: '#FFBD2E' }} />
+                        <div className="log-terminal-dot" style={{ background: '#28CA41' }} />
                       </div>
-                    ))}
+                      📋 PIPELINE EXECUTION LOGS
+                    </div>
+                    <div className="log-terminal-body">
+                      {statusLogs.map((entry, index) => {
+                        const msg = typeof entry === 'string' ? entry : entry.message;
+                        const ts = typeof entry === 'object' ? entry.ts : '';
+                        let color = '#CBD5E0';
+                        if (msg.includes('✅')) color = '#48BB78';
+                        if (msg.includes('⚠️') || msg.includes('❌')) color = '#ECC94B';
+                        if (msg.includes('🤖') || msg.includes('👀') || msg.includes('📐')) color = '#63B3ED';
+                        return (
+                          <div key={index} className="log-entry">
+                            <span className="log-entry-ts">{ts}</span>
+                            <span className="log-entry-msg" style={{ color, opacity: 0.9 }}>{msg}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
