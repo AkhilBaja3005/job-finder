@@ -821,6 +821,123 @@ async def open_in_overleaf(request: OverleafRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+def _build_original_latex(resume_data: dict) -> str:
+    """Build a clean LaTeX resume from raw parsed resume JSON — no AI tailoring."""
+    def esc(s: str) -> str:
+        """Escape special LaTeX characters."""
+        if not s:
+            return ""
+        for char, rep in [("&", r"\&"), ("%", r"\%"), ("$", r"\$"), ("#", r"\#"),
+                           ("_", r"\_"), ("{", r"\{"), ("}", r"\}"), ("~", r"\textasciitilde{}"),
+                           ("^", r"\^{}"), ("\\", r"\textbackslash{}")]:
+            s = s.replace(char, rep)
+        return s
+
+    name = esc(resume_data.get("name", ""))
+    email = esc(resume_data.get("email", ""))
+    phone = esc(resume_data.get("phone", ""))
+    linkedin = esc(resume_data.get("linkedin", ""))
+    summary = esc(resume_data.get("summary", ""))
+    skills = resume_data.get("skills", [])
+    experience = resume_data.get("experience", [])
+    education = resume_data.get("education", [])
+
+    contact_parts = [p for p in [email, phone, linkedin] if p]
+    contact_line = " $\\vert$ ".join(contact_parts)
+
+    # Skills block
+    skills_str = ""
+    if skills:
+        # Chunk into rows of 6
+        chunks = [skills[i:i+6] for i in range(0, len(skills), 6)]
+        rows = []
+        for chunk in chunks:
+            rows.append(f"    \\textbf{{Skills}} & {esc(', '.join(chunk))} \\\\")
+        skills_str = f"""
+\\begin{{rSection}}{{Technical Skills}}
+\\begin{{tabular}}{{ @{{}} >{{\\bfseries}}l @{{\\hspace{{6ex}}}} l }}
+{chr(10).join(rows)}
+\\end{{tabular}}
+\\end{{rSection}}"""
+
+    # Experience block
+    exp_str = ""
+    if experience:
+        exp_blocks = []
+        for exp in experience:
+            company = esc(exp.get("company", ""))
+            role = esc(exp.get("role", ""))
+            dates = esc(exp.get("dates", exp.get("date", exp.get("duration", ""))))
+            bullets = exp.get("description", [])
+            bullet_lines = "\n".join([f"    \\item {esc(b)}" for b in bullets if b])
+            exp_blocks.append(
+                f"  \\begin{{rSubsection}}{{{company}}}{{{dates}}}{{{role}}}{{}}\n{bullet_lines}\n  \\end{{rSubsection}}"
+            )
+        exp_str = f"""
+\\begin{{rSection}}{{Professional Experience}}
+{chr(10).join(exp_blocks)}
+\\end{{rSection}}"""
+
+    # Education block
+    edu_str = ""
+    if education:
+        edu_blocks = []
+        for edu in education:
+            if isinstance(edu, dict):
+                institution = esc(edu.get("institution", edu.get("school", "")))
+                degree = esc(edu.get("degree", ""))
+                year = esc(str(edu.get("year", edu.get("graduation_year", ""))))
+                edu_blocks.append(f"  \\textbf{{{institution}}} \\hfill {year} \\\\\n  {degree}")
+            else:
+                edu_blocks.append(f"  {esc(str(edu))}")
+        edu_str = f"""
+\\begin{{rSection}}{{Education}}
+{chr(10).join(edu_blocks)}
+\\end{{rSection}}"""
+
+    summary_str = ""
+    if summary:
+        summary_str = f"""
+\\begin{{rSection}}{{Professional Summary}}
+{summary}
+\\end{{rSection}}"""
+
+    return f"""\\documentclass{{resume}}
+\\usepackage[left=0.4in,top=0.4in,right=0.4in,bottom=0.4in]{{geometry}}
+\\usepackage{{hyperref}}
+\\hypersetup{{hidelinks}}
+
+\\name{{{name}}}
+\\address{{{contact_line}}}
+
+\\begin{{document}}
+{summary_str}
+{skills_str}
+{exp_str}
+{edu_str}
+\\end{{document}}
+"""
+
+
+class OriginalOverleafRequest(BaseModel):
+    resume_data: dict
+    job_title: Optional[str] = ""
+    company: Optional[str] = ""
+
+@app.post("/open_original_in_overleaf")
+async def open_original_in_overleaf(request: OriginalOverleafRequest):
+    """Export the user's original (non-tailored) resume to Overleaf as LaTeX."""
+    try:
+        latex_code = _build_original_latex(request.resume_data)
+        candidate_name = request.resume_data.get("name", "")
+        url = upload_zip_to_tmpfiles(latex_code, candidate_name, request.job_title, request.company)
+        return {"url": url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 @app.get("/auth/url")
 async def auth_url():
     return {"url": get_google_auth_url()}
