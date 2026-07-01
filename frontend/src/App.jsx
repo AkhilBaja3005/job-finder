@@ -58,6 +58,7 @@ function App() {
   const [rejectionWarning, setRejectionWarning] = useState(null);
   const [forceTailorEnabled, setForceTailorEnabled] = useState(false);
   const [coverLetterCopied, setCoverLetterCopied] = useState(false);
+  const [toast, setToast] = useState(null); // { message, type: 'success'|'error'|'info' }
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
 
   const [user, setUser] = useState(null);
@@ -67,6 +68,40 @@ function App() {
 
   // Returns the current time in HH:MM:SS using the browser's local timezone
   const nowTs = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
+  // Show a transient toast for 3 seconds
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // Reset all job-related state so the user can target a new job
+  const handleNewJob = () => {
+    setJobUrl('');
+    setJobTitle('');
+    setJobDescription('');
+    setCompany('');
+    setAnalysisResult(null);
+    setTailoredResumeData(null);
+    setRejectionWarning(null);
+    setKeepOriginalMode(false);
+    setStatusLogs([]);
+    setStatusMessage('');
+    setActiveTab('preview');
+    setCoverLetterCopied(false);
+  };
+
+  // Cmd+Enter / Ctrl+Enter shortcut to trigger analysis
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !loading && resumeData) {
+        handleAnalyzeJob();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, resumeData, jobUrl, jobTitle, jobDescription]);
 
   const handleApiKeyChange = (e) => {
     const val = e.target.value;
@@ -524,8 +559,10 @@ function App() {
       const data = await response.json();
       window.open(data.url, '_blank');
       setStatusMessage('Overleaf workspace opened!');
+      showToast('✅ Overleaf opened in a new tab!', 'success');
     } catch (err) {
       setStatusMessage(`Error opening in Overleaf: ${err.message}`);
+      showToast(`❌ ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -570,21 +607,54 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Toast Notification */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '28px', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9999, padding: '12px 22px', borderRadius: '12px', fontWeight: 600,
+          fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '10px',
+          animation: 'slideDown 0.3s ease both',
+          background: toast.type === 'success' ? 'rgba(16,185,129,0.15)' : toast.type === 'error' ? 'rgba(239,68,68,0.15)' : 'rgba(99,102,241,0.15)',
+          border: `1px solid ${toast.type === 'success' ? 'rgba(16,185,129,0.4)' : toast.type === 'error' ? 'rgba(239,68,68,0.4)' : 'rgba(99,102,241,0.4)'}`,
+          color: toast.type === 'success' ? '#34D399' : toast.type === 'error' ? '#F87171' : '#A5B4FC',
+          backdropFilter: 'blur(16px)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+        }}>
+          {toast.message}
+        </div>
+      )}
+
       <header className="app-header">
         <h1 className="title">
           Resume Tailor Suite
         </h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {statusMessage && (
-            <span className="status-badge" title={statusMessage}>
-              {statusMessage.length > 50 ? `${statusMessage.substring(0, 80)}...` : statusMessage}
-            </span>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '7px',
+              padding: '5px 12px', borderRadius: '20px', maxWidth: '340px',
+              background: statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
+                ? 'rgba(239,68,68,0.1)' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
+                ? 'rgba(16,185,129,0.1)' : 'rgba(99,102,241,0.1)',
+              border: `1px solid ${
+                statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
+                ? 'rgba(239,68,68,0.25)' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
+                ? 'rgba(16,185,129,0.25)' : 'rgba(99,102,241,0.25)'}`,
+            }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0, animation: 'pulseGlow 2s infinite',
+                background: statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
+                  ? '#EF4444' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
+                  ? '#10B981' : '#6366F1'
+              }} />
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {statusMessage.length > 55 ? `${statusMessage.substring(0, 55)}…` : statusMessage}
+              </span>
+            </div>
           )}
           {user && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--accent-green)' }}>👤 {user.email}</span>
-              <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.75rem' }} onClick={handleLogout}>
-                Logout
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.82rem', color: 'var(--accent-green)', fontWeight: 500 }}>{user.email}</span>
+              <button className="btn btn-secondary" style={{ padding: '5px 11px', fontSize: '0.76rem' }} onClick={handleLogout}>
+                Sign out
               </button>
             </div>
           )}
@@ -592,14 +662,27 @@ function App() {
       </header>
 
       {!user ? (
-        <div className="login-container" style={{ maxWidth: '450px', margin: '80px auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '35px' }}>
-            <h2 style={{ textAlign: 'center', color: 'var(--accent-primary)', marginBottom: '5px' }}>Authentication Required</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center', marginBottom: '15px' }}>
-              Log in to store your profile and access user-specific tailoring configurations in the cloud.
-            </p>
+        <div className="login-container" style={{ maxWidth: '460px', margin: '70px auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '38px' }}>
+            {/* Brand mark */}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', margin: '0 auto 14px', boxShadow: '0 8px 24px rgba(99,102,241,0.3)' }}>📄</div>
+              <h2 style={{ textAlign: 'center', fontSize: '1.4rem', marginBottom: '6px' }}>Welcome to Resume Tailor</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.87rem', lineHeight: 1.6 }}>
+                Paste a job URL, get your ATS score, and receive a tailored LaTeX resume + cover letter in under 60 seconds.
+              </p>
+            </div>
 
-            <button className="btn" style={{ background: '#4285F4', color: '#fff', fontSize: '0.95rem', padding: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }} onClick={handleGoogleLogin}>
+            {/* Value props */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {['🎯 Keyword-matched ATS scoring', '✍️ AI-tailored LaTeX resume & cover letter', '🔍 Recruiter truthfulness validation', '📄 One-click Overleaf export'].map(item => (
+                <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.84rem', color: 'var(--text-muted)', padding: '7px 12px', background: 'var(--panel-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  {item}
+                </div>
+              ))}
+            </div>
+
+            <button className="btn" style={{ background: '#4285F4', color: '#fff', fontSize: '0.92rem', padding: '13px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }} onClick={handleGoogleLogin}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
@@ -633,54 +716,70 @@ function App() {
           </div>
         </div>
       ) : configStepActive ? (
-        <div className="setup-container" style={{ maxWidth: '600px', margin: '40px auto', display: 'flex', flexDirection: 'column', gap: '25px' }}>
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '30px' }}>
-            <h2 style={{ color: 'var(--accent-primary)', marginBottom: '5px' }}>⚙️ Startup Setup & Keys</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '10px' }}>
-              Configure your API settings and upload your master resume profile before you target a job search.
-            </p>
-
+        <div className="setup-container" style={{ maxWidth: '580px', margin: '40px auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '32px' }}>
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-main)', fontWeight: '600' }}>
-                LLM API Key (Gemini, Groq, or Claude)
-              </label>
+              <h2 style={{ marginBottom: '4px' }}>Setup & Configuration</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.87rem' }}>Configure your AI key and upload your master resume to get started.</p>
+            </div>
+
+            {/* API Key section */}
+            <div>
+              <div className="section-label">LLM API Key</div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
                   type="password"
-                  placeholder="Paste your Gemini, Groq (gsk_...), or Claude (sk-ant-...) key..."
+                  placeholder="Gemini (AIza...), Groq (gsk_...), or Claude (sk-ant-...)"
                   value={geminiApiKey}
                   onChange={handleApiKeyChange}
-                  style={{ fontFamily: 'monospace', flexGrow: 1 }}
+                  style={{ fontFamily: 'var(--font-mono)', flexGrow: 1, marginBottom: 0, fontSize: '0.84rem' }}
                 />
-                <button className="btn" style={{ padding: '8px 12px', fontSize: '0.8rem' }} onClick={saveApiKeyToCloud}>
-                  Save Key
+                <button className="btn" style={{ padding: '10px 14px', fontSize: '0.82rem', flexShrink: 0 }} onClick={saveApiKeyToCloud}>
+                  Save
                 </button>
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Supports native Gemini, Groq (gsk_), or Claude (sk-ant_) keys. Saved securely.
+              <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                Supports Gemini, Groq, and Anthropic Claude keys. Stored securely in the cloud.
               </div>
             </div>
 
-            <hr style={{ borderColor: 'var(--border-color)', margin: '10px 0' }} />
-
+            {/* Resume upload section */}
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-main)', fontWeight: '600' }}>
-                Upload Master Resume (PDF/DOCX)
+              <div className="section-label">Master Resume</div>
+              <label style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                padding: '28px 20px', borderRadius: '12px', cursor: 'pointer',
+                border: resumeData ? '1.5px solid rgba(16,185,129,0.4)' : '1.5px dashed var(--border-color)',
+                background: resumeData ? 'rgba(16,185,129,0.04)' : 'var(--panel-bg)',
+                transition: 'all 0.25s ease'
+              }}>
+                <input type="file" accept=".pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
+                {resumeData ? (
+                  <>
+                    <div style={{ fontSize: '1.6rem' }}>✅</div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--accent-green)', fontSize: '0.92rem' }}>{resumeData.name}</div>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>Click to replace</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: '1.6rem' }}>📄</div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Drop your resume here or click to browse</div>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>PDF or DOCX — this becomes your master profile</div>
+                    </div>
+                  </>
+                )}
               </label>
-              <input type="file" accept=".pdf,.docx" onChange={handleResumeUpload} style={{ background: 'var(--bg-primary)' }} />
-              {resumeData && (
-                <div style={{ fontSize: '0.9rem', color: 'var(--accent-green)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>✓</span> Loaded profile: <strong>{resumeData.name}</strong>
-                </div>
-              )}
             </div>
 
-            <button 
-              className="btn" 
-              style={{ marginTop: '15px', padding: '14px', width: '100%', fontSize: '1rem' }} 
+            <button
+              className="btn"
+              style={{ padding: '14px', width: '100%', fontSize: '0.95rem', marginTop: '4px' }}
               onClick={() => setConfigStepActive(false)}
             >
-              Continue to Tailoring Dashboard ➡️
+              Continue to Dashboard →
             </button>
           </div>
         </div>
@@ -739,7 +838,10 @@ function App() {
                 value={jobDescription}
                 onChange={(e) => setJobDescription(e.target.value)}
               />
-              <button className="btn" style={{ width: '100%', marginTop: '4px' }} onClick={handleAnalyzeJob} disabled={loading}>
+              <div style={{ fontSize: '0.72rem', color: jobDescription.length > 500 ? 'var(--accent-green)' : 'var(--text-muted)', marginTop: '-8px', marginBottom: '10px', textAlign: 'right' }}>
+                {jobDescription.length.toLocaleString()} chars{jobDescription.length < 200 ? ' — paste more for better results' : jobDescription.length < 500 ? ' — good' : ' — ✅ detailed'}
+              </div>
+              <button className="btn" style={{ width: '100%' }} onClick={handleAnalyzeJob} disabled={loading} title="Analyze & Tailor (Cmd+Enter)">
                 {loading ? '⏳ Analyzing…' : '⚡ Analyze & Tailor Resume'}
               </button>
             </div>
@@ -747,7 +849,18 @@ function App() {
 
           {/* Right Analysis Panel */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-            <h2 style={{ marginBottom: 0 }}>Analysis & Preview</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ marginBottom: 0 }}>Analysis & Preview</h2>
+              {analysisResult && (
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '6px' }}
+                  onClick={handleNewJob}
+                >
+                  + New Job
+                </button>
+              )}
+            </div>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             {loading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -942,39 +1055,61 @@ function App() {
                   </div>
                 ) : (!analysisResult.latex_code && !keepOriginalMode) ? (
                   <div style={{
-                    marginTop: '30px',
-                    padding: '30px',
-                    borderRadius: '12px',
-                    backgroundColor: 'rgba(99, 179, 237, 0.05)',
-                    border: '1.5px dashed var(--accent-primary)',
-                    textAlign: 'center',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '15px'
+                    marginTop: '24px', padding: '32px 28px', borderRadius: '16px',
+                    background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(79,70,229,0.04) 100%)',
+                    border: '1px solid rgba(99,102,241,0.22)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '18px', textAlign: 'center',
+                    animation: 'slideDown 0.4s ease both'
                   }}>
-                    <h3 style={{ margin: 0, color: 'var(--accent-primary)' }}>🤖 ATS Score & Suggestions Ready!</h3>
-                    <p style={{ maxWidth: '600px', margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                      The AI agent has computed the ATS compatibility scores, analyzed keyword alignments, and generated feedback.
-                      Would you like to proceed and tailor your LaTeX resume and generate a customized cover letter for this role?
-                    </p>
-                    <div style={{ display: 'flex', gap: '15px', marginTop: '5px' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', boxShadow: '0 6px 20px rgba(99,102,241,0.3)' }}>🤖</div>
+                    <div>
+                      <h3 style={{ margin: '0 0 8px', fontSize: '1.05rem', color: '#fff' }}>ATS Score & Analysis Ready</h3>
+                      <p style={{ maxWidth: '520px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
+                        Keyword alignment, experience scoring, and role-fit analysis are complete.
+                        Ready to generate a tailored LaTeX resume and custom cover letter?
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
                       <button
                         className="btn"
-                        style={{ padding: '10px 24px', fontWeight: 'bold', background: 'var(--accent-primary)', color: '#fff', transition: 'all 0.2s ease', cursor: 'pointer' }}
+                        style={{ padding: '11px 26px', fontWeight: 700, fontSize: '0.92rem', boxShadow: 'var(--accent-glow)' }}
                         onClick={() => handleGenerateTailoredResume(false)}
                       >
-                        🚀 Yes, Tailor My Resume & Cover Letter
+                        ⚡ Tailor Resume & Cover Letter
                       </button>
                       <button
                         className="btn btn-secondary"
-                        style={{ padding: '10px 24px', transition: 'all 0.2s ease', cursor: 'pointer' }}
+                        style={{ padding: '11px 20px' }}
                         onClick={() => {
                           setKeepOriginalMode(true);
-                          setStatusMessage('Keeping original resume. You can compile the PDF manually.');
+                          showToast('📄 Keeping original resume — Overleaf export is ready.', 'info');
                         }}
                       >
-                        Keep Original Resume
+                        Keep Original
+                      </button>
+                    </div>
+                  </div>
+                ) : keepOriginalMode && !analysisResult.latex_code ? (
+                  <div style={{
+                    marginTop: '24px', padding: '28px', borderRadius: '14px',
+                    background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.18)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', textAlign: 'center',
+                    animation: 'slideDown 0.3s ease both'
+                  }}>
+                    <div style={{ fontSize: '2rem' }}>📄</div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '6px' }}>Using Your Original Resume</div>
+                      <div style={{ fontSize: '0.86rem', color: 'var(--text-muted)', maxWidth: '400px', lineHeight: 1.6 }}>
+                        Your original resume profile is loaded. You can open it in Overleaf directly, or go back and tailor it for this role.
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <button className="btn-overleaf" onClick={openInOverleaf} disabled={loading}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z"/></svg>
+                        Open Original in Overleaf
+                      </button>
+                      <button className="btn btn-secondary" style={{ padding: '9px 18px', fontSize: '0.84rem' }} onClick={() => setKeepOriginalMode(false)}>
+                        ← Go Back & Tailor
                       </button>
                     </div>
                   </div>
