@@ -582,23 +582,27 @@ function App() {
               Sign in with Google
             </button>
 
-            <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', margin: '10px 0' }}>— OR —</div>
+            {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+              <>
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', margin: '10px 0' }}>— OR —</div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Mock Dev Login</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  placeholder="Enter test email (e.g., test@example.com)"
-                  value={mockEmail}
-                  onChange={(e) => setMockEmail(e.target.value)}
-                  style={{ flexGrow: 1 }}
-                />
-                <button className="btn btn-secondary" onClick={handleMockLogin}>
-                  Login
-                </button>
-              </div>
-            </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Mock Dev Login</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="Enter test email (e.g., test@example.com)"
+                      value={mockEmail}
+                      onChange={(e) => setMockEmail(e.target.value)}
+                      style={{ flexGrow: 1 }}
+                    />
+                    <button className="btn btn-secondary" onClick={handleMockLogin}>
+                      Login
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       ) : configStepActive ? (
