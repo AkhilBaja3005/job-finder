@@ -35,14 +35,14 @@ async def scrape_job_description(url: str) -> dict:
             """)
             
             # Navigate to target page
-            await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
             
-            # Emulate realistic human delay and micro-scrolling to trigger lazy loading
-            await page.wait_for_timeout(1500)
+            # Emulate fast micro-scrolling to trigger lazy loading with minimal wait
+            await page.wait_for_timeout(400)
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 3)")
-            await page.wait_for_timeout(1000)
+            await page.wait_for_timeout(300)
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 1.5)")
-            await page.wait_for_timeout(1000)
+            await page.wait_for_timeout(300)
             
             html = await page.content()
             soup = BeautifulSoup(html, 'html.parser')
