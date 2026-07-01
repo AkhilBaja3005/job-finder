@@ -213,7 +213,6 @@ class _SemanticScoreResult(BaseModel):
     )
 
 class _CoverLetterResult(BaseModel):
-    cover_letter: str = Field(description="A highly tailored cover letter under 300 words")
     suggested_resume_updates: SectionUpdate = Field(description="Tailored suggestions per section")
 
 
@@ -279,7 +278,7 @@ Focus ONLY on:
     }
 
     cover_prompt = f"""You are an expert career writer.
-Write a tailored cover letter and resume section updates for this candidate.
+Write tailored resume section updates for this candidate.
 
 CANDIDATE: {json.dumps(lean_resume, indent=2)}
 TARGET ROLE: {job_title}
@@ -287,7 +286,6 @@ MISSING SKILLS TO ADDRESS: {', '.join(ats.missing_skills[:8])}
 JD EXCERPT: {jd_truncated[:1200]}
 
 RULES:
-- Cover letter: under 300 words, specific to this JD, no generic filler.
 - suggested_resume_updates.experience: MUST have bullet lists matching these counts: {json.dumps(bullet_counts)}
   Do NOT merge, delete, or add bullets.
 - suggested_resume_updates.skills: Updated skills list naturally integrating missing skills.
@@ -340,7 +338,7 @@ RULES:
     response_obj = AnalysisResponse(
         match_analysis=match_analysis,
         suggested_resume_updates=cover_result.suggested_resume_updates,
-        cover_letter=cover_result.cover_letter,
+        cover_letter="",
         latex_code="",
     )
 
