@@ -58,7 +58,7 @@ def create_session(user_id) -> str:
 
 def get_user_by_token(token: str) -> Optional[dict]:
     encoded_token = urllib.parse.quote(token)
-    sessions = supabase_request(f"sessions?token=eq.{encoded_token}&select=token,user_id,users(id,email,gemini_api_key)", "GET")
+    sessions = supabase_request(f"sessions?token=eq.{encoded_token}&select=token,user_id,users(id,email,gemini_api_key,resume_data,master_latex)", "GET")
     if sessions:
         user_info = sessions[0].get("users")
         if isinstance(user_info, list) and user_info:
@@ -69,6 +69,12 @@ def get_user_by_token(token: str) -> Optional[dict]:
 
 def update_user_api_key(user_id, api_key: str):
     supabase_request(f"users?id=eq.{user_id}", "PATCH", {"gemini_api_key": api_key})
+
+def update_user_resume_data(user_id, resume_data: dict, master_latex: str = None):
+    payload = {"resume_data": json.dumps(resume_data)}
+    if master_latex is not None:
+        payload["master_latex"] = master_latex
+    supabase_request(f"users?id=eq.{user_id}", "PATCH", payload)
 
 # Google OAuth Parameters (dynamic lookup helpers)
 def get_google_auth_url() -> str:
