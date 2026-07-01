@@ -52,8 +52,8 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Ensure resume.cls is available in uploads directory for compilation/zipping
-# Render container launches with clean git-ignored uploads, meaning resume.cls could be missing.
-default_cls_source = os.path.join(OUTPUT_DIR, "resume.cls")
+# We copy it from the static backend/assets folder which is tracked in Git.
+default_cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
 target_cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
 if os.path.exists(default_cls_source):
     import shutil
@@ -230,7 +230,7 @@ def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, 
         import shutil
         cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
         if not os.path.exists(cls_source):
-            cls_source = os.path.join(OUTPUT_DIR, "resume.cls")
+            cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
             
         shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
         
@@ -616,7 +616,7 @@ async def compile_latex(request: CompileLatexRequest):
         import shutil
         cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
         if not os.path.exists(cls_source):
-            cls_source = os.path.join(OUTPUT_DIR, "resume.cls")
+            cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
         shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
             
         # Run tectonic compiler
@@ -725,7 +725,7 @@ def upload_zip_to_tmpfiles(latex_code: str) -> str:
         # Load resume.cls (use default tracked version as fallback if uploads doesn't contain a custom copy)
         cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
         if not os.path.exists(cls_path):
-            cls_path = os.path.join(OUTPUT_DIR, "resume.cls")
+            cls_path = os.path.join(BASE_DIR, "assets", "resume.cls")
             
         print(f"[Overleaf ZIP Export] Loading resume.cls from resolved path: {cls_path}")
         if os.path.exists(cls_path):
