@@ -55,10 +55,10 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # Render container launches with clean git-ignored uploads, meaning resume.cls could be missing.
 default_cls_source = os.path.join(OUTPUT_DIR, "resume.cls")
 target_cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
-if os.path.exists(default_cls_source) and not os.path.exists(target_cls_path):
+if os.path.exists(default_cls_source):
     import shutil
     shutil.copy2(default_cls_source, target_cls_path)
-    print("Initialized fallback resume.cls in uploads directory.")
+    print(f"Synced fallback resume.cls from {default_cls_source} to {target_cls_path}")
 
 import threading
 
@@ -727,10 +727,14 @@ def upload_zip_to_tmpfiles(latex_code: str) -> str:
         if not os.path.exists(cls_path):
             cls_path = os.path.join(OUTPUT_DIR, "resume.cls")
             
+        print(f"[Overleaf ZIP Export] Loading resume.cls from resolved path: {cls_path}")
         if os.path.exists(cls_path):
             with open(cls_path, "r", encoding="utf-8") as f:
                 cls_content = f.read()
             zip_file.writestr("resume.cls", cls_content)
+            print(f"[Overleaf ZIP Export] Successfully packed resume.cls ({len(cls_content)} bytes)")
+        else:
+            print("[Overleaf ZIP Export] ERROR: resume.cls not found in uploads or output directories!")
             
     zip_buffer.seek(0)
     zip_data = zip_buffer.getvalue()
