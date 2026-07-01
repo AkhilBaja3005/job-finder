@@ -11,7 +11,7 @@ Final formula:
 import re
 import math
 from difflib import SequenceMatcher
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass, field
 
 
