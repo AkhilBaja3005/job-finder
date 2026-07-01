@@ -442,28 +442,44 @@ def review_tailored_resume(
         return ResumeReviewResult(satisfied=False, feedback="\n".join(issues))
 
     # ── Phase 2: LLM soft-quality check ──────────────────────────────────────
-    jd_excerpt = _truncate_jd(job_description, max_chars=600)
+    jd_excerpt = _truncate_jd(job_description, max_chars=1200)
+    
+    # Formulate a clean profile snapshot for validation
+    candidate_profile = {
+        "skills": original_resume_data.get("skills", []),
+        "education": [{"institution": e.get("institution", ""), "degree": e.get("degree", "")} for e in original_resume_data.get("education", [])],
+        "experience": [{"company": e.get("company", ""), "role": e.get("role", "")} for e in original_resume_data.get("experience", [])]
+    }
 
     prompt = f"""You are a senior technical recruiter reviewing a tailored LaTeX resume.
 The resume has already passed all structural checks (grades, schools, companies, projects all present).
-Now evaluate QUALITY only:
+Evaluate the QUALITY of the tailored resume by comparing it against both the target Job Description (JD) and the candidate's original Profile.
 
 QUALITY RUBRIC:
 1. ATS Fit: Are the top 3-5 job keywords from the JD naturally integrated into experience/skill bullets?
    (Check for contextual use, NOT verbatim copy-paste from JD.)
 2. Impact Metrics: Do the majority of bullets contain at least one quantified result (%, numbers, scale)?
-3. Truthfulness: Does tailored content stay within the candidate's real background? No invented roles/companies?
+3. Truthfulness: Does tailored content stay within the candidate's real background?
+   - Compare the tailored resume to the Candidate Profile below.
+   - Did the tailorer invent new companies, fabricate degrees, or exaggerate years of experience?
+   - Ensure the candidate is not falsely claimed to have skills/experience they do not possess.
 4. Conciseness: Are bullets tight (1-1.5 lines)? No sprawling multi-line sentences?
 
 If quality passes all 4 criteria → satisfied=true, brief positive feedback.
 If any criterion clearly fails → satisfied=false, specific actionable feedback (what exactly to fix).
 
 Target Job Title: {job_title}
-JD Excerpt: {jd_excerpt}
-
-Tailored LaTeX:
+JD Excerpt:
 ---
-{tailored_latex[:4000]}
+{jd_excerpt}
+---
+
+CANDIDATE ORIGINAL PROFILE:
+{json.dumps(candidate_profile, indent=2)}
+
+TAILORED LaTeX:
+---
+{tailored_latex[:4500]}
 ---
 """
 
