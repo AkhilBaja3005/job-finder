@@ -433,6 +433,7 @@ function App() {
     } catch (error) {
       console.error(error);
       setStatusMessage(`Error: ${error.message}`);
+      setStatusLogs((prev) => [...prev, `❌ Pipeline Interrupted: ${error.message}`]);
     } finally {
       setLoading(false);
     }
