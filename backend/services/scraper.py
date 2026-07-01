@@ -17,10 +17,32 @@ async def scrape_job_description(url: str) -> dict:
         page = await context.new_page()
         
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
+            # Clean up the previous scrapingbee blocks and focus on free stealth browser emulation
+            # Disable webdriver flag and mock navigator plugins to pass anti-bot tests
+            await page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+                window.chrome = {
+                    runtime: {}
+                };
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['en-US', 'en']
+                });
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+            """)
             
-            # Wait for generic content containers to render
-            await page.wait_for_timeout(2000)
+            # Navigate to target page
+            await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            
+            # Emulate realistic human delay and micro-scrolling to trigger lazy loading
+            await page.wait_for_timeout(1500)
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 3)")
+            await page.wait_for_timeout(1000)
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 1.5)")
+            await page.wait_for_timeout(1000)
             
             html = await page.content()
             soup = BeautifulSoup(html, 'html.parser')
