@@ -49,6 +49,15 @@ OUTPUT_DIR = "./output"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+# Ensure resume.cls is available in uploads directory for compilation/zipping
+# Render container launches with clean git-ignored uploads, meaning resume.cls could be missing.
+default_cls_source = os.path.join(OUTPUT_DIR, "resume.cls")
+target_cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
+if os.path.exists(default_cls_source) and not os.path.exists(target_cls_path):
+    import shutil
+    shutil.copy2(default_cls_source, target_cls_path)
+    print("Initialized fallback resume.cls in uploads directory.")
+
 import threading
 
 # Session-scoped state storage: maps session_token -> {"data": resume_data_dict, "path": master_resume_path_str}
