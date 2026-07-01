@@ -801,7 +801,9 @@ def upload_zip_to_tmpfiles(latex_code: str, candidate_name: str = "", job_title:
         upload_url = resp_data["data"]["url"]
         # Convert to raw download link
         raw_url = upload_url.replace("https://tmpfiles.org/", "https://tmpfiles.org/dl/")
-        return f"https://www.overleaf.com/docs?snip_uri={urllib.parse.quote(raw_url)}"
+        # snip_name sets the project title inside Overleaf directly (ignores ZIP filename)
+        encoded_name = urllib.parse.quote(project_name)
+        return f"https://www.overleaf.com/docs?snip_uri={urllib.parse.quote(raw_url)}&snip_name={encoded_name}"
     else:
         raise Exception("Upload to tmpfiles.org failed.")
 
