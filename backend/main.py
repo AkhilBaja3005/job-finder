@@ -280,6 +280,23 @@ def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, 
 
 import time
 import hashlib
+import re as _re
+
+def _extract_company_from_jd(jd_text: str) -> str:
+    """Heuristically extract the hiring company name from a job description."""
+    patterns = [
+        r"(?:About|Join|At|with)\s+([A-Z][\w&.,'-]{1,40}(?:\s+[A-Z][\w&.,'-]{1,20}){0,3})",
+        r"([A-Z][\w&.,'-]{2,40}(?:\s+[A-Z][\w&.,'-]{1,20}){0,2})\s+is\s+(?:hiring|looking|seeking|a|an)",
+        r"([A-Z][\w&.,'-]{2,40}(?:\s+[A-Z][\w&.,'-]{1,20}){0,2})\s+(?:Inc\.?|LLC|Ltd\.?|Corp\.?|Co\.?)",
+    ]
+    for pat in patterns:
+        m = _re.search(pat, jd_text[:1500])
+        if m:
+            name = m.group(1).strip().rstrip('.,;')
+            # Filter out generic words
+            if name.lower() not in {'the', 'a', 'an', 'we', 'our', 'this', 'you', 'your', 'us'}:
+                return name
+    return ""
 
 # In-memory analysis cache: keys are MD5(token + job_title + jd_text), values are {"analysis": AnalysisResponse_model_dump, "timestamp": float}
 _analysis_cache: dict[str, dict] = {}
@@ -563,10 +580,12 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                 
             dumped = analysis.model_dump()
             set_cached_analysis(token, job_title, jd_text, dumped)
+            company_name = _extract_company_from_jd(jd_text)
             yield json.dumps({
                 "type": "result",
                 "job_title": job_title,
                 "job_description": jd_text,
+                "company": company_name,
                 "analysis": dumped
             }) + "\n"
         except Exception as e:
@@ -714,7 +733,11 @@ async def apply_status(task_id: str):
             
     return StreamingResponse(status_stream(), media_type="text/event-stream")
 
-def upload_zip_to_tmpfiles(latex_code: str) -> str:
+def _sanitize_filename_part(s: str) -> str:
+    """Strip characters invalid in filenames and trim whitespace."""
+    return _re.sub(r'[\\/:*?"<>|]', '', s or '').strip()
+
+def upload_zip_to_tmpfiles(latex_code: str, candidate_name: str = "", job_title: str = "", company: str = "") -> str:
     # 1. Create a zip in memory
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
@@ -739,12 +762,19 @@ def upload_zip_to_tmpfiles(latex_code: str) -> str:
     zip_buffer.seek(0)
     zip_data = zip_buffer.getvalue()
     
-    # 2. Upload to tmpfiles.org
+    # 2. Build a descriptive project name from candidate / role / company
+    parts = [_sanitize_filename_part(candidate_name), _sanitize_filename_part(job_title), _sanitize_filename_part(company)]
+    parts = [p for p in parts if p]  # drop empty parts
+    project_name = " - ".join(parts) + " Resume" if parts else "Resume"
+    zip_filename = f"{project_name}.zip"
+    print(f"[Overleaf ZIP Export] Project filename: {zip_filename}")
+
+    # 3. Upload to tmpfiles.org
     boundary = f"----WebKitFormBoundary{uuid.uuid4().hex}"
     
     body = []
     body.append(f"--{boundary}".encode('utf-8'))
-    body.append(f'Content-Disposition: form-data; name="file"; filename="project (25).zip"'.encode('utf-8'))
+    body.append(f'Content-Disposition: form-data; name="file"; filename="{zip_filename}"'.encode('utf-8'))
     body.append(b'Content-Type: application/zip')
     body.append(b'')
     body.append(zip_data)
@@ -777,11 +807,14 @@ def upload_zip_to_tmpfiles(latex_code: str) -> str:
 
 class OverleafRequest(BaseModel):
     latex_code: str
+    candidate_name: Optional[str] = ""
+    job_title: Optional[str] = ""
+    company: Optional[str] = ""
 
 @app.post("/open_in_overleaf")
 async def open_in_overleaf(request: OverleafRequest):
     try:
-        url = upload_zip_to_tmpfiles(request.latex_code)
+        url = upload_zip_to_tmpfiles(request.latex_code, request.candidate_name, request.job_title, request.company)
         return {"url": url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
