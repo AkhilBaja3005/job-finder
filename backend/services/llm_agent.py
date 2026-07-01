@@ -492,9 +492,6 @@ TAILORED LaTeX:
         parsed = json.loads(response_text)
         return ResumeReviewResult(**parsed)
     except Exception as e:
-        # If LLM quality check fails (malformed JSON, API error), don't crash the pipeline
-        print(f"[review_tailored_resume] LLM quality check failed: {e}. Defaulting to satisfied=True.")
-        return ResumeReviewResult(
-            satisfied=True,
-            feedback="Quality check skipped due to API error. Structural checks passed."
-        )
+        # Re-raise API failures (e.g. Rate Limit 429) so they bubble up to the frontend UI
+        print(f"[review_tailored_resume] LLM quality check failed: {e}")
+        raise RuntimeError(f"Recruiter review model check failed: {str(e)}")
