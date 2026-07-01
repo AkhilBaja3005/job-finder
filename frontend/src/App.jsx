@@ -1103,16 +1103,48 @@ function App() {
                         Your original resume profile is loaded. You can open it in Overleaf directly, or go back and tailor it for this role.
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                      <button className="btn-overleaf" onClick={openInOverleaf} disabled={loading}>
+                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <button
+                        className="btn-overleaf"
+                        disabled={loading}
+                        onClick={async () => {
+                          if (!resumeData) return;
+                          setLoading(true);
+                          setStatusMessage('Preparing original resume for Overleaf…');
+                          try {
+                            const res = await fetch(`${API_BASE}/open_original_in_overleaf`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                resume_data: resumeData,
+                                job_title: jobTitle || '',
+                                company: company || '',
+                              }),
+                            });
+                            if (!res.ok) {
+                              const err = await res.json();
+                              throw new Error(err.detail || 'Failed to prepare Overleaf link');
+                            }
+                            const data = await res.json();
+                            window.open(data.url, '_blank');
+                            showToast('✅ Original resume opened in Overleaf!', 'success');
+                          } catch (err) {
+                            showToast(`❌ ${err.message}`, 'error');
+                          } finally {
+                            setLoading(false);
+                            setStatusMessage('');
+                          }
+                        }}
+                      >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z"/></svg>
-                        Open Original in Overleaf
+                        {loading ? 'Preparing…' : 'Open Original in Overleaf'}
                       </button>
                       <button className="btn btn-secondary" style={{ padding: '9px 18px', fontSize: '0.84rem' }} onClick={() => setKeepOriginalMode(false)}>
                         ← Go Back & Tailor
                       </button>
                     </div>
                   </div>
+
                 ) : (
                   <div className="workspace">
                     <div className="workspace-panel">
