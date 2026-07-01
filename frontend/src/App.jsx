@@ -52,6 +52,8 @@ function App() {
   const [statusLogs, setStatusLogs] = useState([]);
   const [activeTab, setActiveTab] = useState('preview');
   const [keepOriginalMode, setKeepOriginalMode] = useState(false);
+  const [rejectionWarning, setRejectionWarning] = useState(null);
+  const [forceTailorEnabled, setForceTailorEnabled] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
 
   const [user, setUser] = useState(null);
@@ -335,13 +337,14 @@ function App() {
   };
 
   // Step 2: Full LaTeX tailoring and recruiter check loop (when user decides to go ahead)
-  const handleGenerateTailoredResume = async () => {
+  const handleGenerateTailoredResume = async (overrideForce = false) => {
     if (!resumeData) {
       alert('Please upload a resume first.');
       return;
     }
 
     setLoading(true);
+    setRejectionWarning(null);
     setStatusMessage('Tailoring resume LaTeX and running recruiter loop...');
     setStatusLogs((prev) => [...prev, '🤖 Requesting LaTeX tailoring and page-metric checks...']);
 
@@ -362,6 +365,7 @@ function App() {
           job_title: jobTitle || 'Target Role',
           job_description: jobDescription || null,
           skip_tailoring: false, // Run full LaTeX tailoring + page checks + reviewer checks
+          force_tailoring: overrideForce
         }),
       });
 
@@ -388,6 +392,12 @@ function App() {
             if (event.type === 'log') {
               setStatusMessage(event.message);
               setStatusLogs((prev) => [...prev, event.message]);
+            } else if (event.type === 'rejection_warning') {
+              setRejectionWarning(event.message);
+              setStatusLogs((prev) => [...prev, `❌ Warning Paused: ${event.message}`]);
+              setStatusMessage('Process paused: Candidate may not be a fit.');
+              reader.cancel(); // Terminate the stream cleanly
+              return;
             } else if (event.type === 'error') {
               throw new Error(event.message);
             } else if (event.type === 'result') {
@@ -836,7 +846,64 @@ function App() {
 
 
                 {/* Workspace Panels or Tailor Resume Decision Banner */}
-                {(!analysisResult.latex_code && !keepOriginalMode) ? (
+                {rejectionWarning ? (
+                  <div style={{
+                    marginTop: '30px',
+                    padding: '30px',
+                    borderRadius: '12px',
+                    backgroundColor: 'rgba(229, 115, 115, 0.08)',
+                    border: '1.5px dashed #e57373',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '15px'
+                  }}>
+                    <h3 style={{ margin: 0, color: '#e57373' }}>⚠️ Candidate Suitability Warning</h3>
+                    <p style={{ maxWidth: '600px', margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+                      The AI Recruiter checked your resume against the JD requirements and flagged potential mismatches after 3 checks. 
+                      You can review the specific feedback below:
+                    </p>
+                    <div style={{
+                      backgroundColor: 'rgba(0,0,0,0.15)',
+                      padding: '15px',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontFamily: 'monospace',
+                      textAlign: 'left',
+                      color: '#E2E8F0',
+                      maxWidth: '650px',
+                      width: '100%',
+                      border: '1px solid rgba(255,255,255,0.05)',
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      {rejectionWarning}
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
+                      Would you still like to proceed and generate the tailored resume files anyway?
+                    </p>
+                    <div style={{ display: 'flex', gap: '15px', marginTop: '5px' }}>
+                      <button
+                        className="btn"
+                        style={{ padding: '10px 24px', fontWeight: 'bold', background: 'var(--accent-primary)', color: '#fff', cursor: 'pointer' }}
+                        onClick={() => handleGenerateTailoredResume(true)}
+                      >
+                        🚀 Yes, Generate Anyway
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: '10px 24px', cursor: 'pointer' }}
+                        onClick={() => {
+                          setRejectionWarning(null);
+                          setKeepOriginalMode(true);
+                          setStatusMessage('Tailoring cancelled by user.');
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (!analysisResult.latex_code && !keepOriginalMode) ? (
                   <div style={{
                     marginTop: '30px',
                     padding: '30px',
@@ -858,7 +925,7 @@ function App() {
                       <button
                         className="btn"
                         style={{ padding: '10px 24px', fontWeight: 'bold', background: 'var(--accent-primary)', color: '#fff', transition: 'all 0.2s ease', cursor: 'pointer' }}
-                        onClick={handleGenerateTailoredResume}
+                        onClick={() => handleGenerateTailoredResume(false)}
                       >
                         🚀 Yes, Tailor My Resume & Cover Letter
                       </button>
