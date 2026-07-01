@@ -57,6 +57,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
+  const [configStepActive, setConfigStepActive] = useState(true);
 
   const handleApiKeyChange = (e) => {
     const val = e.target.value;
@@ -600,46 +601,86 @@ function App() {
             </div>
           </div>
         </div>
-      ) : (
-        <div className="dashboard-grid">
-          {/* Left Control Panel */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <h2>0. Configurations</h2>
+      ) : configStepActive ? (
+        <div className="setup-container" style={{ maxWidth: '600px', margin: '40px auto', display: 'flex', flexDirection: 'column', gap: '25px' }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '30px' }}>
+            <h2 style={{ color: 'var(--accent-primary)', marginBottom: '5px' }}>⚙️ Startup Setup & Keys</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '10px' }}>
+              Configure your API settings and upload your master resume profile before you target a job search.
+            </p>
+
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)' }}>
-                Gemini API Key (Optional)
+              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-main)', fontWeight: '600' }}>
+                LLM API Key (Gemini, Groq, or Claude)
               </label>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
                   type="password"
-                  placeholder="Enter your Gemini API key..."
+                  placeholder="Paste your Gemini, Groq (gsk_...), or Claude (sk-ant-...) key..."
                   value={geminiApiKey}
                   onChange={handleApiKeyChange}
                   style={{ fontFamily: 'monospace', flexGrow: 1 }}
                 />
                 <button className="btn" style={{ padding: '8px 12px', fontSize: '0.8rem' }} onClick={saveApiKeyToCloud}>
-                  Save to Cloud
+                  Save Key
                 </button>
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                Saved securely in cloud database for your profile.
+                Supports native Gemini, Groq (gsk_), or Claude (sk-ant_) keys. Saved securely.
               </div>
             </div>
 
-            <h2>1. Profile Setup</h2>
+            <hr style={{ borderColor: 'var(--border-color)', margin: '10px 0' }} />
+
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)' }}>
-                Upload Resume (PDF/DOCX)
+              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-main)', fontWeight: '600' }}>
+                Upload Master Resume (PDF/DOCX)
               </label>
-              <input type="file" accept=".pdf,.docx" onChange={handleResumeUpload} />
+              <input type="file" accept=".pdf,.docx" onChange={handleResumeUpload} style={{ background: 'var(--bg-primary)' }} />
               {resumeData && (
-                <div style={{ fontSize: '0.85rem', color: 'var(--accent-green)' }}>
-                  Loaded profile: <strong>{resumeData.name}</strong>
+                <div style={{ fontSize: '0.9rem', color: 'var(--accent-green)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>✓</span> Loaded profile: <strong>{resumeData.name}</strong>
                 </div>
               )}
             </div>
 
-            <h2>2. Job Target Details</h2>
+            <button 
+              className="btn" 
+              style={{ marginTop: '15px', padding: '14px', width: '100%', fontSize: '1rem' }} 
+              onClick={() => setConfigStepActive(false)}
+            >
+              Continue to Tailoring Dashboard ➡️
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="dashboard-grid">
+          {/* Left Control Panel */}
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2>Active Profile</h2>
+              <button 
+                className="btn btn-secondary" 
+                style={{ padding: '2px 8px', fontSize: '0.75rem' }} 
+                onClick={() => setConfigStepActive(true)}
+              >
+                ⚙️ Configs
+              </button>
+            </div>
+            
+            <div style={{ background: 'var(--panel-bg)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                Master Resume Profile:
+              </div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: resumeData ? 'var(--accent-green)' : 'var(--accent-red)', marginTop: '4px' }}>
+                {resumeData ? `👤 ${resumeData.name}` : '❌ No Resume Loaded'}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                API Key: <span style={{ fontFamily: 'monospace' }}>{geminiApiKey ? '••••••••' + geminiApiKey.slice(-4) : 'Not Configured'}</span>
+              </div>
+            </div>
+
+            <h2>Target Application Details</h2>
             <div>
               <input
                 type="text"

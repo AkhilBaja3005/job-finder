@@ -324,8 +324,32 @@ input:focus, textarea:focus, select:focus {
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0.9); opacity: 0; }
+  from { transform: scale(0.95); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes bgShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes pulseGlow {
+  0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+
+/* Apply background shift animation */
+body::before {
+  animation: bgShift 20s ease infinite;
+  background-size: 200% 200%, 200% 200%, 40px 40px, 40px 40px;
+}
+
+/* Apply pulse to the status-badge */
+.status-badge {
+  animation: pulseGlow 2s infinite;
+  border-radius: 20px;
 }
 
 /* Custom Scrollbars */

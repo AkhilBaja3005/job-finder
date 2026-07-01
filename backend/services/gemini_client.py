@@ -11,15 +11,15 @@ from typing import Optional
 # For structured JSON output (analysis, scoring, review) — flash-lite is fast & cheap
 JSON_FALLBACK_MODELS = [
     'gemini-3.1-flash-lite',
-    'gemini-2.5-flash',
     'gemini-2.5-flash-lite',
+    'gemini-2.5-flash',
     'gemini-2.0-flash',
 ]
 
-# For raw LaTeX generation — use stronger model first to avoid structural corruption
+# For raw LaTeX generation — prioritize stronger reasoning models first to prevent document compilation failures
 LATEX_FALLBACK_MODELS = [
-    'gemini-3.1-flash-lite',
     'gemini-2.5-flash',
+    'gemini-3.1-flash-lite',
     'gemini-2.0-flash',
 ]
 
@@ -67,9 +67,153 @@ def _generate_with_model_list(
     """
     Core generation function. Tries each model in the given list in order.
     Falls back to the next model on any API error (rate limit, quota, etc).
-    Raises RuntimeError if all models fail.
+    Supports OpenRouter routing if the API key prefix is "sk-or-".
     """
-    client = get_gemini_client(custom_api_key)
+    active_key = custom_api_key or os.getenv("GEMINI_API_KEY")
+    if not active_key:
+        raise ValueError("API Key is not set.")
+
+    # ── Anthropic Claude SDK Routing Branch ───────────────────────────────────
+    if active_key.startswith("sk-ant-"):
+        print("[LLM Client] Anthropic API key detected. Routing request through Anthropic SDK...")
+        try:
+            import anthropic
+            anthropic_client = anthropic.Anthropic(api_key=active_key)
+            
+            # Select Sonnet for coding/LaTeX tasks, Haiku for quick JSON scoring
+            is_latex_or_review = (response_schema is None or "latex" in prompt.lower())
+            claude_model = "claude-3-5-sonnet-latest" if is_latex_or_review else "claude-3-5-haiku-latest"
+            
+            print(f"Attempting Anthropic generation with model: {claude_model}...")
+            
+            messages = [{"role": "user", "content": prompt}]
+            system_prompt = "You are an expert recruiter AI system."
+            
+            if response_schema is not None:
+                # Supply JSON schema and formatting guidelines directly to the prompt since Anthropic doesn't take raw schema parameters directly in chat completions
+                schema_json = json.dumps(clean_schema(response_schema.model_json_schema()), indent=2)
+                system_prompt += f"\nReturn ONLY a raw JSON object string that complies strictly with this JSON schema:\n{schema_json}"
+                messages[0]["content"] += "\nEnsure your response is valid JSON and starts with '{' and ends with '}'."
+            
+            completion = anthropic_client.messages.create(
+                model=claude_model,
+                max_tokens=4096,
+                temperature=0.1,
+                system=system_prompt,
+                messages=messages
+            )
+            
+            text = completion.content[0].text
+            if not text or not text.strip():
+                raise ValueError("Anthropic returned empty text response.")
+            print(f"Anthropic generation successful with: {claude_model}")
+            return text
+        except Exception as e:
+            print(f"Anthropic API call failed: {e}")
+            raise RuntimeError(f"Anthropic API routing failed: {e}")
+
+    # ── Groq SDK Routing Branch ──────────────────────────────────────────────
+    if active_key.startswith("gsk_"):
+        print("[LLM Client] Groq API key detected. Routing request through Groq SDK...")
+        try:
+            from groq import Groq
+            groq_client = Groq(api_key=active_key)
+            
+            # Map standard jobs to the Groq flagship model
+            groq_model = "llama-3.3-70b-versatile"
+            print(f"Attempting Groq generation with model: {groq_model}...")
+            
+            # Formulate query payload
+            messages = [{"role": "user", "content": prompt}]
+            
+            payload_args = {
+                "model": groq_model,
+                "messages": messages,
+                "temperature": 0.2, # Keep low temperature for structured output alignment
+            }
+            
+            if response_schema is not None:
+                # Tell Groq to output JSON structured response
+                payload_args["response_format"] = {"type": "json_object"}
+                # Append schema format details to user prompt to reinforce structure compliance
+                schema_json = json.dumps(clean_schema(response_schema.model_json_schema()), indent=2)
+                messages[0]["content"] += f"\n\nCRITICAL: You must return a JSON object that adheres strictly to this JSON schema:\n{schema_json}"
+            
+            completion = groq_client.chat.completions.create(**payload_args)
+            text = completion.choices[0].message.content
+            
+            if not text or not text.strip():
+                raise ValueError("Groq returned empty text response.")
+            print(f"Groq generation successful with: {groq_model}")
+            return text
+        except Exception as e:
+            print(f"Groq API call failed: {e}")
+            raise RuntimeError(f"Groq API routing failed: {e}")
+
+    # ── OpenRouter Routing Branch ───────────────────────────────────────────
+    if active_key.startswith("sk-or-"):
+        print("[LLM Client] OpenRouter API key detected. Routing request through OpenRouter...")
+        # Map Google model names to their OpenRouter equivalents
+        or_model_map = {
+            'gemini-3.1-flash-lite': 'google/gemini-2.5-flash-lite',
+            'gemini-2.5-flash-lite': 'google/gemini-2.5-flash-lite',
+            'gemini-2.5-flash': 'google/gemini-2.5-flash',
+            'gemini-2.0-flash': 'google/gemini-2.5-flash',
+        }
+        
+        last_error = None
+        for model_name in model_list:
+            or_model = or_model_map.get(model_name, 'google/gemini-2.5-flash')
+            try:
+                print(f"Attempting OpenRouter generation with model: {or_model}...")
+                import urllib.request
+                import urllib.parse
+                import json
+                import ssl
+                
+                url = "https://openrouter.ai/api/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {active_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://github.com/AkhilBaja3005/job-finder",
+                    "X-Title": "Job Finder Resume Tailor"
+                }
+                
+                messages = [{"role": "user", "content": prompt}]
+                payload = {
+                    "model": or_model,
+                    "messages": messages
+                }
+                if response_schema is not None:
+                    # Provide JSON schema instructions directly for OpenRouter structure compliance
+                    cleaned_schema = clean_schema(response_schema.model_json_schema())
+                    payload["response_format"] = {
+                        "type": "json_object",
+                        "schema": cleaned_schema
+                    }
+                
+                req_data = json.dumps(payload).encode("utf-8")
+                req = urllib.request.Request(url, headers=headers, data=req_data, method="POST")
+                context = ssl._create_unverified_context()
+                
+                with urllib.request.urlopen(req, context=context, timeout=30) as response:
+                    resp_body = response.read().decode("utf-8")
+                    result = json.loads(resp_body)
+                    text = result["choices"][0]["message"]["content"]
+                    
+                if not text or not text.strip():
+                    print(f"OpenRouter model {or_model} returned empty response. Trying next model.")
+                    continue
+                print(f"OpenRouter generation successful with: {or_model}")
+                return text
+            except Exception as e:
+                last_error = e
+                print(f"OpenRouter model {or_model} failed: {e}")
+                continue
+        raise RuntimeError(f"All OpenRouter model fallbacks failed. Last error: {last_error}")
+
+    # ── Native Gemini SDK Branch ─────────────────────────────────────────────
+    client = get_gemini_client(active_key)
 
     config_args = {}
     if response_schema is not None:
