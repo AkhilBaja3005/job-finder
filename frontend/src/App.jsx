@@ -944,6 +944,30 @@ function App() {
                         {analysisResult.cover_letter}
                       </div>
                     </div>
+                {/* Execution logs terminal rendering (always visible at bottom of dashboard after analysis) */}
+                {statusLogs.length > 0 && (
+                  <div style={{
+                    marginTop: '25px',
+                    padding: '16px 20px',
+                    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '12px',
+                    fontFamily: 'monospace',
+                    fontSize: '0.82rem',
+                    color: '#E2E8F0',
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                    textAlign: 'left',
+                    boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.4)'
+                  }}>
+                    <div style={{ color: 'var(--accent-primary)', fontWeight: 'bold', marginBottom: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px' }}>
+                      📋 Pipeline Execution Logs
+                    </div>
+                    {statusLogs.map((log, index) => (
+                      <div key={index} style={{ marginBottom: '4px', lineHeight: '1.45', opacity: log.includes('⚠️') ? 0.95 : 0.75 }}>
+                        {log}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
