@@ -326,10 +326,10 @@ def compute_skills_score(
         else:
             missing_pref.append(skill)
 
-    req_pct  = len(matched_req) / len(required_skills)  if required_skills  else 1.0
+    req_pct  = len(matched_req) / len(required_skills)  if required_skills  else 0.5
     pref_pct = len(matched_pref) / len(preferred_skills) if preferred_skills else 1.0
 
-    score = round(req_pct * 80 + pref_pct * 20)
+    score = round(req_pct * 80 + pref_pct * 20) if required_skills else 50
     score = min(100, max(0, score))
 
     detail = (
