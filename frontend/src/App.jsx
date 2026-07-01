@@ -65,6 +65,9 @@ function App() {
   const [mockEmail, setMockEmail] = useState('');
   const [configStepActive, setConfigStepActive] = useState(true);
 
+  // Returns the current time in HH:MM:SS using the browser's local timezone
+  const nowTs = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
   const handleApiKeyChange = (e) => {
     const val = e.target.value;
     setGeminiApiKey(val);
@@ -294,8 +297,7 @@ function App() {
             const event = JSON.parse(line);
             if (event.type === 'log') {
               setStatusMessage(event.message);
-              const ts = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
-              setStatusLogs((prev) => [...prev, { message: event.message, ts }]);
+              setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
             } else if (event.type === 'error') {
               throw new Error(event.message);
             } else if (event.type === 'result') {
@@ -355,8 +357,7 @@ function App() {
     setLoading(true);
     setRejectionWarning(null);
     setStatusMessage('Tailoring resume LaTeX and running recruiter loop...');
-    const _ts0 = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
-    setStatusLogs((prev) => [...prev, { message: '🤖 Requesting LaTeX tailoring and page-metric checks...', ts: _ts0 }]);
+    setStatusLogs((prev) => [...prev, { message: '🤖 Requesting LaTeX tailoring and page-metric checks...', ts: nowTs() }]);
 
     try {
       const headers = { 'Content-Type': 'application/json' };
@@ -401,12 +402,10 @@ function App() {
             const event = JSON.parse(line);
             if (event.type === 'log') {
               setStatusMessage(event.message);
-              const ts2 = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
-              setStatusLogs((prev) => [...prev, { message: event.message, ts: ts2 }]);
+              setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
             } else if (event.type === 'rejection_warning') {
               setRejectionWarning(event.message);
-              const tsW = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
-              setStatusLogs((prev) => [...prev, { message: `❌ Warning Paused: ${event.message}`, ts: tsW }]);
+              setStatusLogs((prev) => [...prev, { message: `❌ Warning Paused: ${event.message}`, ts: nowTs() }]);
               setStatusMessage('Process paused: Candidate may not be a fit.');
               reader.cancel(); // Terminate the stream cleanly
               return;
@@ -443,8 +442,7 @@ function App() {
     } catch (error) {
       console.error(error);
       setStatusMessage(`Error: ${error.message}`);
-      const tsE = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
-      setStatusLogs((prev) => [...prev, { message: `❌ Pipeline Interrupted: ${error.message}`, ts: tsE }]);
+      setStatusLogs((prev) => [...prev, { message: `❌ Pipeline Interrupted: ${error.message}`, ts: nowTs() }]);
     } finally {
       setLoading(false);
     }
@@ -479,8 +477,7 @@ function App() {
   const generateTailoredPdf = async (data) => {
     setLoading(true);
     setStatusMessage('Compiling tailored PDF resume using backend compiler...');
-    const tsC0 = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
-    setStatusLogs((prev) => [...prev, { message: '🤖 Starting LaTeX PDF compilation...', ts: tsC0 }]);
+    setStatusLogs((prev) => [...prev, { message: '🤖 Starting LaTeX PDF compilation...', ts: nowTs() }]);
     try {
       const response = await fetch(`${API_BASE}/generate_tailored_resume`, {
         method: 'POST',
@@ -489,8 +486,7 @@ function App() {
       });
       if (response.ok) {
         setStatusMessage('Resume compiled successfully!');
-        const tsC1 = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
-        setStatusLogs((prev) => [...prev, { message: '✅ Tectonic LaTeX compilation completed.', ts: tsC1 }]);
+        setStatusLogs((prev) => [...prev, { message: '✅ Tectonic LaTeX compilation completed.', ts: nowTs() }]);
       } else {
         const err = await response.json();
         throw new Error(err.detail || 'Failed to compile');
@@ -498,8 +494,7 @@ function App() {
     } catch (err) {
       console.error('Failed to compile tailored PDF', err);
       setStatusMessage(`Compilation failed: ${err.message}`);
-      const tsC2 = new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' });
-      setStatusLogs((prev) => [...prev, { message: `⚠️ Compilation error: ${err.message}`, ts: tsC2 }]);
+      setStatusLogs((prev) => [...prev, { message: `⚠️ Compilation error: ${err.message}`, ts: nowTs() }]);
     } finally {
       setLoading(false);
     }
