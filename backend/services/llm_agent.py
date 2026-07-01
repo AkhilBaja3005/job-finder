@@ -444,12 +444,15 @@ def review_tailored_resume(
     # ── Phase 2: LLM soft-quality check ──────────────────────────────────────
     jd_excerpt = _truncate_jd(job_description, max_chars=1200)
     
+    from services.ats_scorer import extract_candidate_years
+    computed_years = extract_candidate_years(original_resume_data)
+
     # Formulate a clean profile snapshot for validation
     candidate_profile = {
         "skills": original_resume_data.get("skills", []),
         "education": [{"institution": e.get("institution", ""), "degree": e.get("degree", "")} for e in original_resume_data.get("education", [])],
         "experience": [{"company": e.get("company", ""), "role": e.get("role", "")} for e in original_resume_data.get("experience", [])],
-        "total_experience_years": 3.1 # Hand-calculated timeline sum
+        "total_experience_years": computed_years
     }
 
     prompt = f"""You are a senior technical recruiter reviewing a tailored LaTeX resume.
