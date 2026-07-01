@@ -379,7 +379,7 @@ def _parse_year(date_str: str) -> Optional[float]:
     if not date_str:
         return None
     s = date_str.strip().lower()
-    if s in ('present', 'current', 'now', 'ongoing', 'till date'):
+    if s in ('present', 'current', 'now', 'ongoing', 'till date') or 'present' in s or 'current' in s or 'ongoing' in s:
         return datetime.datetime.now().year + datetime.datetime.now().month / 12.0
 
     # Try 4-digit year
