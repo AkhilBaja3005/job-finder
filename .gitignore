@@ -1,0 +1,10 @@
+node_modules/
+dist/
+venv/
+.env
+uvicorn.log
+output/
+uploads/
+.DS_Store
+*.pyc
+__pycache__/

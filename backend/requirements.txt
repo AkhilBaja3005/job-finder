@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pydantic
+pypdf
+python-docx
+playwright
+google-genai
+python-dotenv
+jinja2
+beautifulsoup4
+python-multipart
