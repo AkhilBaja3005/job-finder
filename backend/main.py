@@ -226,7 +226,11 @@ def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, 
             f.write(fixed_code)
             
         import shutil
-        shutil.copy2(os.path.join(UPLOAD_DIR, "resume.cls"), os.path.join(OUTPUT_DIR, "resume.cls"))
+        cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
+        if not os.path.exists(cls_source):
+            cls_source = os.path.join(OUTPUT_DIR, "resume.cls")
+            
+        shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
         
         result = subprocess.run(
             ["tectonic", temp_tex, "--outdir", OUTPUT_DIR],
@@ -608,7 +612,10 @@ async def compile_latex(request: CompileLatexRequest):
             
         # Copy resume.cls to output directory so Tectonic can find it
         import shutil
-        shutil.copy2(os.path.join(UPLOAD_DIR, "resume.cls"), os.path.join(OUTPUT_DIR, "resume.cls"))
+        cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
+        if not os.path.exists(cls_source):
+            cls_source = os.path.join(OUTPUT_DIR, "resume.cls")
+        shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
             
         # Run tectonic compiler
         print("Compiling LaTeX using Tectonic...")
