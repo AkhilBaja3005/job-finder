@@ -848,6 +848,11 @@ if os.path.exists(frontend_dist):
         if rest_of_path.startswith(("user/", "auth/", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf")):
             raise HTTPException(status_code=404, detail="Not Found")
         
+        if rest_of_path == "favicon.svg":
+            favicon_path = os.path.join(frontend_dist, "favicon.svg")
+            if os.path.exists(favicon_path):
+                return FileResponse(favicon_path, media_type="image/svg+xml")
+            
         index_html = os.path.join(frontend_dist, "index.html")
         if os.path.exists(index_html):
             with open(index_html, "r", encoding="utf-8") as f:
