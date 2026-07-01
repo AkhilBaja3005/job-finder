@@ -705,8 +705,11 @@ def upload_zip_to_tmpfiles(latex_code: str) -> str:
         fixed_code = apply_latex_hotfix(latex_code)
         zip_file.writestr("main.tex", fixed_code)
         
-        # Load resume.cls
+        # Load resume.cls (use default tracked version as fallback if uploads doesn't contain a custom copy)
         cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
+        if not os.path.exists(cls_path):
+            cls_path = os.path.join(OUTPUT_DIR, "resume.cls")
+            
         if os.path.exists(cls_path):
             with open(cls_path, "r", encoding="utf-8") as f:
                 cls_content = f.read()
