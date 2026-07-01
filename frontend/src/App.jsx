@@ -46,6 +46,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [jobUrl, setJobUrl] = useState('');
   const [jobTitle, setJobTitle] = useState('');
+  const [company, setCompany] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [analysisResult, setAnalysisResult] = useState(null);
   const [tailoredResumeData, setTailoredResumeData] = useState(null);
@@ -300,6 +301,9 @@ function App() {
               if (result.job_title) {
                 setJobTitle(result.job_title);
               }
+              if (result.company) {
+                setCompany(result.company);
+              }
               if (result.job_description) {
                 setJobDescription(result.job_description);
               }
@@ -501,7 +505,12 @@ function App() {
       const response = await fetch(`${API_BASE}/open_in_overleaf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latex_code: analysisResult.latex_code }),
+        body: JSON.stringify({
+          latex_code: analysisResult.latex_code,
+          candidate_name: resumeData?.name || '',
+          job_title: jobTitle || '',
+          company: company || '',
+        }),
       });
       if (!response.ok) {
         const errData = await response.json();
