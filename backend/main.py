@@ -404,7 +404,7 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
             t0 = time.time()
             analysis = await analyze_job_fit(session_resume_data, job_title, jd_text, master_latex if not request.skip_tailoring else None, active_api_key)
             ctx.log_step("analyze_job_fit", time.time() - t0, "gemini-3.1-flash-lite")
-            yield json.dumps({"type": "log", "message": "✍8 Generated tailored resume content and cover letter."}) + "\n"
+            yield json.dumps({"type": "log", "message": "✍️ Generated tailored resume content and cover letter."}) + "\n"
             
             if request.skip_tailoring:
                 dumped = analysis.model_dump()
