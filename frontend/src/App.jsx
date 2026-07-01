@@ -944,6 +944,8 @@ function App() {
                         {analysisResult.cover_letter}
                       </div>
                     </div>
+                  </div>
+                )}
                 {/* Execution logs terminal rendering (always visible at bottom of dashboard after analysis) */}
                 {statusLogs.length > 0 && (
                   <div style={{
