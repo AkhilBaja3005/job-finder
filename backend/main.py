@@ -69,23 +69,27 @@ def get_session_data(token: Optional[str]) -> dict:
             
     # Try fetching from Supabase if token exists
     if token:
-        user = get_user_by_token(token)
-        if user and user.get("resume_data"):
-            try:
-                resume_dict = json.loads(user["resume_data"])
-                # Recover master_latex locally if exists
-                path = ""
-                master_latex = user.get("master_latex", "")
-                if master_latex:
-                    path = os.path.join(UPLOAD_DIR, f"{user['id']}_master.tex")
-                    with open(path, "w", encoding="utf-8") as f:
-                        f.write(master_latex)
-                
-                with _store_lock:
-                    _session_store[token] = {"data": resume_dict, "path": path}
-                return {"data": resume_dict, "path": path}
-            except Exception as e:
-                print(f"Failed to load resume from Supabase user session: {e}")
+        try:
+            user = get_user_by_token(token)
+            # Query the user_resumes table instead or query users safely
+            if user:
+                # We dynamically check if Supabase returned the fields or try querying user_resumes
+                user_id = user.get("id")
+                from services.auth import supabase_request
+                res = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+                if res and len(res) > 0:
+                    resume_dict = json.loads(res[0].get("resume_data", "{}"))
+                    path = ""
+                    master_latex = res[0].get("master_latex", "")
+                    if master_latex:
+                        path = os.path.join(UPLOAD_DIR, f"{user_id}_master.tex")
+                        with open(path, "w", encoding="utf-8") as f:
+                            f.write(master_latex)
+                    with _store_lock:
+                        _session_store[token] = {"data": resume_dict, "path": path}
+                    return {"data": resume_dict, "path": path}
+        except Exception as e:
+            print(f"Failed to load resume from Supabase user session: {e}")
 
     # Fallback to guest if user session is empty
     with _store_lock:
@@ -108,7 +112,28 @@ def set_session_data(token: Optional[str], data: dict, path: str):
                 
         user = get_user_by_token(token)
         if user:
-            update_user_resume_data(user["id"], data, master_latex)
+            try:
+                # We try writing to users directly first
+                update_user_resume_data(user["id"], data, master_latex)
+            except Exception as e:
+                # If users table lacks columns, upsert to user_resumes table
+                print(f"Direct users table resume update failed: {e}. Trying user_resumes table...")
+                try:
+                    from services.auth import supabase_request
+                    user_id = user["id"]
+                    # Check if user_resume entry exists
+                    existing = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+                    payload = {
+                        "user_id": user_id,
+                        "resume_data": json.dumps(data),
+                        "master_latex": master_latex
+                    }
+                    if existing:
+                        supabase_request(f"user_resumes?user_id=eq.{user_id}", "PATCH", payload)
+                    else:
+                        supabase_request("user_resumes", "POST", payload)
+                except Exception as ex:
+                    print(f"Fallback user_resumes table upsert failed: {ex}")
 
 # Load stored resume state if exists at startup (initialized to the guest session)
 if os.path.exists(RESUME_STATE_FILE):
