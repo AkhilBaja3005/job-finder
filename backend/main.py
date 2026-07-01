@@ -112,28 +112,23 @@ def set_session_data(token: Optional[str], data: dict, path: str):
                 
         user = get_user_by_token(token)
         if user:
+            user_id = user["id"]
+            # To prevent HTTP 400 Bad Request error noise, we write directly to the user_resumes table
             try:
-                # We try writing to users directly first
-                update_user_resume_data(user["id"], data, master_latex)
-            except Exception as e:
-                # If users table lacks columns, upsert to user_resumes table
-                print(f"Direct users table resume update failed: {e}. Trying user_resumes table...")
-                try:
-                    from services.auth import supabase_request
-                    user_id = user["id"]
-                    # Check if user_resume entry exists
-                    existing = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
-                    payload = {
-                        "user_id": user_id,
-                        "resume_data": json.dumps(data),
-                        "master_latex": master_latex
-                    }
-                    if existing:
-                        supabase_request(f"user_resumes?user_id=eq.{user_id}", "PATCH", payload)
-                    else:
-                        supabase_request("user_resumes", "POST", payload)
-                except Exception as ex:
-                    print(f"Fallback user_resumes table upsert failed: {ex}")
+                from services.auth import supabase_request
+                # Check if user_resume entry exists
+                existing = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+                payload = {
+                    "user_id": user_id,
+                    "resume_data": json.dumps(data),
+                    "master_latex": master_latex or ""
+                }
+                if existing:
+                    supabase_request(f"user_resumes?user_id=eq.{user_id}", "PATCH", payload)
+                else:
+                    supabase_request("user_resumes", "POST", payload)
+            except Exception as ex:
+                print(f"Failed to save user resume to Supabase: {ex}")
 
 # Load stored resume state if exists at startup (initialized to the guest session)
 if os.path.exists(RESUME_STATE_FILE):
