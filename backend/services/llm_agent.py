@@ -173,7 +173,8 @@ RULE 5 — LATEX STRUCTURE:
 
 RULE 6 — ATS KEYWORD INTEGRATION:
   • Inject relevant missing keywords into Technical Skills and bullets naturally.
-  • Bold existing key metrics (\\textbf{{50\\%}}) and tools (\\textbf{{RabbitMQ}}) for visual consistency.
+  • Bold existing key metrics (e.g. \\textbf{{50\\%}}) and tools (e.g. \\textbf{{RabbitMQ}}) for visual consistency.
+  • CRITICAL: NEVER use markdown asterisks (e.g. **RabbitMQ** or **50%**) for bold text. You MUST use standard LaTeX command: \\textbf{{RabbitMQ}} or \\textbf{{50\\%}} (always escape percent signs: \\%).
   • Translate JD phrases into natural accomplishments — NEVER copy-paste verbatim.
 
 RULE 7 — OUTPUT FORMAT:
