@@ -744,7 +744,7 @@ def upload_zip_to_tmpfiles(latex_code: str) -> str:
     
     body = []
     body.append(f"--{boundary}".encode('utf-8'))
-    body.append(f'Content-Disposition: form-data; name="file"; filename="project.zip"'.encode('utf-8'))
+    body.append(f'Content-Disposition: form-data; name="file"; filename="project (25).zip"'.encode('utf-8'))
     body.append(b'Content-Type: application/zip')
     body.append(b'')
     body.append(zip_data)
