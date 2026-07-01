@@ -6,20 +6,28 @@ RUN npm install
 COPY frontend/ ./
 RUN npm run build
 
-# Final Stage for Backend + Frontend Serving (matching python:3.11-slim)
+# Final Stage for Backend + Frontend Serving
 FROM python:3.11-slim
 WORKDIR /app
 
-# Install system dependencies for Tectonic and base dependencies
-# Note: Playwright browser dependencies are installed natively using 'playwright install-deps'
+# Install system dependencies for Tectonic compilation
 RUN apt-get update && apt-get install -y \
     curl \
     git \
+    libfontconfig1-dev \
+    libgraphite2-dev \
+    libharfbuzz-dev \
+    libicu-dev \
+    libssl-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Tectonic (LaTeX engine)
-RUN curl --proto '=https' --tlsv1.2 -sSf https://drop-sh.fullyjustified.net | sh \
-    && mv tectonic /usr/local/bin/
+# Install Tectonic directly via the official static binary release url
+# This bypasses the drop-sh redirect installer which can return HTML redirect walls in cloud IPs.
+RUN curl -Lo tectonic.tar.gz https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz \
+    && tar -xzf tectonic.tar.gz \
+    && mv tectonic /usr/local/bin/ \
+    && rm tectonic.tar.gz
 
 # Copy backend dependencies and install
 COPY backend/requirements.txt ./backend/requirements.txt
