@@ -186,7 +186,6 @@ def _generate_with_model_list(
                 print(f"Attempting OpenRouter generation with model: {or_model}...")
                 import urllib.request
                 import urllib.parse
-                import json
                 import ssl
                 
                 url = "https://openrouter.ai/api/v1/chat/completions"
