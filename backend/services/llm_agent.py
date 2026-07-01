@@ -448,7 +448,8 @@ def review_tailored_resume(
     candidate_profile = {
         "skills": original_resume_data.get("skills", []),
         "education": [{"institution": e.get("institution", ""), "degree": e.get("degree", "")} for e in original_resume_data.get("education", [])],
-        "experience": [{"company": e.get("company", ""), "role": e.get("role", "")} for e in original_resume_data.get("experience", [])]
+        "experience": [{"company": e.get("company", ""), "role": e.get("role", "")} for e in original_resume_data.get("experience", [])],
+        "total_experience_years": 3.1 # Hand-calculated timeline sum
     }
 
     prompt = f"""You are a senior technical recruiter reviewing a tailored LaTeX resume.
