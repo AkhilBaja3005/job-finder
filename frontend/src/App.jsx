@@ -1127,12 +1127,10 @@ function App() {
                             }
                             const data = await res.json();
                             window.open(data.url, '_blank');
-                            showToast('✅ Original resume opened in Overleaf!', 'success');
                           } catch (err) {
-                            showToast(`❌ ${err.message}`, 'error');
+                            console.error(err);
                           } finally {
                             setLoading(false);
-                            setStatusMessage('');
                           }
                         }}
                       >
