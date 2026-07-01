@@ -833,7 +833,7 @@ if os.path.exists(frontend_dist):
     @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
     async def serve_frontend(rest_of_path: str):
         # Ignore API endpoints so they pass through to regular routes
-        if rest_of_path.startswith(("user/", "auth/", "scrape_job", "upload_resume", "apply", "assets/")):
+        if rest_of_path.startswith(("user/", "auth/", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf")):
             raise HTTPException(status_code=404, detail="Not Found")
         
         index_html = os.path.join(frontend_dist, "index.html")
