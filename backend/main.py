@@ -429,6 +429,8 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                 import hashlib
                 prev_review_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
                 
+                last_rejection_feedback = ""
+                
                 while reviewer_attempts < 3:
                     yield json.dumps({"type": "log", "message": f"👀 Recruiter review check (Attempt {reviewer_attempts + 1})..."}) + "\n"
                     t0 = time.time()
@@ -439,6 +441,7 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                         yield json.dumps({"type": "log", "message": "✅ Recruiter review approved!"}) + "\n"
                         break
     
+                    last_rejection_feedback = review.feedback
                     yield json.dumps({"type": "log", "message": f"⚠️ Recruiter rejected (Attempt {reviewer_attempts + 1}): {review.feedback}"}) + "\n"
                     t0 = time.time()
                     analysis.latex_code = tailor_latex_code(
@@ -452,6 +455,12 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                         break
                     prev_review_hash = curr_hash
                     reviewer_attempts += 1
+
+                if not review.satisfied and reviewer_attempts >= 3:
+                    yield json.dumps({
+                        "type": "log", 
+                        "message": f"❌ WARNING: Candidate may not be a suitable fit for this job after 3 recruitment checks. Reason: {last_rejection_feedback}"
+                    }) + "\n"
     
                 # --- Page-fit loop (compile first, try mechanical adjustments first) ---
                 yield json.dumps({"type": "log", "message": "⚙️ Compiling PDF & checking page layout..."}) + "\n"
