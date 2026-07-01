@@ -868,11 +868,36 @@ def _build_original_latex(resume_data: dict) -> str:
         for exp in experience:
             company = esc(exp.get("company", ""))
             role = esc(exp.get("role", ""))
-            dates = esc(exp.get("dates", exp.get("date", exp.get("duration", ""))))
+            
+            # Extract start and end dates or fall back to dates/duration string
+            start_date = exp.get("start_date")
+            end_date = exp.get("end_date")
+            dates = exp.get("dates", exp.get("date", exp.get("duration", "")))
+            
+            if start_date:
+                # Normalize current/present working
+                end_normalized = "Present"
+                if end_date:
+                    end_clean = end_date.strip().lower()
+                    if end_clean not in ["current", "present", "now", "present working", "currently working"]:
+                        end_normalized = end_date
+                dates_str = f"{start_date} -- {end_normalized}"
+            else:
+                dates_str = dates
+            
+            # Clean up the final dates string case-insensitively for current/present
+            if dates_str:
+                for term in ["current", "present working", "currently working", "present"]:
+                    if term in dates_str.lower():
+                        # Replace specific term with capitalized "Present"
+                        import re
+                        dates_str = re.sub(re.escape(term), "Present", dates_str, flags=re.IGNORECASE)
+            
+            dates_final = esc(dates_str)
             bullets = exp.get("description", [])
             bullet_lines = "\n".join([f"    \\item {esc(b)}" for b in bullets if b])
             exp_blocks.append(
-                f"  \\begin{{rSubsection}}{{{company}}}{{{dates}}}{{{role}}}{{}}\n{bullet_lines}\n  \\end{{rSubsection}}"
+                f"  \\begin{{rSubsection}}{{{company}}}{{{dates_final}}}{{{role}}}{{}}\n{bullet_lines}\n  \\end{{rSubsection}}"
             )
         exp_str = f"""
 \\begin{{rSection}}{{Professional Experience}}
