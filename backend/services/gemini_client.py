@@ -3,6 +3,7 @@ from google import genai
 from google.genai import types
 import google.api_core.exceptions
 from typing import Optional
+import json
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Model priority lists
@@ -27,20 +28,37 @@ LATEX_FALLBACK_MODELS = [
 def clean_schema(schema: dict, inside_properties: bool = False) -> dict:
     """
     Recursively cleans a JSON schema for Gemini compatibility:
+    - Inlines all nested definitions ($defs / $ref references) since Gemini rejects them.
     - Removes 'additionalProperties' (Gemini rejects it regardless of value).
-    - Removes 'title' ONLY when it's a string metadata field on a schema node,
-      NOT when 'title' is a property name key inside a 'properties' mapping
-      (e.g. Project.title field must be preserved).
+    - Removes 'title' ONLY when it's a string metadata field on a schema node.
     """
+    # If this is the root schema block and contains $defs, extract them first to inline nested parts
+    if isinstance(schema, dict) and "$defs" in schema:
+        schema = dict(schema) # shallow copy
+        defs = schema.pop("$defs")
+        
+        def _resolve_refs(node):
+            if isinstance(node, dict):
+                if "$ref" in node:
+                    ref_path = node.pop("$ref")
+                    ref_key = ref_path.split("/")[-1]
+                    # Inline key definition
+                    node.update(_resolve_refs(defs[ref_key]))
+                for k, v in list(node.items()):
+                    node[k] = _resolve_refs(v)
+            elif isinstance(node, list):
+                node = [_resolve_refs(item) for item in node]
+            return node
+            
+        schema = _resolve_refs(schema)
+
     if isinstance(schema, dict):
         schema.pop("additionalProperties", None)
         # Only strip 'title' if we're NOT inside a 'properties' dict
-        # (inside_properties=True means the dict keys are property names like "title", "description")
         if not inside_properties and isinstance(schema.get("title"), str):
             schema.pop("title", None)
         result = {}
         for k, v in schema.items():
-            # When recursing into 'properties', mark that the child dict's keys are property names
             result[k] = clean_schema(v, inside_properties=(k == "properties")) if isinstance(v, dict) else (
                 [clean_schema(i) if isinstance(i, dict) else i for i in v] if isinstance(v, list) else v
             )
