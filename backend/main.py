@@ -172,6 +172,7 @@ class JobAnalysisRequest(BaseModel):
     job_title: str
     job_description: Optional[str] = None
     skip_tailoring: bool = False
+    force_tailoring: bool = False
 
 class ApplyRequest(BaseModel):
     job_url: str
@@ -457,10 +458,17 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                     reviewer_attempts += 1
 
                 if not review.satisfied and reviewer_attempts >= 3:
-                    yield json.dumps({
-                        "type": "log", 
-                        "message": f"❌ WARNING: Candidate may not be a suitable fit for this job after 3 recruitment checks. Reason: {last_rejection_feedback}"
-                    }) + "\n"
+                    if not request.force_tailoring:
+                        yield json.dumps({
+                            "type": "rejection_warning", 
+                            "message": f"Candidate may not be a suitable fit for this job after 3 recruitment checks. Reason: {last_rejection_feedback}"
+                        }) + "\n"
+                        return
+                    else:
+                        yield json.dumps({
+                            "type": "log",
+                            "message": "⚠️ Proceeding with resume tailoring anyway due to user override request."
+                        }) + "\n"
     
                 # --- Page-fit loop (compile first, try mechanical adjustments first) ---
                 yield json.dumps({"type": "log", "message": "⚙️ Compiling PDF & checking page layout..."}) + "\n"
