@@ -579,9 +579,17 @@ function App() {
     setStatusMessage('Spawning automated browser agent to autofill your application...');
 
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (geminiApiKey) {
+        headers['X-Gemini-API-Key'] = geminiApiKey;
+      }
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
       const response = await fetch(`${API_BASE}/apply`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify({
           job_url: jobUrl,
           direct_mode: directMode,

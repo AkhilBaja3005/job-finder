@@ -1,170 +1,292 @@
 import os
 import json
 import asyncio
+import datetime
+from typing import List, Optional, Literal
+from pydantic import BaseModel, Field
 from playwright.async_api import async_playwright
-from google import genai
-from google.genai import types
+from services.gemini_client import generate_content_with_fallback
 
-def get_answer_from_llm(question: str, field_context: str, resume_data: dict) -> str:
+# ─── Pydantic Schemas for Structured Actions ───────────────────────────────
+
+class AgentAction(BaseModel):
+    action_type: Literal["fill", "select", "click", "upload", "pause", "complete"] = Field(
+        description="The type of action to perform. "
+                    "'fill': enter text into an input field. "
+                    "'select': pick an option from a dropdown. "
+                    "'click': click a button or link. "
+                    "'upload': upload the resume PDF. "
+                    "'pause': stop and wait for manual human interaction. "
+                    "'complete': finish the application."
+    )
+    locator_label: Optional[str] = Field(
+        default=None,
+        description="The text label, placeholder, aria-label, role name, or visible text of the target element."
+    )
+    value: Optional[str] = Field(
+        default=None,
+        description="The value to enter (for 'fill') or the option to pick (for 'select')."
+    )
+    reason: Optional[str] = Field(
+        default=None,
+        description="The reason for pausing (only for 'pause' action type)."
+    )
+
+class NextStepDecision(BaseModel):
+    thought: str = Field(
+        description="Reasoning about the current page state, what fields are visible, what needs to be filled, and what actions to take."
+    )
+    actions: List[AgentAction] = Field(
+        description="Ordered list of actions to execute sequentially on the current page."
+    )
+
+# ─── Accessibility Tree Extraction & Flattening ──────────────────────────────
+
+def _flatten_accessibility_tree(node: dict, indent: int = 0) -> List[str]:
     """
-    Uses Gemini to answer a custom application question.
-    Receives both the field's visual text context (HTML/Surrounding text) and the candidate's resume data
-    to form an exact answer.
+    Recursively flattens the Playwright accessibility tree snapshot into a clean list
+    of readable semantic elements, omitting layout nodes to save context window tokens.
     """
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        return ""
+    lines = []
+    role = node.get("role", "")
+    name = node.get("name", "").strip()
+    value = node.get("value", "")
+    description = node.get("description", "")
     
-    client = genai.Client(api_key=api_key)
-    prompt = f"""
-    You are an AI assistant helping a candidate fill out a job application. Answer this specific application question accurately based on the candidate's resume and the provided page context.
+    # Filter out pure layout or structural wrapper roles unless they contain useful text/names
+    skip_roles = {"generic", "List", "ListItem", "Grid", "Row", "Cell", "WebArea"}
     
-    Resume details:
-    {json.dumps(resume_data, indent=2)}
-    
-    Application Field Context (HTML / Surrounding text of the question/dropdown):
-    ---
-    {field_context}
-    ---
-    
-    Application Question:
-    "{question}"
-    
-    Instructions:
-    - Provide a direct, concise answer.
-    - If it's a dropdown/select option, provide the exact text matching one of the options shown in the context.
-    - If it's a yes/no question, respond with exactly 'Yes' or 'No'.
-    - If it asks for years of experience, respond with a single integer (e.g., '3').
-    """
+    label_info = []
+    if name:
+        label_info.append(f'name: "{name}"')
+    if value:
+        label_info.append(f'value: "{value}"')
+    if description:
+        label_info.append(f'desc: "{description}"')
+        
+    for prop in ["required", "disabled", "checked", "expanded", "focused"]:
+        if node.get(prop):
+            label_info.append(prop)
+
+    # Format the element if it has a role or label info
+    if role and (label_info or role not in skip_roles):
+        info_str = ", ".join(label_info)
+        space = "  " * indent
+        lines.append(f"{space}[{role}] {info_str if info_str else '(no label)'}")
+
+    # Process children
+    for child in node.get("children", []):
+        lines.extend(_flatten_accessibility_tree(child, indent + 1))
+        
+    return lines
+
+async def get_accessibility_context(page) -> str:
+    """Captures the current browser accessibility snapshot and returns a clean serialized text representation."""
     try:
-        response = client.models.generate_content(
-            model='gemini-3.1-flash-lite',
-            contents=prompt
-        )
-        return response.text.strip()
+        snapshot = await page.accessibility.snapshot()
+        if not snapshot:
+            return "Accessibility tree snapshot is empty."
+        flat_lines = _flatten_accessibility_tree(snapshot)
+        return "\n".join(flat_lines)
     except Exception as e:
-        print(f"Error calling LLM for question: {e}")
-        return ""
+        return f"Error capturing accessibility tree: {str(e)}"
 
-async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, session_filled_questions: set):
+# ─── Playwright Locator Helper ──────────────────────────────────────────────
+
+async def locate_element(page, label: str, action_type: str):
     """
-    Scans the current page state, finds all visible, unfilled inputs,
-    and populates them dynamically. Uses session_filled_questions to prevent
-    re-filling fields if the page dynamically refreshes or reloads.
+    Resolves the best semantic locator for a given action and element descriptor.
+    Tries different Playwright locators (label, placeholder, text, role) sequentially.
     """
-    # Find all inputs, textareas, and select elements
-    inputs = await page.query_selector_all("input:not([type='hidden']):not([type='submit']):not([type='button']), textarea, select")
+    # Clean and sanitize search label
+    clean_label = label.strip()
     
-    for inp in inputs:
+    # Try finding elements using Playwright's get_by_label
+    el = page.get_by_label(clean_label, exact=False)
+    if await el.count() > 0:
+        # Check first match is visible/interactable
+        for i in range(await el.count()):
+            candidate = el.nth(i)
+            if await candidate.is_visible():
+                return candidate
+
+    # Try get_by_placeholder
+    el = page.get_by_placeholder(clean_label, exact=False)
+    if await el.count() > 0:
+        for i in range(await el.count()):
+            candidate = el.nth(i)
+            if await candidate.is_visible():
+                return candidate
+
+    # Try get_by_role (especially for buttons and comboboxes)
+    role_map = {
+        "click": ["button", "link"],
+        "fill": ["textbox", "searchbox"],
+        "select": ["combobox", "listbox"],
+        "upload": ["button", "textbox"]
+    }
+    roles = role_map.get(action_type, ["textbox"])
+    for r in roles:
         try:
-            # Check if element is visible and not already handled
-            is_visible = await inp.is_visible()
-            already_filled = await inp.get_attribute("data-autofilled")
-            
-            if not is_visible or already_filled == "true":
-                continue
+            el = page.get_by_role(r, name=clean_label, exact=False)
+            if await el.count() > 0:
+                for i in range(await el.count()):
+                    candidate = el.nth(i)
+                    if await candidate.is_visible():
+                        return candidate
+        except Exception:
+            pass
 
-            inp_type = await inp.get_attribute("type") or ""
-            inp_id = await inp.get_attribute("id") or ""
-            inp_name = await inp.get_attribute("name") or ""
-            
-            # Get associated label text
-            label_text = ""
-            if inp_id:
-                label = await page.query_selector(f"label[for='{inp_id}']")
-                if label:
-                    label_text = await label.inner_text()
-            
-            # Extract surrounding parent container HTML for context
-            parent_html = ""
-            parent = await inp.evaluate_handle("el => el.closest('div')")
-            if parent:
-                parent_html = await page.evaluate("el => el.outerHTML", parent)
-                if not label_text:
-                    label_text = await page.evaluate("el => el.innerText", parent)
-            
-            field_key = (inp_name + " " + label_text + " " + inp_id).lower().strip()
-            if not field_key:
-                continue
+    # Try get_by_text (anywhere in element)
+    el = page.get_by_text(clean_label, exact=False)
+    if await el.count() > 0:
+        for i in range(await el.count()):
+            candidate = el.nth(i)
+            if await candidate.is_visible():
+                return candidate
 
-            question_text = label_text.split('\n')[0].strip() if label_text else inp_name
-            
-            # 1. Skip if this question has already been answered during this application run
-            if question_text in session_filled_questions:
-                # Mark it in the DOM just to keep current session tidy
-                await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
-                continue
-                
-            # 2. Resume PDF upload
-            if inp_type == "file":
-                placeholder = await inp.get_attribute("placeholder") or ""
-                if "resume" in inp_name.lower() or "cv" in inp_name.lower() or "resume" in placeholder.lower():
-                    await inp.set_input_files(resume_pdf_path)
-                    await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
-                    session_filled_questions.add(question_text)
-                    print(f"Uploaded tailored resume PDF: {resume_pdf_path}")
-                    continue
+    # If all semantic locators fail, try simple text selectors inside input/button tags
+    selectors = [
+        f"input[placeholder*='{clean_label}']",
+        f"input[name*='{clean_label}']",
+        f"button:has-text('{clean_label}')",
+        f"a:has-text('{clean_label}')"
+    ]
+    for sel in selectors:
+        try:
+            el = page.locator(sel)
+            if await el.count() > 0:
+                for i in range(await el.count()):
+                    candidate = el.nth(i)
+                    if await candidate.is_visible():
+                        return candidate
+        except Exception:
+            pass
 
-            # Heuristic matching for common personal fields
-            if "first name" in field_key or "firstname" in field_key:
-                first_name = resume_data.get("name", "John").split()[0]
-                await inp.fill(first_name)
-                session_filled_questions.add(question_text)
-            elif "last name" in field_key or "lastname" in field_key:
-                names = resume_data.get("name", "Doe").split()
-                last_name = names[-1] if len(names) > 0 else "Doe"
-                await inp.fill(last_name)
-                session_filled_questions.add(question_text)
-            elif "email" in field_key:
-                await inp.fill(resume_data.get("email", ""))
-                session_filled_questions.add(question_text)
-            elif "phone" in field_key or "mobile" in field_key:
-                await inp.fill(resume_data.get("phone", ""))
-                session_filled_questions.add(question_text)
-            elif "linkedin" in field_key and len(resume_data.get("links", [])) > 0:
-                li_url = next((link for link in resume_data["links"] if "linkedin" in link), "")
-                if li_url:
-                    await inp.fill(li_url)
-                    session_filled_questions.add(question_text)
-            elif "github" in field_key and len(resume_data.get("links", [])) > 0:
-                gh_url = next((link for link in resume_data["links"] if "github" in link), "")
-                if gh_url:
-                    await inp.fill(gh_url)
-                    session_filled_questions.add(question_text)
+    return None
+
+# ─── Execute Actions ────────────────────────────────────────────────────────
+
+async def execute_agent_action(page, action: AgentAction, resume_pdf_path: str) -> bool:
+    """Executes a single structured AgentAction using Playwright locators."""
+    action_type = action.action_type
+    label = action.locator_label or ""
+    val = action.value or ""
+    
+    print(f"[Autofill Action] Executing: {action_type.upper()} | Label: '{label}' | Value: '{val}'")
+    
+    if action_type == "pause":
+        print(f"[Autofill Action] PAUSING loop: {action.reason or 'User requested pause'}")
+        return False
+        
+    if action_type == "complete":
+        print("[Autofill Action] COMPLETE action reached.")
+        return True
+
+    # Locate the target element
+    el = await locate_element(page, label, action_type)
+    if not el:
+        print(f"[Autofill Action] WARNING: Could not find element matching '{label}' for action '{action_type}'")
+        return False
+
+    try:
+        # Focus element to trigger dynamic JS focus events
+        await el.focus()
+        
+        if action_type == "fill":
+            await el.fill(val)
+        elif action_type == "select":
+            # For select option, try direct selection or picking by value/text
+            try:
+                await el.select_option(label=val)
+            except Exception:
+                try:
+                    await el.select_option(value=val)
+                except Exception:
+                    # Fallback: type value to auto-select option
+                    await el.type(val)
+        elif action_type == "click":
+            await el.click()
+        elif action_type == "upload":
+            # If the element is a button/input wrapper, resolve the actual file input underneath
+            if await el.evaluate("el => el.tagName") != "INPUT":
+                # Find input type=file inside or near the element
+                file_input = page.locator("input[type='file']")
+                if await file_input.count() > 0:
+                    await file_input.first.set_input_files(resume_pdf_path)
+                    print(f"[Autofill Action] Uploaded resume to underlying file input: {resume_pdf_path}")
+                else:
+                    raise Exception("File input tag not found under locator.")
             else:
-                # LLM-based answering for custom questions with page context
-                if question_text and len(question_text) > 3:
-                    print(f"Asking LLM to answer: '{question_text}' with visual HTML context...")
-                    answer = get_answer_from_llm(question_text, parent_html, resume_data)
-                    if answer:
-                        print(f"LLM Answer: {answer}")
-                        if inp_type == "checkbox":
-                            if "yes" in answer.lower() or "true" in answer.lower():
-                                await inp.check()
-                        elif await inp.evaluate("el => el.tagName") == "SELECT":
-                            options = await inp.query_selector_all("option")
-                            for opt in options:
-                                val = await opt.get_attribute("value") or ""
-                                text = await opt.inner_text() or ""
-                                if answer.lower() in val.lower() or answer.lower() in text.lower():
-                                    await inp.select_option(value=val)
-                                    break
-                        else:
-                            await inp.fill(answer)
-                    
-                    # Mark as successfully handled in this run
-                    session_filled_questions.add(question_text)
+                await el.set_input_files(resume_pdf_path)
             
-            # Mark as filled in the DOM
-            await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
-            
-        except Exception as e:
-            print(f"Skipping input field due to error: {e}")
+        # Give pages a brief moment to update state or run event handlers
+        await page.wait_for_timeout(350)
+        return True
+    except Exception as e:
+        print(f"[Autofill Action] ERROR executing action on '{label}': {str(e)}")
+        return False
 
-async def autofill_job_application(url: str, resume_data: dict, resume_pdf_path: str, interactive_mode: bool = True):
+# ─── Thought Phase ──────────────────────────────────────────────────────────
+
+async def get_next_actions_from_llm(
+    current_url: str,
+    accessibility_tree: str,
+    resume_data: dict,
+    job_description: str,
+    custom_api_key: Optional[str] = None
+) -> NextStepDecision:
+    """Queries Gemini to evaluate page state and return structured actions."""
+    
+    prompt = f"""You are an advanced job application autofill agent using Playwright.
+Analyze the current page state, candidate profile, and job details below. Decide on the next set of actions to perform on the page.
+
+CURRENT APPLICATION URL:
+{current_url}
+
+CANDIDATE PROFILE (RESUME DATA):
+{json.dumps(resume_data, indent=2)}
+
+TARGET JOB DESCRIPTION:
+---
+{job_description[:1500]}
+---
+
+CURRENT PAGE ACCESSIBILITY TREE STATE:
+---
+{accessibility_tree}
+---
+
+INSTRUCTIONS:
+1. Map the visible fields (textbox, combobox, checkbox, radio, file input) to the candidate's profile.
+2. Generate a list of sequential actions to fill/click items on this current page state.
+3. If you encounter file inputs (upload) for the Resume/CV, return an 'upload' action type.
+4. When you fill all fields on the current page, include a 'click' action to progress (e.g. clicking 'Next', 'Continue', or 'Save').
+5. If you reach the final submission or preview review page (usually has a 'Submit', 'Submit Application', or 'Finish' button), insert a 'pause' action to let the human review before submission.
+6. If the page is complete or has successfully completed the submission, return a 'complete' action.
+"""
+
+    response_text = generate_content_with_fallback(
+        prompt=prompt,
+        response_schema=NextStepDecision,
+        custom_api_key=custom_api_key
+    )
+    
+    decision_data = json.loads(response_text)
+    return NextStepDecision(**decision_data)
+
+# ─── Main Autofill Loop ───────────────────────────────────────────────────────
+
+async def autofill_job_application(
+    url: str,
+    resume_data: dict,
+    resume_pdf_path: str,
+    custom_api_key: Optional[str] = None,
+    interactive_mode: bool = True
+):
     """
-    Launches a headed browser with a persistent user data directory (keeping you logged in).
-    Continuously monitors the application page, dynamically filling out forms step-by-step.
+    Launches browser context with persistent state, runs the dynamic Observation-Thought-Action loop,
+    and fills out application forms step-by-step using Accessibility Tree snapshots.
     """
     async with async_playwright() as p:
         user_data_dir = os.path.abspath("./user_data")
@@ -178,29 +300,79 @@ async def autofill_job_application(url: str, resume_data: dict, resume_pdf_path:
         
         page = context.pages[0] if context.pages else await context.new_page()
         
-        print(f"Navigating to: {url}")
+        print(f"[Autofill Agent] Navigating to: {url}")
         await page.goto(url)
         
-        print("Autofill Agent active. Monitoring application forms dynamically...")
-        
-        # State tracker that survives DOM refreshes/AJAX reloads
-        session_filled_questions = set()
+        # Keep track of recently attempted actions to prevent infinite loop errors
+        action_history = []
         
         try:
             while not page.is_closed():
-                await fill_visible_fields(page, resume_data, resume_pdf_path, session_filled_questions)
+                # 1. Observation Phase
+                print("[Autofill Agent] Capturing Accessibility Tree state...")
+                tree = await get_accessibility_context(page)
                 
-                if not interactive_mode:
-                    next_btn = await page.query_selector("button:has-text('Next'), button:has-text('Continue'), button:has-text('Review')")
-                    if next_btn and await next_btn.is_visible():
-                        print("Clicking Next/Continue button automatically...")
-                        await next_btn.click()
-                        await page.wait_for_timeout(2000)
+                # 2. Thought Phase
+                print("[Autofill Agent] Consulting Gemini for next steps...")
+                decision = await get_next_actions_from_llm(
+                    current_url=page.url,
+                    accessibility_tree=tree,
+                    resume_data=resume_data,
+                    job_description=resume_data.get("summary", ""), # Fallback to summary if JD not provided
+                    custom_api_key=custom_api_key
+                )
                 
-                await asyncio.sleep(2)
+                print(f"[Autofill Agent] Reasoning: {decision.thought}")
+                
+                if not decision.actions:
+                    print("[Autofill Agent] No actions returned. Sleeping and retrying...")
+                    await asyncio.sleep(3)
+                    continue
+                
+                # Check for infinite action loops (e.g. repeated failure clicks)
+                current_actions_summary = [(a.action_type, a.locator_label) for a in decision.actions]
+                if len(action_history) > 3 and action_history[-1] == current_actions_summary:
+                    print("[Autofill Agent] Infinite loop detected on the same set of actions. Pausing for human intervention...")
+                    # Insert manual sleep to let user fix
+                    await asyncio.sleep(5)
+                    continue
+                
+                action_history.append(current_actions_summary)
+                if len(action_history) > 10:
+                    action_history.pop(0)
+
+                # 3. Action Phase
+                paused = False
+                completed = False
+                for action in decision.actions:
+                    if action.action_type == "pause":
+                        paused = True
+                        break
+                    if action.action_type == "complete":
+                        completed = True
+                        break
+                        
+                    success = await execute_agent_action(page, action, resume_pdf_path)
+                    if not success:
+                        # Stop execution chain on failure to re-evaluate page state
+                        break
+                
+                if completed:
+                    print("[Autofill Agent] Success! Application flow finished.")
+                    break
+                    
+                if paused:
+                    print("[Autofill Agent] Human-in-the-Loop triggered. Pausing agent interaction.")
+                    # Wait indefinitely until user resumes or closes page
+                    while not page.is_closed():
+                        await asyncio.sleep(2)
+                    break
+                
+                # Yield execution thread briefly
+                await asyncio.sleep(2.5)
                 
         except Exception as e:
-            print(f"Autofill event loop error or browser closed: {e}")
+            print(f"[Autofill Agent] Loop error or page closed: {e}")
         finally:
             if not interactive_mode:
                 await context.close()

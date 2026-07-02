@@ -669,7 +669,7 @@ def update_task_status(task_id: str, status: str, message: str):
         }
 
 @app.post("/apply")
-async def apply(request: ApplyRequest, authorization: Optional[str] = Header(None)):
+async def apply(request: ApplyRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
@@ -685,6 +685,13 @@ async def apply(request: ApplyRequest, authorization: Optional[str] = Header(Non
             raise HTTPException(status_code=400, detail="No resume available to upload.")
         pdf_path = session_resume_path
 
+    db_api_key = None
+    if token:
+        user = get_user_by_token(token)
+        if user:
+            db_api_key = user.get("gemini_api_key")
+    active_api_key = x_gemini_api_key or db_api_key
+
     task_id = str(uuid.uuid4())
     update_task_status(task_id, "running", "Autofill session initialized...")
 
@@ -695,6 +702,7 @@ async def apply(request: ApplyRequest, authorization: Optional[str] = Header(Non
                 url=request.job_url,
                 resume_data=session_resume_data,
                 resume_pdf_path=os.path.abspath(pdf_path),
+                custom_api_key=active_api_key,
                 interactive_mode=not request.direct_mode
             )
             update_task_status(task_id, "completed", "Job application form auto-filled successfully!")
