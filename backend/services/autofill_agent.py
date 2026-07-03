@@ -81,85 +81,178 @@ def _flatten_accessibility_tree(node: dict, indent: int = 0) -> List[str]:
     return lines
 
 async def get_accessibility_context(page) -> str:
-    """Captures the current browser accessibility snapshot and returns a clean serialized text representation."""
+    """
+    Extracts a clean, semantic text map of all interactive form elements across all frames.
+    Supports iframes and nested portal elements dynamically.
+    """
+    js_extractor = """
+    () => {
+        let root = document;
+        let activeModal = document.querySelector("div[role='dialog'], [role='dialog'], .aria-modal, #artdeco-modal-outlet, .jobs-easy-apply-modal");
+        if (activeModal && activeModal.offsetWidth > 0 && activeModal.offsetHeight > 0) {
+            root = activeModal;
+        }
+
+        let lines = [];
+        let elements = root.querySelectorAll("input, select, textarea, button, h1, h2, h3, [role='textbox'], [role='checkbox'], [role='button']");
+        
+        elements.forEach(el => {
+            if (el.offsetWidth === 0 || el.offsetHeight === 0 || el.type === 'hidden') {
+                return;
+            }
+            
+            let tag = el.tagName.toLowerCase();
+            let role = el.getAttribute("role") || tag;
+            let type = el.getAttribute("type") || "";
+            
+            let label = "";
+            let id = el.getAttribute("id");
+            if (id) {
+                let lblEl = document.querySelector(`label[for="${id}"]`);
+                if (lblEl) label = lblEl.innerText.trim();
+            }
+            
+            if (!label) {
+                label = el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.getAttribute("name") || "";
+            }
+            
+            if (!label && tag === 'button') {
+                label = el.innerText.trim();
+            }
+            
+            if (!label) {
+                let parent = el.closest('div');
+                if (parent) {
+                    label = parent.innerText.split('\\n')[0].trim();
+                }
+            }
+
+            label = label.replace(/\\s+/g, ' ').trim();
+            let val = el.value || el.innerText || "";
+            if (tag === 'input' && (type === 'checkbox' || type === 'radio')) {
+                val = el.checked ? "checked" : "unchecked";
+            }
+            
+            let required = el.hasAttribute("required") || el.getAttribute("aria-required") === "true" ? "required" : "";
+            
+            if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
+                lines.push(`[heading] name: "${el.innerText.trim()}"`);
+            } else {
+                lines.push(`[${role}${type ? ':' + type : ''}] name: "${label}", value: "${val}"${required ? ', ' + required : ''}`);
+            }
+        });
+        
+        return lines.join("\\n");
+    }
+    """
     try:
-        snapshot = await page.accessibility.snapshot()
-        if not snapshot:
-            return "Accessibility tree snapshot is empty."
-        flat_lines = _flatten_accessibility_tree(snapshot)
-        return "\n".join(flat_lines)
+        results = []
+        for frame in page.frames:
+            try:
+                # Verify frame is still attached and active
+                if frame.is_detached():
+                    continue
+                context_str = await frame.evaluate(js_extractor)
+                if context_str and context_str.strip() and context_str != "No visible form elements found.":
+                    results.append(context_str)
+            except Exception:
+                # Ignore cross-origin access blocks silently
+                pass
+
+        if not results:
+            return "No visible form elements found."
+            
+        final_context = "\n".join(results)
+        
+        # Print a clean, formatted snapshot debug log
+        print("=== [DEBUG ACCESSIBILITY] EXTRACTED FORM STATE ===")
+        print(final_context)
+        print("==================================================")
+        return final_context
     except Exception as e:
-        return f"Error capturing accessibility tree: {str(e)}"
+        print(f"[DEBUG ACCESSIBILITY] Captured error: {str(e)}")
+        return f"Error extracting page state: {str(e)}"
 
 # ─── Playwright Locator Helper ──────────────────────────────────────────────
 
 async def locate_element(page, label: str, action_type: str):
     """
     Resolves the best semantic locator for a given action and element descriptor.
-    Tries different Playwright locators (label, placeholder, text, role) sequentially.
+    Searches sequentially through the main frame and all active sub-frames.
     """
-    # Clean and sanitize search label
     clean_label = label.strip()
-    
-    # Try finding elements using Playwright's get_by_label
-    el = page.get_by_label(clean_label, exact=False)
-    if await el.count() > 0:
-        # Check first match is visible/interactable
-        for i in range(await el.count()):
-            candidate = el.nth(i)
-            if await candidate.is_visible():
-                return candidate
-
-    # Try get_by_placeholder
-    el = page.get_by_placeholder(clean_label, exact=False)
-    if await el.count() > 0:
-        for i in range(await el.count()):
-            candidate = el.nth(i)
-            if await candidate.is_visible():
-                return candidate
-
-    # Try get_by_role (especially for buttons and comboboxes)
-    role_map = {
-        "click": ["button", "link"],
-        "fill": ["textbox", "searchbox"],
-        "select": ["combobox", "listbox"],
-        "upload": ["button", "textbox"]
-    }
-    roles = role_map.get(action_type, ["textbox"])
-    for r in roles:
+    if not clean_label:
+        return None
+        
+    # Check main page first, then all active frames
+    containers = [page]
+    try:
+        containers.extend([f for f in page.frames if not f.is_detached() and f != page])
+    except Exception:
+        pass
+        
+    for container in containers:
         try:
-            el = page.get_by_role(r, name=clean_label, exact=False)
+            # 1. Try finding elements using Playwright's get_by_label
+            el = container.get_by_label(clean_label, exact=False)
             if await el.count() > 0:
                 for i in range(await el.count()):
                     candidate = el.nth(i)
                     if await candidate.is_visible():
                         return candidate
-        except Exception:
-            pass
 
-    # Try get_by_text (anywhere in element)
-    el = page.get_by_text(clean_label, exact=False)
-    if await el.count() > 0:
-        for i in range(await el.count()):
-            candidate = el.nth(i)
-            if await candidate.is_visible():
-                return candidate
-
-    # If all semantic locators fail, try simple text selectors inside input/button tags
-    selectors = [
-        f"input[placeholder*='{clean_label}']",
-        f"input[name*='{clean_label}']",
-        f"button:has-text('{clean_label}')",
-        f"a:has-text('{clean_label}')"
-    ]
-    for sel in selectors:
-        try:
-            el = page.locator(sel)
+            # 2. Try get_by_placeholder
+            el = container.get_by_placeholder(clean_label, exact=False)
             if await el.count() > 0:
                 for i in range(await el.count()):
                     candidate = el.nth(i)
                     if await candidate.is_visible():
                         return candidate
+
+            # 3. Try get_by_role (especially for buttons and comboboxes)
+            role_map = {
+                "click": ["button", "link"],
+                "fill": ["textbox", "searchbox"],
+                "select": ["combobox", "listbox"],
+                "upload": ["button", "textbox"]
+            }
+            roles = role_map.get(action_type, ["textbox"])
+            for r in roles:
+                try:
+                    el = container.get_by_role(r, name=clean_label, exact=False)
+                    if await el.count() > 0:
+                        for i in range(await el.count()):
+                            candidate = el.nth(i)
+                            if await candidate.is_visible():
+                                return candidate
+                except Exception:
+                    pass
+
+            # 4. Try get_by_text
+            el = container.get_by_text(clean_label, exact=False)
+            if await el.count() > 0:
+                for i in range(await el.count()):
+                    candidate = el.nth(i)
+                    if await candidate.is_visible():
+                        return candidate
+
+            # 5. Tag selector backups
+            selectors = [
+                f"input[placeholder*='{clean_label}']",
+                f"input[name*='{clean_label}']",
+                f"button:has-text('{clean_label}')",
+                f"a:has-text('{clean_label}')"
+            ]
+            for sel in selectors:
+                try:
+                    el = container.locator(sel)
+                    if await el.count() > 0:
+                        for i in range(await el.count()):
+                            candidate = el.nth(i)
+                            if await candidate.is_visible():
+                                return candidate
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -303,6 +396,22 @@ async def autofill_job_application(
         print(f"[Autofill Agent] Navigating to: {url}")
         await page.goto(url)
         
+        # Initial sleep to let dynamic content or sign-in state settle
+        await page.wait_for_timeout(3000)
+        
+        # Automatically detect and click the Easy Apply button to open the popup form
+        try:
+            easy_apply_btn = page.locator("button.jobs-apply-button")
+            if await easy_apply_btn.count() > 0 and await easy_apply_btn.first.is_visible():
+                print("[Autofill Agent] 'Easy Apply' button found. Clicking it to launch form popup...")
+                await easy_apply_btn.first.click()
+                # Wait for modal overlay to slide in
+                await page.wait_for_timeout(2000)
+            else:
+                print("[Autofill Agent] 'Easy Apply' button not found on load. Let's see if modal is already open.")
+        except Exception as e:
+            print(f"[Autofill Agent] Note: Checked for Easy Apply button but encountered: {str(e)}")
+
         # Keep track of recently attempted actions to prevent infinite loop errors
         action_history = []
         
@@ -343,10 +452,12 @@ async def autofill_job_application(
 
                 # 3. Action Phase
                 paused = False
+                pause_reason = ""
                 completed = False
                 for action in decision.actions:
                     if action.action_type == "pause":
                         paused = True
+                        pause_reason = action.reason or "Needs manual interaction"
                         break
                     if action.action_type == "complete":
                         completed = True
@@ -362,11 +473,11 @@ async def autofill_job_application(
                     break
                     
                 if paused:
-                    print("[Autofill Agent] Human-in-the-Loop triggered. Pausing agent interaction.")
-                    # Wait indefinitely until user resumes or closes page
-                    while not page.is_closed():
-                        await asyncio.sleep(2)
-                    break
+                    print(f"[Autofill Agent] Human-in-the-Loop active: {pause_reason}")
+                    print("[Autofill Agent] Waiting 5 seconds for user action before checking page state again...")
+                    await asyncio.sleep(5)
+                    # Loop continues, will capture a new Accessibility Tree on next iteration
+                    continue
                 
                 # Yield execution thread briefly
                 await asyncio.sleep(2.5)
