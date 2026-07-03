@@ -690,6 +690,30 @@ input:focus, textarea:focus, select:focus {
   flex: 1;
 }
 
+/* Color-coded log levels */
+.log-default { color: #CBD5E0; }
+.log-ok      { color: #48BB78; }
+.log-warn    { color: #ECC94B; }
+.log-ai      { color: #63B3ED; }
+.log-ratelimit { color: #FBBF24; font-weight: 600; }
+
+/* Blinking cursor at end of console */
+.log-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  background: #6366F1;
+  border-radius: 2px;
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 /* ─── Keyframes ──────────────────────────────────────────── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(15px); }
@@ -723,6 +747,11 @@ input:focus, textarea:focus, select:focus {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ─── Misc ───────────────────────────────────────────────── */
 .status-badge {
   animation: pulseGlow 2s infinite;
@@ -733,3 +762,67 @@ input:focus, textarea:focus, select:focus {
 ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1); }
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.18); }
+
+/* ─── Job card progressive disclosure ──────────────────────── */
+.job-card {
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  border-radius: 14px;
+}
+.job-card:hover {
+  border-color: rgba(99,102,241,0.25) !important;
+  box-shadow: 0 4px 20px rgba(99,102,241,0.1);
+}
+
+/* ─── Mobile Responsiveness ──────────────────────────────── */
+@media (max-width: 768px) {
+  .app-container {
+    padding: 16px 12px;
+  }
+
+  header.app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-panel {
+    height: 400px;
+  }
+
+  h1.title {
+    font-size: 1.35rem;
+  }
+
+  .log-terminal-body {
+    max-height: 150px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-container {
+    padding: 10px 8px;
+  }
+
+  .card {
+    padding: 18px 14px;
+  }
+
+  .btn {
+    font-size: 0.82rem;
+    padding: 10px 16px;
+  }
+
+  h2 {
+    font-size: 1rem;
+  }
+}
