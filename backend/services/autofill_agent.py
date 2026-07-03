@@ -300,12 +300,21 @@ async def execute_agent_action(page, action: AgentAction, resume_pdf_path: str) 
                     await el.type(val)
         elif action_type == "click":
             try:
-                # Try standard Playwright click first (with 3s timeout)
-                await el.click(timeout=3000)
+                # Stage 1: Standard Playwright click (with 2s timeout)
+                await el.click(timeout=2000)
             except Exception as click_err:
-                print(f"[Autofill Action] Standard click intercepted or timed out: {str(click_err)[:100]} | Retrying via DOM trigger...")
-                # Dispatch DOM click bypassing physical cursor layout hit-testing
-                await el.evaluate("el => el.click()")
+                print(f"[Autofill Action] Stage 1 Click failed: {str(click_err)[:80]}. Trying Stage 2 (Force click)...")
+                try:
+                    # Stage 2: Force click ignoring hit-test overlays
+                    await el.click(force=True, timeout=2000)
+                except Exception as force_err:
+                    print(f"[Autofill Action] Stage 2 Click failed: {str(force_err)[:80]}. Trying Stage 3 (Dispatch trusted mouse events)...")
+                    # Stage 3: Dispatch manual trusted MouseEvents directly to button
+                    await el.evaluate("""el => {
+                        el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}));
+                        el.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, cancelable: true}));
+                        el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+                    }""")
         elif action_type == "upload":
             # If the element is a button/input wrapper, resolve the actual file input underneath
             if await el.evaluate("el => el.tagName") != "INPUT":
