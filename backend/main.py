@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 import json
@@ -9,20 +10,37 @@ import urllib.request
 import urllib.parse
 import uuid
 import ssl
+import queue
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+# pyrefly: ignore [missing-import]
+# Mount static files for hosting the built frontend as part of the same service
+from fastapi.staticfiles import StaticFiles
+# pyrefly: ignore [missing-import]
+from fastapi.responses import HTMLResponse
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel
 from typing import List, Optional
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 load_dotenv()
+# pyrefly: ignore [missing-import]
 from pypdf import PdfReader
+import time
+import hashlib
+import re as _re
+
 
 from services.resume_parser import parse_resume
 from services.scraper import scrape_job_description
 from services.llm_agent import analyze_job_fit, review_tailored_resume, tailor_latex_code
 from services.resume_generator import generate_pdf_resume
 from services.autofill_agent import autofill_job_application
+from services.job_searcher import find_matching_jobs
 from services.auth import (
     create_or_get_user,
     create_session,
@@ -31,15 +49,20 @@ from services.auth import (
     get_google_auth_url,
     exchange_google_code_for_email
 )
+from services.log_queue import LLMClientLogQueue
 from utils.latex_utils import extract_latex_command, apply_latex_hotfix, generate_latex_from_json
 
 app = FastAPI(title="AI Job Finder Agent API")
 
-# Enable CORS for React Frontend
+# FIX #5: allow_origins=["*"] combined with allow_credentials=True is invalid per the
+# CORS spec (browsers will reject it even though FastAPI won't error at startup).
+# This API authenticates via a Bearer token header, not cookies, so credentialed
+# CORS requests aren't actually needed. If you later need cookie-based auth,
+# replace allow_origins=["*"] with an explicit list of trusted origins instead.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -62,14 +85,80 @@ if os.path.exists(default_cls_source):
 
 import threading
 
-# Session-scoped state storage: maps session_token -> {"data": resume_data_dict, "path": master_resume_path_str}
-_session_store: dict[str, dict] = {}
-_store_lock = threading.Lock()
+# ─── SessionStore abstraction ───────────────────────────────────────────────
+# Maps any token (real user token, guest UUID, or "guest") to resume state.
+# Backed in-memory with optional Supabase persistence for authenticated users.
+class SessionStore:
+    """Thread-safe session store keyed by user token."""
+    def __init__(self):
+        self._store: dict[str, dict] = {}
+        self._lock = threading.Lock()
+
+    def get_raw(self, key: str) -> Optional[dict]:
+        with self._lock:
+            return self._store.get(key)
+
+    def set_raw(self, key: str, data: dict, path: str):
+        with self._lock:
+            self._store[key] = {"data": data, "path": path}
+
+    def all_keys(self) -> list:
+        with self._lock:
+            return list(self._store.keys())
+
+_session_store_obj = SessionStore()
+_store_lock = threading.Lock()  # kept for legacy inline uses
+
+# Legacy alias so existing code using _session_store dict still works
+_session_store = _session_store_obj._store
 
 RESUME_STATE_FILE = os.path.join(OUTPUT_DIR, "resume_state.json")
 
 # Helpers to manage state safely
 from services.auth import update_user_resume_data
+
+
+def _safe_key(token: Optional[str]) -> str:
+    """FIX #2 helper: turn a token (or 'guest') into a filesystem/cache-safe key
+    with no path separators, so it can be used to build per-user file paths."""
+    key = token or "guest"
+    key = _re.sub(r'[^a-zA-Z0-9_-]', '', key)[:40]
+    return key or "guest"
+
+
+def _user_output_paths(token: Optional[str]) -> tuple[str, str]:
+    """FIX #2: Return per-user tex/pdf output paths instead of the single global
+    'tailored_resume.tex' / 'tailored_resume.pdf' filenames. Using fixed global
+    filenames meant concurrent users could overwrite each other's compiled resume,
+    and in the worst case /apply could submit one user's resume to another
+    user's job application."""
+    key = _safe_key(token)
+    tex_path = os.path.join(OUTPUT_DIR, f"tailored_resume_{key}.tex")
+    pdf_path = os.path.join(OUTPUT_DIR, f"tailored_resume_{key}.pdf")
+    return tex_path, pdf_path
+
+
+def drain_llm_logs() -> list[str]:
+    """FIX #1: Non-blocking drain of all currently-queued LLM client log messages.
+
+    The previous implementation used `while True: LLMClientLogQueue.get(block=True,
+    timeout=1.0)` with `except queue.Empty: continue`. That loop has no exit
+    condition once the queue is empty and the underlying LLM call has already
+    finished -- it just polls forever, hanging the SSE stream indefinitely.
+    Draining non-blockingly (like the original commented-out `get_all()` calls)
+    fixes this: we grab whatever log lines are currently available and move on.
+    """
+    messages = []
+    while True:
+        try:
+            msg = LLMClientLogQueue.get(block=False)
+        except queue.Empty:
+            break
+        except Exception:
+            break
+        messages.append(msg)
+    return messages
+
 
 def get_session_data(token: Optional[str]) -> dict:
     key = token or "guest"
@@ -187,7 +276,15 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
         token = authorization.split(" ")[1]
         
     try:
-        file_path = os.path.join(UPLOAD_DIR, file.filename)
+        # FIX #3: file.filename comes straight from the client and was previously
+        # joined into UPLOAD_DIR unsanitized, allowing path traversal (e.g. a
+        # filename like "../../main.py") to write outside UPLOAD_DIR. Strip any
+        # directory component and disallow unsafe characters.
+        raw_filename = os.path.basename(file.filename or "resume_upload")
+        safe_filename = _re.sub(r'[^A-Za-z0-9._-]', '_', raw_filename).lstrip('.')
+        if not safe_filename:
+            safe_filename = f"resume_upload_{uuid.uuid4().hex[:8]}"
+        file_path = os.path.join(UPLOAD_DIR, safe_filename)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
@@ -220,8 +317,13 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
 
 def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, linespread: float = 1.0, master_latex: Optional[str] = None) -> tuple[int, float]:
     try:
-        temp_tex = os.path.join(OUTPUT_DIR, "temp_check.tex")
-        temp_pdf = os.path.join(OUTPUT_DIR, "temp_check.pdf")
+        # FIX #2 (part 2): use a unique temp filename per call instead of the fixed
+        # "temp_check.tex"/"temp_check.pdf". Since analyze_job can run concurrently
+        # for different users, the old fixed names let concurrent requests clobber
+        # each other's compile output and read back the wrong PDF.
+        unique_id = uuid.uuid4().hex[:10]
+        temp_tex = os.path.join(OUTPUT_DIR, f"temp_check_{unique_id}.tex")
+        temp_pdf = os.path.join(OUTPUT_DIR, f"temp_check_{unique_id}.pdf")
         
         fixed_code = apply_latex_hotfix(latex_code, spacing_scale, linespread, master_latex)
         with open(temp_tex, "w", encoding="utf-8") as f:
@@ -278,10 +380,6 @@ def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, 
         print(f"Error checking page metrics: {e}")
         return 999, 0.0
 
-import time
-import hashlib
-import re as _re
-
 def _extract_company_from_jd(jd_text: str) -> str:
     """Heuristically extract the hiring company name from a job description."""
     patterns = [
@@ -301,6 +399,11 @@ def _extract_company_from_jd(jd_text: str) -> str:
 # In-memory analysis cache: keys are MD5(token + job_title + jd_text), values are {"analysis": AnalysisResponse_model_dump, "timestamp": float}
 _analysis_cache: dict[str, dict] = {}
 _cache_lock = threading.Lock()
+
+# In-memory job search TTL cache: keys are (keywords, location, timeframe), values are (timestamp, jobs_list)
+_job_search_cache: dict[tuple, tuple] = {}
+_job_cache_lock = threading.Lock()
+JOB_SEARCH_CACHE_TTL = 300  # 5 minutes
 
 def get_cached_analysis(token: str, job_title: str, jd_text: str) -> Optional[dict]:
     if not jd_text:
@@ -323,9 +426,17 @@ def set_cached_analysis(token: str, job_title: str, jd_text: str, analysis: dict
     key_src = f"{token or 'guest'}:{job_title}:{jd_text}"
     key = hashlib.md5(key_src.encode("utf-8")).hexdigest()
     with _cache_lock:
+        # FIX #8: opportunistically prune expired entries whenever we write, so the
+        # cache doesn't grow unbounded over the life of a long-running process
+        # (previously expired entries were only ever removed if someone happened
+        # to read that exact key again after expiry).
+        now = time.time()
+        expired = [k for k, v in _analysis_cache.items() if now - v["timestamp"] >= 3600]
+        for k in expired:
+            _analysis_cache.pop(k, None)
         _analysis_cache[key] = {
             "analysis": analysis,
-            "timestamp": time.time()
+            "timestamp": now
         }
 
 class RunContext:
@@ -403,6 +514,7 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                 job_title = scraped["title"]
                 ctx.log_step("scrape_job", time.time() - t0)
                 yield json.dumps({"type": "log", "message": f"✅ Scraped job details for: {job_title}"}) + "\n"
+                yield json.dumps({"type": "scraped_data", "job_title": job_title, "job_description": jd_text}) + "\n"
                 
                 # Check cache again after scraping
                 cached = get_cached_analysis(token, job_title, jd_text)
@@ -421,7 +533,6 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                     return
                 
             yield json.dumps({"type": "log", "message": "🤖 Comparing candidate profile & calculating ATS gap analysis..."}) + "\n"
-                
             master_latex = None
             if session_resume_path and session_resume_path.endswith(".tex"):
                 with open(session_resume_path, "r", encoding="utf-8") as f:
@@ -429,9 +540,55 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
             else:
                 master_latex = generate_latex_from_json(session_resume_data)
                 
+            def log_callback(msg_json: str):
+                try:
+                    # Verify it's valid json
+                    json.loads(msg_json)
+                    LLMClientLogQueue.put(msg_json)
+                except Exception:
+                    pass
+
             t0 = time.time()
-            analysis = await analyze_job_fit(session_resume_data, job_title, jd_text, master_latex if not request.skip_tailoring else None, active_api_key)
+            # Run fit analysis in a background task so we can drain log messages concurrently
+            import asyncio
+            fit_task = asyncio.create_task(
+                analyze_job_fit(session_resume_data, job_title, jd_text, master_latex if not request.skip_tailoring else None, active_api_key, on_log=log_callback)
+            )
+
+            # Poll and yield log queue events in real-time while the LLM call is running
+            while not fit_task.done():
+                for msg in drain_llm_logs():
+                    try:
+                        parsed = json.loads(msg)
+                        if parsed.get("type") == "llm_warn":
+                            yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
+                        else:
+                            yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
+                    except Exception:
+                        if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
+                            yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
+                        else:
+                            yield json.dumps({"type": "log", "message": msg}) + "\n"
+                await asyncio.sleep(0.5)
+
+            # Wait for task completion and fetch result
+            analysis = await fit_task
             ctx.log_step("analyze_job_fit", time.time() - t0, "gemini-3.1-flash-lite")
+
+            # Yield any remaining leftover log messages
+            for msg in drain_llm_logs():
+                try:
+                    parsed = json.loads(msg)
+                    if parsed.get("type") == "llm_warn":
+                        yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
+                    else:
+                        yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
+                except Exception:
+                    if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
+                        yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
+                    else:
+                        yield json.dumps({"type": "log", "message": msg}) + "\n"
+                
             yield json.dumps({"type": "log", "message": "✍️ Generated tailored resume content and cover letter."}) + "\n"
             
             if request.skip_tailoring:
@@ -443,7 +600,7 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                     "analysis": dumped
                 }) + "\n"
                 return
-
+ 
             if master_latex:
                 suggestions = analysis.suggested_resume_updates
                 missing_skills = analysis.match_analysis.missing_skills
@@ -454,44 +611,114 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                 prev_review_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
                 
                 last_rejection_feedback = ""
+                review = None
+                stalled_on_identical_output = False
                 
-                while reviewer_attempts < 3:
-                    yield json.dumps({"type": "log", "message": f"👀 Recruiter review check (Attempt {reviewer_attempts + 1})..."}) + "\n"
-                    t0 = time.time()
-                    review = review_tailored_resume(analysis.latex_code, session_resume_data, job_title, jd_text, active_api_key)
-                    ctx.log_step(f"recruiter_review_check_attempt_{reviewer_attempts+1}", time.time() - t0, "gemini-3.1-flash-lite")
-    
-                    if review.satisfied:
-                        yield json.dumps({"type": "log", "message": "✅ Recruiter review approved!"}) + "\n"
-                        break
-    
-                    last_rejection_feedback = review.feedback
-                    yield json.dumps({"type": "log", "message": f"⚠️ Recruiter rejected (Attempt {reviewer_attempts + 1}): {review.feedback}"}) + "\n"
-                    t0 = time.time()
-                    analysis.latex_code = tailor_latex_code(
-                        master_latex, job_title, jd_text, suggestions, missing_skills, active_api_key, review.feedback
-                    )
-                    ctx.log_step(f"tailor_latex_retry_attempt_{reviewer_attempts+1}", time.time() - t0, "gemini-3.5-flash")
-                    
-                    curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
-                    if curr_hash == prev_review_hash:
-                        yield json.dumps({"type": "log", "message": "⚠️ AI reviewer feedback generated identical LaTeX output. Breaking reviewer loop."}) + "\n"
-                        break
-                    prev_review_hash = curr_hash
-                    reviewer_attempts += 1
+                if not request.force_tailoring:
+                    while reviewer_attempts < 3:
+                        yield json.dumps({"type": "log", "message": f"👀 Recruiter review check (Attempt {reviewer_attempts + 1})..."}) + "\n"
+                        t0 = time.time()
+                        
+                        # Task-wrapped check to drain logs concurrently
+                        review_task = asyncio.create_task(
+                            asyncio.to_thread(review_tailored_resume, analysis.latex_code, session_resume_data, job_title, jd_text, active_api_key, on_log=log_callback)
+                        )
+                        while not review_task.done():
+                            for msg in drain_llm_logs():
+                                try_parse_failed = False
+                                try:
+                                    parsed = json.loads(msg)
+                                    if parsed.get("type") == "llm_warn":
+                                        yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
+                                    else:
+                                        yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
+                                except Exception:
+                                    try_parse_failed = True
+                                if try_parse_failed:
+                                    if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
+                                        yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
+                                    else:
+                                        yield json.dumps({"type": "log", "message": msg}) + "\n"
+                            await asyncio.sleep(0.5)
+                        
+                        review = await review_task
+                        ctx.log_step(f"recruiter_review_check_attempt_{reviewer_attempts+1}", time.time() - t0, "gemini-3.1-flash-lite")
 
-                if not review.satisfied and reviewer_attempts >= 3:
-                    if not request.force_tailoring:
+                        for msg in drain_llm_logs():
+                            try:
+                                parsed = json.loads(msg)
+                                if parsed.get("type") == "llm_warn":
+                                    yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
+                                else:
+                                    yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
+                            except Exception:
+                                if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
+                                    yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
+                                else:
+                                    yield json.dumps({"type": "log", "message": msg}) + "\n"
+
+                        if review.satisfied:
+                            yield json.dumps({"type": "log", "message": "✅ Recruiter review approved!"}) + "\n"
+                            break
+        
+                        last_rejection_feedback = review.feedback
+                        yield json.dumps({"type": "log", "message": f"⚠️ Recruiter rejected (Attempt {reviewer_attempts + 1}): {review.feedback}"}) + "\n"
+                        t0 = time.time()
+                        
+                        # Task-wrapped tailoring retry to drain logs concurrently
+                        tailor_task = asyncio.create_task(
+                            asyncio.to_thread(tailor_latex_code, master_latex, job_title, jd_text, suggestions, missing_skills, active_api_key, review.feedback, on_log=log_callback)
+                        )
+                        while not tailor_task.done():
+                            for msg in drain_llm_logs():
+                                try:
+                                    parsed = json.loads(msg)
+                                    if parsed.get("type") == "llm_warn":
+                                        yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
+                                    else:
+                                        yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
+                                except Exception:
+                                    if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
+                                        yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
+                                    else:
+                                        yield json.dumps({"type": "log", "message": msg}) + "\n"
+                            await asyncio.sleep(0.5)
+                            
+                        analysis.latex_code = await tailor_task
+                        ctx.log_step(f"tailor_latex_retry_attempt_{reviewer_attempts+1}", time.time() - t0, "gemini-3.5-flash")
+
+                        for msg in drain_llm_logs():
+                            try:
+                                parsed = json.loads(msg)
+                                if parsed.get("type") == "llm_warn":
+                                    yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
+                                else:
+                                    yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
+                            except Exception:
+                                if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
+                                    yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
+                                else:
+                                    yield json.dumps({"type": "log", "message": msg}) + "\n"
+                                
+                        curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
+                        if curr_hash == prev_review_hash:
+                            yield json.dumps({"type": "log", "message": "⚠️ AI reviewer feedback generated identical LaTeX output. Breaking reviewer loop."}) + "\n"
+                            stalled_on_identical_output = True
+                            break
+                        prev_review_hash = curr_hash
+                        reviewer_attempts += 1
+
+                    if review is not None and not review.satisfied and (reviewer_attempts >= 3 or stalled_on_identical_output):
                         yield json.dumps({
                             "type": "rejection_warning", 
-                            "message": f"Candidate may not be a suitable fit for this job after 3 recruitment checks. Reason: {last_rejection_feedback}"
+                            "message": f"Candidate may not be a suitable fit for this job after {reviewer_attempts + 1} recruitment checks. Reason: {last_rejection_feedback}"
                         }) + "\n"
                         return
-                    else:
-                        yield json.dumps({
-                            "type": "log",
-                            "message": "⚠️ Proceeding with resume tailoring anyway due to user override request."
-                        }) + "\n"
+                else:
+                    yield json.dumps({
+                        "type": "log",
+                        "message": "⚠️ Proceeding with resume tailoring anyway due to user override request."
+                    }) + "\n"
     
                 # --- Page-fit loop (compile first, try mechanical adjustments first) ---
                 yield json.dumps({"type": "log", "message": "⚙️ Compiling PDF & checking page layout..."}) + "\n"
@@ -539,9 +766,26 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                         "CPI/GPA value, or bullet point — just make each bullet shorter."
                     )
                     
-                    analysis.latex_code = tailor_latex_code(
-                        master_latex, job_title, jd_text, suggestions, missing_skills, active_api_key, condense_feedback
+                    # Task-wrapped tailoring retry to drain logs concurrently
+                    tailor_task = asyncio.create_task(
+                        asyncio.to_thread(tailor_latex_code, master_latex, job_title, jd_text, suggestions, missing_skills, active_api_key, condense_feedback, on_log=log_callback)
                     )
+                    while not tailor_task.done():
+                        for msg in drain_llm_logs():
+                            try:
+                                parsed = json.loads(msg)
+                                if parsed.get("type") == "llm_warn":
+                                    yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
+                                else:
+                                    yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
+                            except Exception:
+                                if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
+                                    yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
+                                else:
+                                    yield json.dumps({"type": "log", "message": msg}) + "\n"
+                        await asyncio.sleep(0.5)
+                        
+                    analysis.latex_code = await tailor_task
                     
                     curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
                     if curr_hash == prev_latex_hash:
@@ -593,9 +837,13 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post("/generate_tailored_resume")
-async def generate_tailored_resume(tailored_data: dict):
+async def generate_tailored_resume(tailored_data: dict, authorization: Optional[str] = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
     try:
-        output_pdf = os.path.join(OUTPUT_DIR, "tailored_resume.pdf")
+        # FIX #2: per-user output path instead of the fixed "tailored_resume.pdf"
+        _, output_pdf = _user_output_paths(token)
         await generate_pdf_resume(tailored_data, output_pdf)
         return FileResponse(output_pdf, media_type="application/pdf", filename="tailored_resume.pdf")
     except Exception as e:
@@ -607,9 +855,13 @@ class LatexDownloadRequest(BaseModel):
     latex_code: str
 
 @app.post("/download_latex")
-async def download_latex(request: LatexDownloadRequest):
+async def download_latex(request: LatexDownloadRequest, authorization: Optional[str] = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
     try:
-        tex_path = os.path.join(OUTPUT_DIR, "tailored_resume.tex")
+        # FIX #2: per-user output path instead of the fixed "tailored_resume.tex"
+        tex_path, _ = _user_output_paths(token)
         fixed_code = apply_latex_hotfix(request.latex_code)
         with open(tex_path, "w") as f:
             f.write(fixed_code)
@@ -621,10 +873,16 @@ class CompileLatexRequest(BaseModel):
     latex_code: str
 
 @app.post("/compile_latex")
-async def compile_latex(request: CompileLatexRequest):
+async def compile_latex(request: CompileLatexRequest, authorization: Optional[str] = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
     try:
-        tex_path = os.path.join(OUTPUT_DIR, "tailored_resume.tex")
-        pdf_path = os.path.join(OUTPUT_DIR, "tailored_resume.pdf")
+        # FIX #2: per-user output paths instead of the fixed "tailored_resume.tex"/
+        # "tailored_resume.pdf". With fixed global filenames, two users compiling
+        # concurrently could overwrite each other's tex/pdf and each get back the
+        # wrong file.
+        tex_path, pdf_path = _user_output_paths(token)
         
         # Write the LaTeX code
         fixed_code = apply_latex_hotfix(request.latex_code)
@@ -659,6 +917,11 @@ async def compile_latex(request: CompileLatexRequest):
 # Background task status registry maps task_id -> {"status": str, "message": str}
 _task_registry: dict[str, dict] = {}
 _registry_lock = threading.Lock()
+# FIX #7: keep strong references to in-flight asyncio Tasks. asyncio only holds a
+# weak reference to tasks created via create_task; if nothing else references the
+# Task object, it can be garbage-collected mid-execution, silently killing the
+# autofill job. Storing it here (and dropping it on completion) prevents that.
+_background_tasks: dict[str, "asyncio.Task"] = {}
 
 def update_task_status(task_id: str, status: str, message: str):
     with _registry_lock:
@@ -669,7 +932,7 @@ def update_task_status(task_id: str, status: str, message: str):
         }
 
 @app.post("/apply")
-async def apply(request: ApplyRequest, authorization: Optional[str] = Header(None)):
+async def apply(request: ApplyRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
@@ -678,12 +941,22 @@ async def apply(request: ApplyRequest, authorization: Optional[str] = Header(Non
     session_resume_data = session.get("data")
     session_resume_path = session.get("path")
     
-    pdf_path = os.path.join(OUTPUT_DIR, "tailored_resume.pdf")
+    # FIX #2: per-user pdf path instead of the fixed "tailored_resume.pdf". Using a
+    # single global filename meant /apply could pick up and submit a *different*
+    # user's most-recently-compiled resume to this user's job application.
+    _, pdf_path = _user_output_paths(token)
     if not os.path.exists(pdf_path):
         # Fallback to master if tailored hasn't been generated
         if not session_resume_path:
             raise HTTPException(status_code=400, detail="No resume available to upload.")
         pdf_path = session_resume_path
+
+    db_api_key = None
+    if token:
+        user = get_user_by_token(token)
+        if user:
+            db_api_key = user.get("gemini_api_key")
+    active_api_key = x_gemini_api_key or db_api_key
 
     task_id = str(uuid.uuid4())
     update_task_status(task_id, "running", "Autofill session initialized...")
@@ -700,11 +973,15 @@ async def apply(request: ApplyRequest, authorization: Optional[str] = Header(Non
             update_task_status(task_id, "completed", "Job application form auto-filled successfully!")
         except Exception as ex:
             update_task_status(task_id, "failed", f"Autofill error: {str(ex)}")
+        finally:
+            _background_tasks.pop(task_id, None)
 
     try:
         # Run autofill in the background task
         import asyncio
-        asyncio.create_task(run_autofill_wrapper())
+        task = asyncio.create_task(run_autofill_wrapper())
+        # FIX #7: retain a reference so the task can't be garbage-collected early
+        _background_tasks[task_id] = task
         
         return {"status": "success", "task_id": task_id, "message": "Autofill session started in separate browser window."}
     except Exception as e:
@@ -1032,9 +1309,66 @@ async def scrape_job(request: ScrapeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Mount static files for hosting the built frontend as part of the same service
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+class SearchJobsRequest(BaseModel):
+    location: Optional[str] = "Remote"
+    keywords: Optional[str] = None
+    timeframe: Optional[str] = "48h"
+
+@app.post("/search_matching_jobs")
+async def search_matching_jobs(request: SearchJobsRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        
+    session = get_session_data(token)
+    session_resume_data = session.get("data")
+    if not session_resume_data:
+        raise HTTPException(status_code=400, detail="Please upload a resume first.")
+
+    db_api_key = None
+    if token:
+        user = get_user_by_token(token)
+        if user:
+            db_api_key = user.get("gemini_api_key")
+    active_api_key = x_gemini_api_key or db_api_key
+    
+    # Check TTL job search cache first
+    cache_key = (request.keywords or "", request.location or "Remote", request.timeframe or "48h")
+    with _job_cache_lock:
+        cached_entry = _job_search_cache.get(cache_key)
+        if cached_entry:
+            cached_ts, cached_jobs = cached_entry
+            if time.time() - cached_ts < JOB_SEARCH_CACHE_TTL:
+                async def cached_job_stream():
+                    yield json.dumps({"type": "log", "message": "⚡ Loaded job results from cache (< 5 min old)!"}) + "\n"
+                    yield json.dumps({"type": "result", "jobs": cached_jobs}) + "\n"
+                return StreamingResponse(cached_job_stream(), media_type="application/x-ndjson")
+    
+    try:
+        # Wrap the generator to also cache results on completion
+        async def caching_job_stream():
+            all_jobs = []
+            async for chunk in find_matching_jobs(
+                resume_data=session_resume_data,
+                location=request.location,
+                keywords=request.keywords,
+                timeframe=request.timeframe or "48h",
+                custom_api_key=active_api_key
+            ):
+                # Intercept result events to extract jobs for caching
+                try:
+                    parsed = json.loads(chunk.strip())
+                    if parsed.get("type") == "result" and parsed.get("jobs"):
+                        all_jobs = parsed["jobs"]
+                        with _job_cache_lock:
+                            _job_search_cache[cache_key] = (time.time(), all_jobs)
+                except Exception:
+                    pass
+                yield chunk
+        
+        return StreamingResponse(caching_job_stream(), media_type="application/x-ndjson")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist"))
 if os.path.exists(frontend_dist):
@@ -1043,7 +1377,7 @@ if os.path.exists(frontend_dist):
     @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
     async def serve_frontend(rest_of_path: str):
         # Ignore API endpoints so they pass through to regular routes
-        if rest_of_path.startswith(("user/", "auth/", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf")):
+        if rest_of_path.startswith(("user/", "auth/", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs")):
             raise HTTPException(status_code=404, detail="Not Found")
         
         if rest_of_path == "favicon.svg":
@@ -1058,6 +1392,7 @@ if os.path.exists(frontend_dist):
         return "Frontend build files not found."
 
 if __name__ == "__main__":
+    # pyrefly: ignore [missing-import]
     import uvicorn
     # Bind to PORT env variable specified by Render
     port = int(os.getenv("PORT", "8000"))
