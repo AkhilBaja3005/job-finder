@@ -299,7 +299,13 @@ async def execute_agent_action(page, action: AgentAction, resume_pdf_path: str) 
                     # Fallback: type value to auto-select option
                     await el.type(val)
         elif action_type == "click":
-            await el.click()
+            try:
+                # Try standard Playwright click first (with 3s timeout)
+                await el.click(timeout=3000)
+            except Exception as click_err:
+                print(f"[Autofill Action] Standard click intercepted or timed out: {str(click_err)[:100]} | Retrying via DOM trigger...")
+                # Dispatch DOM click bypassing physical cursor layout hit-testing
+                await el.evaluate("el => el.click()")
         elif action_type == "upload":
             # If the element is a button/input wrapper, resolve the actual file input underneath
             if await el.evaluate("el => el.tagName") != "INPUT":
