@@ -1,8 +1,9 @@
 import os
 import json
 import re
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Callable
 
 from services.gemini_client import generate_content_with_fallback, generate_latex_with_strong_model
 from services.ats_scorer import compute_ats_score, compute_overall_score
@@ -115,6 +116,7 @@ def tailor_latex_code(
     missing_skills: List[str],
     custom_api_key: Optional[str] = None,
     reviewer_feedback: Optional[str] = None,
+    on_log: Optional[Callable[[str], None]] = None,
 ) -> str:
     """
     Step 2: Directly tailors the master LaTeX code for a target job.
@@ -180,6 +182,15 @@ RULE 6 — ATS KEYWORD INTEGRATION:
 RULE 7 — OUTPUT FORMAT:
   • Return ONLY the raw LaTeX source. No markdown fences, no explanations, no commentary.
 
+RULE 8 — TRUTHFULNESS & CREDENTIALS (ABSOLUTE TRUST):
+  • NEVER fabricate security clearances, specialized government clearances, or certifications unless they are explicitly present in the original master resume.
+  • Keep years of experience accurate and consistent with the candidate's actual timeline history. Never exaggerate the candidate's total years of experience in summaries.
+  • Do not invent expert proficiency in major frameworks, libraries, tools, or compliance/regulatory standards if they are completely absent from the master profile. Focus on highlighting real transferable skills and conceptual alignment instead.
+
+RULE 9 — EMPLOYMENT DATES LOCK (ZERO TOLERANCE):
+  • You MUST copy all employment start and end dates (e.g., June 2023 - Present) character-for-character from the master resume.
+  • You are strictly prohibited from modifying, shifting, or creating new dates for any job or education entry. Dates are historical facts and must remain unchanged.
+
 MASTER LaTeX (source of truth):
 ---
 {master_latex}
@@ -190,7 +201,7 @@ MASTER LaTeX (source of truth):
     last_err = None
     for attempt in range(max_retries):
         try:
-            raw = generate_latex_with_strong_model(prompt, custom_api_key)
+            raw = generate_latex_with_strong_model(prompt, custom_api_key, on_log=on_log)
             raw = raw.replace("```latex", "").replace("```", "").strip()
             return _validate_latex_output(raw, label=f"tailor attempt {attempt+1}")
         except ValueError as e:
@@ -224,6 +235,7 @@ async def analyze_job_fit(
     job_description: str,
     master_latex: Optional[str] = None,
     custom_api_key: Optional[str] = None,
+    on_log: Optional[Callable[[str], None]] = None,
 ) -> AnalysisResponse:
     """
     Hybrid ATS scoring pipeline:
@@ -291,7 +303,8 @@ RULES:
 - Cover letter: under 300 words, specific to this JD, no generic filler.
 - suggested_resume_updates.experience: MUST have bullet lists matching these counts: {json.dumps(bullet_counts)}
   Do NOT merge, delete, or add bullets.
-- suggested_resume_updates.skills: Updated skills list naturally integrating missing skills.
+- TRUTHFULNESS: Never claim security clearances, certifications, or specialized regulatory compliance standards if the candidate does not possess them in their profile. Emphasize transferable skills honestly. Never exaggerate the candidate's total years of experience history in the summary or cover letter.
+- suggested_resume_updates.skills: Updated skills list naturally integrating missing skills (only include adjacent skills that are reasonable extensions of their background, do not fabricate unrelated expert skills).
 """
 
     # ── Phase 2 & 3: Run LLM calls in parallel threads ─────────────────────
@@ -302,13 +315,15 @@ RULES:
         generate_content_with_fallback,
         semantic_prompt,
         _SemanticScoreResult,
-        custom_api_key
+        custom_api_key,
+        on_log=on_log
     )
     cover_task = asyncio.to_thread(
         generate_content_with_fallback,
         cover_prompt,
         _CoverLetterResult,
-        custom_api_key
+        custom_api_key,
+        on_log=on_log
     )
 
     semantic_text, cover_text = await asyncio.gather(semantic_task, cover_task)
@@ -348,10 +363,11 @@ RULES:
     # ── Phase 5: LaTeX tailoring ─────────────────────────────────────────────
     if master_latex:
         suggestions  = response_obj.suggested_resume_updates
-        # LaTeX tailoring is run sequentially since it depends on the output of suggestions
-        tailored_latex = tailor_latex_code(
+        # Run LaTeX tailoring inside a background thread to prevent thread locking the event loop
+        tailored_latex = await asyncio.to_thread(
+            tailor_latex_code,
             master_latex, job_title, job_description, suggestions,
-            ats.missing_skills, custom_api_key
+            ats.missing_skills, custom_api_key, on_log=on_log
         )
         response_obj.latex_code = tailored_latex
     return response_obj
@@ -367,6 +383,7 @@ def review_tailored_resume(
     job_title: str,
     job_description: str,
     custom_api_key: Optional[str] = None,
+    on_log: Optional[Callable[[str], None]] = None,
 ) -> ResumeReviewResult:
     """
     Two-phase review:
@@ -488,7 +505,7 @@ TAILORED LaTeX:
 """
 
     try:
-        response_text = generate_content_with_fallback(prompt, ResumeReviewResult, custom_api_key)
+        response_text = generate_content_with_fallback(prompt, ResumeReviewResult, custom_api_key, on_log)
         parsed = json.loads(response_text)
         return ResumeReviewResult(**parsed)
     except Exception as e:

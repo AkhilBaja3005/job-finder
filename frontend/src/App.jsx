@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
-  ? 'http://127.0.0.1:8000' 
+
+const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://127.0.0.1:8000'
   : window.location.origin;
 
 const RocketIcon = () => (
@@ -61,6 +62,16 @@ function App() {
   const [toast, setToast] = useState(null); // { message, type: 'success'|'error'|'info' }
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
 
+  const [discoveredJobs, setDiscoveredJobs] = useState([]);
+  const [discovering, setDiscovering] = useState(false);
+  const [searchLocation, setSearchLocation] = useState('Remote');
+  const [searchKeywords, setSearchKeywords] = useState('');
+  const [searchTimeframe, setSearchTimeframe] = useState('48h'); // '24h' | '48h' | '1w' | '1m'
+  const [isDiscoveryView, setIsDiscoveryView] = useState(false);
+  const [dashboardMode, setDashboardMode] = useState('tailor'); // 'tailor' | 'discover'
+  const [searchSortMode, setSearchSortMode] = useState('overall'); // 'overall' | 'role_fit' | 'time'
+  const [searchPage, setSearchPage] = useState(1);
+
   const [user, setUser] = useState(null);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
@@ -68,6 +79,38 @@ function App() {
 
   // Returns the current time in HH:MM:SS using the browser's local timezone
   const nowTs = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
+  // Console auto-scroll ref — pauses when user scrolls up
+  const consoleBodyRef = useRef(null);
+  const consoleUserScrolled = useRef(false);
+  const scrollConsoleToBottom = useCallback(() => {
+    if (consoleBodyRef.current && !consoleUserScrolled.current) {
+      consoleBodyRef.current.scrollTop = consoleBodyRef.current.scrollHeight;
+    }
+  }, []);
+
+
+  // Expanded job cards set
+  const [expandedCards, setExpandedCards] = useState(new Set());
+  const toggleCard = (idx) => setExpandedCards(prev => {
+    const next = new Set(prev);
+    if (next.has(idx)) next.delete(idx); else next.add(idx);
+    return next;
+  });
+
+  // Guest UUID token — persisted in localStorage so guest sessions survive refresh
+  const [guestToken] = useState(() => {
+    let t = localStorage.getItem('guest_token');
+    if (!t) {
+      t = 'guest-' + crypto.randomUUID();
+      localStorage.setItem('guest_token', t);
+    }
+    return t;
+  });
+
+  // Returns the effective Authorization header value: real token > guest UUID
+  const getAuthHeader = () => authToken || guestToken;
+
 
   // Show a transient toast for 3 seconds
   const showToast = (message, type = 'success') => {
@@ -100,7 +143,7 @@ function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, resumeData, jobUrl, jobTitle, jobDescription]);
 
   const handleApiKeyChange = (e) => {
@@ -247,14 +290,13 @@ function App() {
     if (!file) return;
 
     setLoading(true);
+    setStatusMessage('Uploading and parsing master resume...');
     const formData = new FormData();
     formData.append('file', file);
 
     try {
       const headers = {};
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
+      headers['Authorization'] = `Bearer ${getAuthHeader()}`;
 
       const response = await fetch(`${API_BASE}/upload_resume`, {
         method: 'POST',
@@ -264,22 +306,32 @@ function App() {
       const result = await response.json();
       if (response.ok) {
         setResumeData(result.data);
-        setStatusMessage('Resume parsed successfully!');
+        setStatusMessage('✅ Master resume uploaded and parsed successfully!');
       } else {
-        setStatusMessage(`Error parsing resume: ${result.detail}`);
+        setStatusMessage(`❌ Error parsing resume: ${result.detail}`);
       }
     } catch (err) {
-      setStatusMessage(`Error connecting to backend: ${err.message}`);
+      setStatusMessage(`❌ Error connecting to backend: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   // Step 1: Initial Job Analysis & Scoring (Fast ATS evaluation)
-  const handleAnalyzeJob = async () => {
+  const handleAnalyzeJob = async (urlOverride = null, titleOverride = null) => {
     if (!resumeData) {
       alert('Please upload a resume first.');
       return;
+    }
+
+    const targetUrl = urlOverride || jobUrl;
+    const targetTitle = titleOverride || jobTitle;
+    
+    // Clear out stale job description if we are switching to a new URL override
+    let activeDescription = jobDescription;
+    if (urlOverride) {
+      activeDescription = null;
+      setJobDescription('');
     }
 
     setLoading(true);
@@ -289,23 +341,22 @@ function App() {
     setStatusLogs([]);
     setCompany('');
     setStatusMessage('Connecting to AI agent pipeline...');
+    consoleUserScrolled.current = false;
 
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (geminiApiKey) {
         headers['X-Gemini-API-Key'] = geminiApiKey;
       }
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
+      headers['Authorization'] = `Bearer ${getAuthHeader()}`;
 
       const response = await fetch(`${API_BASE}/analyze_job`, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({
-          job_url: jobUrl || null,
-          job_title: jobTitle || 'Target Role',
-          job_description: jobDescription || null,
+          job_url: targetUrl || null,
+          job_title: targetTitle || 'Target Role',
+          job_description: activeDescription || null,
           skip_tailoring: true, // Only calculate ATS scores and gap analysis
         }),
       });
@@ -333,6 +384,15 @@ function App() {
             if (event.type === 'log') {
               setStatusMessage(event.message);
               setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
+              setTimeout(scrollConsoleToBottom, 30);
+            } else if (event.type === 'llm_warn') {
+              const msg = event.message || `⚠️ Rate limit hit on ${event.model}. Retrying in ${event.wait_s}s...`;
+              setStatusMessage(msg);
+              setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
+              setTimeout(scrollConsoleToBottom, 30);
+            } else if (event.type === 'scraped_data') {
+              if (event.job_description) setJobDescription(event.job_description);
+              if (event.job_title) setJobTitle(event.job_title);
             } else if (event.type === 'error') {
               throw new Error(event.message);
             } else if (event.type === 'result') {
@@ -364,6 +424,7 @@ function App() {
               };
               setTailoredResumeData(tailored);
               setStatusMessage('ATS Scoring complete! Awaiting your instruction to tailor the resume.');
+
             }
           } catch (e) {
             if (e instanceof SyntaxError) {
@@ -382,34 +443,42 @@ function App() {
     }
   };
 
-  // Step 2: Full LaTeX tailoring and recruiter check loop (when user decides to go ahead)
-  const handleGenerateTailoredResume = async (overrideForce = false) => {
+  const handleGenerateTailoredResume = async (overrideForce = false, urlOverride = null, titleOverride = null) => {
     if (!resumeData) {
       alert('Please upload a resume first.');
       return;
+    }
+
+    const targetUrl = urlOverride || jobUrl;
+    const targetTitle = titleOverride || jobTitle;
+
+    // Clear out stale job description if we are switching to a new URL override
+    let activeDescription = jobDescription;
+    if (urlOverride) {
+      activeDescription = null;
+      setJobDescription('');
     }
 
     setLoading(true);
     setRejectionWarning(null);
     setStatusMessage('Tailoring resume LaTeX and running recruiter loop...');
     setStatusLogs((prev) => [...prev, { message: '🤖 Requesting LaTeX tailoring and page-metric checks...', ts: nowTs() }]);
+    consoleUserScrolled.current = false;
 
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (geminiApiKey) {
         headers['X-Gemini-API-Key'] = geminiApiKey;
       }
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
+      headers['Authorization'] = `Bearer ${getAuthHeader()}`;
 
       const response = await fetch(`${API_BASE}/analyze_job`, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({
-          job_url: jobUrl || null,
-          job_title: jobTitle || 'Target Role',
-          job_description: jobDescription || null,
+          job_url: targetUrl || null,
+          job_title: targetTitle || 'Target Role',
+          job_description: activeDescription || null,
           skip_tailoring: false, // Run full LaTeX tailoring + page checks + reviewer checks
           force_tailoring: overrideForce
         }),
@@ -438,6 +507,15 @@ function App() {
             if (event.type === 'log') {
               setStatusMessage(event.message);
               setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
+              setTimeout(scrollConsoleToBottom, 30);
+            } else if (event.type === 'llm_warn') {
+              const msg = event.message || `⚠️ Rate limit hit on ${event.model}. Retrying in ${event.wait_s}s...`;
+              setStatusMessage(msg);
+              setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
+              setTimeout(scrollConsoleToBottom, 30);
+            } else if (event.type === 'scraped_data') {
+              if (event.job_description) setJobDescription(event.job_description);
+              if (event.job_title) setJobTitle(event.job_title);
             } else if (event.type === 'rejection_warning') {
               setRejectionWarning(event.message);
               setStatusLogs((prev) => [...prev, { message: `❌ Warning Paused: ${event.message}`, ts: nowTs() }]);
@@ -447,23 +525,26 @@ function App() {
             } else if (event.type === 'error') {
               throw new Error(event.message);
             } else if (event.type === 'result') {
-               const result = event;
-               setAnalysisResult(result.analysis);
-               const updates = result.analysis.suggested_resume_updates || {};
-               const tailored = {
-                 ...resumeData,
-                 summary: updates.summary || (resumeData || {}).summary || '',
-                 skills: updates.skills || (resumeData || {}).skills || [],
-                 experience: ((resumeData || {}).experience || []).map((job, idx) => {
-                   const tailoredExperience = updates.experience && updates.experience[idx];
-                   return {
-                     ...job,
-                     description: Array.isArray(tailoredExperience) ? tailoredExperience : (tailoredExperience && tailoredExperience.description) || (job || {}).description || [],
-                   };
-                 }),
-               };
-               setTailoredResumeData(tailored);
-               setStatusMessage('LaTeX tailored resume and metrics prepared successfully!');
+              const result = event;
+              if (result.job_description) setJobDescription(result.job_description);
+              if (result.job_title) setJobTitle(result.job_title);
+              setAnalysisResult(result.analysis);
+              const updates = result.analysis.suggested_resume_updates || {};
+              const tailored = {
+                ...resumeData,
+                summary: updates.summary || (resumeData || {}).summary || '',
+                skills: updates.skills || (resumeData || {}).skills || [],
+                experience: ((resumeData || {}).experience || []).map((job, idx) => {
+                  const tailoredExperience = updates.experience && updates.experience[idx];
+                  return {
+                    ...job,
+                    description: Array.isArray(tailoredExperience) ? tailoredExperience : (tailoredExperience && tailoredExperience.description) || (job || {}).description || [],
+                  };
+                }),
+              };
+              setTailoredResumeData(tailored);
+              setStatusMessage('LaTeX tailored resume and metrics prepared successfully!');
+
             }
           } catch (e) {
             if (e instanceof SyntaxError) {
@@ -481,6 +562,104 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearchJobs = async () => {
+    if (!resumeData) {
+      showToast("⚠️ Please upload a resume first to generate search queries.", "error");
+      return;
+    }
+    setDiscovering(true);
+    setIsDiscoveryView(true);
+    setDiscoveredJobs([]);
+    setStatusMessage(`🔎 Scanning LinkedIn and Indeed for matching jobs posted in the last ${searchTimeframe === '24h' ? '24 hours' : searchTimeframe === '48h' ? '48 hours' : searchTimeframe === '1w' ? '1 week' : '1 month'}...`);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (geminiApiKey) headers['X-Gemini-API-Key'] = geminiApiKey;
+      headers['Authorization'] = `Bearer ${getAuthHeader()}`;
+
+      setStatusLogs([]); // Clear logs before fresh sweep
+      const response = await fetch(`${API_BASE}/search_matching_jobs`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+          location: searchLocation,
+          keywords: searchKeywords || null,
+          timeframe: searchTimeframe
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.detail || "Search failed");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            if (event.type === 'log') {
+              setStatusMessage(event.message);
+              setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
+              setTimeout(scrollConsoleToBottom, 30);
+            } else if (event.type === 'result') {
+              setDiscoveredJobs(event.jobs || []);
+              setStatusMessage(`Found ${event.jobs?.length || 0} matching jobs.`);
+              showToast(`Discovered ${event.jobs?.length || 0} matching jobs!`, 'success');
+            }
+          } catch (e) {
+            // Ignore incomplete parsing chunks
+          }
+        }
+      }
+    } catch (err) {
+      setStatusMessage(`Discovery failed: ${err.message}`);
+      setStatusLogs((prev) => [...prev, { message: `❌ Discovery failed: ${err.message}`, ts: nowTs() }]);
+      showToast(`❌ ${err.message}`, 'error');
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const getSortedAndPaginatedJobs = () => {
+    // 1. Sort copy of jobs array
+    const sorted = [...discoveredJobs];
+    if (searchSortMode === 'overall') {
+      sorted.sort((a, b) => (b.score || 0) - (a.score || 0));
+    } else if (searchSortMode === 'role_fit') {
+      sorted.sort((a, b) => (b.role_fit_score || 0) - (a.role_fit_score || 0));
+    } else if (searchSortMode === 'time') {
+      // Sort by age keyword estimation: if age contains "minute" or "hour" it is newer than "day"
+      const getAgeValue = (ageStr) => {
+        if (!ageStr) return 999999;
+        const val = parseInt(ageStr, 10) || 1;
+        const lowerAge = ageStr.toLowerCase();
+        if (lowerAge.includes('minute')) return val;
+        if (lowerAge.includes('hour')) return val * 60;
+        if (lowerAge.includes('day')) return val * 1440;
+        return 999999;
+      };
+      sorted.sort((a, b) => getAgeValue(a.age) - getAgeValue(b.age));
+    }
+
+    // 2. Paginate items (30 items per page)
+    const itemsPerPage = 30;
+    const totalPages = Math.ceil(sorted.length / itemsPerPage) || 1;
+    const currentPage = Math.max(1, Math.min(searchPage, totalPages));
+    const paginated = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    return { sorted, paginated, totalPages, currentPage };
   };
 
   const handleUrlBlur = async () => {
@@ -579,9 +758,17 @@ function App() {
     setStatusMessage('Spawning automated browser agent to autofill your application...');
 
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (geminiApiKey) {
+        headers['X-Gemini-API-Key'] = geminiApiKey;
+      }
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
       const response = await fetch(`${API_BASE}/apply`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify({
           job_url: jobUrl,
           direct_mode: directMode,
@@ -622,7 +809,7 @@ function App() {
           {toast.message}
         </div>
       )}
-
+      
       <header className="app-header">
         <h1 className="title">
           Resume Tailor Suite
@@ -634,16 +821,16 @@ function App() {
               padding: '5px 12px', borderRadius: '20px', maxWidth: '340px',
               background: statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
                 ? 'rgba(239,68,68,0.1)' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
-                ? 'rgba(16,185,129,0.1)' : 'rgba(99,102,241,0.1)',
-              border: `1px solid ${
-                statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
+                  ? 'rgba(16,185,129,0.1)' : 'rgba(99,102,241,0.1)',
+              border: `1px solid ${statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
                 ? 'rgba(239,68,68,0.25)' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
-                ? 'rgba(16,185,129,0.25)' : 'rgba(99,102,241,0.25)'}`,
+                  ? 'rgba(16,185,129,0.25)' : 'rgba(99,102,241,0.25)'}`,
             }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0, animation: 'pulseGlow 2s infinite',
+              <span style={{
+                width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0, animation: 'pulseGlow 2s infinite',
                 background: statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
                   ? '#EF4444' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
-                  ? '#10B981' : '#6366F1'
+                    ? '#10B981' : '#6366F1'
               }} />
               <span style={{ fontSize: '0.78rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {statusMessage.length > 55 ? `${statusMessage.substring(0, 55)}…` : statusMessage}
@@ -774,6 +961,18 @@ function App() {
               </label>
             </div>
 
+            {statusMessage && (
+              <div style={{
+                fontSize: '0.82rem',
+                color: statusMessage.includes('❌') ? 'var(--accent-red)' : statusMessage.includes('✅') ? 'var(--accent-green)' : 'var(--accent-primary)',
+                textAlign: 'center',
+                padding: '4px',
+                fontWeight: 600
+              }}>
+                {statusMessage}
+              </div>
+            )}
+
             <button
               className="btn"
               style={{ padding: '14px', width: '100%', fontSize: '0.95rem', marginTop: '4px' }}
@@ -816,53 +1015,489 @@ function App() {
               </div>
             </div>
 
-            <div className="section-label">Target Job</div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-              <input
-                type="text"
-                placeholder="Job Application URL (LinkedIn, Indeed…)"
-                value={jobUrl}
-                onChange={(e) => setJobUrl(e.target.value)}
-                onBlur={handleUrlBlur}
-              />
-              <input
-                type="text"
-                placeholder="Job Title (e.g. Software Engineer)"
-                value={jobTitle}
-                onChange={(e) => setJobTitle(e.target.value)}
-              />
-              <textarea
-                placeholder="Paste Job Description (optional if URL provided)"
-                rows="6"
-                value={jobDescription}
-                onChange={(e) => setJobDescription(e.target.value)}
-              />
-              <div style={{ fontSize: '0.72rem', color: jobDescription.length > 500 ? 'var(--accent-green)' : 'var(--text-muted)', marginTop: '-8px', marginBottom: '10px', textAlign: 'right' }}>
-                {jobDescription.length.toLocaleString()} chars{jobDescription.length < 200 ? ' — paste more for better results' : jobDescription.length < 500 ? ' — good' : ' — ✅ detailed'}
-              </div>
-              <button className="btn" style={{ width: '100%' }} onClick={handleAnalyzeJob} disabled={loading} title="Analyze & Tailor (Cmd+Enter)">
-                {loading ? '⏳ Analyzing…' : '⚡ Analyze & Tailor Resume'}
+            {/* Mode Switcher */}
+            <div style={{ display: 'flex', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', padding: '4px', border: '1px solid rgba(255,255,255,0.05)', marginTop: '4px' }}>
+              <button
+                className={`mode-btn ${dashboardMode === 'tailor' ? 'active' : ''}`}
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  fontSize: '0.82rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: 'none',
+                  background: dashboardMode === 'tailor' ? 'var(--accent-primary)' : 'transparent',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onClick={() => {
+                  setDashboardMode('tailor');
+                  setIsDiscoveryView(false);
+                }}
+              >
+                🎯 Tailor Resume
+              </button>
+              <button
+                className={`mode-btn ${dashboardMode === 'discover' ? 'active' : ''}`}
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  fontSize: '0.82rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: 'none',
+                  background: dashboardMode === 'discover' ? 'var(--accent-primary)' : 'transparent',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onClick={() => {
+                  setDashboardMode('discover');
+                  setIsDiscoveryView(true);
+                }}
+              >
+                🔍 Discover Jobs
               </button>
             </div>
+
+            {dashboardMode === 'tailor' && (
+              <>
+                <div className="section-label">Target Job</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                  <input
+                    type="text"
+                    placeholder="Job Application URL (LinkedIn, Indeed…)"
+                    value={jobUrl}
+                    onChange={(e) => setJobUrl(e.target.value)}
+                    onBlur={handleUrlBlur}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Job Title (e.g. Software Engineer)"
+                    value={jobTitle}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                  />
+                  <textarea
+                    placeholder="Paste Job Description (optional if URL provided)"
+                    rows="6"
+                    value={jobDescription}
+                    onChange={(e) => setJobDescription(e.target.value)}
+                  />
+                  <div style={{ fontSize: '0.72rem', color: jobDescription.length > 500 ? 'var(--accent-green)' : 'var(--text-muted)', marginTop: '-8px', marginBottom: '10px', textAlign: 'right' }}>
+                    {jobDescription.length.toLocaleString()} chars{jobDescription.length < 200 ? ' — paste more for better results' : jobDescription.length < 500 ? ' — good' : ' — ✅ detailed'}
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                    {!analysisResult && (
+                      <button className="btn btn-secondary" style={{ flex: 1 }} onClick={handleAnalyzeJob} disabled={loading}>
+                        {loading ? '⏳' : '🔍 Analyze Job'}
+                      </button>
+                    )}
+                    <button className="btn" style={{ flex: 1.2, width: analysisResult ? '100%' : 'auto' }} onClick={() => handleGenerateTailoredResume(false)} disabled={loading} title="Analyze & Tailor (Cmd+Enter)">
+                      {loading ? '⏳' : '⚡ Analyze & Tailor'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {dashboardMode === 'discover' && (
+              <>
+                <div className="section-label">Job Discoverer</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder="Preferred Role (e.g. Data Scientist, AI Engineer)"
+                    value={searchKeywords}
+                    onChange={(e) => setSearchKeywords(e.target.value)}
+                    style={{ marginBottom: '2px' }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Location (e.g. Remote, London)"
+                    value={searchLocation}
+                    onChange={(e) => setSearchLocation(e.target.value)}
+                    style={{ marginBottom: '2px' }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Post Date Timeframe</span>
+                    <select
+                      value={searchTimeframe}
+                      onChange={(e) => setSearchTimeframe(e.target.value)}
+                      style={{
+                        padding: '8px',
+                        fontSize: '0.8rem',
+                        borderRadius: '6px',
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        color: '#fff',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="24h">Last 24 Hours</option>
+                      <option value="48h">Last 48 Hours</option>
+                      <option value="1w">Last 1 Week</option>
+                      <option value="1m">Last 1 Month</option>
+                    </select>
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    style={{
+                      width: '100%',
+                      background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(79,70,229,0.06) 100%)',
+                      border: '1px solid rgba(99,102,241,0.25)',
+                      color: '#a5b4fc',
+                      fontWeight: 600,
+                      padding: '12px'
+                    }}
+                    onClick={handleSearchJobs}
+                    disabled={discovering || loading}
+                  >
+                    {discovering ? '⏳ Scanning Feeds...' : `🔍 Scan Matches (${searchTimeframe === '24h' ? 'Last 24h' : searchTimeframe === '48h' ? 'Last 48h' : searchTimeframe === '1w' ? 'Last 1w' : 'Last 1m'})`}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Right Analysis Panel */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ marginBottom: 0 }}>Analysis & Preview</h2>
-              {analysisResult && (
+              <h2 style={{ marginBottom: 0 }}>
+                {isDiscoveryView
+                  ? `Job Discoveries (${searchTimeframe === '24h' ? 'Last 24h' : searchTimeframe === '48h' ? 'Last 48h' : searchTimeframe === '1w' ? 'Last 1 Week' : 'Last 1 Month'})`
+                  : 'Analysis & Preview'}
+              </h2>
+              {(analysisResult || isDiscoveryView) && (
                 <button
                   className="btn btn-secondary"
                   style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '6px' }}
-                  onClick={handleNewJob}
+                  onClick={() => {
+                    if (isDiscoveryView) {
+                      setIsDiscoveryView(false);
+                    } else {
+                      handleNewJob();
+                    }
+                  }}
                 >
-                  + New Job
+                  {isDiscoveryView ? '← Back to Active' : '+ New Job'}
                 </button>
               )}
             </div>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            {loading ? (
+            {isDiscoveryView && discovering ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: '700' }}>
+                  <svg style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" style={{ opacity: 0.25 }} />
+                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>Searching Platform Feeds…</span>
+                </div>
+                <div className="log-terminal">
+                  <div className="log-terminal-header">
+                    <div className="log-terminal-dots">
+                      <div className="log-terminal-dot" style={{ background: '#FF5F57' }} />
+                      <div className="log-terminal-dot" style={{ background: '#FFBD2E' }} />
+                      <div className="log-terminal-dot" style={{ background: '#28CA41' }} />
+                    </div>
+                    📋 SEARCH PIPELINE LOGS
+                  </div>
+                  <div
+                    className="log-terminal-body"
+                    ref={consoleBodyRef}
+                    onScroll={(e) => {
+                      const el = e.currentTarget;
+                      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+                      consoleUserScrolled.current = !atBottom;
+                    }}
+                    style={{ maxHeight: '200px' }}
+                  >
+                    {statusLogs.map((entry, index) => {
+                      const msg = typeof entry === 'string' ? entry : entry.message;
+                      const ts = typeof entry === 'object' ? entry.ts : '';
+                      let cls = 'log-entry-msg log-default';
+                      if (msg.includes('🏁') || msg.includes('✅')) cls = 'log-entry-msg log-ok';
+                      else if (msg.includes('🔎') || msg.includes('🌐') || msg.includes('🤖')) cls = 'log-entry-msg log-ai';
+                      else if (msg.includes('❌')) cls = 'log-entry-msg log-warn';
+                      return (
+                        <div key={index} className="log-entry">
+                          <span className="log-entry-ts">{ts}</span>
+                          <span className={cls}>{msg}</span>
+                        </div>
+                      );
+                    })}
+                    <span className="log-cursor" />
+                  </div>
+                </div>
+              </div>
+            ) : isDiscoveryView ? (
+              (() => {
+                const { sorted, paginated, totalPages, currentPage } = getSortedAndPaginatedJobs();
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                    {/* Filter & Sorting Controls */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      paddingBottom: '12px',
+                      borderBottom: '1px solid rgba(255,255,255,0.06)',
+                      gap: '12px',
+                      flexWrap: 'wrap'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                        {/* Two-row text container on the left */}
+                        <div style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          alignItems: 'center',
+                          justifyContent: 'center', 
+                          lineHeight: 1.15,
+                          fontSize: '0.74rem', 
+                          color: 'var(--text-muted)', 
+                          fontWeight: 600, 
+                          letterSpacing: '0.03em', 
+                          textTransform: 'uppercase'
+                        }}>
+                          <div>Sort:</div>
+                          <div>by</div>
+                        </div>
+
+                        {/* Select box on the right */}
+                        <select
+                          value={searchSortMode}
+                          onChange={(e) => {
+                            setSearchSortMode(e.target.value);
+                            setSearchPage(1); // Reset to page 1 on sort change
+                          }}
+                          style={{
+                            background: 'rgba(255,255,255,0.03)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            color: '#e2e8f0',
+                            fontSize: '0.74rem',
+                            padding: '5px 10px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            outline: 'none',
+                            minWidth: '160px',
+                            transition: 'all 0.2s ease',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                          }}
+                        >
+                          <option value="overall">Overall Match %</option>
+                          <option value="role_fit">Role Fit % (Semantic)</option>
+                          <option value="time">Time/Age (Newest)</option>
+                        </select>
+                      </div>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--accent-green)' }}>
+                        Scanned: <strong>{sorted.length} matches</strong>
+                      </span>
+                    </div>
+
+                    {sorted.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🔍</div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>No matching listings found</div>
+                        <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>Enter search keywords or location and scan matches.</div>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '500px', overflowY: 'auto', paddingRight: '4px' }}>
+                          {paginated.map((job, idx) => {
+                            const isExpanded = expandedCards.has(idx);
+                            const score = job.score || 0;
+                            const scoreColor = score >= 80 ? '#10B981' : score >= 60 ? '#6366F1' : '#E57373';
+                            // Mini SVG arc for score
+                            const r = 18, circ = 2 * Math.PI * r;
+                            const arc = (score / 100) * circ;
+                            return (
+                              <div key={idx} className="card job-card" style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}
+                                onClick={() => toggleCard(idx)}>
+                                {/* Collapsed header row */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                      <span style={{
+                                        fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 700,
+                                        background: job.platform === 'LinkedIn' ? 'rgba(10,102,194,0.12)' : 'rgba(255,111,0,0.12)',
+                                        color: job.platform === 'LinkedIn' ? '#0a66c2' : '#ff6f00'
+                                      }}>{job.platform}</span>
+                                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{job.age}</span>
+                                    </div>
+                                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{job.title}</div>
+                                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{job.company} • {job.location}</div>
+                                    {/* Top 3 skill tags always visible */}
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
+                                      {(job.matched_skills || []).slice(0, 3).map((s, i) => (
+                                        <span key={i} style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(72,187,120,0.08)', color: '#48bb78', border: '1px solid rgba(72,187,120,0.15)', fontSize: '0.68rem' }}>✓ {s}</span>
+                                      ))}
+                                      {(job.missing_skills || []).slice(0, 2).map((s, i) => (
+                                        <span key={i} style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(229,115,115,0.08)', color: '#e57373', border: '1px solid rgba(229,115,115,0.15)', fontSize: '0.68rem' }}>✗ {s}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  {/* Mini score ring */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                                    <svg width="48" height="48" viewBox="0 0 48 48">
+                                      <circle cx="24" cy="24" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
+                                      <circle
+                                        cx="24" cy="24" r={r} fill="none"
+                                        stroke={scoreColor} strokeWidth="4"
+                                        strokeDasharray={`${arc} ${circ - arc}`}
+                                        strokeLinecap="round"
+                                        transform="rotate(-90 24 24)"
+                                        style={{ transition: 'stroke-dasharray 0.6s cubic-bezier(0.16,1,0.3,1)' }}
+                                      />
+                                      <text x="24" y="28" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="800" fontFamily="Plus Jakarta Sans, sans-serif">{score}%</text>
+                                    </svg>
+                                    <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '2px' }}>Overall</span>
+                                  </div>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0 }}>{isExpanded ? '▲' : '▼'}</span>
+                                </div>
+
+                                {/* Expanded details */}
+                                {isExpanded && (
+                                  <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px', animation: 'fadeIn 0.2s ease both' }}>
+                                    {/* Detailed sub-scores grid */}
+                                    <div style={{
+                                      display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px',
+                                      background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)',
+                                      borderRadius: '8px', padding: '10px', fontSize: '0.72rem', textAlign: 'center'
+                                    }}>
+                                      <div>
+                                        <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Skills</div>
+                                        <div style={{ fontWeight: 700, color: '#a5b4fc' }}>{job.skills_score || 50}%</div>
+                                        <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>{job.matched_skills?.length || 0}/{(job.matched_skills?.length || 0) + (job.missing_skills?.length || 0)} key</div>
+                                      </div>
+                                      <div>
+                                        <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Experience</div>
+                                        <div style={{ fontWeight: 700, color: '#a5b4fc' }}>{job.experience_score || 70}%</div>
+                                        <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>{job.candidate_years || 3}y / {job.required_years || 4}y req</div>
+                                      </div>
+                                      <div>
+                                        <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Role Fit</div>
+                                        <div style={{ fontWeight: 700, color: '#a5b4fc' }}>{job.role_fit_score || 65}%</div>
+                                        <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>Semantic</div>
+                                      </div>
+                                      <div>
+                                        <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Overall</div>
+                                        <div style={{ fontWeight: 800, color: scoreColor }}>{score}%</div>
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                      <button
+                                        className="btn btn-secondary"
+                                        style={{ padding: '8px 12px', fontSize: '0.76rem', flex: 1 }}
+                                        onClick={(e) => { e.stopPropagation(); window.open(job.url, '_blank'); }}
+                                      >
+                                        🔗 View Post
+                                      </button>
+                                      <button
+                                        className="btn"
+                                        style={{ padding: '8px 12px', fontSize: '0.76rem', flex: 1, fontWeight: 700 }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setJobUrl(job.url);
+                                          setJobTitle(job.title);
+                                          setCompany(job.company);
+                                          setJobDescription('');
+                                          setAnalysisResult(null);
+                                          setTailoredResumeData(null);
+                                          setStatusLogs([]);
+                                          setIsDiscoveryView(false);
+                                          setDashboardMode('tailor');
+                                          // Trigger fit analysis first to populate JD and show ATS score panel
+                                          setTimeout(() => {
+                                            handleAnalyzeJob(job.url, job.title);
+                                          }, 50);
+                                        }}
+                                      >
+                                        ⚡ Tailor Resume
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Pagination Controls */}
+                        {totalPages > 1 && (
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            gap: '12px',
+                            marginTop: '16px',
+                            paddingTop: '12px',
+                            borderTop: '1px solid rgba(255,255,255,0.06)'
+                          }}>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 14px', fontSize: '0.74rem' }}
+                              onClick={() => setSearchPage((p) => Math.max(1, p - 1))}
+                              disabled={currentPage === 1}
+                            >
+                              ← Prev
+                            </button>
+                            <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                              Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+                            </span>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 14px', fontSize: '0.74rem' }}
+                              onClick={() => setSearchPage((p) => Math.min(totalPages, p + 1))}
+                              disabled={currentPage === totalPages}
+                            >
+                              Next →
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })()
+            ) : rejectionWarning ? (
+              <div className="rejection-warning-panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px', animation: 'slideDown 0.4s ease both' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+                  <h3 style={{ margin: 0, color: 'var(--accent-amber)', fontSize: '1rem' }}>Candidate Suitability Warning</h3>
+                </div>
+                <p style={{ maxWidth: '600px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
+                  The AI Recruiter flagged potential mismatches after 3 checks. Review the feedback below before proceeding.
+                </p>
+                <div className="rejection-feedback-box" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.18)', borderRadius: '8px', padding: '16px', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6, maxHeight: '200px', overflowY: 'auto' }}>
+                  {rejectionWarning}
+                </div>
+                <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: 0 }}>
+                  Would you still like to proceed and generate the tailored resume anyway?
+                </p>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+                  <button
+                    className="btn"
+                    style={{ padding: '10px 22px', fontWeight: 700, background: 'linear-gradient(135deg,#F59E0B,#D97706)', boxShadow: '0 4px 14px rgba(245,158,11,0.3)' }}
+                    onClick={() => handleGenerateTailoredResume(true)}
+                  >
+                    🚀 Yes, Generate Anyway
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '10px 22px' }}
+                    onClick={() => {
+                      setRejectionWarning(null);
+                      setKeepOriginalMode(true);
+                      setStatusMessage('Tailoring cancelled by user.');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : loading ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: '700' }}>
                   <svg style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
@@ -880,21 +1515,32 @@ function App() {
                     </div>
                     📋 PIPELINE LOGS
                   </div>
-                  <div className="log-terminal-body">
+                  <div
+                    className="log-terminal-body"
+                    ref={consoleBodyRef}
+                    onScroll={(e) => {
+                      const el = e.currentTarget;
+                      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+                      consoleUserScrolled.current = !atBottom;
+                    }}
+                  >
                     {statusLogs.map((entry, index) => {
                       const msg = typeof entry === 'string' ? entry : entry.message;
                       const ts = typeof entry === 'object' ? entry.ts : '';
-                      let color = '#CBD5E0';
-                      if (msg.includes('✅')) color = '#48BB78';
-                      if (msg.includes('⚠️') || msg.includes('❌')) color = '#ECC94B';
-                      if (msg.includes('🤖') || msg.includes('👀') || msg.includes('📐')) color = '#63B3ED';
+                      let cls = 'log-entry-msg log-default';
+                      if (msg.includes('✅')) cls = 'log-entry-msg log-ok';
+                      else if (msg.includes('⚠️') || msg.includes('❌')) cls = 'log-entry-msg log-warn';
+                      else if (msg.includes('🤖') || msg.includes('👀') || msg.includes('📐') || msg.includes('⚙️') || msg.includes('✍️')) cls = 'log-entry-msg log-ai';
+                      else if (msg.includes('Rate limit') || msg.includes('429')) cls = 'log-entry-msg log-ratelimit';
                       return (
                         <div key={index} className="log-entry">
                           <span className="log-entry-ts">{ts}</span>
-                          <span className="log-entry-msg" style={{ color }}>{msg}</span>
+                          <span className={cls}>{msg}</span>
                         </div>
                       );
                     })}
+                    {/* Blinking cursor on last line while loading */}
+                    <span className="log-cursor" />
                   </div>
                 </div>
               </div>
@@ -1017,43 +1663,7 @@ function App() {
 
 
                 {/* Workspace Panels or Tailor Resume Decision Banner */}
-                {rejectionWarning ? (
-                  <div className="rejection-warning-panel">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontSize: '1.4rem' }}>⚠️</span>
-                      <h3 style={{ margin: 0, color: 'var(--accent-amber)', fontSize: '1rem' }}>Candidate Suitability Warning</h3>
-                    </div>
-                    <p style={{ maxWidth: '600px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
-                      The AI Recruiter flagged potential mismatches after 3 checks. Review the feedback below before proceeding.
-                    </p>
-                    <div className="rejection-feedback-box">
-                      {rejectionWarning}
-                    </div>
-                    <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: 0 }}>
-                      Would you still like to proceed and generate the tailored resume anyway?
-                    </p>
-                    <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
-                      <button
-                        className="btn"
-                        style={{ padding: '10px 22px', fontWeight: 700, background: 'linear-gradient(135deg,#F59E0B,#D97706)', boxShadow: '0 4px 14px rgba(245,158,11,0.3)' }}
-                        onClick={() => handleGenerateTailoredResume(true)}
-                      >
-                        🚀 Yes, Generate Anyway
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        style={{ padding: '10px 22px' }}
-                        onClick={() => {
-                          setRejectionWarning(null);
-                          setKeepOriginalMode(true);
-                          setStatusMessage('Tailoring cancelled by user.');
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (!analysisResult.latex_code && !keepOriginalMode) ? (
+                {(!analysisResult.latex_code && !keepOriginalMode) ? (
                   <div style={{
                     marginTop: '24px', padding: '32px 28px', borderRadius: '16px',
                     background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(79,70,229,0.04) 100%)',
@@ -1103,7 +1713,7 @@ function App() {
                         Your original resume profile is loaded. You can open it in Overleaf directly, or go back and tailor it for this role.
                       </div>
                     </div>
-                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
                       <button
                         className="btn-overleaf"
                         disabled={loading}
@@ -1134,7 +1744,7 @@ function App() {
                           }
                         }}
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z"/></svg>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z" /></svg>
                         {loading ? 'Preparing…' : 'Open Original in Overleaf'}
                       </button>
                       <button className="btn btn-secondary" style={{ padding: '9px 18px', fontSize: '0.84rem' }} onClick={() => setKeepOriginalMode(false)}>
@@ -1162,7 +1772,7 @@ function App() {
                           </button>
                         </div>
                         <button className="btn-overleaf" onClick={openInOverleaf} disabled={loading}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z"/></svg>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z" /></svg>
                           Open in Overleaf
                         </button>
                       </div>
@@ -1258,21 +1868,32 @@ function App() {
                       </div>
                       📋 PIPELINE EXECUTION LOGS
                     </div>
-                    <div className="log-terminal-body">
+                    <div
+                      className="log-terminal-body"
+                      ref={consoleBodyRef}
+                      onScroll={(e) => {
+                        const el = e.currentTarget;
+                        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+                        consoleUserScrolled.current = !atBottom;
+                      }}
+                    >
                       {statusLogs.map((entry, index) => {
                         const msg = typeof entry === 'string' ? entry : entry.message;
                         const ts = typeof entry === 'object' ? entry.ts : '';
-                        let color = '#CBD5E0';
-                        if (msg.includes('✅')) color = '#48BB78';
-                        if (msg.includes('⚠️') || msg.includes('❌')) color = '#ECC94B';
-                        if (msg.includes('🤖') || msg.includes('👀') || msg.includes('📐')) color = '#63B3ED';
+                        let cls = 'log-entry-msg log-default';
+                        if (msg.includes('✅')) cls = 'log-entry-msg log-ok';
+                        else if (msg.includes('⚠️') || msg.includes('❌')) cls = 'log-entry-msg log-warn';
+                        else if (msg.includes('🤖') || msg.includes('👀') || msg.includes('📐') || msg.includes('⚙️') || msg.includes('✍️')) cls = 'log-entry-msg log-ai';
+                        else if (msg.includes('Rate limit') || msg.includes('429')) cls = 'log-entry-msg log-ratelimit';
                         return (
                           <div key={index} className="log-entry">
                             <span className="log-entry-ts">{ts}</span>
-                            <span className="log-entry-msg" style={{ color, opacity: 0.9 }}>{msg}</span>
+                            <span className={cls}>{msg}</span>
                           </div>
                         );
                       })}
+                      {/* Blinking cursor while loading */}
+                      {loading && <span className="log-cursor" />}
                     </div>
                   </div>
                 )}
