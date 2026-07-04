@@ -339,10 +339,12 @@ if os.path.exists(RESUME_STATE_FILE):
 else:
     # Scan for existing uploaded files to auto-parse at startup
     import glob
-    uploaded_files = glob.glob(os.path.join(UPLOAD_DIR, "*.tex")) or \
-                     glob.glob(os.path.join(UPLOAD_DIR, "*.pdf")) or \
-                     glob.glob(os.path.join(UPLOAD_DIR, "*.docx")) or \
-                     glob.glob(os.path.join(UPLOAD_DIR, "*"))
+    uploaded_files = [f for f in (
+        glob.glob(os.path.join(UPLOAD_DIR, "*.tex")) +
+        glob.glob(os.path.join(UPLOAD_DIR, "*.pdf")) +
+        glob.glob(os.path.join(UPLOAD_DIR, "*.docx"))
+    ) if not f.endswith("resume.cls")]
+    
     if uploaded_files:
         try:
             file_path = uploaded_files[0]
