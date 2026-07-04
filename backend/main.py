@@ -86,68 +86,82 @@ if os.path.exists(default_cls_source):
 # --- Background Task to Clean Files Older Than 1 Hour (Runs every 30 mins) ---
 from contextlib import asynccontextmanager
 
-async def auto_clean_expired_files():
-    while True:
-        try:
-            now = time.time()
-            cutoff = now - 3600 # 1 hour
-            
-            # 1. Clean output folder
-            if os.path.exists(OUTPUT_DIR):
-                for filename in os.listdir(OUTPUT_DIR):
-                    if filename == "resume_state.json":
-                        continue
-                    file_path = os.path.join(OUTPUT_DIR, filename)
-                    try:
+async def auto_clean_expired_files(force_startup_purge: bool = False):
+    """Deletes temporary files. If force_startup_purge is True, ignores time checks and cleans everything."""
+    try:
+        now = time.time()
+        cutoff = 0 if force_startup_purge else (now - 3600) # 1 hour cutoff
+        mode = "STARTUP INSTANT PURGE" if force_startup_purge else "CRON AUTO CLEAN"
+        print(f"[Auto Clean] Running {mode} task...")
+        
+        # 1. Clean output folder
+        if os.path.exists(OUTPUT_DIR):
+            for filename in os.listdir(OUTPUT_DIR):
+                if filename == "resume_state.json":
+                    continue
+                file_path = os.path.join(OUTPUT_DIR, filename)
+                try:
+                    mtime = os.path.getmtime(file_path)
+                    if force_startup_purge or mtime < cutoff:
                         if os.path.isfile(file_path) or os.path.islink(file_path):
-                            if os.path.getmtime(file_path) < cutoff:
-                                os.unlink(file_path)
+                            os.unlink(file_path)
+                            print(f"[Auto Clean Output] Deleted file: {filename} (Modified {now - mtime:.1f}s ago)")
                         elif os.path.isdir(file_path):
-                            if os.path.getmtime(file_path) < cutoff:
-                                shutil.rmtree(file_path)
-                    except Exception as ex:
-                        print(f"[Auto Clean Output] Failed to delete {file_path}: {ex}")
-            
-            # 2. Clean uploads folder (keep fallback resume.cls)
-            if os.path.exists(UPLOAD_DIR):
-                for filename in os.listdir(UPLOAD_DIR):
-                    if filename == "resume.cls":
-                        continue
-                    file_path = os.path.join(UPLOAD_DIR, filename)
-                    try:
+                            shutil.rmtree(file_path)
+                            print(f"[Auto Clean Output] Deleted directory: {filename}")
+                except Exception as ex:
+                    print(f"[Auto Clean Output] Failed to delete {file_path}: {ex}")
+        
+        # 2. Clean uploads folder (keep fallback resume.cls)
+        if os.path.exists(UPLOAD_DIR):
+            for filename in os.listdir(UPLOAD_DIR):
+                if filename == "resume.cls":
+                    continue
+                file_path = os.path.join(UPLOAD_DIR, filename)
+                try:
+                    mtime = os.path.getmtime(file_path)
+                    if force_startup_purge or mtime < cutoff:
                         if os.path.isfile(file_path) or os.path.islink(file_path):
-                            if os.path.getmtime(file_path) < cutoff:
-                                os.unlink(file_path)
+                            os.unlink(file_path)
+                            print(f"[Auto Clean Uploads] Deleted file: {filename} (Modified {now - mtime:.1f}s ago)")
                         elif os.path.isdir(file_path):
-                            if os.path.getmtime(file_path) < cutoff:
-                                shutil.rmtree(file_path)
-                    except Exception as ex:
-                        print(f"[Auto Clean Uploads] Failed to delete {file_path}: {ex}")
-            
-            # 3. Clean local user_data folder of browser state directories
-            user_data_path = os.path.join(BASE_DIR, "user_data")
-            if os.path.exists(user_data_path):
-                for filename in os.listdir(user_data_path):
-                    file_path = os.path.join(user_data_path, filename)
-                    try:
+                            shutil.rmtree(file_path)
+                            print(f"[Auto Clean Uploads] Deleted directory: {filename}")
+                except Exception as ex:
+                    print(f"[Auto Clean Uploads] Failed to delete {file_path}: {ex}")
+        
+        # 3. Clean local user_data folder of browser state directories
+        user_data_path = os.path.join(BASE_DIR, "user_data")
+        if os.path.exists(user_data_path):
+            for filename in os.listdir(user_data_path):
+                file_path = os.path.join(user_data_path, filename)
+                try:
+                    mtime = os.path.getmtime(file_path)
+                    if force_startup_purge or mtime < cutoff:
                         if os.path.isdir(file_path):
-                            if os.path.getmtime(file_path) < cutoff:
-                                shutil.rmtree(file_path)
+                            shutil.rmtree(file_path)
+                            print(f"[Auto Clean UserData] Deleted directory: {filename}")
                         elif os.path.isfile(file_path) or os.path.islink(file_path):
-                            if os.path.getmtime(file_path) < cutoff:
-                                os.unlink(file_path)
-                    except Exception as ex:
-                        print(f"[Auto Clean UserData] Failed to delete {file_path}: {ex}")
-                        
-        except Exception as e:
-            print(f"[Auto Clean Task] Error running cleanup: {e}")
-            
-        await asyncio.sleep(1800) # Sleep for 30 minutes
+                            os.unlink(file_path)
+                            print(f"[Auto Clean UserData] Deleted file: {filename} (Modified {now - mtime:.1f}s ago)")
+                except Exception as ex:
+                    print(f"[Auto Clean UserData] Failed to delete {file_path}: {ex}")
+                    
+    except Exception as e:
+        print(f"[Auto Clean Task] Error running cleanup: {e}")
+
+async def auto_clean_expired_files_loop():
+    # Loop that runs every 30 minutes
+    while True:
+        await asyncio.sleep(1800) # Sleep first, startup clean is handled in lifespan
+        await auto_clean_expired_files(force_startup_purge=False)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Start cleanup loop task
-    clean_task = asyncio.create_task(auto_clean_expired_files())
+    # Startup: Perform immediate full purge of leftover files from previous deployment container instances
+    await auto_clean_expired_files(force_startup_purge=True)
+    # Start the background checker loop task
+    clean_task = asyncio.create_task(auto_clean_expired_files_loop())
     yield
     # Shutdown
     clean_task.cancel()
