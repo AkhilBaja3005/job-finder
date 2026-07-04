@@ -51,40 +51,17 @@ from services.auth import (
 )
 from services.log_queue import LLMClientLogQueue
 from utils.latex_utils import extract_latex_command, apply_latex_hotfix, generate_latex_from_json
+# --- Background Task to Clean Files Older Than 1 Hour (Runs every 30 mins) ---
+from contextlib import asynccontextmanager
 
-
-
-# FIX #5: allow_origins=["*"] combined with allow_credentials=True is invalid per the
-# CORS spec (browsers will reject it even though FastAPI won't error at startup).
-# This API authenticates via a Bearer token header, not cookies, so credentialed
-# CORS requests aren't actually needed. If you later need cookie-based auth,
-# replace allow_origins=["*"] with an explicit list of trusted origins instead.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Use absolute paths to prevent working directory shifts on Render container startup
+# Define directories before using them in the startup methods
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# Ensure resume.cls is available in uploads directory for compilation/zipping
-# We copy it from the static backend/assets folder which is tracked in Git.
 default_cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
 target_cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
-if os.path.exists(default_cls_source):
-    import shutil
-    shutil.copy2(default_cls_source, target_cls_path)
-    print(f"Synced fallback resume.cls from {default_cls_source} to {target_cls_path}")
-
-# --- Background Task to Clean Files Older Than 1 Hour (Runs every 30 mins) ---
-from contextlib import asynccontextmanager
 
 async def auto_clean_expired_files(force_startup_purge: bool = False):
     """Deletes temporary files. If force_startup_purge is True, ignores time checks and cleans everything."""
@@ -172,6 +149,36 @@ async def lifespan(app: FastAPI):
 
 # Initialize FastAPI with the lifespan handler
 app = FastAPI(title="AI Job Finder Agent API", lifespan=lifespan)
+
+# FIX #5: allow_origins=["*"] combined with allow_credentials=True is invalid per the
+# CORS spec (browsers will reject it even though FastAPI won't error at startup).
+# This API authenticates via a Bearer token header, not cookies, so credentialed
+# CORS requests aren't actually needed. If you later need cookie-based auth,
+# replace allow_origins=["*"] with an explicit list of trusted origins instead.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Use absolute paths to prevent working directory shifts on Render container startup
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# Ensure resume.cls is available in uploads directory for compilation/zipping
+# We copy it from the static backend/assets folder which is tracked in Git.
+default_cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
+target_cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
+if os.path.exists(default_cls_source):
+    import shutil
+    shutil.copy2(default_cls_source, target_cls_path)
+    print(f"Synced fallback resume.cls from {default_cls_source} to {target_cls_path}")
+
 
 import threading
 
