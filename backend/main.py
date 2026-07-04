@@ -52,7 +52,7 @@ from services.auth import (
 from services.log_queue import LLMClientLogQueue
 from utils.latex_utils import extract_latex_command, apply_latex_hotfix, generate_latex_from_json
 
-app = FastAPI(title="AI Job Finder Agent API")
+
 
 # FIX #5: allow_origins=["*"] combined with allow_credentials=True is invalid per the
 # CORS spec (browsers will reject it even though FastAPI won't error at startup).
@@ -82,6 +82,82 @@ if os.path.exists(default_cls_source):
     import shutil
     shutil.copy2(default_cls_source, target_cls_path)
     print(f"Synced fallback resume.cls from {default_cls_source} to {target_cls_path}")
+
+# --- Background Task to Clean Files Older Than 1 Hour (Runs every 30 mins) ---
+from contextlib import asynccontextmanager
+
+async def auto_clean_expired_files():
+    while True:
+        try:
+            now = time.time()
+            cutoff = now - 3600 # 1 hour
+            
+            # 1. Clean output folder
+            if os.path.exists(OUTPUT_DIR):
+                for filename in os.listdir(OUTPUT_DIR):
+                    if filename == "resume_state.json":
+                        continue
+                    file_path = os.path.join(OUTPUT_DIR, filename)
+                    try:
+                        if os.path.isfile(file_path) or os.path.islink(file_path):
+                            if os.path.getmtime(file_path) < cutoff:
+                                os.unlink(file_path)
+                        elif os.path.isdir(file_path):
+                            if os.path.getmtime(file_path) < cutoff:
+                                shutil.rmtree(file_path)
+                    except Exception as ex:
+                        print(f"[Auto Clean Output] Failed to delete {file_path}: {ex}")
+            
+            # 2. Clean uploads folder (keep fallback resume.cls)
+            if os.path.exists(UPLOAD_DIR):
+                for filename in os.listdir(UPLOAD_DIR):
+                    if filename == "resume.cls":
+                        continue
+                    file_path = os.path.join(UPLOAD_DIR, filename)
+                    try:
+                        if os.path.isfile(file_path) or os.path.islink(file_path):
+                            if os.path.getmtime(file_path) < cutoff:
+                                os.unlink(file_path)
+                        elif os.path.isdir(file_path):
+                            if os.path.getmtime(file_path) < cutoff:
+                                shutil.rmtree(file_path)
+                    except Exception as ex:
+                        print(f"[Auto Clean Uploads] Failed to delete {file_path}: {ex}")
+            
+            # 3. Clean local user_data folder of browser state directories
+            user_data_path = os.path.join(BASE_DIR, "user_data")
+            if os.path.exists(user_data_path):
+                for filename in os.listdir(user_data_path):
+                    file_path = os.path.join(user_data_path, filename)
+                    try:
+                        if os.path.isdir(file_path):
+                            if os.path.getmtime(file_path) < cutoff:
+                                shutil.rmtree(file_path)
+                        elif os.path.isfile(file_path) or os.path.islink(file_path):
+                            if os.path.getmtime(file_path) < cutoff:
+                                os.unlink(file_path)
+                    except Exception as ex:
+                        print(f"[Auto Clean UserData] Failed to delete {file_path}: {ex}")
+                        
+        except Exception as e:
+            print(f"[Auto Clean Task] Error running cleanup: {e}")
+            
+        await asyncio.sleep(1800) # Sleep for 30 minutes
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Start cleanup loop task
+    clean_task = asyncio.create_task(auto_clean_expired_files())
+    yield
+    # Shutdown
+    clean_task.cancel()
+    try:
+        await clean_task
+    except asyncio.CancelledError:
+        pass
+
+# Initialize FastAPI with the lifespan handler
+app = FastAPI(title="AI Job Finder Agent API", lifespan=lifespan)
 
 import threading
 
