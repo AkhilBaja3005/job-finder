@@ -12,7 +12,6 @@ The app is a single FastAPI backend serving a React (Vite) single-page frontend,
 - **Cover letter generation** — produced alongside the tailored resume.
 - **Job discovery** — searches LinkedIn and Indeed for postings matching the candidate's resume, dedupes, scores, and ranks them.
 - **Export to Overleaf** — one-click export of the tailored (or original) resume as a LaTeX project opened directly in Overleaf.
-- **Autofill agent** — drives a real (persistent, visible) Chromium browser via Playwright to fill out a job application form, uploading the tailored resume PDF and answering free-text questions with an LLM, with an interactive or fully-automated mode.
 - **Google OAuth login** — with a guest mode and per-browser guest token for unauthenticated use.
 - **Multi-provider LLM support** — Gemini (default), Anthropic Claude, Groq, or OpenRouter, selected automatically from the shape of a user-supplied API key, with automatic model fallback and 429/rate-limit backoff.
 
@@ -30,20 +29,19 @@ backend/
     job_searcher.py       LinkedIn/Indeed scraping + job ranking
     scraper.py             Single job-posting page scraper (Playwright)
     resume_generator.py  Structured JSON -> PDF (Jinja2 + Playwright), used for autofill uploads
-    autofill_agent.py    Playwright browser automation for job applications
     auth.py                Supabase-backed users/sessions + Google OAuth
     log_queue.py          Thread-safe log relay for streaming LLM progress to the client
   utils/latex_utils.py  LaTeX post-processing/hotfixes and JSON->LaTeX generation
 ```
 
-The backend streams progress (NDJSON) to the frontend for long-running operations (job analysis, tailoring, job search, autofill status) so the UI can show a live log.
+The backend streams progress (NDJSON) to the frontend for long-running operations (job analysis, tailoring, job search) so the UI can show a live log.
 
 ## Prerequisites
 
 - Python 3.11+
 - Node.js 20+
 - [Tectonic](https://tectonic-typesetting.github.io/) (LaTeX compiler) on `PATH` — used to compile tailored resumes to PDF
-- Playwright browsers (`playwright install chromium`) — used for scraping, autofill, and PDF generation
+- Playwright browsers (`playwright install chromium`) — used for scraping, and PDF generation
 - A Gemini API key (or Anthropic/Groq/OpenRouter key) for the LLM features
 
 ## Environment variables
