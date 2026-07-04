@@ -914,6 +914,65 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/clear_cache")
+async def clear_cache(authorization: Optional[str] = Header(None)):
+    """Resets all in-memory caches and deletes temporary files in uploads and output folders."""
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        
+    try:
+        # 1. Clear in-memory caches
+        with _cache_lock:
+            _analysis_cache.clear()
+        with _job_cache_lock:
+            _job_search_cache.clear()
+            
+        # 2. Clean temporary output files
+        if os.path.exists(OUTPUT_DIR):
+            for filename in os.listdir(OUTPUT_DIR):
+                file_path = os.path.join(OUTPUT_DIR, filename)
+                # Keep resume_state.json unless guest cache is cleared
+                if filename == "resume_state.json":
+                    continue
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as ex:
+                    print(f"Failed to delete output file {file_path}: {ex}")
+                    
+        # 3. Clean temporary uploads (except for the default resume.cls)
+        if os.path.exists(UPLOAD_DIR):
+            for filename in os.listdir(UPLOAD_DIR):
+                if filename == "resume.cls":
+                    continue
+                file_path = os.path.join(UPLOAD_DIR, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as ex:
+                    print(f"Failed to delete upload file {file_path}: {ex}")
+
+        # Also reset session store for guest/user
+        if token:
+            with _store_lock:
+                _session_store.pop(token, None)
+        else:
+            with _store_lock:
+                _session_store.clear()
+                
+        # Re-sync resume.cls fallback
+        if os.path.exists(default_cls_source):
+            shutil.copy2(default_cls_source, target_cls_path)
+
+        return {"status": "success", "message": "All cache, session store, and temporary files cleared successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Background task status registry maps task_id -> {"status": str, "message": str}
 _task_registry: dict[str, dict] = {}
 _registry_lock = threading.Lock()
@@ -1377,7 +1436,7 @@ if os.path.exists(frontend_dist):
     @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
     async def serve_frontend(rest_of_path: str):
         # Ignore API endpoints so they pass through to regular routes
-        if rest_of_path.startswith(("user/", "auth/", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs")):
+        if rest_of_path.startswith(("user/", "auth/", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
             raise HTTPException(status_code=404, detail="Not Found")
         
         if rest_of_path == "favicon.svg":
