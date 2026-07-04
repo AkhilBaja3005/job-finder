@@ -51,8 +51,104 @@ from services.auth import (
 )
 from services.log_queue import LLMClientLogQueue
 from utils.latex_utils import extract_latex_command, apply_latex_hotfix, generate_latex_from_json
+# --- Background Task to Clean Files Older Than 1 Hour (Runs every 30 mins) ---
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="AI Job Finder Agent API")
+# Define directories before using them in the startup methods
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+default_cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
+target_cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
+
+async def auto_clean_expired_files(force_startup_purge: bool = False):
+    """Deletes temporary files. If force_startup_purge is True, ignores time checks and cleans everything."""
+    try:
+        now = time.time()
+        cutoff = 0 if force_startup_purge else (now - 3600) # 1 hour cutoff
+        mode = "STARTUP INSTANT PURGE" if force_startup_purge else "CRON AUTO CLEAN"
+        print(f"[Auto Clean] Running {mode} task...")
+        
+        # 1. Clean output folder
+        if os.path.exists(OUTPUT_DIR):
+            for filename in os.listdir(OUTPUT_DIR):
+                if filename == "resume_state.json":
+                    continue
+                file_path = os.path.join(OUTPUT_DIR, filename)
+                try:
+                    mtime = os.path.getmtime(file_path)
+                    if force_startup_purge or mtime < cutoff:
+                        if os.path.isfile(file_path) or os.path.islink(file_path):
+                            os.unlink(file_path)
+                            print(f"[Auto Clean Output] Deleted file: {filename} (Modified {now - mtime:.1f}s ago)")
+                        elif os.path.isdir(file_path):
+                            shutil.rmtree(file_path)
+                            print(f"[Auto Clean Output] Deleted directory: {filename}")
+                except Exception as ex:
+                    print(f"[Auto Clean Output] Failed to delete {file_path}: {ex}")
+        
+        # 2. Clean uploads folder (keep fallback resume.cls)
+        if os.path.exists(UPLOAD_DIR):
+            for filename in os.listdir(UPLOAD_DIR):
+                if filename == "resume.cls":
+                    continue
+                file_path = os.path.join(UPLOAD_DIR, filename)
+                try:
+                    mtime = os.path.getmtime(file_path)
+                    if force_startup_purge or mtime < cutoff:
+                        if os.path.isfile(file_path) or os.path.islink(file_path):
+                            os.unlink(file_path)
+                            print(f"[Auto Clean Uploads] Deleted file: {filename} (Modified {now - mtime:.1f}s ago)")
+                        elif os.path.isdir(file_path):
+                            shutil.rmtree(file_path)
+                            print(f"[Auto Clean Uploads] Deleted directory: {filename}")
+                except Exception as ex:
+                    print(f"[Auto Clean Uploads] Failed to delete {file_path}: {ex}")
+        
+        # 3. Clean local user_data folder of browser state directories
+        user_data_path = os.path.join(BASE_DIR, "user_data")
+        if os.path.exists(user_data_path):
+            for filename in os.listdir(user_data_path):
+                file_path = os.path.join(user_data_path, filename)
+                try:
+                    mtime = os.path.getmtime(file_path)
+                    if force_startup_purge or mtime < cutoff:
+                        if os.path.isdir(file_path):
+                            shutil.rmtree(file_path)
+                            print(f"[Auto Clean UserData] Deleted directory: {filename}")
+                        elif os.path.isfile(file_path) or os.path.islink(file_path):
+                            os.unlink(file_path)
+                            print(f"[Auto Clean UserData] Deleted file: {filename} (Modified {now - mtime:.1f}s ago)")
+                except Exception as ex:
+                    print(f"[Auto Clean UserData] Failed to delete {file_path}: {ex}")
+                    
+    except Exception as e:
+        print(f"[Auto Clean Task] Error running cleanup: {e}")
+
+async def auto_clean_expired_files_loop():
+    # Loop that runs every 30 minutes
+    while True:
+        await asyncio.sleep(1800) # Sleep first, startup clean is handled in lifespan
+        await auto_clean_expired_files(force_startup_purge=False)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Perform immediate full purge of leftover files from previous deployment container instances
+    await auto_clean_expired_files(force_startup_purge=True)
+    # Start the background checker loop task
+    clean_task = asyncio.create_task(auto_clean_expired_files_loop())
+    yield
+    # Shutdown
+    clean_task.cancel()
+    try:
+        await clean_task
+    except asyncio.CancelledError:
+        pass
+
+# Initialize FastAPI with the lifespan handler
+app = FastAPI(title="AI Job Finder Agent API", lifespan=lifespan)
 
 # FIX #5: allow_origins=["*"] combined with allow_credentials=True is invalid per the
 # CORS spec (browsers will reject it even though FastAPI won't error at startup).
@@ -82,6 +178,7 @@ if os.path.exists(default_cls_source):
     import shutil
     shutil.copy2(default_cls_source, target_cls_path)
     print(f"Synced fallback resume.cls from {default_cls_source} to {target_cls_path}")
+
 
 import threading
 
@@ -242,10 +339,12 @@ if os.path.exists(RESUME_STATE_FILE):
 else:
     # Scan for existing uploaded files to auto-parse at startup
     import glob
-    uploaded_files = glob.glob(os.path.join(UPLOAD_DIR, "*.tex")) or \
-                     glob.glob(os.path.join(UPLOAD_DIR, "*.pdf")) or \
-                     glob.glob(os.path.join(UPLOAD_DIR, "*.docx")) or \
-                     glob.glob(os.path.join(UPLOAD_DIR, "*"))
+    uploaded_files = [f for f in (
+        glob.glob(os.path.join(UPLOAD_DIR, "*.tex")) +
+        glob.glob(os.path.join(UPLOAD_DIR, "*.pdf")) +
+        glob.glob(os.path.join(UPLOAD_DIR, "*.docx"))
+    ) if not f.endswith("resume.cls")]
+    
     if uploaded_files:
         try:
             file_path = uploaded_files[0]
@@ -914,6 +1013,65 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/clear_cache")
+async def clear_cache(authorization: Optional[str] = Header(None)):
+    """Resets all in-memory caches and deletes temporary files in uploads and output folders."""
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        
+    try:
+        # 1. Clear in-memory caches
+        with _cache_lock:
+            _analysis_cache.clear()
+        with _job_cache_lock:
+            _job_search_cache.clear()
+            
+        # 2. Clean temporary output files
+        if os.path.exists(OUTPUT_DIR):
+            for filename in os.listdir(OUTPUT_DIR):
+                file_path = os.path.join(OUTPUT_DIR, filename)
+                # Keep resume_state.json unless guest cache is cleared
+                if filename == "resume_state.json":
+                    continue
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as ex:
+                    print(f"Failed to delete output file {file_path}: {ex}")
+                    
+        # 3. Clean temporary uploads (except for the default resume.cls)
+        if os.path.exists(UPLOAD_DIR):
+            for filename in os.listdir(UPLOAD_DIR):
+                if filename == "resume.cls":
+                    continue
+                file_path = os.path.join(UPLOAD_DIR, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as ex:
+                    print(f"Failed to delete upload file {file_path}: {ex}")
+
+        # Also reset session store for guest/user
+        if token:
+            with _store_lock:
+                _session_store.pop(token, None)
+        else:
+            with _store_lock:
+                _session_store.clear()
+                
+        # Re-sync resume.cls fallback
+        if os.path.exists(default_cls_source):
+            shutil.copy2(default_cls_source, target_cls_path)
+
+        return {"status": "success", "message": "All cache, session store, and temporary files cleared successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Background task status registry maps task_id -> {"status": str, "message": str}
 _task_registry: dict[str, dict] = {}
 _registry_lock = threading.Lock()
@@ -1377,7 +1535,7 @@ if os.path.exists(frontend_dist):
     @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
     async def serve_frontend(rest_of_path: str):
         # Ignore API endpoints so they pass through to regular routes
-        if rest_of_path.startswith(("user/", "auth/", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs")):
+        if rest_of_path.startswith(("user/", "auth/", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
             raise HTTPException(status_code=404, detail="Not Found")
         
         if rest_of_path == "favicon.svg":

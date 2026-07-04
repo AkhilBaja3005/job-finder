@@ -210,6 +210,45 @@ function App() {
     fetchResume();
   }, [authToken]);
 
+  const handleClearCache = async () => {
+    if (!window.confirm("Are you sure you want to clear all in-memory caches, active session state, and output PDF/TEX files?")) {
+      return;
+    }
+    setLoading(true);
+    setStatusMessage('Clearing application caches and temp files...');
+    try {
+      const headers = {};
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      const res = await fetch(`${API_BASE}/clear_cache`, {
+        method: 'POST',
+        headers
+      });
+      if (res.ok) {
+        setResumeData(null);
+        setAnalysisResult(null);
+        setTailoredResumeData(null);
+        setRejectionWarning(null);
+        setJobUrl('');
+        setJobTitle('');
+        setJobDescription('');
+        setCompany('');
+        setStatusLogs([]);
+        setStatusMessage('Caches cleared successfully!');
+        showToast('🧹 All caches and files deleted!', 'success');
+      } else {
+        const err = await res.json();
+        throw new Error(err.detail || 'Failed to clear cache');
+      }
+    } catch (err) {
+      setStatusMessage(`Clear cache failed: ${err.message}`);
+      showToast(`❌ ${err.message}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
     setAuthToken('');
@@ -973,13 +1012,22 @@ function App() {
               </div>
             )}
 
-            <button
-              className="btn"
-              style={{ padding: '14px', width: '100%', fontSize: '0.95rem', marginTop: '4px' }}
-              onClick={() => setConfigStepActive(false)}
-            >
-              Continue to Dashboard →
-            </button>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '14px', flex: 1, fontSize: '0.95rem', borderColor: 'var(--accent-red)', color: 'var(--accent-red)' }}
+                onClick={handleClearCache}
+              >
+                🧹 Clear Caches & Data
+              </button>
+              <button
+                className="btn"
+                style={{ padding: '14px', flex: 2, fontSize: '0.95rem' }}
+                onClick={() => setConfigStepActive(false)}
+              >
+                Continue to Dashboard →
+              </button>
+            </div>
           </div>
         </div>
       ) : (

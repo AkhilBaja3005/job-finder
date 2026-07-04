@@ -8,3 +8,4 @@ uploads/
 .DS_Store
 *.pyc
 __pycache__/
+user_data/
