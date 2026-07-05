@@ -1,5 +1,7 @@
 import os
+# pyrefly: ignore [missing-import]
 from jinja2 import Template
+# pyrefly: ignore [missing-import]
 from playwright.async_api import async_playwright
 
 RESUME_HTML_TEMPLATE = """

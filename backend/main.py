@@ -652,6 +652,7 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
             import asyncio
             fit_task = asyncio.create_task(
                 analyze_job_fit(session_resume_data, job_title, jd_text, master_latex if not request.skip_tailoring else None, active_api_key, on_log=log_callback)
+                # analyze_job_fit(session_resume_data, job_title, jd_text, master_latex if not request.skip_tailoring else None, active_api_key, on_log=None)
             )
 
             # Poll and yield log queue events in real-time while the LLM call is running
