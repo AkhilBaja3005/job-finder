@@ -363,11 +363,22 @@ function App() {
       return;
     }
 
-    const targetUrl = urlOverride || jobUrl;
-    const targetTitle = titleOverride || jobTitle;
-    
+    // ─── SAFE STRING SANITIZATION ──────────────────────────────────────────
+    // Force inputs to be primitive strings. If an object/event slipped in, 
+    // extracting text fields prevents circular structure crashes.
+    const extractString = (val) => {
+      if (!val) return null;
+      if (typeof val === 'string') return val;
+      if (val.target && typeof val.target.value === 'string') return val.target.value; // Catch accidental event objects
+      if (typeof val.toString === 'function') return val.toString();
+      return String(val);
+    };
+
+    const targetUrl = extractString(urlOverride || jobUrl);
+    const targetTitle = extractString(titleOverride || jobTitle);
+
     // Clear out stale job description if we are switching to a new URL override
-    let activeDescription = jobDescription;
+    let activeDescription = extractString(jobDescription);
     if (urlOverride) {
       activeDescription = null;
       setJobDescription('');
@@ -385,19 +396,28 @@ function App() {
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (geminiApiKey) {
-        headers['X-Gemini-API-Key'] = geminiApiKey;
+        headers['X-Gemini-API-Key'] = extractString(geminiApiKey);
       }
       headers['Authorization'] = `Bearer ${getAuthHeader()}`;
+
+      // ─── DEFENSIVE SERIALIZATION ──────────────────────────────────────────
+      let requestBody;
+      try {
+        requestBody = JSON.stringify({
+          job_url: targetUrl || null,
+          job_title: targetTitle || 'Target Role',
+          job_description: activeDescription || null,
+          skip_tailoring: true,
+        });
+      } catch (jsonError) {
+        console.error("CRITICAL: The payload items are circular!", { targetUrl, targetTitle, activeDescription });
+        throw new Error(`Payload serialization failed: ${jsonError.message}. Check your state bindings.`);
+      }
 
       const response = await fetch(`${API_BASE}/analyze_job`, {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify({
-          job_url: targetUrl || null,
-          job_title: targetTitle || 'Target Role',
-          job_description: activeDescription || null,
-          skip_tailoring: true, // Only calculate ATS scores and gap analysis
-        }),
+        body: requestBody,
       });
 
       if (!response.ok) {
@@ -437,33 +457,37 @@ function App() {
             } else if (event.type === 'result') {
               const result = event;
               setAnalysisResult(result.analysis);
-              if (result.job_title) {
-                setJobTitle(result.job_title);
-              }
-              if (result.company) {
-                setCompany(result.company);
-              }
-              if (result.job_description) {
-                setJobDescription(result.job_description);
-              }
+              if (result.job_title) setJobTitle(result.job_title);
+              if (result.company) setCompany(result.company);
+              if (result.job_description) setJobDescription(result.job_description);
 
-              const updates = result.analysis.suggested_resume_updates || {};
+              // ─── SAFE RESUME CLONING ──────────────────────────────────────
+              const baseResume = resumeData ? JSON.parse(JSON.stringify(resumeData)) : {};
+              const updates = result.analysis?.suggested_resume_updates || {};
+
               const tailored = {
-                ...resumeData,
-                summary: updates.summary || (resumeData || {}).summary || '',
-                skills: updates.skills || (resumeData || {}).skills || [],
-                experience: ((resumeData || {}).experience || []).map((job, idx) => {
-                  const tailoredExperience = updates.experience && updates.experience[idx];
+                ...baseResume,
+                summary: updates.summary || baseResume.summary || '',
+                skills: updates.skills || baseResume.skills || [],
+                experience: (baseResume.experience || []).map((job, idx) => {
+                  const tailoredExperience = updates.experience?.[idx];
+
+                  let finalDescription = job.description || [];
+                  if (Array.isArray(tailoredExperience)) {
+                    finalDescription = tailoredExperience;
+                  } else if (tailoredExperience && tailoredExperience.description) {
+                    finalDescription = tailoredExperience.description;
+                  }
+
                   return {
                     ...job,
-                    // If tailoredExperience is a list/array of bullets directly, use it, else fallback
-                    description: Array.isArray(tailoredExperience) ? tailoredExperience : (tailoredExperience && tailoredExperience.description) || (job || {}).description || [],
+                    description: finalDescription,
                   };
                 }),
               };
+
               setTailoredResumeData(tailored);
               setStatusMessage('ATS Scoring complete! Awaiting your instruction to tailor the resume.');
-
             }
           } catch (e) {
             if (e instanceof SyntaxError) {
@@ -481,7 +505,6 @@ function App() {
       setLoading(false);
     }
   };
-
   const handleGenerateTailoredResume = async (overrideForce = false, urlOverride = null, titleOverride = null) => {
     if (!resumeData) {
       alert('Please upload a resume first.');
@@ -848,7 +871,7 @@ function App() {
           {toast.message}
         </div>
       )}
-      
+
       <header className="app-header">
         <h1 className="title">
           Resume Tailor Suite
@@ -1176,10 +1199,11 @@ function App() {
                         padding: '8px',
                         fontSize: '0.8rem',
                         borderRadius: '6px',
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        color: '#fff',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        // Safe fallback styles using CSS variables 👇
+                        background: 'var(--bg-input, rgba(0,0,0,0.05))',
+                        border: '1px solid var(--border-input, rgba(0,0,0,0.15))',
+                        color: 'var(--text-main, currentcolor)'
                       }}
                     >
                       <option value="24h">Last 24 Hours</option>
@@ -1297,16 +1321,16 @@ function App() {
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                         {/* Two-row text container on the left */}
-                        <div style={{ 
-                          display: 'flex', 
-                          flexDirection: 'column', 
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
                           alignItems: 'center',
-                          justifyContent: 'center', 
+                          justifyContent: 'center',
                           lineHeight: 1.15,
-                          fontSize: '0.74rem', 
-                          color: 'var(--text-muted)', 
-                          fontWeight: 600, 
-                          letterSpacing: '0.03em', 
+                          fontSize: '0.74rem',
+                          color: 'var(--text-muted)',
+                          fontWeight: 600,
+                          letterSpacing: '0.03em',
                           textTransform: 'uppercase'
                         }}>
                           <div>Sort:</div>
@@ -1602,14 +1626,10 @@ function App() {
                 <div className="empty-state-steps">
                   <div className="empty-step">
                     <div className="empty-step-num">1</div>
-                    <div className="empty-step-label">Upload master resume</div>
-                  </div>
-                  <div className="empty-step">
-                    <div className="empty-step-num">2</div>
                     <div className="empty-step-label">Paste job URL or description</div>
                   </div>
                   <div className="empty-step">
-                    <div className="empty-step-num">3</div>
+                    <div className="empty-step-num">2</div>
                     <div className="empty-step-label">Get tailored resume & score</div>
                   </div>
                 </div>

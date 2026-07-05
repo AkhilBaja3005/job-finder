@@ -1,3 +1,4 @@
+from asyncio import base_events
 import os
 import json
 import re
@@ -6,7 +7,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Callable
 
 from services.gemini_client import generate_content_with_fallback, generate_latex_with_strong_model
-from services.ats_scorer import compute_ats_score, compute_overall_score
+from services.ats_scorer import compute_ats_score, compute_overall_score, calculate_flattened_experience
 
 # ─────────────────────────────────────────
 # Pydantic schemas
@@ -60,7 +61,38 @@ def _strip_latex_commands(text: str) -> str:
 
 def _truncate_jd(jd: str, max_chars: int = 3000) -> str:
     """Truncate job description to avoid ballooning prompt size from scraped HTML noise."""
+    if not jd:
+        return ""
     return jd[:max_chars] if len(jd) > max_chars else jd
+
+def _parse_llm_json(raw_text: str, label: str = "LLM JSON") -> dict:
+    """
+    Parses JSON out of an LLM response defensively.
+
+    Native Gemini enforces response_mime_type=application/json, so its output
+    is already clean. But this pipeline's fallback chain can also land on
+    Cloudflare/Groq/OpenRouter, which are only *prompted* to return raw JSON —
+    they can still wrap the payload in ```json fences, add a stray preamble
+    line, or trail extra commentary despite instructions. Strip fences and,
+    if that's not enough, fall back to extracting the outermost {...} block
+    before parsing, so a well-formed-but-wrapped response doesn't blow up
+    with a JSONDecodeError.
+    """
+    text = raw_text.strip()
+    if text.startswith("```"):
+        text = re.sub(r'^```(?:json)?\s*', '', text)
+        text = re.sub(r'\s*```$', '', text)
+        text = text.strip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Fall back to grabbing the outermost JSON object if there's
+        # leading/trailing prose around it.
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if not match:
+            raise ValueError(f"{label}: could not locate a JSON object in the response: {text[:300]}")
+        return json.loads(match.group(0))
 
 def _sanitize_suggestions(suggestions) -> dict:
     """
@@ -247,10 +279,18 @@ async def analyze_job_fit(
     jd_truncated = _truncate_jd(job_description)
 
     # ── Phase 1: Deterministic ATS scoring ──────────────────────────────────
+    # ── Phase 1: Deterministic ATS scoring ──────────────────────────────────
     ats = compute_ats_score(resume_data, jd_truncated)
+
+    # Use getattr to prevent crashes if fields are missing from ATSScoreResult
+    matched_count = getattr(ats, "matched_required_count", 0)
+    total_count   = getattr(ats, "total_required_count", 0)
+    cand_years    = getattr(ats, "candidate_years", 0)
+    req_years     = getattr(ats, "required_years", "not specified")
+
     print(f"[ATS] skills={ats.skills_score} exp={ats.experience_score} "
-          f"matched={ats.matched_required_count}/{ats.total_required_count} "
-          f"years={ats.candidate_years}/{ats.required_years}")
+        f"matched={matched_count}/{total_count} "
+        f"years={cand_years}/{req_years}")
 
     # Prepare inputs for semantic scoring & cover letter
     lean_resume = {
@@ -287,16 +327,16 @@ Focus ONLY on:
 """
 
     bullet_counts = {
-        e.get("company", f"job_{i}"): len(e.get("description", []))
+        e.get("company", f"job_{i}"): len(e.get("description" or []))
         for i, e in enumerate(resume_data.get("experience", []))
     }
-
+    missing_skills_list = ats.missing_skills or []
     cover_prompt = f"""You are an expert career writer.
 Write a tailored cover letter and resume section updates for this candidate.
 
 CANDIDATE: {json.dumps(lean_resume, indent=2)}
 TARGET ROLE: {job_title}
-MISSING SKILLS TO ADDRESS: {', '.join(ats.missing_skills[:8])}
+MISSING SKILLS TO ADDRESS: {', '.join(missing_skills_list[:8])}
 JD EXCERPT: {jd_truncated[:1200]}
 
 RULES:
@@ -309,7 +349,7 @@ RULES:
 
     # ── Phase 2 & 3: Run LLM calls in parallel threads ─────────────────────
     import asyncio
-    
+
     # We use asyncio.to_thread to run synchronous blocking Gemini API calls concurrently
     semantic_task = asyncio.to_thread(
         generate_content_with_fallback,
@@ -328,17 +368,21 @@ RULES:
 
     semantic_text, cover_text = await asyncio.gather(semantic_task, cover_task)
 
-    semantic = _SemanticScoreResult(**json.loads(semantic_text))
+    # NOTE: parsed defensively — see _parse_llm_json docstring. Non-Gemini
+    # providers in the fallback chain (Cloudflare/Groq/OpenRouter) are only
+    # prompted to emit raw JSON and can still wrap it in ```json fences.
+    semantic = _SemanticScoreResult(**_parse_llm_json(semantic_text, label="semantic scoring"))
     role_fit = min(100, max(0, semantic.role_fit_score))
-    cover_result = _CoverLetterResult(**json.loads(cover_text))
+    cover_result = _CoverLetterResult(**_parse_llm_json(cover_text, label="cover letter"))
 
     # ── Phase 4: Compute overall score (formula, not hallucinated) ───────────
     overall = compute_overall_score(ats.skills_score, ats.experience_score, role_fit)
 
+    # ── Phase 4: Compute overall score ───────────────────────────────────────
     keyword_stats = {
-        "required_matched":  f"{ats.matched_required_count}/{ats.total_required_count}",
-        "candidate_years":   str(ats.candidate_years),
-        "required_years":    str(ats.required_years) if ats.required_years else "not specified",
+        "required_matched":  f"{getattr(ats, 'matched_required_count', 0)}/{getattr(ats, 'total_required_count', 0)}",
+        "candidate_years":   str(getattr(ats, "candidate_years", 0)),
+        "required_years":    str(getattr(ats, "required_years", "not specified")),
     }
 
     match_analysis = MatchScoreDetails(
@@ -346,8 +390,8 @@ RULES:
         skills_score=ats.skills_score,
         experience_score=ats.experience_score,
         role_fit_score=role_fit,
-        matched_skills=ats.matched_skills,
-        missing_skills=ats.missing_skills,
+        matched_skills=getattr(ats, "matched_skills", []), # Safe fallback to empty list
+        missing_skills=getattr(ats, "missing_skills", []), # Safe fallback to empty list
         tailoring_suggestions=semantic.tailoring_suggestions,
         score_breakdown=ats.score_breakdown,
         keyword_stats=keyword_stats,
@@ -460,9 +504,9 @@ def review_tailored_resume(
 
     # ── Phase 2: LLM soft-quality check ──────────────────────────────────────
     jd_excerpt = _truncate_jd(job_description, max_chars=1200)
+
+    computed_years, avg_tenure, weighted_segments = calculate_flattened_experience(original_resume_data)
     
-    from services.ats_scorer import extract_candidate_years
-    computed_years = extract_candidate_years(original_resume_data)
 
     # Formulate a clean profile snapshot for validation
     candidate_profile = {
@@ -506,7 +550,7 @@ TAILORED LaTeX:
 
     try:
         response_text = generate_content_with_fallback(prompt, ResumeReviewResult, custom_api_key, on_log)
-        parsed = json.loads(response_text)
+        parsed = _parse_llm_json(response_text, label="resume review")
         return ResumeReviewResult(**parsed)
     except Exception as e:
         # Re-raise API failures (e.g. Rate Limit 429) so they bubble up to the frontend UI
