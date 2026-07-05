@@ -147,6 +147,11 @@ def _cloudflare_configured() -> bool:
         return False
     return bool(os.getenv("CLOUDFLARE_API_KEY") and os.getenv("CLOUDFLARE_ACCOUNT_ID"))
 
+def _nvidia_configured() -> bool:
+    if os.getenv("NVIDIA_DISABLED", "").strip() in ("1", "true", "True"):
+        return False
+    return bool(os.getenv("NVIDIA_API_KEY"))
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Core Logic Engine and Cascading Routine
 # ─────────────────────────────────────────────────────────────────────────────
@@ -185,7 +190,7 @@ def _generate_with_model_list(
 
     # ── STAGE 1: NVIDIA NIM (First General Checkpoint) ───────────────────────
     nvidia_api_key = os.getenv("NVIDIA_API_KEY")
-    if nvidia_api_key and nvidia_api_key.startswith("nvapi-"):
+    if _nvidia_configured():
         try:
             # Internal execution now tests validation natively before returning text
             return _execute_nvidia_nim_fallback(prompt, response_schema, nvidia_api_key, on_log)
