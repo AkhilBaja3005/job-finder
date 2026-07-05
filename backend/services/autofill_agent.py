@@ -1,8 +1,11 @@
 import os
 import json
 import asyncio
+# pyrefly: ignore [missing-import]
 from playwright.async_api import async_playwright
+# pyrefly: ignore [missing-import]
 from google import genai
+# pyrefly: ignore [missing-import]
 from google.genai import types
 
 def get_answer_from_llm(question: str, field_context: str, resume_data: dict) -> str:

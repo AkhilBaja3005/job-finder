@@ -4,11 +4,13 @@ import urllib.parse
 import urllib.request
 import re
 import ssl
+# pyrefly: ignore [missing-import]
 from bs4 import BeautifulSoup
 from typing import List, Optional, Dict
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 from services.gemini_client import generate_content_with_fallback
-from services.ats_scorer import compute_ats_score, extract_candidate_years
+from services.ats_scorer import compute_ats_score, calculate_flattened_experience
 
 # ─── Pydantic Schemas for Search ──────────────────────────────────────────
 
@@ -141,6 +143,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
     print(f"[Job Searcher] Fetching Indeed via Playwright: {url}")
     results = []
     
+    # pyrefly: ignore [missing-import]
     from playwright.async_api import async_playwright
     
     try:
@@ -284,7 +287,7 @@ async def find_matching_jobs(
         skills_score = max(40, min(95, skills_score))
         
         # Calculate experience years dynamically from resume
-        cand_years = extract_candidate_years(resume_data)
+        cand_years, avg_tenure, weighted_segments = calculate_flattened_experience(resume_data)
         
         # Try to parse experience requirements from title, fallback to senior/junior guess
         req_years = 2

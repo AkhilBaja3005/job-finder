@@ -10,16 +10,23 @@ RUN npm run build
 FROM python:3.11-slim
 WORKDIR /app
 
-# Install system dependencies for Tectonic compilation
+# Install system dependencies for Tectonic compilation.
+# ca-certificates is required here, not just at the Python level: curl (used
+# below to fetch the Tectonic binary) and Playwright's browser downloader
+# both do their own TLS verification independent of Python/certifi, and
+# python:3.11-slim doesn't reliably ship an up-to-date CA bundle.
+# update-ca-certificates refreshes the system trust store after install.
 RUN apt-get update && apt-get install -y \
     curl \
     git \
+    ca-certificates \
     libfontconfig1-dev \
     libgraphite2-dev \
     libharfbuzz-dev \
     libicu-dev \
     libssl-dev \
     zlib1g-dev \
+    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Tectonic directly via the official static binary release url
@@ -32,6 +39,10 @@ RUN curl -Lo tectonic.tar.gz https://github.com/tectonic-typesetting/tectonic/re
 # Copy backend dependencies and install
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
+# Belt-and-suspenders: guarantee an up-to-date certifi CA bundle at the Python
+# level regardless of whether/which version requirements.txt pins, since
+# gemini_client.py relies on certifi.where() for outbound HTTPS calls.
+RUN pip install --no-cache-dir --upgrade certifi
 
 # Install Playwright and let it fetch the exact browser packages and OS libraries natively
 RUN playwright install chromium
