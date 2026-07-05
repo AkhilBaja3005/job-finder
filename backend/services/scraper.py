@@ -1,5 +1,7 @@
 import asyncio
+# pyrefly: ignore [missing-import]
 from playwright.async_api import async_playwright
+# pyrefly: ignore [missing-import]
 from bs4 import BeautifulSoup
 import re
 
@@ -106,6 +108,7 @@ async def scrape_job_description(url: str) -> dict:
             """
             try:
                 from services.gemini_client import generate_content_with_fallback
+                # pyrefly: ignore [missing-import]
                 from pydantic import BaseModel
                 
                 class CleanedJobInfo(BaseModel):

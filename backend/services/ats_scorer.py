@@ -1,511 +1,454 @@
 """
-ats_scorer.py — Deterministic ATS scoring engine.
+ats_scorer.py — Production-Grade Deterministic ATS Scoring Engine.
 
-Computes skills_score and experience_score purely from text signals,
-with no LLM involvement. The LLM handles only semantic role_fit scoring.
-
-Final formula:
-    overall_score = round(0.40 × skills_score + 0.35 × experience_score + 0.25 × role_fit_score)
+Computes skills_score and experience_score purely from text signals.
+Features: 
+- Overlap-aware timeline flattening
+- Time-decay skill recency weights
+- Contextual density tracking (anti-keyword stuffing)
+- Strict case/context bounded single-word tokenization
+- Advanced degree experience credits
+- Seniority title tier matching & tenure volatility scaling
+- Hard knockout parameters (Visa / Location)
 """
 
 import re
-import math
-from difflib import SequenceMatcher
-from typing import List, Tuple, Dict, Optional
+import datetime
 from dataclasses import dataclass, field
-
+from typing import List, Tuple, Dict, Set, Optional
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Synonym / alias table for fuzzy skill matching
-# Maps canonical name → list of acceptable surface forms
+# 1. ENHANCED TAXONOMY & GLOBAL LOCALIZATION DICTIONARIES
 # ─────────────────────────────────────────────────────────────────────────────
 SKILL_ALIASES: Dict[str, List[str]] = {
-    # AI / ML
     "machine learning":    ["machine learning", "ml", "sklearn", "scikit-learn"],
-    "deep learning":       ["deep learning", "dl", "neural network", "neural net"],
-    "llm":                 ["llm", "large language model", "gpt", "gemini", "claude", "chatgpt", "foundation model"],
-    "nlp":                 ["nlp", "natural language processing", "text mining", "text analysis"],
-    "computer vision":     ["computer vision", "cv", "image recognition", "object detection", "cnn"],
-    "reinforcement learning": ["reinforcement learning", "rl", "rlhf"],
-    "generative ai":       ["generative ai", "gen ai", "genai", "diffusion model", "stable diffusion"],
-    "prompt engineering":  ["prompt engineering", "prompt design", "prompting"],
+    "deep learning":       ["deep learning", "dl", "neural network", "neural net", "cnn", "rnn"],
+    "llm":                 ["llm", "large language model", "gpt", "gemini", "claude", "chatgpt"],
+    "nlp":                 ["nlp", "natural language processing", "text mining"],
+    "computer vision":     ["computer vision", "cv", "image recognition", "object detection"],
+    "generative ai":       ["generative ai", "gen ai", "genai", "diffusion model"],
     "rag":                 ["rag", "retrieval augmented generation", "retrieval-augmented"],
     "fine-tuning":         ["fine-tuning", "finetuning", "lora", "qlora", "peft"],
-    # Frameworks
     "pytorch":             ["pytorch", "torch"],
     "tensorflow":          ["tensorflow", "tf", "keras"],
     "langchain":           ["langchain", "lang chain"],
-    "langgraph":           ["langgraph", "lang graph"],
-    "autogen":             ["autogen", "auto gen", "microsoft autogen"],
-    "hugging face":        ["hugging face", "huggingface", "transformers"],
-    # Languages
     "python":              ["python", "py"],
     "javascript":          ["javascript", "js", "node", "nodejs", "node.js"],
     "typescript":          ["typescript", "ts"],
     "java":                ["java", "jvm"],
-    "c++":                 ["c++", "cpp", "c plus plus"],
-    "go":                  ["go", "golang"],
+    "c++":                 ["c++", "cpp"],
+    "go":                  ["go", "golang"], # Handled specially via context boundary to avoid "google/godaddy" false positives
     "rust":                ["rust", "rustlang"],
-    "sql":                 ["sql", "mysql", "postgresql", "postgres", "sqlite", "t-sql", "plsql"],
-    # Cloud / DevOps
-    "aws":                 ["aws", "amazon web services", "ec2", "s3", "lambda", "sagemaker"],
-    "gcp":                 ["gcp", "google cloud", "bigquery", "vertex ai", "cloud run"],
-    "azure":               ["azure", "microsoft azure", "azure ml"],
-    "docker":              ["docker", "dockerfile", "containerization"],
-    "kubernetes":          ["kubernetes", "k8s", "helm", "eks", "gke", "aks"],
-    "terraform":           ["terraform", "iac", "infrastructure as code"],
-    "ci/cd":               ["ci/cd", "github actions", "jenkins", "gitlab ci", "circleci", "devops pipeline"],
-    # Data
-    "spark":               ["spark", "apache spark", "pyspark"],
-    "kafka":               ["kafka", "apache kafka"],
-    "airflow":             ["airflow", "apache airflow"],
-    "dbt":                 ["dbt", "data build tool"],
-    "pandas":              ["pandas", "dataframe"],
-    # Web
+    "sql":                 ["sql", "mysql", "postgresql", "postgres", "sqlite"],
+    "aws":                 ["aws", "amazon web services", "ec2", "s3", "lambda"],
+    "gcp":                 ["gcp", "google cloud", "bigquery", "vertex ai"],
+    "docker":              ["docker", "containerization"],
+    "kubernetes":          ["kubernetes", "k8s", "eks"],
+    "terraform":           ["terraform", "iac"],
+    "ci/cd":               ["ci/cd", "github actions", "jenkins", "gitlab ci", "cicd"],
     "react":               ["react", "reactjs", "react.js"],
-    "fastapi":             ["fastapi", "fast api"],
-    "django":              ["django"],
-    "flask":               ["flask"],
-    "rest api":            ["rest api", "restful", "rest", "api design"],
-    "graphql":             ["graphql"],
-    # Vector / Search
-    "vector database":     ["vector database", "vector db", "vectordb", "pinecone", "weaviate", "chromadb", "faiss", "milvus"],
-    "elasticsearch":       ["elasticsearch", "elastic search", "opensearch"],
+    "fastapi":             ["fastapi"],
+    "vector database":     ["vector database", "vector db", "pinecone", "weaviate", "chromadb"]
 }
 
-# Flatten aliases into a lookup: surface_form → canonical_name
-_ALIAS_LOOKUP: Dict[str, str] = {}
-for canonical, aliases in SKILL_ALIASES.items():
-    for alias in aliases:
-        _ALIAS_LOOKUP[alias.lower()] = canonical
+# High-risk single-word collisions that require context protection rules
+HIGH_RISK_TOKENS = {"go", "airflow", "pipeline", "spark"}
 
+# Cross-language Seniority & Title Classifications map
+TITLE_TIERS: Dict[str, List[str]] = {
+    "executive": ["director", "vp", "vice president", "cto", "cio", "cpo", "head of", "leiter", "directeur"],
+    "lead":      ["principal", "staff", "lead", "architect", "lead engineer", "haupt", "principal engineer"],
+    "senior":    ["senior", "sr", "snr", "senior engineer", "senior developer", "senior software engineer", "softwareentwickler senior"],
+    "mid":       ["mid", "software engineer", "developer", "engineer", "softwareentwickler", "ingenieur logiciel"],
+    "junior":    ["junior", "jr", "associate", "intern", "trainee", "entry level", "softwareentwickler junior"]
+}
+
+# Global structural reverse lookups
+_SKILL_LOOKUP: Dict[str, str] = {alias.lower(): canonical for canonical, aliases in SKILL_ALIASES.items() for alias in aliases}
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Data classes
+# 2. DATA CONTAINERS
 # ─────────────────────────────────────────────────────────────────────────────
-
 @dataclass
 class SkillMatchResult:
-    score: int                          # 0–100
-    matched_required: List[str]         # required skills found
-    matched_preferred: List[str]        # preferred skills found (bonus)
-    missing_required: List[str]         # required skills not found
-    missing_preferred: List[str]        # preferred skills not found
-    match_detail: str                   # human-readable breakdown
+    score: int
+    matched_required: List[str]
+    matched_preferred: List[str]
+    missing_required: List[str]
+    missing_preferred: List[str]
+    match_detail: str
 
 @dataclass
 class ExperienceMatchResult:
-    score: int                          # 0–100
+    score: int
     candidate_years: float
     required_years: int
-    year_score: int                     # 0–100 component
     detail: str
 
 @dataclass
 class ATSScoreResult:
+    eligible: bool
+    knockout_reason: Optional[str]
     skills_score: int
     experience_score: int
-    matched_skills: List[str]           # union of required + preferred matched
-    missing_skills: List[str]           # required skills not found
-    matched_required_count: int
-    total_required_count: int
+    matched_skills: List[str]
+    missing_skills: List[str]
     candidate_years: float
     required_years: int
-    score_breakdown: Dict[str, str]     # human-readable breakdown per dimension
-
+    score_breakdown: Dict[str, str]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Text normalisation helpers
+# 3. TEXT SANITIZATION & BOUNDED SCANNING UTILITIES
 # ─────────────────────────────────────────────────────────────────────────────
+def _normalize_alphanumeric(text: str) -> str:
+    """Strips all structural formatting, spaces, and punctuation for safety lookups."""
+    if not text: return ""
+    return re.sub(r'[^a-z0-9]', '', text.lower())
 
-def _normalise(text: str) -> str:
-    """Lowercase, collapse whitespace, remove punctuation noise."""
+def _clean_text(text: str) -> str:
+    """Standardizes spaces and structural boundary components."""
+    if not text: return ""
     text = text.lower()
-    text = re.sub(r'[•·▪▸–—]', ' ', text)
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
+    text = re.sub(r'[•·▪▸–—\-\_/]', ' ', text)
+    return re.sub(r'\s+', ' ', text).strip()
 
-def _canonicalise(term: str) -> str:
-    """Map a raw term to its canonical form via alias table, else return lowercased."""
-    low = _normalise(term)
-    return _ALIAS_LOOKUP.get(low, low)
-
-def _fuzzy_similar(a: str, b: str, threshold: float = 0.82) -> bool:
-    """True if two strings are similar enough to be considered the same skill."""
-    return SequenceMatcher(None, a, b).ratio() >= threshold
-
-def _token_match(candidate_text: str, skill: str) -> bool:
+def _extract_taxonomy_skills(text: str) -> Set[str]:
     """
-    Check if `skill` appears in `candidate_text`.
-    Uses: exact word boundary, alias lookup, and clean normalized text matching.
+    Extracts canonical skills safely using alphanumeric matching and strict
+    boundary checks for vulnerable short single words.
     """
-    canon = _canonicalise(skill)
-    norm_text = _normalise(candidate_text)
-
-    # Clean boundary check helper
-    def has_word(text: str, word: str) -> bool:
-        pattern = r'(?:^|[\s,/\(\)\[\]:;])' + re.escape(word) + r'(?:$|[\s,/\(\)\[\]:;])'
-        return bool(re.search(pattern, text))
-
-    # 1. Exact canonical match
-    if has_word(norm_text, canon):
-        return True
-
-    # 2. Check all known aliases of the canonical form
-    aliases = SKILL_ALIASES.get(canon, [skill.lower()])
-    for alias in aliases:
-        if has_word(norm_text, alias):
-            return True
-
-    # 3. Fuzzy fallback (for typos / minor variations)
-    for word_group in re.split(r'[\s,/\(\)\[\]:;]+', norm_text):
-        if word_group and _fuzzy_similar(canon, word_group):
-            return True
-
-    return False
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# JD parsing: extract required / preferred skills
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Patterns that signal "required" context
-_REQUIRED_SIGNALS = re.compile(
-    r'(required|must.have|mandatory|essential|minimum qualifications?'
-    r'|basic qualifications?|you must|we require|key requirements?)',
-    re.IGNORECASE
-)
-
-# Patterns that signal "preferred / nice-to-have" context
-_PREFERRED_SIGNALS = re.compile(
-    r'(preferred|nice.to.have|bonus|plus|desired|advantage|ideally'
-    r'|good to have|added benefit|would be beneficial)',
-    re.IGNORECASE
-)
-
-# Common tech-skill extraction pattern (catches "X years of Python", "experience with Kubernetes", etc.)
-_SKILL_INLINE = re.compile(
-    r'(?:experience(?:\s+with)?|proficiency(?:\s+in)?|knowledge(?:\s+of)?'
-    r'|expertise(?:\s+in)?|skilled(?:\s+in)?|familiarity(?:\s+with)?'
-    r'|background(?:\s+in)?|strong\s+in|hands.on\s+(?:with|in))\s+'
-    r'([A-Za-z0-9\+\#\./\- ]{2,40})',
-    re.IGNORECASE
-)
-
-
-def _split_jd_sections(jd_text: str) -> Tuple[str, str]:
-    """
-    Attempt to split JD into a 'required' section and a 'preferred' section.
-    Falls back to treating the whole JD as required if no signals found.
-    """
-    lines = jd_text.split('\n')
-    required_lines, preferred_lines = [], []
-    current_bucket = required_lines
-
-    for line in lines:
-        if _PREFERRED_SIGNALS.search(line):
-            current_bucket = preferred_lines
-        elif _REQUIRED_SIGNALS.search(line):
-            current_bucket = required_lines
-        current_bucket.append(line)
-
-    return '\n'.join(required_lines), '\n'.join(preferred_lines)
-
-
-def _extract_skill_tokens(text: str) -> List[str]:
-    """
-    Extract candidate skill tokens from a block of text.
-    Strategy:
-      1. Bullet/comma-separated lists after skill-signal phrases
-      2. Inline "experience with X" patterns
-      3. Known alias matches anywhere in text
-    """
-    norm = _normalise(text)
-    found = set()
-
-    # Pass 1: known alias scan (check every alias against the whole text)
-    for canonical, aliases in SKILL_ALIASES.items():
-        for alias in aliases:
-            if re.search(r'\b' + re.escape(alias) + r'\b', norm):
-                found.add(canonical)
-                break
-
-    # Pass 2: inline "experience with X" pattern — catches things not in alias table
-    for m in _SKILL_INLINE.finditer(text):
-        raw = m.group(1).strip().rstrip('.,;:)')
-        canon = _canonicalise(raw)
-        if len(canon) >= 2:
-            found.add(canon)
-
-    return list(found)
-
+    cleaned = _clean_text(text)
+    found_skills = set()
+    
+    # 1. Evaluate general dictionary items using standard word boundaries
+    for alias, canonical in _SKILL_LOOKUP.items():
+        if alias in HIGH_RISK_TOKENS:
+            continue
+        pattern = r'\b' + re.escape(alias) + r'\b'
+        if re.search(pattern, cleaned):
+            found_skills.add(canonical)
+            
+    # 2. Protected validation for high-risk tokens (e.g., checking context rules for "go")
+    for token in HIGH_RISK_TOKENS:
+        pattern = r'\b' + re.escape(token) + r'\b'
+        if re.search(pattern, cleaned):
+            canonical = _SKILL_LOOKUP.get(token, token)
+            # Verify context proximity to engineering terms
+            if token == "go":
+                context_pattern = r'\b(golang|programming|language|developer|engineer|backend|code|writing)\b'
+                if re.search(context_pattern, cleaned) or "golang" in cleaned:
+                    found_skills.add(canonical)
+            else:
+                found_skills.add(canonical) # Pass safe non-go tokens if bounded correctly
+                
+    return found_skills
 
 def extract_jd_skills(jd_text: str) -> Tuple[List[str], List[str]]:
     """
-    Returns (required_skills, preferred_skills) extracted from the JD.
-    Both lists contain canonical skill names.
+    Splits the Job Description into structural text chunks (Required vs Preferred)
+    and extracts cross-referenced canonical skill tokens using the closed taxonomy.
     """
-    required_text, preferred_text = _split_jd_sections(jd_text)
-    required = _extract_skill_tokens(required_text)
-    preferred = _extract_skill_tokens(preferred_text)
-
-    # Skills appearing in both → keep them only in required
-    preferred = [s for s in preferred if s not in required]
-
-    return required, preferred
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Resume skill surface: build a single text blob from all skill signals
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _build_resume_skill_surface(resume_data: dict) -> str:
-    """
-    Merge all text from the resume that contains skill evidence:
-    skills list, experience bullets, project bullets, achievements.
-    """
-    parts = []
-
-    # Skills section (highest signal)
-    skills = resume_data.get("skills", [])
-    if isinstance(skills, list):
-        parts.append(' '.join(skills))
-
-    # Experience bullets
-    for exp in resume_data.get("experience", []):
-        parts.append(exp.get("role", ""))
-        for bullet in exp.get("description", []):
-            parts.append(bullet)
-
-    # Project descriptions
-    for proj in resume_data.get("projects", []):
-        for bullet in proj.get("description", []):
-            parts.append(bullet)
-
-    # Achievements
-    for ach in resume_data.get("achievements", []):
-        parts.append(ach)
-
-    return ' '.join(parts)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Skills scoring
-# ─────────────────────────────────────────────────────────────────────────────
-
-def compute_skills_score(
-    resume_data: dict,
-    required_skills: List[str],
-    preferred_skills: List[str],
-) -> SkillMatchResult:
-    """
-    Scores skill match deterministically.
-
-    Weights:
-      - Required skills: 80% of skills_score
-      - Preferred skills: 20% bonus (capped)
-
-    Formula:
-      required_pct  = matched_required / total_required   (if total_required > 0)
-      preferred_pct = matched_preferred / total_preferred (if total_preferred > 0)
-      skills_score  = round(required_pct * 80 + preferred_pct * 20)
-    """
-    surface = _build_resume_skill_surface(resume_data)
-
-    matched_req, missing_req = [], []
-    for skill in required_skills:
-        if _token_match(surface, skill):
-            matched_req.append(skill)
-        else:
-            missing_req.append(skill)
-
-    matched_pref, missing_pref = [], []
-    for skill in preferred_skills:
-        if _token_match(surface, skill):
-            matched_pref.append(skill)
-        else:
-            missing_pref.append(skill)
-
-    req_pct  = len(matched_req) / len(required_skills)  if required_skills  else 0.5
-    pref_pct = len(matched_pref) / len(preferred_skills) if preferred_skills else 1.0
-
-    score = round(req_pct * 80 + pref_pct * 20) if required_skills else 50
-    score = min(100, max(0, score))
-
-    detail = (
-        f"Required: {len(matched_req)}/{len(required_skills)} matched "
-        f"({round(req_pct*100)}%)"
+    required_signals = re.compile(
+        r'(required|must\s*have|mandatory|essential|minimum qualifications?|basic qualifications?|requirements)', 
+        re.IGNORECASE
     )
-    if preferred_skills:
-        detail += f" | Preferred: {len(matched_pref)}/{len(preferred_skills)} matched ({round(pref_pct*100)}%)"
-
-    return SkillMatchResult(
-        score=score,
-        matched_required=matched_req,
-        matched_preferred=matched_pref,
-        missing_required=missing_req,
-        missing_preferred=missing_pref,
-        match_detail=detail,
+    preferred_signals = re.compile(
+        r'(preferred|nice\s*to\s*have|bonus|plus|desired|ideally|good to have|beneficial)', 
+        re.IGNORECASE
     )
-
+    
+    lines = jd_text.split('\n')
+    req_chunks: List[str] = []
+    pref_chunks: List[str] = []
+    current_bucket = req_chunks  # Default fallback context is required
+    
+    for line in lines:
+        if preferred_signals.search(line):
+            current_bucket = pref_chunks
+        elif required_signals.search(line):
+            current_bucket = req_chunks
+        current_bucket.append(line)
+        
+    # Extract distinct taxonomy token intersections from each section text block
+    req_set = _extract_taxonomy_skills("\n".join(req_chunks))
+    pref_set = _extract_taxonomy_skills("\n".join(pref_chunks))
+    
+    # Enforce clear logical boundaries: clean preferred choices of items already marked required
+    pref_set = pref_set - req_set
+    
+    return sorted(list(req_set)), sorted(list(pref_set))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Experience years scoring
+# 4. BINARY HARD-KNOCKOUT LAYER
 # ─────────────────────────────────────────────────────────────────────────────
+def evaluate_knockouts(resume_data: dict, jd_text: str) -> Tuple[bool, Optional[str]]:
+    """Evaluates critical alignment filters (Location restrictions / Visa Sponsorship requirements)."""
+    jd_lower = jd_text.lower()
+    
+    # Extract structural candidate data points
+    location_str = _clean_text(resume_data.get("location", ""))
+    requires_sponsorship = resume_data.get("requires_sponsorship", False)
+    
+    # Rule A: Detect explicit geographic on-site requirements
+    if "must be based in" in jd_lower or "onsite in" in jd_lower:
+        # Simple string-match locator verification
+        city_match = re.search(r'(?:based in|onsite in)\s+([a-z\s]{3,20})', jd_lower)
+        if city_match:
+            target_city = city_match.group(1).strip()
+            if target_city not in location_str and len(location_str) > 0:
+                return False, f"Geographic mismatch. Target location required: {target_city.title()}."
 
-_YEARS_REQUIRED_PATTERNS = [
-    re.compile(r'(\d+)\+?\s*(?:to\s*\d+)?\s*years?\s+(?:of\s+)?(?:relevant\s+)?(?:work\s+)?experience', re.IGNORECASE),
-    re.compile(r'minimum\s+(?:of\s+)?(\d+)\s*\+?\s*years?', re.IGNORECASE),
-    re.compile(r'at\s+least\s+(\d+)\s*\+?\s*years?', re.IGNORECASE),
-    re.compile(r'(\d+)\s*\+\s*years?', re.IGNORECASE),
-]
+    # Rule B: Explicit Visa sponsorship disqualification
+    if "no visa sponsorship" in jd_lower or "must have right to work" in jd_lower:
+        if requires_sponsorship:
+            return False, "Candidate requires visa sponsorship which is unavailable for this role."
+            
+    return True, None
 
-
-def extract_years_required(jd_text: str) -> int:
-    """Extract minimum required years of experience from JD. Returns 0 if not found."""
-    for pattern in _YEARS_REQUIRED_PATTERNS:
-        m = pattern.search(jd_text)
-        if m:
-            return int(m.group(1))
-    return 0
-
-
-def _parse_year(date_str: str) -> Optional[float]:
-    """
-    Parse a date string to a fractional year.
-    Handles: 'Jan 2022', 'January 2022', '2022', 'Present', 'Current'
-    """
-    import datetime
-    if not date_str:
-        return None
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. ADVANCED CHRONOLOGICAL TIMELINE ENGINE (OVERLAPS & RECENCY)
+# ─────────────────────────────────────────────────────────────────────────────
+def _parse_date_to_ordinal(date_str: str) -> Optional[int]:
+    if not date_str: return None
     s = date_str.strip().lower()
-    if s in ('present', 'current', 'now', 'ongoing', 'till date') or 'present' in s or 'current' in s or 'ongoing' in s:
-        return datetime.datetime.now().year + datetime.datetime.now().month / 12.0
+    now = datetime.datetime.now()
+    if s in ('present', 'current', 'now', 'ongoing', 'till date') or 'present' in s:
+        return now.toordinal()
+    year_match = re.search(r'\b(19\d{2}|20\d{2})\b', s)
+    if not year_match: return None
+    year = int(year_match.group(1))
+    months = {'jan':1,'feb':2,'mar':3,'apr':4,'may':5,'jun':6,'jul':7,'aug':8,'sep':9,'oct':10,'nov':11,'dec':12}
+    month = 1
+    for abbr, num in months.items():
+        if abbr in s:
+            month = num
+            break
+    return datetime.date(year, month, 1).toordinal()
 
-    # Try 4-digit year
-    m = re.search(r'\b(20\d{2}|19\d{2})\b', s)
-    if m:
-        year = int(m.group(1))
-        # Try to extract month
-        months = {'jan':1,'feb':2,'mar':3,'apr':4,'may':5,'jun':6,
-                  'jul':7,'aug':8,'sep':9,'oct':10,'nov':11,'dec':12}
-        for abbr, num in months.items():
-            if abbr in s:
-                return year + num / 12.0
-        return float(year)
-    return None
-
-
-def extract_candidate_years(resume_data: dict) -> float:
+def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, List[Tuple[int, int, float]]]:
     """
-    Compute total professional experience in years from the resume's experience list.
-    Sums up non-overlapping spans across all jobs.
+    Merges overlapping professional experience, tracking total years, 
+    average structural tenure parameters, and recency coefficients.
     """
-    total_months = 0.0
+    intervals = []
+    job_durations = []
+    
     for exp in resume_data.get("experience", []):
-        start = _parse_year(exp.get("start_date", ""))
-        end   = _parse_year(exp.get("end_date", "") or "Present")
+        start = _parse_date_to_ordinal(exp.get("start_date", ""))
+        end = _parse_date_to_ordinal(exp.get("end_date", "") or "Present")
         if start and end and end > start:
-            total_months += (end - start) * 12
-    return round(total_months / 12.0, 1)
-
-
-def compute_experience_score(candidate_years: float, required_years: int) -> ExperienceMatchResult:
-    """
-    Score years-of-experience match.
-    Uses a continuous progressive formula to align with real-world human recruiters:
-    - Meets/exceeds requirement -> 100%
-    - 0 years required -> 75% base (neutral)
-    - Under-experience calculated along a progressive curve rather than steep tier drops:
-      score = round( (candidate / required) * 100 )
-      No matter how low, you get a minimum of 45% if you have some experience.
-    """
-    if required_years == 0:
-        return ExperienceMatchResult(
-            score=75,
-            candidate_years=candidate_years,
-            required_years=0,
-            year_score=75,
-            detail=f"No explicit year requirement found. Candidate has {candidate_years}y total."
-        )
-
-    if candidate_years >= required_years:
-        year_score = 100
-        verdict = "meets or exceeds"
-    else:
-        # Continuous linear ratio with a floor of 45% to keep it realistic
-        ratio = candidate_years / required_years if required_years > 0 else 1.0
-        year_score = max(45, round(ratio * 100))
-        verdict = "below"
-
-    detail = (
-        f"Candidate: {candidate_years}y, Required: {required_years}y → "
-        f"{verdict} requirement ({round((candidate_years / required_years)*100 if required_years > 0 else 100)}%)"
-    )
-    return ExperienceMatchResult(
-        score=year_score,
-        candidate_years=candidate_years,
-        required_years=required_years,
-        year_score=year_score,
-        detail=detail,
-    )
-
+            intervals.append((start, end))
+            job_durations.append((end - start) / 365.25)
+            
+    if not intervals:
+        return 0.0, 0.0, []
+        
+    intervals.sort(key=lambda x: x[0])
+    merged: List[Tuple[int, int]] = []
+    for current in intervals:
+        if not merged:
+            merged.append(current)
+        else:
+            prev_start, prev_end = merged[-1]
+            if current[0] <= prev_end:
+                merged[-1] = (prev_start, max(prev_end, current[1]))
+            else:
+                merged.append(current)
+                
+    total_days = sum((end - start) for start, end in merged)
+    calendar_years = round(total_days / 365.25, 1)
+    avg_tenure = sum(job_durations) / len(job_durations) if job_durations else 0.0
+    
+    now_ordinal = datetime.datetime.now().toordinal()
+    weighted_segments = []
+    for start, end in merged:
+        years_ago = (now_ordinal - end) / 365.25
+        # Recency Multiplier: 100% value for recent work; decays to a 40% floor over 5 years
+        weight = 1.0 if years_ago <= 1.0 else max(0.4, 1.0 - ((years_ago - 1.0) / 4.0) * 0.6)
+        weighted_segments.append((start, end, weight))
+        
+    return calendar_years, avg_tenure, weighted_segments
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Main entry point
+# 6. EDUCATION CREDITS, SENIORITY TIERS & TENURE VOLATILITY ADJUSTERS
 # ─────────────────────────────────────────────────────────────────────────────
+def get_highest_education_tier(resume_data: dict) -> str:
+    edu_text = " ".join([edu.get("degree", "").lower() for edu in resume_data.get("education", [])])
+    if "phd" in edu_text or "ph.d" in edu_text or "doctorate" in edu_text: return "phd"
+    if "master" in edu_text or "ms" in edu_text or "msc" in edu_text or "mba" in edu_text: return "masters"
+    return "bachelors"
 
-# Import here to avoid circular at module level
-from typing import Optional
+def extract_jd_expectations(jd_text: str) -> Tuple[int, str, str]:
+    """Parses JD text for explicit years, required degrees, and targeted seniority tiers."""
+    cleaned = _clean_text(jd_text)
+    
+    # 1. Parse required experience years
+    years_required = 0
+    p_years = re.search(r'(\d+)\+?\s*(?:to\s*\d+)?\s*years?\s+(?:of\s+)?(?:relevant|work)?\s*experience', cleaned)
+    if p_years: years_required = int(p_years.group(1))
+    
+    # 2. Parse education tier request
+    edu_tier = "bachelors"
+    if "phd" in cleaned or "ph.d" in cleaned: edu_tier = "phd"
+    elif "master" in cleaned: edu_tier = "masters"
+    
+    # 3. Parse required seniority tier
+    role_tier = "mid"
+    for tier, Keywords in TITLE_TIERS.items():
+        for kw in Keywords:
+            if re.search(r'\b' + re.escape(kw) + r'\b', cleaned):
+                role_tier = tier
+                break
+    
+    return years_required, edu_tier, role_tier
 
+def get_candidate_seniority_tier(resume_data: dict) -> str:
+    """Classifies the candidate's professional tier using their most recent job titles."""
+    exp = resume_data.get("experience", [])
+    if not exp: return "junior"
+    recent_roles = " ".join([exp[i].get("role", "").lower() for i in range(min(len(exp), 2))])
+    
+    for tier in ["executive", "lead", "senior", "mid", "junior"]:
+        for kw in TITLE_TIERS[tier]:
+            if re.search(r'\b' + re.escape(kw) + r'\b', recent_roles):
+                return tier
+    return "mid"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. CONTEXTUAL DENSITY SKILLS EVALUATOR
+# ─────────────────────────────────────────────────────────────────────────────
+def compute_skills_score(
+    resume_data: dict, required_skills: List[str], preferred_skills: List[str],
+    weighted_segments: List[Tuple[int, int, float]]
+) -> SkillMatchResult:
+    """Evaluates keyword matches using location weighting and a stuffing-prevention cap."""
+    if not required_skills:
+        return SkillMatchResult(100, [], [], [], [], "No mandatory technical keywords configured.")
+
+    skills_sec_canon = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
+    
+    job_profiles: List[Tuple[Set[str], float]] = []
+    for exp in resume_data.get("experience", []):
+        start = _parse_date_to_ordinal(exp.get("start_date", ""))
+        end = _parse_date_to_ordinal(exp.get("end_date", "") or "Present")
+        weight = 0.5
+        if start and end:
+            for s_ord, e_ord, w_val in weighted_segments:
+                if start >= s_ord and end <= e_ord:
+                    weight = w_val
+                    break
+        job_text = _clean_text(exp.get("role", "") + " " + " ".join(exp.get("description", [])))
+        job_profiles.append((_extract_taxonomy_skills(job_text), weight))
+
+    def evaluate_skill_strength(skill: str) -> float:
+        strength = 0.5 if skill in skills_sec_canon else 0.0
+        for j_skills, weight in job_profiles:
+            if skill in j_skills:
+                strength += (1.0 * weight)
+        return min(1.0, strength) # Hard anti-keyword stuffing cap limit
+
+    matched_req, missing_req, total_req_strength = [], [], 0.0
+    for s in required_skills:
+        str_val = evaluate_skill_strength(s)
+        if str_val >= 0.35:
+            matched_req.append(s)
+            total_req_strength += str_val
+        else:
+            missing_req.append(s)
+
+    matched_pref, total_pref_strength = [], 0.0
+    for s in preferred_skills:
+        str_val = evaluate_skill_strength(s)
+        if str_val >= 0.35:
+            matched_pref.append(s)
+            total_pref_strength += str_val
+
+    req_score = (total_req_strength / len(required_skills)) * 85
+    pref_score = (total_pref_strength / len(preferred_skills)) * 15 if preferred_skills else 15
+    final_skills_score = min(100, max(0, round(req_score + pref_score)))
+    
+    detail = f"Required Match Strength: {len(matched_req)}/{len(required_skills)}. Section weights: Mandatory: {round(req_score)}/85"
+    if preferred_skills: detail += f" + Preferred: {round(pref_score)}/15."
+
+    return SkillMatchResult(final_skills_score, matched_req, matched_pref, missing_req, [], detail)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. MAIN ENTRY PIPELINE
+# ─────────────────────────────────────────────────────────────────────────────
 def compute_ats_score(resume_data: dict, jd_text: str) -> ATSScoreResult:
-    """
-    Full deterministic ATS scoring pipeline.
-    Returns ATSScoreResult with skills_score, experience_score, and supporting data.
-    The caller (llm_agent) will add LLM-derived role_fit_score and compute overall.
-    """
-    # 1. Extract skills from JD
+    """Executes the optimized multi-stage deterministic ATS ingestion pipeline."""
+    # Stage 1: Screen binary knockouts
+    eligible, reason = evaluate_knockouts(resume_data, jd_text)
+    if not eligible:
+        return ATSScoreResult(False, reason, 0, 0, [], [], 0.0, 0, {"status": f"Rejected by Knockout Filter Layer: {reason}"})
+        
+    # Stage 2: Extract requirements and map out timelines
+    required_years, required_edu, required_tier = extract_jd_expectations(jd_text)
+    calendar_years, avg_tenure, weighted_segments = calculate_flattened_experience(resume_data)
     required_skills, preferred_skills = extract_jd_skills(jd_text)
+    
+    # Stage 3: Inject Advanced Degree Virtual Credits
+    candidate_edu = get_highest_education_tier(resume_data)
+    adjusted_years = calendar_years
+    education_credit_applied = 0.0
+    if candidate_edu == "phd" and required_edu != "phd":
+        education_credit_applied = 3.0
+    elif candidate_edu == "masters" and required_edu == "bachelors":
+        education_credit_applied = 1.5
+    adjusted_years += education_credit_applied
 
-    # 2. Score skills
-    skill_result = compute_skills_score(resume_data, required_skills, preferred_skills)
+    # Stage 4: Experience & Tier matching evaluations
+    if required_years == 0:
+        base_exp_score = 80
+    else:
+        ratio = adjusted_years / required_years
+        base_exp_score = min(100, 90 + round((adjusted_years - required_years) * 2)) if ratio >= 1.0 else max(35, round(ratio * 90))
 
-    # 3. Score experience years
-    candidate_years = extract_candidate_years(resume_data)
-    required_years  = extract_years_required(jd_text)
-    exp_result      = compute_experience_score(candidate_years, required_years)
+    # Stage 5: Apply Seniority Title-Tier Adjustments
+    candidate_tier = get_candidate_seniority_tier(resume_data)
+    tier_hierarchy = {"junior": 1, "mid": 2, "senior": 3, "lead": 4, "executive": 5}
+    req_tier_idx = tier_hierarchy.get(required_tier, 2)
+    cand_tier_idx = tier_hierarchy.get(candidate_tier, 2)
+    
+    tier_modifier = 1.0
+    if cand_tier_idx < req_tier_idx:
+        # Penalize undersized seniority context (e.g., Senior role target vs Junior candidate title history)
+        tier_modifier -= 0.15 * (req_tier_idx - cand_tier_idx)
 
-    # 4. Build matched/missing lists for the frontend (deduplicated, human-readable)
-    all_matched  = list(dict.fromkeys(skill_result.matched_required + skill_result.matched_preferred))
-    all_missing  = list(dict.fromkeys(skill_result.missing_required))  # only show required misses
+    # Stage 6: Apply Volatility Metrics (Tenure stability scaling factor)
+    tenure_modifier = 1.0
+    if avg_tenure > 0.0 and avg_tenure < 0.75:  # Avg tenure lower than 9 months
+        tenure_modifier = 0.88  # Apply operational stability scaling penalty
+        
+    final_experience_score = min(100, max(0, round(base_exp_score * tier_modifier * tenure_modifier)))
 
+    # Stage 7: Evaluate Contextual Taxonomy Matrix
+    skill_res = compute_skills_score(resume_data, required_skills, preferred_skills, weighted_segments)
+    
+    all_matched = sorted(list(set(skill_res.matched_required + skill_res.matched_preferred)))
     score_breakdown = {
-        "skills":     skill_result.match_detail,
-        "experience": exp_result.detail,
-        "required_skills_found":    ", ".join(skill_result.matched_required) or "none",
-        "preferred_skills_found":   ", ".join(skill_result.matched_preferred) or "none",
-        "required_skills_missing":  ", ".join(skill_result.missing_required) or "none",
+        "skills_breakdown": skill_res.match_detail,
+        "experience_breakdown": (
+            f"Chronological Timeline base: {calendar_years}y (Adjusted with Education Credit: +{education_credit_applied}y). "
+            f"Seniority Target: {required_tier.title()} vs Candidate Profile: {candidate_tier.title()}. "
+            f"Average Job Tenure: {round(avg_tenure, 1)}y. Final Dimension Score: {final_experience_score}/100."
+        ),
+        "required_skills_found": ", ".join(skill_res.matched_required) or "None",
+        "missing_critical_skills": ", ".join(skill_res.missing_required) or "None"
     }
 
     return ATSScoreResult(
-        skills_score=skill_result.score,
-        experience_score=exp_result.score,
+        eligible=True,
+        knockout_reason=None,
+        skills_score=skill_res.score,
+        experience_score=final_experience_score,
         matched_skills=all_matched,
-        missing_skills=all_missing,
-        matched_required_count=len(skill_result.matched_required),
-        total_required_count=len(required_skills),
-        candidate_years=candidate_years,
+        missing_skills=skill_res.missing_required,
+        candidate_years=calendar_years,
         required_years=required_years,
-        score_breakdown=score_breakdown,
+        score_breakdown=score_breakdown
     )
 
-
 def compute_overall_score(skills: int, experience: int, role_fit: int) -> int:
-    """
-    Weighted formula for overall ATS score.
-    Weights reflect real recruiter priorities:
-      40% skills (most ATS systems are keyword-first)
-      35% experience (years + domain proximity)
-      25% role fit (semantic match — title, level, industry)
-    """
+    """Calculates final combined ATS score matching recruiter weights."""
     return round(0.40 * skills + 0.35 * experience + 0.25 * role_fit)
