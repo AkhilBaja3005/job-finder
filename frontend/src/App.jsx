@@ -1199,10 +1199,11 @@ function App() {
                         padding: '8px',
                         fontSize: '0.8rem',
                         borderRadius: '6px',
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        color: '#fff',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        // Safe fallback styles using CSS variables 👇
+                        background: 'var(--bg-input, rgba(0,0,0,0.05))',
+                        border: '1px solid var(--border-input, rgba(0,0,0,0.15))',
+                        color: 'var(--text-main, currentcolor)'
                       }}
                     >
                       <option value="24h">Last 24 Hours</option>
