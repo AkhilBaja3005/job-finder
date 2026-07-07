@@ -4,8 +4,9 @@ import uuid
 import json
 import urllib.request
 import urllib.parse
-import ssl
 from typing import Optional
+
+from utils.ssl_utils import SSL_CONTEXT
 
 # Supabase connection parameters
 def get_supabase_client():
@@ -29,7 +30,7 @@ def supabase_request(path: str, method: str = "GET", data: dict = None) -> list:
     
     req_data = json.dumps(data).encode("utf-8") if data else None
     req = urllib.request.Request(url, headers=headers, data=req_data, method=method)
-    context = ssl._create_unverified_context()
+    context = SSL_CONTEXT
     try:
         with urllib.request.urlopen(req, context=context) as response:
             resp_body = response.read().decode("utf-8")
@@ -111,7 +112,7 @@ def exchange_google_code_for_email(code: str) -> str:
         method="POST"
     )
     
-    context = ssl._create_unverified_context()
+    context = SSL_CONTEXT
     with urllib.request.urlopen(req, context=context) as response:
         token_data = json.loads(response.read().decode("utf-8"))
         

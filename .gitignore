@@ -9,3 +9,5 @@ uploads/
 *.pyc
 __pycache__/
 user_data/
+backend/tectonic
+backend/tectonic.tar.gz

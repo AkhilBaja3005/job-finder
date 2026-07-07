@@ -323,7 +323,14 @@ def compute_skills_score(
 ) -> SkillMatchResult:
     """Evaluates keyword matches using location weighting and a stuffing-prevention cap."""
     if not required_skills:
-        return SkillMatchResult(100, [], [], [], [], "No mandatory technical keywords configured.")
+        # No taxonomy skills were extractable from the JD text at all (common
+        # for JDs in non-tech-heavy industries whose tools aren't in
+        # SKILL_ALIASES, e.g. legal/finance-specific software). This is NOT
+        # the same as "candidate matches every requirement" — returning 100
+        # here previously produced a false-perfect skills_score with 0/0
+        # matched skills, inflating overall_score. Use a neutral score
+        # instead so an unscoreable JD doesn't look like a perfect match.
+        return SkillMatchResult(60, [], [], [], [], "No mandatory technical keywords recognized in this JD — skills score is a neutral default, not a real match assessment.")
 
     skills_sec_canon = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
     
@@ -452,3 +459,31 @@ def compute_ats_score(resume_data: dict, jd_text: str) -> ATSScoreResult:
 def compute_overall_score(skills: int, experience: int, role_fit: int) -> int:
     """Calculates final combined ATS score matching recruiter weights."""
     return round(0.40 * skills + 0.35 * experience + 0.25 * role_fit)
+
+
+def estimate_role_fit_score(resume_data: dict, jd_text: str) -> int:
+    """
+    Deterministic stand-in for the LLM-based role_fit_score used in analyze_job_fit.
+
+    Used at job-discovery time to score many jobs cheaply without an LLM call per
+    job. Combines seniority-tier alignment (same logic as compute_ats_score's
+    tier_modifier) with a domain-overlap ratio (JD taxonomy skills vs. candidate's
+    strongest skill section), so discovery's overall_score is computed with the
+    same weighting formula and comparable magnitude to the real ATS score,
+    without requiring a live JD fetch + LLM round-trip for every listing.
+    """
+    _, _, required_tier = extract_jd_expectations(jd_text)
+    candidate_tier = get_candidate_seniority_tier(resume_data)
+    tier_hierarchy = {"junior": 1, "mid": 2, "senior": 3, "lead": 4, "executive": 5}
+    req_idx = tier_hierarchy.get(required_tier, 2)
+    cand_idx = tier_hierarchy.get(candidate_tier, 2)
+    tier_gap = abs(cand_idx - req_idx)
+
+    required_skills, preferred_skills = extract_jd_skills(jd_text)
+    jd_skills = set(required_skills) | set(preferred_skills)
+    resume_skills = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
+    overlap_ratio = (len(jd_skills & resume_skills) / len(jd_skills)) if jd_skills else 0.5
+
+    base = 90 - (tier_gap * 15)
+    domain_adjustment = round((overlap_ratio - 0.5) * 30)
+    return max(0, min(100, base + domain_adjustment))

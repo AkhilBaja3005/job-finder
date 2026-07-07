@@ -44,8 +44,19 @@ class AnalysisResponse(BaseModel):
     latex_code: str = Field(default="", description="LaTeX code placeholder (compiled in Step 2)")
 
 class ResumeReviewResult(BaseModel):
-    satisfied: bool = Field(description="True ONLY if every rubric item passes. False if ANY item fails.")
-    feedback: str = Field(description="Specific, actionable recruiter feedback on exactly what to fix.")
+    ats_fit_ok: bool = Field(description="True if top JD keywords are naturally integrated into experience/skill bullets.")
+    impact_metrics_ok: bool = Field(description="True if the majority of bullets contain at least one quantified result (%, numbers, scale).")
+    truthfulness_ok: bool = Field(description="True if tailored content stays strictly within the candidate's real background — no fabricated companies, degrees, or exaggerated experience.")
+    conciseness_ok: bool = Field(description="True if bullets are tight (1-1.5 lines), with no sprawling multi-line sentences.")
+    feedback: str = Field(description="Specific, actionable recruiter feedback on exactly what to fix for any failing criterion.")
+
+    @property
+    def satisfied(self) -> bool:
+        """Derived from the four rubric booleans rather than trusting a separate
+        LLM-emitted 'satisfied' flag directly — removes a class of
+        self-contradictory outputs where the model says satisfied=true while
+        also failing one of the rubric items in its own feedback text."""
+        return self.ats_fit_ok and self.impact_metrics_ok and self.truthfulness_ok and self.conciseness_ok
 
 
 # ─────────────────────────────────────────
@@ -500,7 +511,10 @@ def review_tailored_resume(
 
     # If structural issues found → return immediately, no LLM needed
     if issues:
-        return ResumeReviewResult(satisfied=False, feedback="\n".join(issues))
+        return ResumeReviewResult(
+            ats_fit_ok=False, impact_metrics_ok=False, truthfulness_ok=False, conciseness_ok=False,
+            feedback="\n".join(issues)
+        )
 
     # ── Phase 2: LLM soft-quality check ──────────────────────────────────────
     jd_excerpt = _truncate_jd(job_description, max_chars=1200)
@@ -508,11 +522,24 @@ def review_tailored_resume(
     computed_years, avg_tenure, weighted_segments = calculate_flattened_experience(original_resume_data)
     
 
-    # Formulate a clean profile snapshot for validation
+    # Formulate a clean profile snapshot for validation. Include full
+    # experience/project bullets (not just company+role) — the reviewer's
+    # truthfulness check compares tailored content against this profile, and
+    # if a skill/tool the candidate actually used only appears in their bullet
+    # text (e.g. "Used Cloudera and Azure OpenAI for...") rather than in the
+    # flat `skills` list, omitting bullets here caused false "fabrication"
+    # rejections for tools the candidate genuinely has experience with.
     candidate_profile = {
         "skills": original_resume_data.get("skills", []),
         "education": [{"institution": e.get("institution", ""), "degree": e.get("degree", "")} for e in original_resume_data.get("education", [])],
-        "experience": [{"company": e.get("company", ""), "role": e.get("role", "")} for e in original_resume_data.get("experience", [])],
+        "experience": [
+            {"company": e.get("company", ""), "role": e.get("role", ""), "bullets": e.get("description", [])}
+            for e in original_resume_data.get("experience", [])
+        ],
+        "projects": [
+            {"title": p.get("title", ""), "bullets": p.get("description", [])}
+            for p in original_resume_data.get("projects", [])
+        ],
         "total_experience_years": computed_years
     }
 
@@ -520,18 +547,23 @@ def review_tailored_resume(
 The resume has already passed all structural checks (grades, schools, companies, projects all present).
 Evaluate the QUALITY of the tailored resume by comparing it against both the target Job Description (JD) and the candidate's original Profile.
 
-QUALITY RUBRIC:
-1. ATS Fit: Are the top 3-5 job keywords from the JD naturally integrated into experience/skill bullets?
+QUALITY RUBRIC — evaluate each item independently and set its boolean field accordingly:
+1. ats_fit_ok: Are the top 3-5 job keywords from the JD naturally integrated into experience/skill bullets?
    (Check for contextual use, NOT verbatim copy-paste from JD.)
-2. Impact Metrics: Do the majority of bullets contain at least one quantified result (%, numbers, scale)?
-3. Truthfulness: Does tailored content stay within the candidate's real background?
-   - Compare the tailored resume to the Candidate Profile below.
-   - Did the tailorer invent new companies, fabricate degrees, or exaggerate years of experience?
-   - Ensure the candidate is not falsely claimed to have skills/experience they do not possess.
-4. Conciseness: Are bullets tight (1-1.5 lines)? No sprawling multi-line sentences?
+2. impact_metrics_ok: Do the majority of bullets contain at least one quantified result (%, numbers, scale)?
+3. truthfulness_ok: Does tailored content stay within the candidate's real background?
+   - The CANDIDATE ORIGINAL PROFILE below — including each job's/project's "bullets" field —
+     is the FULL ground truth of the candidate's real experience. A skill or tool is
+     NOT fabricated if it appears ANYWHERE in the profile, including inside bullets,
+     even if it is not also listed in the flat "skills" array.
+   - Only flag truthfulness if the tailored resume mentions a company, degree, skill,
+     or tool that appears NOWHERE in the candidate profile (skills, education, or any
+     experience/project bullet), or if it exaggerates total years of experience beyond
+     total_experience_years.
+4. conciseness_ok: Are bullets tight (1-1.5 lines)? No sprawling multi-line sentences?
 
-If quality passes all 4 criteria → satisfied=true, brief positive feedback.
-If any criterion clearly fails → satisfied=false, specific actionable feedback (what exactly to fix).
+Set each boolean independently and truthfully — do NOT set all four to true just because most pass.
+In feedback, name exactly which criterion(s) failed and what to fix. If all four pass, give brief positive feedback.
 
 Target Job Title: {job_title}
 JD Excerpt:

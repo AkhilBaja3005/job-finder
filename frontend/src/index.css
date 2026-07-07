@@ -1,6 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
+  /* This app has one fixed dark theme, not a light/dark toggle. Without this,
+     browsers whose OS/browser preference is light-mode render native form
+     controls (particularly <select> dropdown option popups, which mostly
+     ignore inline CSS) using light UI chrome — white background, near-white
+     text — making them unreadable against our dark-styled controls. */
+  color-scheme: dark;
+
   --bg-primary: #0A0D14;
   --bg-secondary: rgba(16, 22, 35, 0.65);
   --border-color: rgba(255, 255, 255, 0.08);

@@ -3,30 +3,13 @@ import time
 import asyncio
 import json
 import urllib.request
-import ssl
 # pyrefly: ignore [missing-import]
 from google import genai
 # pyrefly: ignore [missing-import]
 from google.genai import types
 from typing import Optional, Callable
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TLS context — built once, reused for every outbound HTTPS call in this file.
-# ─────────────────────────────────────────────────────────────────────────────
-def _build_ssl_context() -> ssl.SSLContext:
-    try:
-        # pyrefly: ignore [missing-import]
-        import certifi
-        ca_bundle = certifi.where()
-        os.environ.setdefault("SSL_CERT_FILE", ca_bundle)
-        os.environ.setdefault("REQUESTS_CA_BUNDLE", ca_bundle)
-        return ssl.create_default_context(cafile=ca_bundle)
-    except ImportError:
-        print("[LLM Client] certifi not installed — falling back to the system default "
-              "CA bundle. Run: pip install certifi")
-        return ssl.create_default_context()
-
-_SSL_CONTEXT = _build_ssl_context()
+from utils.ssl_utils import SSL_CONTEXT as _SSL_CONTEXT
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Global Configurations & Provider Layout Models
@@ -180,13 +163,13 @@ def _generate_with_model_list(
         
         elif custom_api_key.startswith("sk-ant-"):
             try: return _execute_anthropic(prompt, response_schema, custom_api_key)
-            except Exception: pass
+            except Exception as e: print(f"[LLM Client] Override Anthropic failed: {e}. Falling back to standard pipeline...")
         elif custom_api_key.startswith("gsk_"):
             try: return _execute_groq(prompt, response_schema, custom_api_key)
-            except Exception: pass
+            except Exception as e: print(f"[LLM Client] Override Groq failed: {e}. Falling back to standard pipeline...")
         elif custom_api_key.startswith("sk-or-"):
             try: return _execute_openrouter(prompt, model_list, response_schema, custom_api_key, on_log)
-            except Exception: pass
+            except Exception as e: print(f"[LLM Client] Override OpenRouter failed: {e}. Falling back to standard pipeline...")
 
     # ── STAGE 1: NVIDIA NIM (First General Checkpoint) ───────────────────────
     nvidia_api_key = os.getenv("NVIDIA_API_KEY")
@@ -215,7 +198,7 @@ def _generate_with_model_list(
         raise ValueError("Pipeline dropped to final floor, but GEMINI_API_KEY environment variable is missing.")
 
     client = get_gemini_client(gemini_key)
-    config_args = {}
+    config_args = {"temperature": 0.1}
     if response_schema is not None:
         config_args["response_mime_type"] = "application/json"
         config_args["response_schema"] = clean_schema(response_schema.model_json_schema())
@@ -407,6 +390,7 @@ def _generate_with_cloudflare_llama(prompt: str, response_schema=None, on_log: O
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ],
+        "temperature": 0.1,
         "max_tokens": 4096,
     }
 
@@ -476,7 +460,7 @@ def _execute_groq(prompt: str, response_schema, api_key: str) -> str:
         for retry_attempt in range(3):
             try:
                 messages = [{"role": "user", "content": prompt}]
-                payload_args = {"model": groq_model, "messages": messages, "temperature": 0.2}
+                payload_args = {"model": groq_model, "messages": messages, "temperature": 0.1}
                 if response_schema is not None:
                     payload_args["response_format"] = {"type": "json_object"}
                     schema_json = json.dumps(clean_schema(response_schema.model_json_schema()), indent=2)
@@ -513,7 +497,7 @@ def _execute_openrouter(prompt: str, model_list: list, response_schema, api_key:
                 "HTTP-Referer": "https://github.com/AkhilBaja3005/job-finder",
                 "X-Title": "Job Finder Resume Tailor"
             }
-            payload = {"model": or_model, "messages": [{"role": "user", "content": prompt}]}
+            payload = {"model": or_model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1}
             if response_schema is not None:
                 payload["response_format"] = {"type": "json_object", "schema": clean_schema(response_schema.model_json_schema())}
 
