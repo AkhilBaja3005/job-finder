@@ -1174,12 +1174,23 @@ def upload_zip_to_tmpfiles(latex_code: str, candidate_name: str = "", job_title:
     zip_buffer.seek(0)
     zip_data = zip_buffer.getvalue()
     
-    # 2. Build a descriptive project name from candidate / role / company
+    # 2. Build a descriptive project name from candidate / role / company —
+    # used only for Overleaf's snip_name (the visible project title), NOT for
+    # the actual uploaded filename below.
     parts = [_sanitize_filename_part(candidate_name), _sanitize_filename_part(job_title), _sanitize_filename_part(company)]
     parts = [p for p in parts if p]  # drop empty parts
     project_name = " - ".join(parts) + " Resume" if parts else "Resume"
-    zip_filename = f"{project_name}.zip"
-    print(f"[Overleaf ZIP Export] Project filename: {zip_filename}")
+    # Upload filename is fixed/ASCII-safe regardless of candidate/job/company
+    # content. Spaces and punctuation (commas, "&", etc.) in project_name
+    # previously ended up in the *uploaded* filename, which tmpfiles.org bakes
+    # into the download URL it returns; Overleaf fetches that URL server-side
+    # per its "Open in Overleaf" API and can fail to recognize the file as a
+    # valid zip if the URL's path segment isn't cleanly encoded end-to-end,
+    # surfacing as "the file supplied is of an unsupported type". snip_name
+    # (below) already sets the human-readable title inside Overleaf, so the
+    # upload filename itself doesn't need to carry any of that information.
+    zip_filename = "resume.zip"
+    print(f"[Overleaf ZIP Export] Project title: {project_name} (upload filename: {zip_filename})")
 
     # 3. Upload to tmpfiles.org
     boundary = f"----WebKitFormBoundary{uuid.uuid4().hex}"
