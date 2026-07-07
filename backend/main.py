@@ -1192,64 +1192,16 @@ def upload_zip_to_tmpfiles(latex_code: str, candidate_name: str = "", job_title:
     zip_filename = "resume.zip"
     print(f"[Overleaf ZIP Export] Project title: {project_name} (upload filename: {zip_filename})")
 
-    # 3. Upload to tmpfiles.org
-    boundary = f"----WebKitFormBoundary{uuid.uuid4().hex}"
+    import base64
+    base64_zip = base64.b64encode(zip_data).decode('utf-8')
     
-    body = []
-    body.append(f"--{boundary}".encode('utf-8'))
-    body.append(f'Content-Disposition: form-data; name="file"; filename="{zip_filename}"'.encode('utf-8'))
-    body.append(b'Content-Type: application/zip')
-    body.append(b'')
-    body.append(zip_data)
-    body.append(f"--{boundary}--".encode('utf-8'))
+    # Return a Base64 Data URL containing the zip project directly
+    # Overleaf supports base64 application/zip Data URIs directly in snip_uri parameters
+    data_uri = f"data:application/zip;base64,{base64_zip}"
     
-    body_data = b'\r\n'.join(body)
-    
-    req = urllib.request.Request(
-        "https://tmpfiles.org/api/v1/upload",
-        data=body_data,
-        headers={
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "Content-Length": str(len(body_data)),
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        },
-        method="POST"
-    )
-    
-    # tmpfiles.org serves a certificate that fails strict validation in some
-    # environments (weak EE key) even though the connection itself is fine —
-    # try the verified context first, and only fall back to an unverified one
-    # for this specific known-quirky host if that fails. This request carries
-    # no secrets (just the LaTeX zip being uploaded for an Overleaf import
-    # link), so the fallback's reduced MITM protection is an acceptable
-    # trade-off scoped to this one call site rather than a blanket policy.
-    try:
-        with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=30) as response:
-            resp_body = response.read().decode('utf-8')
-    except URLError as e:
-        print(f"[Overleaf ZIP Export] Verified TLS failed for tmpfiles.org ({e}); retrying with an unverified context for this known-quirky host.")
-        with urllib.request.urlopen(req, context=ssl._create_unverified_context(), timeout=30) as response:
-            resp_body = response.read().decode('utf-8')
-
-    try:
-        resp_data = json.loads(resp_body)
-    except json.JSONDecodeError:
-        # tmpfiles.org (or a network intermediary between us and it, e.g. a
-        # proxy/DNS sinkhole in some sandboxed environments) returned a
-        # non-JSON page instead of the expected upload response — surface the
-        # actual response body so this is diagnosable rather than a bare
-        # "Expecting value" JSONDecodeError.
-        raise Exception(f"tmpfiles.org returned a non-JSON response (network issue or the service is down): {resp_body[:300]!r}")
-
-    if resp_data.get("status") == "success":
-        upload_url = resp_data["data"]["url"]
-        # Convert to raw download link
-        raw_url = upload_url.replace("https://tmpfiles.org/", "https://tmpfiles.org/dl/")
-        # snip_name sets the project title inside Overleaf directly (ignores ZIP filename)
-        encoded_name = urllib.parse.quote(project_name)
-        return f"https://www.overleaf.com/docs?snip_uri={urllib.parse.quote(raw_url)}&snip_name={encoded_name}"
-    else:
-        raise Exception("Upload to tmpfiles.org failed.")
+    # Overleaf's snip_name will title the project, or we default to candidate / job / company description
+    encoded_name = urllib.parse.quote(project_name)
+    return f"https://www.overleaf.com/docs?snip_uri={urllib.parse.quote(data_uri)}&snip_name={encoded_name}"
 
 class OverleafRequest(BaseModel):
     latex_code: str
