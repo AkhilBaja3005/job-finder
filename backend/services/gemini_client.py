@@ -122,6 +122,7 @@ def get_gemini_client(custom_api_key: Optional[str] = None) -> genai.Client:
 # sleeps before making a call if the model is already at its RPM ceiling.
 GEMINI_MODEL_RPM_LIMITS = {
     "gemini-3.1-flash-lite": 15,
+    "gemini-2.5-flash": 5
 }
 _rpm_call_log: Dict[str, list] = {}
 _rpm_lock = threading.Lock()
