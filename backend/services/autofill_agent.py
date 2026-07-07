@@ -138,7 +138,7 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                 # LLM-based answering for custom questions with page context
                 if question_text and len(question_text) > 3:
                     print(f"Asking LLM to answer: '{question_text}' with visual HTML context...")
-                    answer = get_answer_from_llm(question_text, parent_html, resume_data)
+                    answer = await asyncio.to_thread(get_answer_from_llm, question_text, parent_html, resume_data)
                     if answer:
                         print(f"LLM Answer: {answer}")
                         if inp_type == "checkbox":
