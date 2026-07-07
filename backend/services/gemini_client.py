@@ -1,5 +1,6 @@
 import os
 import time
+import random
 import asyncio
 import json
 import urllib.request
@@ -106,6 +107,11 @@ def get_gemini_client(custom_api_key: Optional[str] = None) -> genai.Client:
 
 
 def _cooperative_sleep(seconds: float) -> None:
+    # Add jitter (±25%) so concurrent requests that all hit a rate limit at
+    # the same moment don't retry in lockstep and immediately re-trigger the
+    # same rate limit together.
+    seconds = seconds * random.uniform(0.75, 1.25)
+
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:

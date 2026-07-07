@@ -1213,11 +1213,11 @@ def upload_zip_to_tmpfiles(latex_code: str, candidate_name: str = "", job_title:
     # link), so the fallback's reduced MITM protection is an acceptable
     # trade-off scoped to this one call site rather than a blanket policy.
     try:
-        with urllib.request.urlopen(req, context=SSL_CONTEXT) as response:
+        with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=30) as response:
             resp_data = json.loads(response.read().decode('utf-8'))
     except URLError as e:
         print(f"[Overleaf ZIP Export] Verified TLS failed for tmpfiles.org ({e}); retrying with an unverified context for this known-quirky host.")
-        with urllib.request.urlopen(req, context=ssl._create_unverified_context()) as response:
+        with urllib.request.urlopen(req, context=ssl._create_unverified_context(), timeout=30) as response:
             resp_data = json.loads(response.read().decode('utf-8'))
         
     if resp_data.get("status") == "success":

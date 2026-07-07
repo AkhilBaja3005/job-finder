@@ -12,7 +12,8 @@ from pydantic import BaseModel, Field
 from services.gemini_client import generate_content_with_fallback
 from services.ats_scorer import (
     compute_ats_score, compute_overall_score, calculate_flattened_experience,
-    estimate_role_fit_score, _extract_taxonomy_skills, get_candidate_seniority_tier, TITLE_TIERS
+    estimate_role_fit_score, _extract_taxonomy_skills, get_candidate_seniority_tier,
+    _COMPILED_TITLE_TIER_PATTERNS
 )
 from services.scraper import scrape_job_description
 from utils.ssl_utils import SSL_CONTEXT
@@ -239,8 +240,8 @@ def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:
     candidate_tier = get_candidate_seniority_tier(resume_data)
     tier_hierarchy = {"junior": 1, "mid": 2, "senior": 3, "lead": 4, "executive": 5}
     title_tier = "mid"
-    for tier, kws in TITLE_TIERS.items():
-        if any(re.search(r'\b' + re.escape(kw) + r'\b', title_lower) for kw in kws):
+    for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
+        if pattern.search(title_lower):
             title_tier = tier
             break
     tier_gap = abs(tier_hierarchy.get(candidate_tier, 2) - tier_hierarchy.get(title_tier, 2))
@@ -323,8 +324,8 @@ def _score_job_with_title_heuristic(job: JobSearchResult, resume_data: dict) -> 
     else:
         candidate_tier = get_candidate_seniority_tier(resume_data)
         title_tier = "mid"
-        for tier, kws in TITLE_TIERS.items():
-            if any(re.search(r'\b' + re.escape(kw) + r'\b', title_lower) for kw in kws):
+        for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
+            if pattern.search(title_lower):
                 title_tier = tier
                 break
         req_years = 5 if title_tier in ("senior", "lead", "executive") else 2

@@ -32,7 +32,7 @@ def supabase_request(path: str, method: str = "GET", data: dict = None) -> list:
     req = urllib.request.Request(url, headers=headers, data=req_data, method=method)
     context = SSL_CONTEXT
     try:
-        with urllib.request.urlopen(req, context=context) as response:
+        with urllib.request.urlopen(req, context=context, timeout=15) as response:
             resp_body = response.read().decode("utf-8")
             if not resp_body:
                 return []
@@ -113,14 +113,14 @@ def exchange_google_code_for_email(code: str) -> str:
     )
     
     context = SSL_CONTEXT
-    with urllib.request.urlopen(req, context=context) as response:
+    with urllib.request.urlopen(req, context=context, timeout=15) as response:
         token_data = json.loads(response.read().decode("utf-8"))
-        
+
     access_token = token_data["access_token"]
-    
+
     userinfo_url = f"https://www.googleapis.com/oauth2/v3/userinfo?access_token={access_token}"
     req_info = urllib.request.Request(userinfo_url, method="GET")
-    with urllib.request.urlopen(req_info, context=context) as response:
+    with urllib.request.urlopen(req_info, context=context, timeout=15) as response:
         user_info = json.loads(response.read().decode("utf-8"))
         
     return user_info["email"]
