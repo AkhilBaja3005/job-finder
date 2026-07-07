@@ -2,13 +2,14 @@ import os
 import time
 import random
 import asyncio
+import threading
 import json
 import urllib.request
 # pyrefly: ignore [missing-import]
 from google import genai
 # pyrefly: ignore [missing-import]
 from google.genai import types
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict
 
 from utils.ssl_utils import SSL_CONTEXT as _SSL_CONTEXT
 
@@ -104,6 +105,41 @@ def get_gemini_client(custom_api_key: Optional[str] = None) -> genai.Client:
     if not api_key:
         raise ValueError("GEMINI_API_KEY is not set.")
     return genai.Client(api_key=api_key)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Proactive per-model RPM throttle (native Gemini only)
+# ─────────────────────────────────────────────────────────────────────────────
+# gemini-3.1-flash-lite is first in JSON_FALLBACK_MODELS, so with
+# NVIDIA/Cloudflare disabled (the common local/dev config), nearly every LLM
+# call in the app — resume parsing, per-job JD cleanup during discovery
+# (several jobs scored concurrently), tailoring, the recruiter reviewer,
+# autofill Q&A — funnels through this one model. The free/low tier for this
+# model is commonly capped at 15 requests/minute; reacting to a 429 after the
+# fact (the existing _cooperative_sleep retry) doesn't prevent a burst of
+# concurrent calls from collectively exceeding that cap before any single one
+# sees an error. This tracks call timestamps per model and cooperatively
+# sleeps before making a call if the model is already at its RPM ceiling.
+GEMINI_MODEL_RPM_LIMITS = {
+    "gemini-3.1-flash-lite": 15,
+}
+_rpm_call_log: Dict[str, list] = {}
+_rpm_lock = threading.Lock()
+
+def _throttle_for_rpm(model_name: str) -> None:
+    limit = GEMINI_MODEL_RPM_LIMITS.get(model_name)
+    if not limit:
+        return
+    while True:
+        with _rpm_lock:
+            now = time.time()
+            calls = [t for t in _rpm_call_log.get(model_name, []) if now - t < 60]
+            if len(calls) < limit:
+                calls.append(now)
+                _rpm_call_log[model_name] = calls
+                return
+            wait_for = 60 - (now - calls[0]) + 0.1
+        _cooperative_sleep(min(wait_for, 60))
 
 
 def _cooperative_sleep(seconds: float) -> None:
@@ -213,10 +249,11 @@ def _generate_with_model_list(
     for model_name in model_list:
         for retry_attempt in range(3):
             try:
+                _throttle_for_rpm(model_name)
                 if on_log:
                     on_log(json.dumps({"type": "llm_info", "message": f"🤖 Attempting Gemini model {model_name} (try {retry_attempt + 1})..."}))
                 print(f"Attempting generation with model: {model_name} (try {retry_attempt + 1})...")
-                
+
                 response = client.models.generate_content(
                     model=model_name,
                     contents=prompt,
