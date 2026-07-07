@@ -5,14 +5,16 @@ import json
 import subprocess
 import re
 import io
+import ssl
+import traceback
 import zipfile
 import urllib.request
 import urllib.parse
+from urllib.error import URLError
 import uuid
-import ssl
 import queue
 # pyrefly: ignore [missing-import]
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request
 # pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
 # pyrefly: ignore [missing-import]
@@ -51,10 +53,11 @@ from services.auth import (
 )
 from services.log_queue import LLMClientLogQueue
 from utils.latex_utils import extract_latex_command, apply_latex_hotfix, generate_latex_from_json
+from utils.ssl_utils import SSL_CONTEXT
 # --- Background Task to Clean Files Older Than 1 Hour (Runs every 30 mins) ---
 from contextlib import asynccontextmanager
 
-# Define directories before using them in the startup methods
+# Use absolute paths to prevent working directory shifts on Render container startup
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
@@ -62,6 +65,12 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 default_cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
 target_cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
+
+# Ensure resume.cls is available in uploads directory for compilation/zipping.
+# We copy it from the static backend/assets folder which is tracked in Git.
+if os.path.exists(default_cls_source):
+    shutil.copy2(default_cls_source, target_cls_path)
+    print(f"Synced fallback resume.cls from {default_cls_source} to {target_cls_path}")
 
 async def auto_clean_expired_files(force_startup_purge: bool = False):
     """Deletes temporary files. If force_startup_purge is True, ignores time checks and cleans everything."""
@@ -163,51 +172,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Use absolute paths to prevent working directory shifts on Render container startup
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# Ensure resume.cls is available in uploads directory for compilation/zipping
-# We copy it from the static backend/assets folder which is tracked in Git.
-default_cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
-target_cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
-if os.path.exists(default_cls_source):
-    import shutil
-    shutil.copy2(default_cls_source, target_cls_path)
-    print(f"Synced fallback resume.cls from {default_cls_source} to {target_cls_path}")
-
-
 import threading
 
-# ─── SessionStore abstraction ───────────────────────────────────────────────
 # Maps any token (real user token, guest UUID, or "guest") to resume state.
 # Backed in-memory with optional Supabase persistence for authenticated users.
-class SessionStore:
-    """Thread-safe session store keyed by user token."""
-    def __init__(self):
-        self._store: dict[str, dict] = {}
-        self._lock = threading.Lock()
-
-    def get_raw(self, key: str) -> Optional[dict]:
-        with self._lock:
-            return self._store.get(key)
-
-    def set_raw(self, key: str, data: dict, path: str):
-        with self._lock:
-            self._store[key] = {"data": data, "path": path}
-
-    def all_keys(self) -> list:
-        with self._lock:
-            return list(self._store.keys())
-
-_session_store_obj = SessionStore()
-_store_lock = threading.Lock()  # kept for legacy inline uses
-
-# Legacy alias so existing code using _session_store dict still works
-_session_store = _session_store_obj._store
+_session_store: dict[str, dict] = {}
+_store_lock = threading.Lock()
 
 RESUME_STATE_FILE = os.path.join(OUTPUT_DIR, "resume_state.json")
 
@@ -251,10 +221,43 @@ def drain_llm_logs() -> list[str]:
             msg = LLMClientLogQueue.get(block=False)
         except queue.Empty:
             break
-        except Exception:
+        except Exception as e:
+            print(f"[drain_llm_logs] Unexpected error draining log queue: {e}")
             break
         messages.append(msg)
     return messages
+
+
+def _format_log_event(msg: str) -> str:
+    """Turns one raw LLMClientLogQueue message into an SSE-ready JSON line.
+    Messages are usually JSON (emitted by gemini_client's on_log callback) but
+    can also be a plain string (e.g. a raw rate-limit error) — handle both."""
+    try:
+        parsed = json.loads(msg)
+        if parsed.get("type") == "llm_warn":
+            return json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
+        return json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
+    except Exception:
+        if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
+            return json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
+        return json.dumps({"type": "log", "message": msg}) + "\n"
+
+
+async def _stream_task_logs(task: "asyncio.Task"):
+    """Polls drain_llm_logs() every 0.5s and yields formatted SSE lines for
+    whatever log messages accumulated, until `task` completes. Callers should
+    `await task` (or `result = await task`) after this generator is exhausted,
+    then iterate _drain_remaining_logs() once more to flush any trailing
+    messages emitted between the last poll and task completion."""
+    while not task.done():
+        for msg in drain_llm_logs():
+            yield _format_log_event(msg)
+        await asyncio.sleep(0.5)
+
+
+def _drain_remaining_logs():
+    """Formats any log messages left in the queue after a task has completed."""
+    return [_format_log_event(msg) for msg in drain_llm_logs()]
 
 
 def get_session_data(token: Optional[str]) -> dict:
@@ -412,6 +415,7 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
         
         return {"message": "Resume uploaded and parsed successfully", "data": data}
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, linespread: float = 1.0, master_latex: Optional[str] = None) -> tuple[int, float]:
@@ -498,6 +502,34 @@ def _extract_company_from_jd(jd_text: str) -> str:
 # In-memory analysis cache: keys are MD5(token + job_title + jd_text), values are {"analysis": AnalysisResponse_model_dump, "timestamp": float}
 _analysis_cache: dict[str, dict] = {}
 _cache_lock = threading.Lock()
+
+# ─── Per-IP rate limiting for costly endpoints ─────────────────────────────
+# Simple in-memory sliding-window limiter: no external deps needed for a
+# single-process deployment. Protects /scrape_job, /search_matching_jobs, and
+# /apply — the three unauthenticated-or-cheaply-authenticated routes that each
+# trigger an expensive Playwright browser launch and/or LLM call chain, so a
+# single abusive client can't cheaply exhaust API quota or CPU.
+_rate_limit_hits: dict[str, list] = {}
+_rate_limit_lock = threading.Lock()
+
+def _check_rate_limit(request: Request, key_prefix: str, max_requests: int, window_seconds: int):
+    """Raises HTTPException(429) if the caller's IP has exceeded max_requests
+    within the trailing window_seconds. Call at the top of a route handler."""
+    client_ip = request.client.host if request.client else "unknown"
+    key = f"{key_prefix}:{client_ip}"
+    now = time.time()
+    with _rate_limit_lock:
+        hits = [t for t in _rate_limit_hits.get(key, []) if now - t < window_seconds]
+        if len(hits) >= max_requests:
+            raise HTTPException(status_code=429, detail=f"Rate limit exceeded: max {max_requests} requests per {window_seconds}s for this endpoint. Try again shortly.")
+        hits.append(now)
+        _rate_limit_hits[key] = hits
+        # Opportunistic cleanup of unrelated stale keys so this dict doesn't
+        # grow unbounded across many distinct client IPs over time.
+        if len(_rate_limit_hits) > 500:
+            for k in list(_rate_limit_hits.keys()):
+                if not any(now - t < window_seconds for t in _rate_limit_hits.get(k, [])):
+                    _rate_limit_hits.pop(k, None)
 
 # In-memory job search TTL cache: keys are (keywords, location, timeframe), values are (timestamp, jobs_list)
 _job_search_cache: dict[tuple, tuple] = {}
@@ -656,39 +688,17 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
             )
 
             # Poll and yield log queue events in real-time while the LLM call is running
-            while not fit_task.done():
-                for msg in drain_llm_logs():
-                    try:
-                        parsed = json.loads(msg)
-                        if parsed.get("type") == "llm_warn":
-                            yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
-                        else:
-                            yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
-                    except Exception:
-                        if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
-                            yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
-                        else:
-                            yield json.dumps({"type": "log", "message": msg}) + "\n"
-                await asyncio.sleep(0.5)
+            async for event in _stream_task_logs(fit_task):
+                yield event
 
             # Wait for task completion and fetch result
             analysis = await fit_task
             ctx.log_step("analyze_job_fit", time.time() - t0, "gemini-3.1-flash-lite")
 
             # Yield any remaining leftover log messages
-            for msg in drain_llm_logs():
-                try:
-                    parsed = json.loads(msg)
-                    if parsed.get("type") == "llm_warn":
-                        yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
-                    else:
-                        yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
-                except Exception:
-                    if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
-                        yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
-                    else:
-                        yield json.dumps({"type": "log", "message": msg}) + "\n"
-                
+            for event in _drain_remaining_logs():
+                yield event
+
             yield json.dumps({"type": "log", "message": "✍️ Generated tailored resume content and cover letter."}) + "\n"
             
             if request.skip_tailoring:
@@ -725,37 +735,14 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                         )
                         while not review_task.done():
                             for msg in drain_llm_logs():
-                                try_parse_failed = False
-                                try:
-                                    parsed = json.loads(msg)
-                                    if parsed.get("type") == "llm_warn":
-                                        yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
-                                    else:
-                                        yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
-                                except Exception:
-                                    try_parse_failed = True
-                                if try_parse_failed:
-                                    if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
-                                        yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
-                                    else:
-                                        yield json.dumps({"type": "log", "message": msg}) + "\n"
+                                yield _format_log_event(msg)
                             await asyncio.sleep(0.5)
-                        
+
                         review = await review_task
                         ctx.log_step(f"recruiter_review_check_attempt_{reviewer_attempts+1}", time.time() - t0, "gemini-3.1-flash-lite")
 
-                        for msg in drain_llm_logs():
-                            try:
-                                parsed = json.loads(msg)
-                                if parsed.get("type") == "llm_warn":
-                                    yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
-                                else:
-                                    yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
-                            except Exception:
-                                if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
-                                    yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
-                                else:
-                                    yield json.dumps({"type": "log", "message": msg}) + "\n"
+                        for event in _drain_remaining_logs():
+                            yield event
 
                         if review.satisfied:
                             yield json.dumps({"type": "log", "message": "✅ Recruiter review approved!"}) + "\n"
@@ -771,34 +758,14 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                         )
                         while not tailor_task.done():
                             for msg in drain_llm_logs():
-                                try:
-                                    parsed = json.loads(msg)
-                                    if parsed.get("type") == "llm_warn":
-                                        yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
-                                    else:
-                                        yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
-                                except Exception:
-                                    if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
-                                        yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
-                                    else:
-                                        yield json.dumps({"type": "log", "message": msg}) + "\n"
+                                yield _format_log_event(msg)
                             await asyncio.sleep(0.5)
-                            
+
                         analysis.latex_code = await tailor_task
                         ctx.log_step(f"tailor_latex_retry_attempt_{reviewer_attempts+1}", time.time() - t0, "gemini-3.5-flash")
 
-                        for msg in drain_llm_logs():
-                            try:
-                                parsed = json.loads(msg)
-                                if parsed.get("type") == "llm_warn":
-                                    yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
-                                else:
-                                    yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
-                            except Exception:
-                                if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
-                                    yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
-                                else:
-                                    yield json.dumps({"type": "log", "message": msg}) + "\n"
+                        for event in _drain_remaining_logs():
+                            yield event
                                 
                         curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
                         if curr_hash == prev_review_hash:
@@ -823,7 +790,7 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                 # --- Page-fit loop (compile first, try mechanical adjustments first) ---
                 yield json.dumps({"type": "log", "message": "⚙️ Compiling PDF & checking page layout..."}) + "\n"
                 t0 = time.time()
-                pages, filled_height = compile_and_check_page_metrics(analysis.latex_code, 1.0, 1.0, master_latex)
+                pages, filled_height = await asyncio.to_thread(compile_and_check_page_metrics, analysis.latex_code, 1.0, 1.0, master_latex)
                 ctx.log_step("compile_pdf_check_metrics", time.time() - t0, "Tectonic")
     
                 optimal_scale = 1.0
@@ -834,7 +801,7 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                     yield json.dumps({"type": "log", "message": "📐 Page overflow. Trying quick mechanical spacing adjustments..."}) + "\n"
                     # Try decreasing linespread to fit page
                     for ls in [0.95, 0.91, 0.88]:
-                        p, h = compile_and_check_page_metrics(analysis.latex_code, 1.0, ls, master_latex)
+                        p, h = await asyncio.to_thread(compile_and_check_page_metrics, analysis.latex_code, 1.0, ls, master_latex)
                         if p == 1:
                             pages = p
                             filled_height = h
@@ -845,7 +812,7 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                 # If still over budget, try scale adjustments
                 if pages > 1:
                     for scale in [0.8, 0.6, 0.5]:
-                        p, h = compile_and_check_page_metrics(analysis.latex_code, scale, optimal_linespread, master_latex)
+                        p, h = await asyncio.to_thread(compile_and_check_page_metrics, analysis.latex_code, scale, optimal_linespread, master_latex)
                         if p == 1:
                             pages = p
                             filled_height = h
@@ -870,21 +837,9 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                     tailor_task = asyncio.create_task(
                         asyncio.to_thread(tailor_latex_code, master_latex, job_title, jd_text, suggestions, missing_skills, active_api_key, condense_feedback, on_log=log_callback)
                     )
-                    while not tailor_task.done():
-                        for msg in drain_llm_logs():
-                            try:
-                                parsed = json.loads(msg)
-                                if parsed.get("type") == "llm_warn":
-                                    yield json.dumps({"type": "llm_warn", "message": parsed.get("message"), "model": parsed.get("model", ""), "wait_s": parsed.get("wait_s", 10)}) + "\n"
-                                else:
-                                    yield json.dumps({"type": "log", "message": parsed.get("message")}) + "\n"
-                            except Exception:
-                                if "429" in msg or "rate limit" in msg.lower() or "Rate limit" in msg:
-                                    yield json.dumps({"type": "llm_warn", "message": msg, "model": "", "wait_s": 10}) + "\n"
-                                else:
-                                    yield json.dumps({"type": "log", "message": msg}) + "\n"
-                        await asyncio.sleep(0.5)
-                        
+                    async for event in _stream_task_logs(tailor_task):
+                        yield event
+
                     analysis.latex_code = await tailor_task
                     
                     curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
@@ -894,12 +849,12 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                     prev_latex_hash = curr_hash
                     
                     # Recheck with scale and current linespread
-                    pages, filled_height = compile_and_check_page_metrics(analysis.latex_code, optimal_scale, optimal_linespread, master_latex)
+                    pages, filled_height = await asyncio.to_thread(compile_and_check_page_metrics, analysis.latex_code, optimal_scale, optimal_linespread, master_latex)
                     
                     # Try mechanical spacing again on the condensed content
                     if pages > 1:
                         for ls in [0.95, 0.91, 0.88]:
-                            p, h = compile_and_check_page_metrics(analysis.latex_code, optimal_scale, ls, master_latex)
+                            p, h = await asyncio.to_thread(compile_and_check_page_metrics, analysis.latex_code, optimal_scale, ls, master_latex)
                             if p == 1:
                                 pages = p
                                 filled_height = h
@@ -911,7 +866,7 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                 if pages == 1 and filled_height < 550.0:
                     yield json.dumps({"type": "log", "message": f"📐 Document is short ({filled_height:.1f} pts height). Adjusting linespread to pad layout..."}) + "\n"
                     for lspread in [1.05, 1.10, 1.15]:
-                        p, h = compile_and_check_page_metrics(analysis.latex_code, 1.0, lspread, master_latex)
+                        p, h = await asyncio.to_thread(compile_and_check_page_metrics, analysis.latex_code, 1.0, lspread, master_latex)
                         if p == 1:
                             optimal_linespread = lspread
                             pages, filled_height = p, h
@@ -947,6 +902,7 @@ async def generate_tailored_resume(tailored_data: dict, authorization: Optional[
         await generate_pdf_resume(tailored_data, output_pdf)
         return FileResponse(output_pdf, media_type="application/pdf", filename="tailored_resume.pdf")
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 # Helper functions and requests imported from utils.latex_utils or defined inline below
@@ -967,6 +923,7 @@ async def download_latex(request: LatexDownloadRequest, authorization: Optional[
             f.write(fixed_code)
         return FileResponse(tex_path, media_type="text/plain", filename="resume.tex")
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 class CompileLatexRequest(BaseModel):
@@ -998,7 +955,8 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
             
         # Run tectonic compiler
         print("Compiling LaTeX using Tectonic...")
-        result = subprocess.run(
+        result = await asyncio.to_thread(
+            subprocess.run,
             ["tectonic", tex_path, "--outdir", OUTPUT_DIR],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1012,6 +970,7 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
         print("Compilation successful!")
         return FileResponse(pdf_path, media_type="application/pdf", filename="resume.pdf")
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/clear_cache")
@@ -1071,6 +1030,7 @@ async def clear_cache(authorization: Optional[str] = Header(None)):
 
         return {"status": "success", "message": "All cache, session store, and temporary files cleared successfully."}
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 # Background task status registry maps task_id -> {"status": str, "message": str}
@@ -1084,14 +1044,22 @@ _background_tasks: dict[str, "asyncio.Task"] = {}
 
 def update_task_status(task_id: str, status: str, message: str):
     with _registry_lock:
+        now = time.time()
+        # Opportunistically prune entries older than 1 hour so _task_registry
+        # doesn't grow unbounded over the life of a long-running process —
+        # mirrors the same pattern used for _analysis_cache.
+        stale = [k for k, v in _task_registry.items() if now - v.get("timestamp", now) >= 3600]
+        for k in stale:
+            _task_registry.pop(k, None)
         _task_registry[task_id] = {
             "status": status,
             "message": message,
-            "timestamp": time.time()
+            "timestamp": now
         }
 
 @app.post("/apply")
-async def apply(request: ApplyRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+async def apply(request: ApplyRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+    _check_rate_limit(http_request, "apply", max_requests=5, window_seconds=300)
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
@@ -1144,29 +1112,37 @@ async def apply(request: ApplyRequest, authorization: Optional[str] = Header(Non
         
         return {"status": "success", "task_id": task_id, "message": "Autofill session started in separate browser window."}
     except Exception as e:
+        traceback.print_exc()
         update_task_status(task_id, "failed", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/apply/status/{task_id}")
 async def apply_status(task_id: str):
+    MAX_STREAM_SECONDS = 1800  # 30 min — stop polling an abandoned/never-finishing task
+
     async def status_stream():
         last_message = ""
+        start = time.time()
         while True:
+            if time.time() - start > MAX_STREAM_SECONDS:
+                yield json.dumps({"status": "timeout", "message": "Stopped watching after 30 minutes. The autofill session may still be running in its browser window."}) + "\n"
+                break
+
             with _registry_lock:
                 entry = _task_registry.get(task_id)
             if not entry:
                 yield json.dumps({"status": "unknown", "message": "Task not found."}) + "\n"
                 break
-                
+
             # Yield event only on message change or when complete
             if entry["message"] != last_message:
                 yield json.dumps({"status": entry["status"], "message": entry["message"]}) + "\n"
                 last_message = entry["message"]
-                
+
             if entry["status"] in ("completed", "failed"):
                 break
             await asyncio.sleep(0.5)
-            
+
     return StreamingResponse(status_stream(), media_type="text/event-stream")
 
 def _sanitize_filename_part(s: str) -> str:
@@ -1198,50 +1174,34 @@ def upload_zip_to_tmpfiles(latex_code: str, candidate_name: str = "", job_title:
     zip_buffer.seek(0)
     zip_data = zip_buffer.getvalue()
     
-    # 2. Build a descriptive project name from candidate / role / company
+    # 2. Build a descriptive project name from candidate / role / company —
+    # used only for Overleaf's snip_name (the visible project title), NOT for
+    # the actual uploaded filename below.
     parts = [_sanitize_filename_part(candidate_name), _sanitize_filename_part(job_title), _sanitize_filename_part(company)]
     parts = [p for p in parts if p]  # drop empty parts
     project_name = " - ".join(parts) + " Resume" if parts else "Resume"
-    zip_filename = f"{project_name}.zip"
-    print(f"[Overleaf ZIP Export] Project filename: {zip_filename}")
+    # Upload filename is fixed/ASCII-safe regardless of candidate/job/company
+    # content. Spaces and punctuation (commas, "&", etc.) in project_name
+    # previously ended up in the *uploaded* filename, which tmpfiles.org bakes
+    # into the download URL it returns; Overleaf fetches that URL server-side
+    # per its "Open in Overleaf" API and can fail to recognize the file as a
+    # valid zip if the URL's path segment isn't cleanly encoded end-to-end,
+    # surfacing as "the file supplied is of an unsupported type". snip_name
+    # (below) already sets the human-readable title inside Overleaf, so the
+    # upload filename itself doesn't need to carry any of that information.
+    zip_filename = "resume.zip"
+    print(f"[Overleaf ZIP Export] Project title: {project_name} (upload filename: {zip_filename})")
 
-    # 3. Upload to tmpfiles.org
-    boundary = f"----WebKitFormBoundary{uuid.uuid4().hex}"
+    import base64
+    base64_zip = base64.b64encode(zip_data).decode('utf-8')
     
-    body = []
-    body.append(f"--{boundary}".encode('utf-8'))
-    body.append(f'Content-Disposition: form-data; name="file"; filename="{zip_filename}"'.encode('utf-8'))
-    body.append(b'Content-Type: application/zip')
-    body.append(b'')
-    body.append(zip_data)
-    body.append(f"--{boundary}--".encode('utf-8'))
+    # Return a Base64 Data URL containing the zip project directly
+    # Overleaf supports base64 application/zip Data URIs directly in snip_uri parameters
+    data_uri = f"data:application/zip;base64,{base64_zip}"
     
-    body_data = b'\r\n'.join(body)
-    
-    req = urllib.request.Request(
-        "https://tmpfiles.org/api/v1/upload",
-        data=body_data,
-        headers={
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "Content-Length": str(len(body_data)),
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        },
-        method="POST"
-    )
-    
-    context = ssl._create_unverified_context()
-    with urllib.request.urlopen(req, context=context) as response:
-        resp_data = json.loads(response.read().decode('utf-8'))
-        
-    if resp_data.get("status") == "success":
-        upload_url = resp_data["data"]["url"]
-        # Convert to raw download link
-        raw_url = upload_url.replace("https://tmpfiles.org/", "https://tmpfiles.org/dl/")
-        # snip_name sets the project title inside Overleaf directly (ignores ZIP filename)
-        encoded_name = urllib.parse.quote(project_name)
-        return f"https://www.overleaf.com/docs?snip_uri={urllib.parse.quote(raw_url)}&snip_name={encoded_name}"
-    else:
-        raise Exception("Upload to tmpfiles.org failed.")
+    # Overleaf's snip_name will title the project, or we default to candidate / job / company description
+    encoded_name = urllib.parse.quote(project_name)
+    return f"https://www.overleaf.com/docs?snip_uri={urllib.parse.quote(data_uri)}&snip_name={encoded_name}"
 
 class OverleafRequest(BaseModel):
     latex_code: str
@@ -1252,9 +1212,10 @@ class OverleafRequest(BaseModel):
 @app.post("/open_in_overleaf")
 async def open_in_overleaf(request: OverleafRequest):
     try:
-        url = upload_zip_to_tmpfiles(request.latex_code, request.candidate_name, request.job_title, request.company)
+        url = await asyncio.to_thread(upload_zip_to_tmpfiles, request.latex_code, request.candidate_name, request.job_title, request.company)
         return {"url": url}
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1392,9 +1353,10 @@ async def open_original_in_overleaf(request: OriginalOverleafRequest):
     try:
         latex_code = _build_original_latex(request.resume_data)
         candidate_name = request.resume_data.get("name", "")
-        url = upload_zip_to_tmpfiles(latex_code, candidate_name, request.job_title, request.company)
+        url = await asyncio.to_thread(upload_zip_to_tmpfiles, latex_code, candidate_name, request.job_title, request.company)
         return {"url": url}
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1457,7 +1419,8 @@ class ScrapeRequest(BaseModel):
     url: str
 
 @app.post("/scrape_job")
-async def scrape_job(request: ScrapeRequest):
+async def scrape_job(request: ScrapeRequest, http_request: Request):
+    _check_rate_limit(http_request, "scrape_job", max_requests=10, window_seconds=60)
     try:
         scraped = await scrape_job_description(request.url)
         return {
@@ -1466,6 +1429,7 @@ async def scrape_job(request: ScrapeRequest):
             "description": scraped.get("description", "")
         }
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 class SearchJobsRequest(BaseModel):
@@ -1474,7 +1438,8 @@ class SearchJobsRequest(BaseModel):
     timeframe: Optional[str] = "48h"
 
 @app.post("/search_matching_jobs")
-async def search_matching_jobs(request: SearchJobsRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+async def search_matching_jobs(request: SearchJobsRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+    _check_rate_limit(http_request, "search_matching_jobs", max_requests=5, window_seconds=300)
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
@@ -1527,6 +1492,7 @@ async def search_matching_jobs(request: SearchJobsRequest, authorization: Option
         
         return StreamingResponse(caching_job_stream(), media_type="application/x-ndjson")
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist"))

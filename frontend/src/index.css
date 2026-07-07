@@ -1,6 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
+  /* This app has one fixed dark theme, not a light/dark toggle. Without this,
+     browsers whose OS/browser preference is light-mode render native form
+     controls (particularly <select> dropdown option popups, which mostly
+     ignore inline CSS) using light UI chrome — white background, near-white
+     text — making them unreadable against our dark-styled controls. */
+  color-scheme: dark;
+
   --bg-primary: #0A0D14;
   --bg-secondary: rgba(16, 22, 35, 0.65);
   --border-color: rgba(255, 255, 255, 0.08);
@@ -26,6 +33,21 @@
   margin: 0;
   padding: 0;
   font-family: var(--font-sans);
+}
+
+/* `color-scheme: dark` on :root alone doesn't reliably force every browser's
+   native <select> popup (and its <option> list) into dark UA styling — some
+   Chromium/Firefox versions still render the open dropdown and its hover
+   state with light chrome when the OS/browser preference is light. Setting
+   color-scheme directly on the form controls, plus explicit option colors as
+   a fallback net, covers both. */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #151a26;
+  color: #fff;
 }
 
 body {

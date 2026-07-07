@@ -3,14 +3,20 @@ import json
 import urllib.parse
 import urllib.request
 import re
-import ssl
+import asyncio
 # pyrefly: ignore [missing-import]
 from bs4 import BeautifulSoup
 from typing import List, Optional, Dict
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 from services.gemini_client import generate_content_with_fallback
-from services.ats_scorer import compute_ats_score, calculate_flattened_experience
+from services.ats_scorer import (
+    compute_ats_score, compute_overall_score, calculate_flattened_experience,
+    estimate_role_fit_score, _extract_taxonomy_skills, get_candidate_seniority_tier,
+    _COMPILED_TITLE_TIER_PATTERNS
+)
+from services.scraper import scrape_job_description
+from utils.ssl_utils import SSL_CONTEXT
 
 # ─── Pydantic Schemas for Search ──────────────────────────────────────────
 
@@ -79,7 +85,7 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
             }
         )
-        context = ssl._create_unverified_context()
+        context = SSL_CONTEXT
         with urllib.request.urlopen(req, context=context, timeout=12) as response:
             html = response.read().decode("utf-8")
             
@@ -209,9 +215,154 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 
 # ─── Combined Aggregation & Scoring Pipeline ──────────────────────────────
 
+DISCOVERY_JD_FETCH_CAP = 30
+DISCOVERY_FETCH_CONCURRENCY = 5
+
+
+def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:
+    """
+    Cheap title-only pre-rank used ONLY to decide which jobs are worth the cost
+    of fetching their real JD (see DISCOVERY_JD_FETCH_CAP below) — NOT the final
+    displayed score, which always comes from compute_ats_score() against the
+    actual job description via _score_job_with_real_jd, same as Tailor Resume.
+
+    Derived generically from the candidate's own resume (skill-alias matches in
+    the title + seniority-tier alignment via the existing ats_scorer taxonomy)
+    rather than hardcoded domain keywords, so it ranks fairly regardless of
+    whether the candidate is in data/ML, frontend, backend, etc.
+    """
+    title_lower = job.title.lower()
+
+    resume_skill_set = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
+    title_skill_set = _extract_taxonomy_skills(title_lower)
+    matched_count = len(resume_skill_set & title_skill_set)
+
+    candidate_tier = get_candidate_seniority_tier(resume_data)
+    tier_hierarchy = {"junior": 1, "mid": 2, "senior": 3, "lead": 4, "executive": 5}
+    title_tier = "mid"
+    for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
+        if pattern.search(title_lower):
+            title_tier = tier
+            break
+    tier_gap = abs(tier_hierarchy.get(candidate_tier, 2) - tier_hierarchy.get(title_tier, 2))
+
+    return 70 + (matched_count * 8) - (tier_gap * 10)
+
+
+async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, browser, semaphore: asyncio.Semaphore) -> Optional[dict]:
+    """Fetches the real JD for a single job and scores it with the exact same
+    deterministic engine (compute_ats_score / compute_overall_score) that the
+    Tailor Resume flow uses, so discovery's overall score is directly comparable
+    to the ATS score shown after tailoring — not a separately-invented estimate."""
+    async with semaphore:
+        try:
+            scraped = await scrape_job_description(job.url, browser=browser)
+        except Exception as e:
+            print(f"[Job Searcher] Failed to fetch JD for '{job.title}' at {job.url}: {e}")
+            return None
+
+    jd_text = scraped.get("description", "")
+    if not jd_text or len(jd_text.strip()) < 100:
+        return None
+
+    ats = compute_ats_score(resume_data, jd_text)
+    if not ats.eligible:
+        return None
+    role_fit = estimate_role_fit_score(resume_data, jd_text)
+    overall_score = compute_overall_score(ats.skills_score, ats.experience_score, role_fit)
+
+    return {
+        "title": job.title,
+        "company": job.company,
+        "location": job.location,
+        "url": job.url,
+        "platform": job.platform,
+        "age": job.post_date_raw,
+        "score": overall_score,
+        "skills_score": ats.skills_score,
+        "experience_score": ats.experience_score,
+        "role_fit_score": role_fit,
+        "candidate_years": ats.candidate_years,
+        "required_years": ats.required_years,
+        "matched_skills": ats.matched_skills,
+        "missing_skills": ats.missing_skills,
+        "estimated": False,
+    }
+
+
+def _score_job_with_title_heuristic(job: JobSearchResult, resume_data: dict) -> dict:
+    """Fallback scoring for jobs past the JD-fetch cap — no JD text is available,
+    so this derives everything from taxonomy skill matches in the title (same
+    SKILL_ALIASES taxonomy compute_ats_score uses) rather than hardcoded domain
+    keywords, so it isn't biased toward any one field (e.g. data/ML). Tagged
+    estimated=True so the UI can visually distinguish it from a real ATS-scored
+    result rather than silently presenting it as equally accurate."""
+    title_lower = job.title.lower()
+
+    resume_skill_set = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
+    title_skill_set = _extract_taxonomy_skills(title_lower)
+    matched_skills = sorted(resume_skill_set & title_skill_set)
+    missing_skills = sorted(title_skill_set - resume_skill_set)
+
+    total_title_skills = len(title_skill_set) or 1
+    # If the title has no recognizable taxonomy skill keywords at all (e.g. a
+    # role-flavor title like "AI-Native Product Engineer" instead of a
+    # tech-stack title), there's nothing to actually measure — use the same
+    # neutral default as compute_skills_score's unscoreable-JD case, and don't
+    # imply a real 0/0 skill match ratio behind a misleadingly high percentage.
+    skills_score = max(40, min(95, int((len(matched_skills) / total_title_skills) * 100))) if title_skill_set else 60
+
+    cand_years, avg_tenure, weighted_segments = calculate_flattened_experience(resume_data)
+
+    req_years = 2
+    title_years_match = re.search(r'(\d+)\s*(?:\+|to|-)?\s*\d*\s*(?:year|yr|y/o)', title_lower)
+    if title_years_match:
+        try:
+            req_years = int(title_years_match.group(1))
+        except ValueError:
+            pass
+    else:
+        candidate_tier = get_candidate_seniority_tier(resume_data)
+        title_tier = "mid"
+        for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
+            if pattern.search(title_lower):
+                title_tier = tier
+                break
+        req_years = 5 if title_tier in ("senior", "lead", "executive") else 2
+
+    experience_score = 95
+    if cand_years < req_years:
+        experience_score = max(40, 95 - int((req_years - cand_years) * 10))
+    elif cand_years > req_years + 3:
+        experience_score = 85
+
+    role_fit_score = estimate_role_fit_score(resume_data, job.title)
+
+    overall_score = int(0.40 * skills_score + 0.35 * experience_score + 0.25 * role_fit_score)
+
+    return {
+        "title": job.title,
+        "company": job.company,
+        "location": job.location,
+        "url": job.url,
+        "platform": job.platform,
+        "age": job.post_date_raw,
+        "score": overall_score,
+        "skills_score": skills_score,
+        "experience_score": experience_score,
+        "role_fit_score": role_fit_score,
+        "candidate_years": cand_years,
+        "required_years": req_years,
+        "matched_skills": matched_skills,
+        "missing_skills": missing_skills,
+        "estimated": True,
+    }
+
+
+
 async def find_matching_jobs(
-    resume_data: dict, 
-    location: str = "Remote", 
+    resume_data: dict,
+    location: str = "Remote",
     keywords: Optional[str] = None,
     timeframe: str = "48h",
     custom_api_key: Optional[str] = None
@@ -220,8 +371,13 @@ async def find_matching_jobs(
     Main aggregator pipeline:
     1. Resolves search queries (either user-entered keywords or auto-generates from resume).
     2. Fetches LinkedIn & Indeed postings concurrently.
-    3. Runs deterministic ATS scoring match.
-    4. Filters and returns job matches >= 70%.
+    3. Ranks by a cheap title heuristic, then fetches the real JD for the top
+       DISCOVERY_JD_FETCH_CAP jobs and scores them with the SAME deterministic
+       engine (compute_ats_score/compute_overall_score) used by Tailor Resume,
+       so discovery's overall score is directly comparable — not a separately
+       invented number. Jobs beyond the cap fall back to a title-only estimate
+       and are tagged estimated=True.
+    4. Filters and returns job matches >= 55%.
     """
     if keywords and keywords.strip():
         # User-provided search role overrides
@@ -231,16 +387,23 @@ async def find_matching_jobs(
         yield json.dumps({"type": "log", "message": "🤖 Analyzing resume context to generate optimal search queries..."}) + "\n"
         queries = generate_search_queries_from_resume(resume_data, custom_api_key)
         yield json.dumps({"type": "log", "message": f"🔎 Generated search queries: {', '.join(queries)}"}) + "\n"
-    
+
     raw_jobs = []
-    
-    # Run queries in parallel thread loops to prevent network stalling
-    for query in queries:
-        yield json.dumps({"type": "log", "message": f"🌐 Fetching listings from LinkedIn & Indeed ({timeframe}) for '{query}'..."}) + "\n"
-        li_jobs = search_linkedin_jobs(query, location, timeframe)
-        ind_jobs = await search_indeed_jobs(query, location, timeframe)
-        raw_jobs.extend(li_jobs + ind_jobs)
-        
+
+    async def _fetch_query(query: str):
+        yield_msg = f"🌐 Fetching listings from LinkedIn & Indeed ({timeframe}) for '{query}'..."
+        li_task = asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
+        ind_task = search_indeed_jobs(query, location, timeframe)
+        li_jobs, ind_jobs = await asyncio.gather(li_task, ind_task)
+        return yield_msg, li_jobs + ind_jobs
+
+    # Run all queries concurrently instead of sequentially — each query's
+    # LinkedIn/Indeed fetch no longer blocks the next query from starting.
+    query_results = await asyncio.gather(*[_fetch_query(q) for q in queries])
+    for yield_msg, jobs in query_results:
+        yield json.dumps({"type": "log", "message": yield_msg}) + "\n"
+        raw_jobs.extend(jobs)
+
     # Deduplicate by job URL / ID
     seen_ids = set()
     deduped_jobs = []
@@ -248,93 +411,42 @@ async def find_matching_jobs(
         if job.job_id not in seen_ids:
             seen_ids.add(job.job_id)
             deduped_jobs.append(job)
-            
+
     yield json.dumps({"type": "log", "message": f"📊 Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + "\n"
-    
+
+    deduped_jobs.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
+
+    jd_scored_batch = deduped_jobs[:DISCOVERY_JD_FETCH_CAP]
+    title_only_batch = deduped_jobs[DISCOVERY_JD_FETCH_CAP:]
+
     scored_jobs = []
-    for job in deduped_jobs:
-        title_lower = job.title.lower()
-        
-        # 1. Match skills listed in resume against job title
-        resume_skills = resume_data.get("skills", [])
-        matched = [s for s in resume_skills if s.lower() in title_lower]
-        
-        # Calculate a realistic base match score based on keyword mappings
-        base_score = 70
-        if "data engineer" in title_lower or "big data" in title_lower:
-            base_score = 85
-        elif "python" in title_lower:
-            base_score = 80
-        elif "data scientist" in title_lower or "machine learning" in title_lower or "ai" in title_lower:
-            base_score = 75
-            
-        # Add matching skills boost
-        base_score += len(matched) * 5
-        
-        # 2. Seniority normalization penalties
-        if any(w in title_lower for w in ["senior", "lead", "sr", "principal"]):
-            # Candidate has 3 years of experience; apply penalty for Senior/Lead roles
-            base_score -= 15
-        elif any(w in title_lower for w in ["junior", "jr", "intern", "entry"]):
-            base_score -= 5
-        
-        # Extract matched and missing skill tags
-        matched_skills = [s for s in resume_skills if s.lower() in title_lower or s.lower() in ["python", "sql", "git"]][:4]
-        missing_skills = [s for s in ["gcp", "aws", "spark", "hadoop", "tableau"] if s not in [m.lower() for m in matched_skills]][:3]
-        
-        # Calculate sub-scores using ATS formula logic
-        skills_score = int((len(matched_skills) / max(1, len(matched_skills) + len(missing_skills))) * 100)
-        skills_score = max(40, min(95, skills_score))
-        
-        # Calculate experience years dynamically from resume
-        cand_years, avg_tenure, weighted_segments = calculate_flattened_experience(resume_data)
-        
-        # Try to parse experience requirements from title, fallback to senior/junior guess
-        req_years = 2
-        title_years_match = re.search(r'(\d+)\s*(?:\+|to|-)?\s*\d*\s*(?:year|yr|y/o)', title_lower)
-        if title_years_match:
+    if jd_scored_batch:
+        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for top {len(jd_scored_batch)} matches to compute accurate ATS scores..."}) + "\n"
+        # pyrefly: ignore [missing-import]
+        from playwright.async_api import async_playwright
+        semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
             try:
-                req_years = int(title_years_match.group(1))
-            except ValueError:
-                pass
-        else:
-            req_years = 5 if any(w in title_lower for w in ["senior", "lead", "sr", "principal"]) else 2
-        
-        experience_score = 95
-        if cand_years < req_years:
-            # Apply a penalty of 10 points per missing year
-            experience_score = max(40, 95 - int((req_years - cand_years) * 10))
-        elif cand_years > req_years + 3:
-            # Overqualification normalization
-            experience_score = 85
-            
-        role_fit_score = 75
-        if "data engineer" in title_lower or "big data" in title_lower:
-            role_fit_score = 85
-        elif "data scientist" in title_lower or "machine learning" in title_lower:
-            role_fit_score = 80
-            
-        overall_score = int(0.40 * skills_score + 0.35 * experience_score + 0.25 * role_fit_score)
-        
-        if overall_score >= 55:
-            scored_jobs.append({
-                "title": job.title,
-                "company": job.company,
-                "location": job.location,
-                "url": job.url,
-                "platform": job.platform,
-                "age": job.post_date_raw,
-                "score": overall_score,
-                "skills_score": skills_score,
-                "experience_score": experience_score,
-                "role_fit_score": role_fit_score,
-                "candidate_years": cand_years,
-                "required_years": req_years,
-                "matched_skills": matched_skills,
-                "missing_skills": missing_skills
-            })
-            
-    # Sort descending by score
-    scored_jobs.sort(key=lambda x: x["score"], reverse=True)
-    yield json.dumps({"type": "log", "message": f"🏁 Scanned {len(scored_jobs)} matches successfully!"}) + "\n"
+                results = await asyncio.gather(*[
+                    _score_job_with_real_jd(job, resume_data, browser, semaphore) for job in jd_scored_batch
+                ])
+            finally:
+                await browser.close()
+        scored_jobs.extend([r for r in results if r is not None])
+
+    if title_only_batch:
+        yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + "\n"
+        scored_jobs.extend([_score_job_with_title_heuristic(job, resume_data) for job in title_only_batch])
+
+    scored_jobs = [j for j in scored_jobs if j["score"] >= 55]
+
+    # Sort accurate (JD-scored) jobs before estimated (title-only) ones, since
+    # an estimated job's raw score isn't directly comparable to a real
+    # ATS-scored one — within each group, sort descending by score.
+    scored_jobs.sort(key=lambda x: (x["estimated"], -x["score"]))
+    accurate_count = sum(1 for j in scored_jobs if not j["estimated"])
+    estimated_count = len(scored_jobs) - accurate_count
+    yield json.dumps({"type": "log", "message": f"🏁 Scanned {len(scored_jobs)} matches successfully! ({accurate_count} JD-scored, {estimated_count} title-estimated)"}) + "\n"
     yield json.dumps({"type": "result", "jobs": scored_jobs}) + "\n"
+

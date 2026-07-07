@@ -66,6 +66,38 @@ TITLE_TIERS: Dict[str, List[str]] = {
 # Global structural reverse lookups
 _SKILL_LOOKUP: Dict[str, str] = {alias.lower(): canonical for canonical, aliases in SKILL_ALIASES.items() for alias in aliases}
 
+# Precompiled skill-matching patterns, built once at module load rather than
+# re.escape()'d and re-searched fresh on every _extract_taxonomy_skills() call
+# — this function runs per job in discovery (up to DISCOVERY_JD_FETCH_CAP
+# times) plus per experience entry in compute_skills_score, so avoiding
+# redundant pattern construction on a hot path matters.
+_COMPILED_SKILL_PATTERNS: List[Tuple[re.Pattern, str]] = [
+    (re.compile(r'\b' + re.escape(alias) + r'\b'), canonical)
+    for alias, canonical in _SKILL_LOOKUP.items()
+    if alias not in HIGH_RISK_TOKENS
+]
+_COMPILED_HIGH_RISK_PATTERNS: List[Tuple[re.Pattern, str]] = [
+    (re.compile(r'\b' + re.escape(token) + r'\b'), token)
+    for token in HIGH_RISK_TOKENS
+]
+_GO_CONTEXT_PATTERN = re.compile(r'\b(golang|programming|language|developer|engineer|backend|code|writing)\b')
+
+# Precompiled (tier, pattern) pairs for TITLE_TIERS, in _TIER_ORDER priority
+# (executive > lead > senior > mid > junior). extract_jd_expectations and
+# get_candidate_seniority_tier both break on first match, so a title matching
+# keywords from multiple tiers (e.g. "Senior Software Engineer" matches both
+# "senior" and "engineer") now resolves to the highest-priority tier. This is
+# an intentional fix, not just a perf change: the original per-tier-dict loop
+# only `break`'d the inner keyword loop, so the outer loop kept iterating and
+# whichever tier's keyword matched LAST in dict insertion order silently won
+# (e.g. "Senior Software Engineer" was misclassified as "mid" via "engineer").
+_TIER_ORDER = ["executive", "lead", "senior", "mid", "junior"]
+_COMPILED_TITLE_TIER_PATTERNS: List[Tuple[str, re.Pattern]] = [
+    (tier, re.compile(r'\b' + re.escape(kw) + r'\b'))
+    for tier in _TIER_ORDER
+    for kw in TITLE_TIERS[tier]
+]
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. DATA CONTAINERS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -119,28 +151,23 @@ def _extract_taxonomy_skills(text: str) -> Set[str]:
     """
     cleaned = _clean_text(text)
     found_skills = set()
-    
+
     # 1. Evaluate general dictionary items using standard word boundaries
-    for alias, canonical in _SKILL_LOOKUP.items():
-        if alias in HIGH_RISK_TOKENS:
-            continue
-        pattern = r'\b' + re.escape(alias) + r'\b'
-        if re.search(pattern, cleaned):
+    for pattern, canonical in _COMPILED_SKILL_PATTERNS:
+        if pattern.search(cleaned):
             found_skills.add(canonical)
-            
+
     # 2. Protected validation for high-risk tokens (e.g., checking context rules for "go")
-    for token in HIGH_RISK_TOKENS:
-        pattern = r'\b' + re.escape(token) + r'\b'
-        if re.search(pattern, cleaned):
+    for pattern, token in _COMPILED_HIGH_RISK_PATTERNS:
+        if pattern.search(cleaned):
             canonical = _SKILL_LOOKUP.get(token, token)
             # Verify context proximity to engineering terms
             if token == "go":
-                context_pattern = r'\b(golang|programming|language|developer|engineer|backend|code|writing)\b'
-                if re.search(context_pattern, cleaned) or "golang" in cleaned:
+                if _GO_CONTEXT_PATTERN.search(cleaned) or "golang" in cleaned:
                     found_skills.add(canonical)
             else:
                 found_skills.add(canonical) # Pass safe non-go tokens if bounded correctly
-                
+
     return found_skills
 
 def extract_jd_skills(jd_text: str) -> Tuple[List[str], List[str]]:
@@ -294,12 +321,11 @@ def extract_jd_expectations(jd_text: str) -> Tuple[int, str, str]:
     
     # 3. Parse required seniority tier
     role_tier = "mid"
-    for tier, Keywords in TITLE_TIERS.items():
-        for kw in Keywords:
-            if re.search(r'\b' + re.escape(kw) + r'\b', cleaned):
-                role_tier = tier
-                break
-    
+    for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
+        if pattern.search(cleaned):
+            role_tier = tier
+            break
+
     return years_required, edu_tier, role_tier
 
 def get_candidate_seniority_tier(resume_data: dict) -> str:
@@ -307,11 +333,10 @@ def get_candidate_seniority_tier(resume_data: dict) -> str:
     exp = resume_data.get("experience", [])
     if not exp: return "junior"
     recent_roles = " ".join([exp[i].get("role", "").lower() for i in range(min(len(exp), 2))])
-    
-    for tier in ["executive", "lead", "senior", "mid", "junior"]:
-        for kw in TITLE_TIERS[tier]:
-            if re.search(r'\b' + re.escape(kw) + r'\b', recent_roles):
-                return tier
+
+    for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
+        if pattern.search(recent_roles):
+            return tier
     return "mid"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -323,7 +348,14 @@ def compute_skills_score(
 ) -> SkillMatchResult:
     """Evaluates keyword matches using location weighting and a stuffing-prevention cap."""
     if not required_skills:
-        return SkillMatchResult(100, [], [], [], [], "No mandatory technical keywords configured.")
+        # No taxonomy skills were extractable from the JD text at all (common
+        # for JDs in non-tech-heavy industries whose tools aren't in
+        # SKILL_ALIASES, e.g. legal/finance-specific software). This is NOT
+        # the same as "candidate matches every requirement" — returning 100
+        # here previously produced a false-perfect skills_score with 0/0
+        # matched skills, inflating overall_score. Use a neutral score
+        # instead so an unscoreable JD doesn't look like a perfect match.
+        return SkillMatchResult(60, [], [], [], [], "No mandatory technical keywords recognized in this JD — skills score is a neutral default, not a real match assessment.")
 
     skills_sec_canon = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
     
@@ -452,3 +484,31 @@ def compute_ats_score(resume_data: dict, jd_text: str) -> ATSScoreResult:
 def compute_overall_score(skills: int, experience: int, role_fit: int) -> int:
     """Calculates final combined ATS score matching recruiter weights."""
     return round(0.40 * skills + 0.35 * experience + 0.25 * role_fit)
+
+
+def estimate_role_fit_score(resume_data: dict, jd_text: str) -> int:
+    """
+    Deterministic stand-in for the LLM-based role_fit_score used in analyze_job_fit.
+
+    Used at job-discovery time to score many jobs cheaply without an LLM call per
+    job. Combines seniority-tier alignment (same logic as compute_ats_score's
+    tier_modifier) with a domain-overlap ratio (JD taxonomy skills vs. candidate's
+    strongest skill section), so discovery's overall_score is computed with the
+    same weighting formula and comparable magnitude to the real ATS score,
+    without requiring a live JD fetch + LLM round-trip for every listing.
+    """
+    _, _, required_tier = extract_jd_expectations(jd_text)
+    candidate_tier = get_candidate_seniority_tier(resume_data)
+    tier_hierarchy = {"junior": 1, "mid": 2, "senior": 3, "lead": 4, "executive": 5}
+    req_idx = tier_hierarchy.get(required_tier, 2)
+    cand_idx = tier_hierarchy.get(candidate_tier, 2)
+    tier_gap = abs(cand_idx - req_idx)
+
+    required_skills, preferred_skills = extract_jd_skills(jd_text)
+    jd_skills = set(required_skills) | set(preferred_skills)
+    resume_skills = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
+    overlap_ratio = (len(jd_skills & resume_skills) / len(jd_skills)) if jd_skills else 0.5
+
+    base = 90 - (tier_gap * 15)
+    domain_adjustment = round((overlap_ratio - 0.5) * 30)
+    return max(0, min(100, base + domain_adjustment))

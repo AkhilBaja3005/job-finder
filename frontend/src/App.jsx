@@ -1,9 +1,46 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://127.0.0.1:8000'
   : window.location.origin;
+
+// Reads a newline-delimited JSON (NDJSON) streaming response body and yields
+// each parsed event object as it arrives. Shared by every SSE/NDJSON endpoint
+// consumer (analyze_job, search_matching_jobs, apply status, etc.) so the
+// buffer/split/parse boilerplate isn't duplicated per call site. Malformed or
+// incomplete lines (a line split across two chunks) are silently skipped,
+// matching the previous per-handler behavior of ignoring JSON.parse errors.
+async function* streamNdjson(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          yield JSON.parse(line);
+        } catch (e) {
+          // Ignore incomplete/malformed lines
+        }
+      }
+    }
+  } finally {
+    // If the consumer stops iterating early (e.g. `return` inside a
+    // `for await` loop), the JS runtime calls this generator's .return(),
+    // running this block — release the underlying stream lock so the
+    // connection can be cleanly torn down instead of left dangling.
+    reader.cancel().catch(() => {});
+  }
+}
 
 const RocketIcon = () => (
   <svg
@@ -425,77 +462,55 @@ function App() {
         throw new Error(errJson.detail || 'Failed to analyze job.');
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      for await (const event of streamNdjson(response)) {
+        if (event.type === 'log') {
+          setStatusMessage(event.message);
+          setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
+          setTimeout(scrollConsoleToBottom, 30);
+        } else if (event.type === 'llm_warn') {
+          const msg = event.message || `⚠️ Rate limit hit on ${event.model}. Retrying in ${event.wait_s}s...`;
+          setStatusMessage(msg);
+          setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
+          setTimeout(scrollConsoleToBottom, 30);
+        } else if (event.type === 'scraped_data') {
+          if (event.job_description) setJobDescription(event.job_description);
+          if (event.job_title) setJobTitle(event.job_title);
+        } else if (event.type === 'error') {
+          throw new Error(event.message);
+        } else if (event.type === 'result') {
+          const result = event;
+          setAnalysisResult(result.analysis);
+          if (result.job_title) setJobTitle(result.job_title);
+          if (result.company) setCompany(result.company);
+          if (result.job_description) setJobDescription(result.job_description);
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
+          // ─── SAFE RESUME CLONING ──────────────────────────────────────
+          const baseResume = resumeData ? JSON.parse(JSON.stringify(resumeData)) : {};
+          const updates = result.analysis?.suggested_resume_updates || {};
 
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const event = JSON.parse(line);
-            if (event.type === 'log') {
-              setStatusMessage(event.message);
-              setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
-              setTimeout(scrollConsoleToBottom, 30);
-            } else if (event.type === 'llm_warn') {
-              const msg = event.message || `⚠️ Rate limit hit on ${event.model}. Retrying in ${event.wait_s}s...`;
-              setStatusMessage(msg);
-              setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
-              setTimeout(scrollConsoleToBottom, 30);
-            } else if (event.type === 'scraped_data') {
-              if (event.job_description) setJobDescription(event.job_description);
-              if (event.job_title) setJobTitle(event.job_title);
-            } else if (event.type === 'error') {
-              throw new Error(event.message);
-            } else if (event.type === 'result') {
-              const result = event;
-              setAnalysisResult(result.analysis);
-              if (result.job_title) setJobTitle(result.job_title);
-              if (result.company) setCompany(result.company);
-              if (result.job_description) setJobDescription(result.job_description);
+          const tailored = {
+            ...baseResume,
+            summary: updates.summary || baseResume.summary || '',
+            skills: updates.skills || baseResume.skills || [],
+            experience: (baseResume.experience || []).map((job, idx) => {
+              const tailoredExperience = updates.experience?.[idx];
 
-              // ─── SAFE RESUME CLONING ──────────────────────────────────────
-              const baseResume = resumeData ? JSON.parse(JSON.stringify(resumeData)) : {};
-              const updates = result.analysis?.suggested_resume_updates || {};
+              let finalDescription = job.description || [];
+              if (Array.isArray(tailoredExperience)) {
+                finalDescription = tailoredExperience;
+              } else if (tailoredExperience && tailoredExperience.description) {
+                finalDescription = tailoredExperience.description;
+              }
 
-              const tailored = {
-                ...baseResume,
-                summary: updates.summary || baseResume.summary || '',
-                skills: updates.skills || baseResume.skills || [],
-                experience: (baseResume.experience || []).map((job, idx) => {
-                  const tailoredExperience = updates.experience?.[idx];
-
-                  let finalDescription = job.description || [];
-                  if (Array.isArray(tailoredExperience)) {
-                    finalDescription = tailoredExperience;
-                  } else if (tailoredExperience && tailoredExperience.description) {
-                    finalDescription = tailoredExperience.description;
-                  }
-
-                  return {
-                    ...job,
-                    description: finalDescription,
-                  };
-                }),
+              return {
+                ...job,
+                description: finalDescription,
               };
+            }),
+          };
 
-              setTailoredResumeData(tailored);
-              setStatusMessage('ATS Scoring complete! Awaiting your instruction to tailor the resume.');
-            }
-          } catch (e) {
-            if (e instanceof SyntaxError) {
-              // Ignore incomplete lines
-            } else {
-              throw e;
-            }
-          }
+          setTailoredResumeData(tailored);
+          setStatusMessage('ATS Scoring complete! Awaiting your instruction to tailor the resume.');
         }
       }
     } catch (error) {
@@ -551,70 +566,46 @@ function App() {
         throw new Error(errJson.detail || 'Failed to tailor resume.');
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const event = JSON.parse(line);
-            if (event.type === 'log') {
-              setStatusMessage(event.message);
-              setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
-              setTimeout(scrollConsoleToBottom, 30);
-            } else if (event.type === 'llm_warn') {
-              const msg = event.message || `⚠️ Rate limit hit on ${event.model}. Retrying in ${event.wait_s}s...`;
-              setStatusMessage(msg);
-              setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
-              setTimeout(scrollConsoleToBottom, 30);
-            } else if (event.type === 'scraped_data') {
-              if (event.job_description) setJobDescription(event.job_description);
-              if (event.job_title) setJobTitle(event.job_title);
-            } else if (event.type === 'rejection_warning') {
-              setRejectionWarning(event.message);
-              setStatusLogs((prev) => [...prev, { message: `❌ Warning Paused: ${event.message}`, ts: nowTs() }]);
-              setStatusMessage('Process paused: Candidate may not be a fit.');
-              reader.cancel(); // Terminate the stream cleanly
-              return;
-            } else if (event.type === 'error') {
-              throw new Error(event.message);
-            } else if (event.type === 'result') {
-              const result = event;
-              if (result.job_description) setJobDescription(result.job_description);
-              if (result.job_title) setJobTitle(result.job_title);
-              setAnalysisResult(result.analysis);
-              const updates = result.analysis.suggested_resume_updates || {};
-              const tailored = {
-                ...resumeData,
-                summary: updates.summary || (resumeData || {}).summary || '',
-                skills: updates.skills || (resumeData || {}).skills || [],
-                experience: ((resumeData || {}).experience || []).map((job, idx) => {
-                  const tailoredExperience = updates.experience && updates.experience[idx];
-                  return {
-                    ...job,
-                    description: Array.isArray(tailoredExperience) ? tailoredExperience : (tailoredExperience && tailoredExperience.description) || (job || {}).description || [],
-                  };
-                }),
+      for await (const event of streamNdjson(response)) {
+        if (event.type === 'log') {
+          setStatusMessage(event.message);
+          setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
+          setTimeout(scrollConsoleToBottom, 30);
+        } else if (event.type === 'llm_warn') {
+          const msg = event.message || `⚠️ Rate limit hit on ${event.model}. Retrying in ${event.wait_s}s...`;
+          setStatusMessage(msg);
+          setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
+          setTimeout(scrollConsoleToBottom, 30);
+        } else if (event.type === 'scraped_data') {
+          if (event.job_description) setJobDescription(event.job_description);
+          if (event.job_title) setJobTitle(event.job_title);
+        } else if (event.type === 'rejection_warning') {
+          setRejectionWarning(event.message);
+          setStatusLogs((prev) => [...prev, { message: `❌ Warning Paused: ${event.message}`, ts: nowTs() }]);
+          setStatusMessage('Process paused: Candidate may not be a fit.');
+          return;
+        } else if (event.type === 'error') {
+          throw new Error(event.message);
+        } else if (event.type === 'result') {
+          const result = event;
+          if (result.job_description) setJobDescription(result.job_description);
+          if (result.job_title) setJobTitle(result.job_title);
+          setAnalysisResult(result.analysis);
+          const updates = result.analysis.suggested_resume_updates || {};
+          const tailored = {
+            ...resumeData,
+            summary: updates.summary || (resumeData || {}).summary || '',
+            skills: updates.skills || (resumeData || {}).skills || [],
+            experience: ((resumeData || {}).experience || []).map((job, idx) => {
+              const tailoredExperience = updates.experience && updates.experience[idx];
+              return {
+                ...job,
+                description: Array.isArray(tailoredExperience) ? tailoredExperience : (tailoredExperience && tailoredExperience.description) || (job || {}).description || [],
               };
-              setTailoredResumeData(tailored);
-              setStatusMessage('LaTeX tailored resume and metrics prepared successfully!');
-
-            }
-          } catch (e) {
-            if (e instanceof SyntaxError) {
-              // Ignore incomplete lines
-            } else {
-              throw e;
-            }
-          }
+            }),
+          };
+          setTailoredResumeData(tailored);
+          setStatusMessage('LaTeX tailored resume and metrics prepared successfully!');
         }
       }
     } catch (error) {
@@ -656,33 +647,15 @@ function App() {
         throw new Error(errData.detail || "Search failed");
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const event = JSON.parse(line);
-            if (event.type === 'log') {
-              setStatusMessage(event.message);
-              setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
-              setTimeout(scrollConsoleToBottom, 30);
-            } else if (event.type === 'result') {
-              setDiscoveredJobs(event.jobs || []);
-              setStatusMessage(`Found ${event.jobs?.length || 0} matching jobs.`);
-              showToast(`Discovered ${event.jobs?.length || 0} matching jobs!`, 'success');
-            }
-          } catch (e) {
-            // Ignore incomplete parsing chunks
-          }
+      for await (const event of streamNdjson(response)) {
+        if (event.type === 'log') {
+          setStatusMessage(event.message);
+          setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
+          setTimeout(scrollConsoleToBottom, 30);
+        } else if (event.type === 'result') {
+          setDiscoveredJobs(event.jobs || []);
+          setStatusMessage(`Found ${event.jobs?.length || 0} matching jobs.`);
+          showToast(`Discovered ${event.jobs?.length || 0} matching jobs!`, 'success');
         }
       }
     } catch (err) {
@@ -694,13 +667,17 @@ function App() {
     }
   };
 
-  const getSortedAndPaginatedJobs = () => {
-    // 1. Sort copy of jobs array
+  const sortedAndPaginatedJobs = useMemo(() => {
+    // 1. Sort copy of jobs array. Accurate (JD-scored) jobs always sort
+    // before estimated (title-only) ones, since an estimated job's score
+    // isn't directly comparable to a real ATS-scored one — within each
+    // group, apply the user's chosen sort mode.
     const sorted = [...discoveredJobs];
+    const estimatedRank = (j) => (j.estimated ? 1 : 0);
     if (searchSortMode === 'overall') {
-      sorted.sort((a, b) => (b.score || 0) - (a.score || 0));
+      sorted.sort((a, b) => estimatedRank(a) - estimatedRank(b) || (b.score || 0) - (a.score || 0));
     } else if (searchSortMode === 'role_fit') {
-      sorted.sort((a, b) => (b.role_fit_score || 0) - (a.role_fit_score || 0));
+      sorted.sort((a, b) => estimatedRank(a) - estimatedRank(b) || (b.role_fit_score || 0) - (a.role_fit_score || 0));
     } else if (searchSortMode === 'time') {
       // Sort by age keyword estimation: if age contains "minute" or "hour" it is newer than "day"
       const getAgeValue = (ageStr) => {
@@ -712,7 +689,7 @@ function App() {
         if (lowerAge.includes('day')) return val * 1440;
         return 999999;
       };
-      sorted.sort((a, b) => getAgeValue(a.age) - getAgeValue(b.age));
+      sorted.sort((a, b) => estimatedRank(a) - estimatedRank(b) || getAgeValue(a.age) - getAgeValue(b.age));
     }
 
     // 2. Paginate items (30 items per page)
@@ -722,7 +699,7 @@ function App() {
     const paginated = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     return { sorted, paginated, totalPages, currentPage };
-  };
+  }, [discoveredJobs, searchSortMode, searchPage]);
 
   const handleUrlBlur = async () => {
     if (!jobUrl || !jobUrl.startsWith('http')) return;
@@ -1200,10 +1177,14 @@ function App() {
                         fontSize: '0.8rem',
                         borderRadius: '6px',
                         cursor: 'pointer',
-                        // Safe fallback styles using CSS variables 👇
-                        background: 'var(--bg-input, rgba(0,0,0,0.05))',
-                        border: '1px solid var(--border-input, rgba(0,0,0,0.15))',
-                        color: 'var(--text-main, currentcolor)'
+                        // This app has one fixed dark theme — it doesn't follow the
+                        // browser/OS light-dark preference. Hardcode explicit dark
+                        // colors instead of CSS vars that were falling back to
+                        // near-white text (--text-main) on a near-transparent
+                        // background, which read as invisible on a light system.
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        color: '#fff'
                       }}
                     >
                       <option value="24h">Last 24 Hours</option>
@@ -1305,7 +1286,7 @@ function App() {
               </div>
             ) : isDiscoveryView ? (
               (() => {
-                const { sorted, paginated, totalPages, currentPage } = getSortedAndPaginatedJobs();
+                const { sorted, paginated, totalPages, currentPage } = sortedAndPaginatedJobs;
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
@@ -1345,9 +1326,9 @@ function App() {
                             setSearchPage(1); // Reset to page 1 on sort change
                           }}
                           style={{
-                            background: 'rgba(255,255,255,0.03)',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            color: '#e2e8f0',
+                            background: 'rgba(255,255,255,0.06)',
+                            border: '1px solid rgba(255,255,255,0.12)',
+                            color: '#fff',
                             fontSize: '0.74rem',
                             padding: '5px 10px',
                             borderRadius: '6px',
@@ -1397,6 +1378,12 @@ function App() {
                                         color: job.platform === 'LinkedIn' ? '#0a66c2' : '#ff6f00'
                                       }}>{job.platform}</span>
                                       <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{job.age}</span>
+                                      {job.estimated && (
+                                        <span
+                                          title="Score estimated from job title only (beyond the accurate-scan cap) — not yet based on the full job description."
+                                          style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, background: 'rgba(234,179,8,0.12)', color: '#eab308' }}
+                                        >EST.</span>
+                                      )}
                                     </div>
                                     <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{job.title}</div>
                                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{job.company} • {job.location}</div>
@@ -1441,7 +1428,11 @@ function App() {
                                       <div>
                                         <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Skills</div>
                                         <div style={{ fontWeight: 700, color: '#a5b4fc' }}>{job.skills_score || 50}%</div>
-                                        <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>{job.matched_skills?.length || 0}/{(job.matched_skills?.length || 0) + (job.missing_skills?.length || 0)} key</div>
+                                        <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>
+                                          {((job.matched_skills?.length || 0) + (job.missing_skills?.length || 0)) > 0
+                                            ? `${job.matched_skills?.length || 0}/${(job.matched_skills?.length || 0) + (job.missing_skills?.length || 0)} key`
+                                            : 'no keywords found'}
+                                        </div>
                                       </div>
                                       <div>
                                         <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Experience</div>
