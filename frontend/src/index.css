@@ -35,6 +35,21 @@
   font-family: var(--font-sans);
 }
 
+/* `color-scheme: dark` on :root alone doesn't reliably force every browser's
+   native <select> popup (and its <option> list) into dark UA styling — some
+   Chromium/Firefox versions still render the open dropdown and its hover
+   state with light chrome when the OS/browser preference is light. Setting
+   color-scheme directly on the form controls, plus explicit option colors as
+   a fallback net, covers both. */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #151a26;
+  color: #fff;
+}
+
 body {
   background-color: var(--bg-primary);
   color: var(--text-main);
