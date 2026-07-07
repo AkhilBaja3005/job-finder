@@ -7,13 +7,13 @@ The app is a single FastAPI backend serving a React (Vite) single-page frontend,
 ## Features
 
 - **Resume parsing** — upload a PDF/DOCX/TEX resume and extract structured data (contact info, skills, experience, education, projects, GPA) via an LLM.
-- **ATS fit scoring** — deterministic skills/experience matching (`ats_scorer.py`) combined with an LLM-based semantic "role fit" score, blended into an overall match percentage.
-- **Resume tailoring** — rewrites the candidate's master LaTeX resume for a specific job description, enforces a one-page layout (mechanical spacing adjustments first, LLM condensation as a last resort), and runs an automated "recruiter review" loop that can reject and retry the tailoring before it's shown to the user.
+- **ATS fit scoring** — deterministic skills/experience matching (`ats_scorer.py`) combined with an LLM-based semantic "role fit" score, blended into an overall match percentage. Job discovery uses the same deterministic engine (real job description fetch + `compute_ats_score`) for the top-ranked postings, so discovery scores and post-tailoring ATS scores are directly comparable; postings beyond that cap fall back to a lighter title-only estimate, clearly marked "EST." in the UI.
+- **Resume tailoring** — rewrites the candidate's master LaTeX resume for a specific job description, enforces a one-page layout (mechanical spacing adjustments first, LLM condensation as a last resort), and runs an automated "recruiter review" loop that scores 4 independent rubric criteria (ATS fit, impact metrics, truthfulness, conciseness) and can reject and retry the tailoring before it's shown to the user. The truthfulness check compares against the candidate's full original experience/project bullets (not just company+role), so real skills mentioned only in bullet text aren't flagged as fabricated.
 - **Cover letter generation** — produced alongside the tailored resume.
-- **Job discovery** — searches LinkedIn and Indeed for postings matching the candidate's resume, dedupes, scores, and ranks them.
+- **Job discovery** — searches LinkedIn and Indeed for postings matching the candidate's resume, dedupes, ranks by a lightweight title-based pre-score, fetches the real job description for the top matches (shared Playwright browser instance, bounded concurrency), and scores them with the same ATS engine used elsewhere.
 - **Export to Overleaf** — one-click export of the tailored (or original) resume as a LaTeX project opened directly in Overleaf.
 - **Google OAuth login** — with a guest mode and per-browser guest token for unauthenticated use.
-- **Multi-provider LLM support** — Gemini (default), Anthropic Claude, Groq, or OpenRouter, selected automatically from the shape of a user-supplied API key, with automatic model fallback and 429/rate-limit backoff.
+- **Multi-provider LLM support** — Gemini (default), Anthropic Claude, Groq, or OpenRouter, selected automatically from the shape of a user-supplied API key, with automatic model fallback, a pinned low temperature across all providers for consistent scoring, and jittered 429/rate-limit backoff.
 
 ## Architecture
 
@@ -31,7 +31,9 @@ backend/
     resume_generator.py  Structured JSON -> PDF (Jinja2 + Playwright), used for autofill uploads
     auth.py                Supabase-backed users/sessions + Google OAuth
     log_queue.py          Thread-safe log relay for streaming LLM progress to the client
-  utils/latex_utils.py  LaTeX post-processing/hotfixes and JSON->LaTeX generation
+  utils/
+    latex_utils.py       LaTeX post-processing/hotfixes and JSON->LaTeX generation
+    ssl_utils.py           Shared certifi-backed verified TLS context for outbound HTTPS calls
 ```
 
 The backend streams progress (NDJSON) to the frontend for long-running operations (job analysis, tailoring, job search) so the UI can show a live log.
@@ -109,3 +111,5 @@ The Dockerfile builds the frontend, then serves the built static assets directly
 - Uploaded files and generated output live in `backend/uploads/` and `backend/output/`, which are purged on startup and periodically (every 30 minutes) to avoid unbounded growth on long-running deployments.
 - LinkedIn/Indeed job search relies on scraping (no official API), so selectors may need maintenance if those sites change their markup.
 - The autofill agent opens a real, visible browser window and persists its session in `backend/user_data/` so logins to job sites/portals survive across runs.
+- `/scrape_job`, `/search_matching_jobs`, and `/apply` are per-IP rate limited (in-memory, single-process) since each triggers a Playwright browser launch and/or LLM call chain.
+- All outbound HTTPS calls use a shared certifi-backed verified TLS context (`utils/ssl_utils.py`) rather than skipping certificate verification, with one narrow, logged fallback for the Overleaf export upload (tmpfiles.org) to accommodate a known certificate issue on that specific host.
