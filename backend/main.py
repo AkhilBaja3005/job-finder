@@ -1214,12 +1214,22 @@ def upload_zip_to_tmpfiles(latex_code: str, candidate_name: str = "", job_title:
     # trade-off scoped to this one call site rather than a blanket policy.
     try:
         with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=30) as response:
-            resp_data = json.loads(response.read().decode('utf-8'))
+            resp_body = response.read().decode('utf-8')
     except URLError as e:
         print(f"[Overleaf ZIP Export] Verified TLS failed for tmpfiles.org ({e}); retrying with an unverified context for this known-quirky host.")
         with urllib.request.urlopen(req, context=ssl._create_unverified_context(), timeout=30) as response:
-            resp_data = json.loads(response.read().decode('utf-8'))
-        
+            resp_body = response.read().decode('utf-8')
+
+    try:
+        resp_data = json.loads(resp_body)
+    except json.JSONDecodeError:
+        # tmpfiles.org (or a network intermediary between us and it, e.g. a
+        # proxy/DNS sinkhole in some sandboxed environments) returned a
+        # non-JSON page instead of the expected upload response — surface the
+        # actual response body so this is diagnosable rather than a bare
+        # "Expecting value" JSONDecodeError.
+        raise Exception(f"tmpfiles.org returned a non-JSON response (network issue or the service is down): {resp_body[:300]!r}")
+
     if resp_data.get("status") == "success":
         upload_url = resp_data["data"]["url"]
         # Convert to raw download link
