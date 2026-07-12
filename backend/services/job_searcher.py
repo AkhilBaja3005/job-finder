@@ -216,7 +216,11 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 # ─── Combined Aggregation & Scoring Pipeline ──────────────────────────────
 
 DISCOVERY_JD_FETCH_CAP = 30
-DISCOVERY_FETCH_CONCURRENCY = 2
+# Dynamically scale concurrency based on the hosting environment:
+# Render (and similar container hosts) limit RAM to 512MB, so we default to a safe concurrency of 2.
+# Local runs default to 5 for maximum performance.
+IS_RENDER = os.getenv("RENDER") is not None
+DISCOVERY_FETCH_CONCURRENCY = 2 if IS_RENDER else 5
 
 
 def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:
