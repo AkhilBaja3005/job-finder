@@ -225,9 +225,10 @@ try:
     if env_concurrency is not None:
         DISCOVERY_FETCH_CONCURRENCY = int(env_concurrency)
     else:
-        # Check if running in Render's container system (which Render injects automatically)
-        IS_RENDER = os.getenv("RENDER") is not None
-        DISCOVERY_FETCH_CONCURRENCY = 2 if IS_RENDER else 5
+        # Detect if running locally by checking the FRONTEND_URL value
+        frontend_url = os.getenv("FRONTEND_URL", "")
+        is_local = "localhost" in frontend_url or "127.0.0.1" in frontend_url
+        DISCOVERY_FETCH_CONCURRENCY = 5 if is_local else 2
 except Exception:
     DISCOVERY_FETCH_CONCURRENCY = 5
 
