@@ -216,7 +216,21 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 # ─── Combined Aggregation & Scoring Pipeline ──────────────────────────────
 
 DISCOVERY_JD_FETCH_CAP = 30
-DISCOVERY_FETCH_CONCURRENCY = 5
+# Dynamically scale concurrency based on the hosting environment:
+# - We check for an explicit override environment variable SCRAPER_CONCURRENCY
+# - Render automatically injects "RENDER" into all web service environments under the hood.
+# - If none is found, we fall back to 5 for local runs.
+try:
+    env_concurrency = os.getenv("SCRAPER_CONCURRENCY")
+    if env_concurrency is not None:
+        DISCOVERY_FETCH_CONCURRENCY = int(env_concurrency)
+    else:
+        # Detect if running locally by checking the FRONTEND_URL value
+        frontend_url = os.getenv("FRONTEND_URL", "")
+        is_local = "localhost" in frontend_url or "127.0.0.1" in frontend_url
+        DISCOVERY_FETCH_CONCURRENCY = 5 if is_local else 2
+except Exception:
+    DISCOVERY_FETCH_CONCURRENCY = 5
 
 
 def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:
