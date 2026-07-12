@@ -216,7 +216,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 # ─── Combined Aggregation & Scoring Pipeline ──────────────────────────────
 
 DISCOVERY_JD_FETCH_CAP = 30
-DISCOVERY_FETCH_CONCURRENCY = 5
+DISCOVERY_FETCH_CONCURRENCY = 2
 
 
 def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:

@@ -148,11 +148,16 @@ async def scrape_job_description(url: str, browser=None) -> dict:
             "description": f"Failed to retrieve job details automatically. Error: {str(e)}"
         }
     finally:
+        await page.close()
         await context.close()
         if own_browser is not None:
             await own_browser.close()
         if own_playwright is not None:
             await own_playwright.stop()
+        
+        # Explicitly invoke garbage collection to clear unneeded browser context resources
+        import gc
+        gc.collect()
 
 if __name__ == "__main__":
     # Test run
