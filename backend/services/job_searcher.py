@@ -217,10 +217,19 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 
 DISCOVERY_JD_FETCH_CAP = 30
 # Dynamically scale concurrency based on the hosting environment:
-# Render (and similar container hosts) limit RAM to 512MB, so we default to a safe concurrency of 2.
-# Local runs default to 5 for maximum performance.
-IS_RENDER = os.getenv("RENDER") is not None
-DISCOVERY_FETCH_CONCURRENCY = 2 if IS_RENDER else 5
+# - We check for an explicit override environment variable SCRAPER_CONCURRENCY
+# - Render automatically injects "RENDER" into all web service environments under the hood.
+# - If none is found, we fall back to 5 for local runs.
+try:
+    env_concurrency = os.getenv("SCRAPER_CONCURRENCY")
+    if env_concurrency is not None:
+        DISCOVERY_FETCH_CONCURRENCY = int(env_concurrency)
+    else:
+        # Check if running in Render's container system (which Render injects automatically)
+        IS_RENDER = os.getenv("RENDER") is not None
+        DISCOVERY_FETCH_CONCURRENCY = 2 if IS_RENDER else 5
+except Exception:
+    DISCOVERY_FETCH_CONCURRENCY = 5
 
 
 def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:
