@@ -228,7 +228,7 @@ try:
         # Detect if running locally by checking the FRONTEND_URL value
         frontend_url = os.getenv("FRONTEND_URL", "")
         is_local = "localhost" in frontend_url or "127.0.0.1" in frontend_url
-        DISCOVERY_FETCH_CONCURRENCY = 5 if is_local else 2
+        DISCOVERY_FETCH_CONCURRENCY = 5 if is_local else 1
 except Exception:
     DISCOVERY_FETCH_CONCURRENCY = 5
 
