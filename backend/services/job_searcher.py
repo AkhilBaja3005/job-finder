@@ -228,7 +228,8 @@ try:
         # Detect if running locally by checking the FRONTEND_URL value
         frontend_url = os.getenv("FRONTEND_URL", "")
         is_local = "localhost" in frontend_url or "127.0.0.1" in frontend_url
-        DISCOVERY_FETCH_CONCURRENCY = 5 if is_local else 2
+        # If not local (i.e. on Render), default to 0 to completely disable Playwright JD fetching during discovery
+        DISCOVERY_FETCH_CONCURRENCY = 5 if is_local else 0
 except Exception:
     DISCOVERY_FETCH_CONCURRENCY = 5
 
@@ -434,7 +435,7 @@ async def find_matching_jobs(
     title_only_batch = deduped_jobs[DISCOVERY_JD_FETCH_CAP:]
 
     scored_jobs = []
-    if jd_scored_batch:
+    if jd_scored_batch and DISCOVERY_FETCH_CONCURRENCY > 0:
         yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for top {len(jd_scored_batch)} matches to compute accurate ATS scores..."}) + "\n"
         # pyrefly: ignore [missing-import]
         from playwright.async_api import async_playwright
@@ -448,6 +449,9 @@ async def find_matching_jobs(
             finally:
                 await browser.close()
         scored_jobs.extend([r for r in results if r is not None])
+    elif jd_scored_batch:
+        # If concurrency is 0 (production/Render), treat all matches as title-only estimates to prevent memory crash
+        title_only_batch = jd_scored_batch + title_only_batch
 
     if title_only_batch:
         yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + "\n"
