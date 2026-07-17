@@ -338,8 +338,12 @@ Focus ONLY on:
 """
 
     bullet_counts = {
-        e.get("company", f"job_{i}"): len(e.get("description" or []))
+        e.get("company", f"job_{i}"): len(e.get("description", []))
         for i, e in enumerate(resume_data.get("experience", []))
+    }
+    project_bullet_counts = {
+        p.get("title", f"project_{i}"): len(p.get("description", []))
+        for i, p in enumerate(resume_data.get("projects", []))
     }
     missing_skills_list = ats.missing_skills or []
     cover_prompt = f"""You are an expert career writer.
@@ -354,6 +358,8 @@ RULES:
 - Cover letter: under 300 words, specific to this JD, no generic filler.
 - suggested_resume_updates.experience: MUST have bullet lists matching these counts: {json.dumps(bullet_counts)}
   Do NOT merge, delete, or add bullets.
+- suggested_resume_updates.projects: MUST have bullet lists matching these counts: {json.dumps(project_bullet_counts)}
+  Do NOT merge, delete, or add bullets. Only include this field if the candidate has projects.
 - TRUTHFULNESS: Never claim security clearances, certifications, or specialized regulatory compliance standards if the candidate does not possess them in their profile. Emphasize transferable skills honestly. Never exaggerate the candidate's total years of experience history in the summary or cover letter.
 - suggested_resume_updates.skills: Updated skills list naturally integrating missing skills (only include adjacent skills that are reasonable extensions of their background, do not fabricate unrelated expert skills).
 """

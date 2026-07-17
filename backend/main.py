@@ -18,7 +18,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Requ
 # pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
 # pyrefly: ignore [missing-import]
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse, Response
 # pyrefly: ignore [missing-import]
 # Mount static files for hosting the built frontend as part of the same service
 from fastapi.staticfiles import StaticFiles
@@ -43,6 +43,7 @@ from services.llm_agent import analyze_job_fit, review_tailored_resume, tailor_l
 from services.resume_generator import generate_pdf_resume
 from services.autofill_agent import autofill_job_application
 from services.job_searcher import find_matching_jobs
+from services.application_tracker import record_application, list_applications
 from services.auth import (
     create_or_get_user,
     create_session,
@@ -54,6 +55,7 @@ from services.auth import (
 from services.log_queue import LLMClientLogQueue
 from utils.latex_utils import extract_latex_command, apply_latex_hotfix, generate_latex_from_json
 from utils.ssl_utils import SSL_CONTEXT
+from utils.ttl_cache import TTLCache
 # --- Background Task to Clean Files Older Than 1 Hour (Runs every 30 mins) ---
 from contextlib import asynccontextmanager
 
@@ -83,7 +85,7 @@ async def auto_clean_expired_files(force_startup_purge: bool = False):
         # 1. Clean output folder
         if os.path.exists(OUTPUT_DIR):
             for filename in os.listdir(OUTPUT_DIR):
-                if filename == "resume_state.json":
+                if filename == "resume_state.json" or filename.startswith("application_history_"):
                     continue
                 file_path = os.path.join(OUTPUT_DIR, filename)
                 try:
@@ -370,6 +372,8 @@ class JobAnalysisRequest(BaseModel):
 class ApplyRequest(BaseModel):
     job_url: str
     direct_mode: bool = False
+    job_title: Optional[str] = None
+    company: Optional[str] = None
 
 @app.post("/upload_resume")
 async def upload_resume(file: UploadFile = File(...), authorization: Optional[str] = Header(None)):
@@ -499,9 +503,8 @@ def _extract_company_from_jd(jd_text: str) -> str:
                 return name
     return ""
 
-# In-memory analysis cache: keys are MD5(token + job_title + jd_text), values are {"analysis": AnalysisResponse_model_dump, "timestamp": float}
-_analysis_cache: dict[str, dict] = {}
-_cache_lock = threading.Lock()
+# In-memory analysis cache: keys are MD5(token + job_title + jd_text), values are AnalysisResponse_model_dump. 1hr TTL, bounded size.
+_analysis_cache = TTLCache(ttl_seconds=3600, max_size=1000)
 
 # ─── Per-IP rate limiting for costly endpoints ─────────────────────────────
 # Simple in-memory sliding-window limiter: no external deps needed for a
@@ -531,44 +534,22 @@ def _check_rate_limit(request: Request, key_prefix: str, max_requests: int, wind
                 if not any(now - t < window_seconds for t in _rate_limit_hits.get(k, [])):
                     _rate_limit_hits.pop(k, None)
 
-# In-memory job search TTL cache: keys are (keywords, location, timeframe), values are (timestamp, jobs_list)
-_job_search_cache: dict[tuple, tuple] = {}
-_job_cache_lock = threading.Lock()
-JOB_SEARCH_CACHE_TTL = 300  # 5 minutes
+# In-memory job search cache: keys are (keywords, location, timeframe), values are jobs_list. 5 min TTL, bounded size.
+_job_search_cache = TTLCache(ttl_seconds=300, max_size=500)
 
 def get_cached_analysis(token: str, job_title: str, jd_text: str) -> Optional[dict]:
     if not jd_text:
         return None
     key_src = f"{token or 'guest'}:{job_title}:{jd_text}"
     key = hashlib.md5(key_src.encode("utf-8")).hexdigest()
-    with _cache_lock:
-        entry = _analysis_cache.get(key)
-        if entry:
-            # 1 hour expiration limit
-            if time.time() - entry["timestamp"] < 3600:
-                return entry["analysis"]
-            else:
-                _analysis_cache.pop(key, None)
-    return None
+    return _analysis_cache.get(key)
 
 def set_cached_analysis(token: str, job_title: str, jd_text: str, analysis: dict):
     if not jd_text:
         return
     key_src = f"{token or 'guest'}:{job_title}:{jd_text}"
     key = hashlib.md5(key_src.encode("utf-8")).hexdigest()
-    with _cache_lock:
-        # FIX #8: opportunistically prune expired entries whenever we write, so the
-        # cache doesn't grow unbounded over the life of a long-running process
-        # (previously expired entries were only ever removed if someone happened
-        # to read that exact key again after expiry).
-        now = time.time()
-        expired = [k for k, v in _analysis_cache.items() if now - v["timestamp"] >= 3600]
-        for k in expired:
-            _analysis_cache.pop(k, None)
-        _analysis_cache[key] = {
-            "analysis": analysis,
-            "timestamp": now
-        }
+    _analysis_cache.set(key, analysis)
 
 class RunContext:
     def __init__(self, user_token: Optional[str], job_title: str):
@@ -614,6 +595,21 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
             if request.skip_tailoring:
                 cached = dict(cached)
                 cached["latex_code"] = ""
+            elif not request.skip_tailoring:
+                # A cache hit on the full-tailoring path is a completed tailoring
+                # result exactly like the live path's final yield below — record it
+                # the same way, or repeat visits to an already-cached job silently
+                # never show up in history.
+                try:
+                    record_application(token, {
+                        "job_title": request.job_title,
+                        "company": _extract_company_from_jd(request.job_description),
+                        "job_url": request.job_url or "",
+                        "score": cached.get("match_analysis", {}).get("overall_score"),
+                        "status": "tailored",
+                    })
+                except Exception as hist_err:
+                    print(f"[analyze_job] Failed to record application history (cache hit): {hist_err}")
             async def cached_event_generator():
                 yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
                 yield json.dumps({
@@ -654,6 +650,17 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                     if request.skip_tailoring:
                         cached = dict(cached)
                         cached["latex_code"] = ""
+                    elif not request.skip_tailoring:
+                        try:
+                            record_application(token, {
+                                "job_title": job_title,
+                                "company": _extract_company_from_jd(jd_text),
+                                "job_url": request.job_url or "",
+                                "score": cached.get("match_analysis", {}).get("overall_score"),
+                                "status": "tailored",
+                            })
+                        except Exception as hist_err:
+                            print(f"[analyze_job] Failed to record application history (cache hit): {hist_err}")
                     yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
                     yield json.dumps({
                         "type": "result",
@@ -880,6 +887,16 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
             dumped = analysis.model_dump()
             set_cached_analysis(token, job_title, jd_text, dumped)
             company_name = _extract_company_from_jd(jd_text)
+            try:
+                record_application(token, {
+                    "job_title": job_title,
+                    "company": company_name,
+                    "job_url": request.job_url or "",
+                    "score": dumped.get("match_analysis", {}).get("overall_score"),
+                    "status": "tailored",
+                })
+            except Exception as hist_err:
+                print(f"[analyze_job] Failed to record application history: {hist_err}")
             yield json.dumps({
                 "type": "result",
                 "job_title": job_title,
@@ -925,6 +942,17 @@ async def download_latex(request: LatexDownloadRequest, authorization: Optional[
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+class CoverLetterDownloadRequest(BaseModel):
+    cover_letter: str
+
+@app.post("/download_cover_letter")
+async def download_cover_letter(request: CoverLetterDownloadRequest):
+    return Response(
+        content=request.cover_letter,
+        media_type="text/plain",
+        headers={"Content-Disposition": "attachment; filename=cover_letter.txt"}
+    )
 
 class CompileLatexRequest(BaseModel):
     latex_code: str
@@ -982,10 +1010,8 @@ async def clear_cache(authorization: Optional[str] = Header(None)):
         
     try:
         # 1. Clear in-memory caches
-        with _cache_lock:
-            _analysis_cache.clear()
-        with _job_cache_lock:
-            _job_search_cache.clear()
+        _analysis_cache.clear()
+        _job_search_cache.clear()
             
         # 2. Clean temporary output files
         if os.path.exists(OUTPUT_DIR):
@@ -1095,9 +1121,21 @@ async def apply(request: ApplyRequest, http_request: Request, authorization: Opt
                 url=request.job_url,
                 resume_data=session_resume_data,
                 resume_pdf_path=os.path.abspath(pdf_path),
-                interactive_mode=not request.direct_mode
+                interactive_mode=not request.direct_mode,
+                user_token=token
             )
             update_task_status(task_id, "completed", "Job application form auto-filled successfully!")
+            try:
+                record_application(token, {
+                    "job_title": request.job_title or "",
+                    "company": request.company or "",
+                    "job_url": request.job_url,
+                    # Direct mode submits the application; interactive mode only autofills
+                    # it for the user to review and submit themselves in the opened browser.
+                    "status": "applied" if request.direct_mode else "autofilled",
+                })
+            except Exception as hist_err:
+                print(f"[apply] Failed to record application history: {hist_err}")
         except Exception as ex:
             update_task_status(task_id, "failed", f"Autofill error: {str(ex)}")
         finally:
@@ -1415,6 +1453,13 @@ async def user_resume(authorization: Optional[str] = Header(None)):
     session = get_session_data(token)
     return {"data": session.get("data"), "path": session.get("path")}
 
+@app.get("/applications")
+async def get_applications(authorization: Optional[str] = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+    return {"applications": list_applications(token)}
+
 class ScrapeRequest(BaseModel):
     url: str
 
@@ -1458,16 +1503,13 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
     
     # Check TTL job search cache first
     cache_key = (request.keywords or "", request.location or "Remote", request.timeframe or "48h")
-    with _job_cache_lock:
-        cached_entry = _job_search_cache.get(cache_key)
-        if cached_entry:
-            cached_ts, cached_jobs = cached_entry
-            if time.time() - cached_ts < JOB_SEARCH_CACHE_TTL:
-                async def cached_job_stream():
-                    yield json.dumps({"type": "log", "message": "⚡ Loaded job results from cache (< 5 min old)!"}) + "\n"
-                    yield json.dumps({"type": "result", "jobs": cached_jobs}) + "\n"
-                return StreamingResponse(cached_job_stream(), media_type="application/x-ndjson")
-    
+    cached_jobs = _job_search_cache.get(cache_key)
+    if cached_jobs is not None:
+        async def cached_job_stream():
+            yield json.dumps({"type": "log", "message": "⚡ Loaded job results from cache (< 5 min old)!"}) + "\n"
+            yield json.dumps({"type": "result", "jobs": cached_jobs}) + "\n"
+        return StreamingResponse(cached_job_stream(), media_type="application/x-ndjson")
+
     try:
         # Wrap the generator to also cache results on completion
         async def caching_job_stream():
@@ -1484,8 +1526,7 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                     parsed = json.loads(chunk.strip())
                     if parsed.get("type") == "result" and parsed.get("jobs"):
                         all_jobs = parsed["jobs"]
-                        with _job_cache_lock:
-                            _job_search_cache[cache_key] = (time.time(), all_jobs)
+                        _job_search_cache.set(cache_key, all_jobs)
                 except Exception:
                     pass
                 yield chunk

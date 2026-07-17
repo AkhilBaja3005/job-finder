@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import asyncio
 # pyrefly: ignore [missing-import]
 from playwright.async_api import async_playwright
@@ -7,6 +8,16 @@ from playwright.async_api import async_playwright
 from google import genai
 # pyrefly: ignore [missing-import]
 from google.genai import types
+from typing import Optional
+
+
+def _safe_user_data_key(token: Optional[str]) -> str:
+    """Mirrors main.py's _safe_key(): turns a token (or 'guest') into a
+    filesystem-safe key with no path separators, so each user/guest gets an
+    isolated Playwright browser profile directory instead of sharing one."""
+    key = token or "guest"
+    key = re.sub(r'[^a-zA-Z0-9_-]', '', key)[:40]
+    return key or "guest"
 
 def get_answer_from_llm(question: str, field_context: str, resume_data: dict) -> str:
     """
@@ -164,13 +175,17 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
         except Exception as e:
             print(f"Skipping input field due to error: {e}")
 
-async def autofill_job_application(url: str, resume_data: dict, resume_pdf_path: str, interactive_mode: bool = True):
+async def autofill_job_application(url: str, resume_data: dict, resume_pdf_path: str, interactive_mode: bool = True, user_token: Optional[str] = None):
     """
     Launches a headed browser with a persistent user data directory (keeping you logged in).
     Continuously monitors the application page, dynamically filling out forms step-by-step.
+
+    The browser profile is scoped per-user (via user_token) rather than a single shared
+    "./user_data" directory, so one user's/guest's login cookies for job sites (LinkedIn,
+    Indeed, Greenhouse/Lever portals, etc.) can't leak into another user's autofill session.
     """
     async with async_playwright() as p:
-        user_data_dir = os.path.abspath("./user_data")
+        user_data_dir = os.path.abspath(f"./user_data/{_safe_user_data_key(user_token)}")
         
         context = await p.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
