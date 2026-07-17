@@ -105,9 +105,12 @@ function App() {
   const [searchKeywords, setSearchKeywords] = useState('');
   const [searchTimeframe, setSearchTimeframe] = useState('48h'); // '24h' | '48h' | '1w' | '1m'
   const [isDiscoveryView, setIsDiscoveryView] = useState(false);
-  const [dashboardMode, setDashboardMode] = useState('tailor'); // 'tailor' | 'discover'
+  const [dashboardMode, setDashboardMode] = useState('tailor'); // 'tailor' | 'discover' | 'history'
   const [searchSortMode, setSearchSortMode] = useState('overall'); // 'overall' | 'role_fit' | 'time'
   const [searchPage, setSearchPage] = useState(1);
+
+  const [applicationHistory, setApplicationHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const [user, setUser] = useState(null);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
@@ -507,6 +510,21 @@ function App() {
                 description: finalDescription,
               };
             }),
+            projects: (baseResume.projects || []).map((proj, idx) => {
+              const tailoredProject = updates.projects?.[idx];
+
+              let finalDescription = proj.description || [];
+              if (Array.isArray(tailoredProject)) {
+                finalDescription = tailoredProject;
+              } else if (tailoredProject && tailoredProject.description) {
+                finalDescription = tailoredProject.description;
+              }
+
+              return {
+                ...proj,
+                description: finalDescription,
+              };
+            }),
           };
 
           setTailoredResumeData(tailored);
@@ -603,6 +621,13 @@ function App() {
                 description: Array.isArray(tailoredExperience) ? tailoredExperience : (tailoredExperience && tailoredExperience.description) || (job || {}).description || [],
               };
             }),
+            projects: ((resumeData || {}).projects || []).map((proj, idx) => {
+              const tailoredProject = updates.projects && updates.projects[idx];
+              return {
+                ...proj,
+                description: Array.isArray(tailoredProject) ? tailoredProject : (tailoredProject && tailoredProject.description) || (proj || {}).description || [],
+              };
+            }),
           };
           setTailoredResumeData(tailored);
           setStatusMessage('LaTeX tailored resume and metrics prepared successfully!');
@@ -614,6 +639,23 @@ function App() {
       setStatusLogs((prev) => [...prev, { message: `❌ Pipeline Interrupted: ${error.message}`, ts: nowTs() }]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/applications`, {
+        headers: { 'Authorization': `Bearer ${getAuthHeader()}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setApplicationHistory(data.applications || []);
+      }
+    } catch (err) {
+      console.error('Failed to load application history', err);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -755,6 +797,29 @@ function App() {
 
 
 
+  const handleDownloadCoverLetter = async () => {
+    if (!analysisResult?.cover_letter) return;
+    try {
+      const response = await fetch(`${API_BASE}/download_cover_letter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cover_letter: analysisResult.cover_letter }),
+      });
+      if (!response.ok) throw new Error('Failed to prepare cover letter download');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'cover_letter.txt';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast(`❌ ${err.message}`, 'error');
+    }
+  };
+
   const openInOverleaf = async () => {
     if (!analysisResult || !analysisResult.latex_code) return;
     setLoading(true);
@@ -811,6 +876,8 @@ function App() {
         body: JSON.stringify({
           job_url: jobUrl,
           direct_mode: directMode,
+          job_title: jobTitle || '',
+          company: company || '',
         }),
       });
 
@@ -1107,6 +1174,28 @@ function App() {
               >
                 🔍 Discover Jobs
               </button>
+              <button
+                className={`mode-btn ${dashboardMode === 'history' ? 'active' : ''}`}
+                style={{
+                  flex: 1,
+                  padding: '8px',
+                  fontSize: '0.82rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: 'none',
+                  background: dashboardMode === 'history' ? 'var(--accent-primary)' : 'transparent',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onClick={() => {
+                  setDashboardMode('history');
+                  setIsDiscoveryView(false);
+                  handleFetchHistory();
+                }}
+              >
+                🕘 History
+              </button>
             </div>
 
             {dashboardMode === 'tailor' && (
@@ -1211,17 +1300,35 @@ function App() {
                 </div>
               </>
             )}
+            {dashboardMode === 'history' && (
+              <>
+                <div className="section-label">Application History</div>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  A record of jobs you've tailored a resume for or applied to. Kept per-account (or per-guest browser).
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  style={{ width: '100%', marginTop: '4px' }}
+                  onClick={handleFetchHistory}
+                  disabled={historyLoading}
+                >
+                  {historyLoading ? '⏳ Refreshing...' : '🔄 Refresh History'}
+                </button>
+              </>
+            )}
           </div>
 
           {/* Right Analysis Panel */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ marginBottom: 0 }}>
-                {isDiscoveryView
+                {dashboardMode === 'history'
+                  ? 'Application History'
+                  : isDiscoveryView
                   ? `Job Discoveries (${searchTimeframe === '24h' ? 'Last 24h' : searchTimeframe === '48h' ? 'Last 48h' : searchTimeframe === '1w' ? 'Last 1 Week' : 'Last 1 Month'})`
                   : 'Analysis & Preview'}
               </h2>
-              {(analysisResult || isDiscoveryView) && (
+              {dashboardMode !== 'history' && (analysisResult || isDiscoveryView) && (
                 <button
                   className="btn btn-secondary"
                   style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '6px' }}
@@ -1238,7 +1345,53 @@ function App() {
               )}
             </div>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            {isDiscoveryView && discovering ? (
+            {dashboardMode === 'history' ? (
+              historyLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: '700' }}>
+                  <svg style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" style={{ opacity: 0.25 }} />
+                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>Loading history…</span>
+                </div>
+              ) : applicationHistory.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🕘</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>No history yet</div>
+                  <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>Tailor a resume or apply to a job to see it recorded here.</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '560px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {applicationHistory.map((entry, idx) => {
+                    const statusColor = entry.status === 'applied' ? '#10B981' : entry.status === 'autofilled' ? '#6366F1' : '#a5b4fc';
+                    const statusLabel = entry.status === 'applied' ? 'Applied' : entry.status === 'autofilled' ? 'Autofilled' : 'Tailored';
+                    const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
+                    return (
+                      <div key={idx} className="card" style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>{entry.job_title || 'Untitled Role'}</div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>{date}</div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                            <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '999px', background: `${statusColor}22`, color: statusColor, fontWeight: 700 }}>
+                              {statusLabel}
+                            </span>
+                            {typeof entry.score === 'number' && (
+                              <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#fff' }}>{entry.score}% match</span>
+                            )}
+                            {entry.job_url && (
+                              <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)' }}>View Post →</a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : isDiscoveryView && discovering ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: '700' }}>
                   <svg style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
@@ -1874,6 +2027,23 @@ function App() {
                                 ))}
                               </>
                             )}
+                            {((tailoredResumeData || {}).projects || []).length > 0 && (
+                              <>
+                                <div className="resume-section-title">Projects</div>
+                                {((tailoredResumeData || {}).projects || []).map((proj, idx) => (
+                                  <div key={idx} className="resume-exp-item">
+                                    <div className="resume-exp-header">
+                                      <span className="resume-exp-role">{proj.title}</span>
+                                    </div>
+                                    <ul className="resume-exp-bullets">
+                                      {(proj.description || []).map((bullet, bidx) => (
+                                        <li key={bidx}>{bullet}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ))}
+                              </>
+                            )}
                           </div>
                         </div>
                       ) : (
@@ -1898,17 +2068,26 @@ function App() {
                     <div className="workspace-panel">
                       <div className="panel-toolbar">
                         <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Generated Cover Letter</h3>
-                        <button
-                          className="btn btn-secondary"
-                          style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
-                          onClick={() => {
-                            navigator.clipboard.writeText(analysisResult.cover_letter || '');
-                            setCoverLetterCopied(true);
-                            setTimeout(() => setCoverLetterCopied(false), 2000);
-                          }}
-                        >
-                          {coverLetterCopied ? '✓ Copied!' : '📋 Copy'}
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            className="btn btn-secondary"
+                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                            onClick={handleDownloadCoverLetter}
+                          >
+                            ⬇️ Download
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                            onClick={() => {
+                              navigator.clipboard.writeText(analysisResult.cover_letter || '');
+                              setCoverLetterCopied(true);
+                              setTimeout(() => setCoverLetterCopied(false), 2000);
+                            }}
+                          >
+                            {coverLetterCopied ? '✓ Copied!' : '📋 Copy'}
+                          </button>
+                        </div>
                       </div>
                       <div className="panel-content" style={{ whiteSpace: 'pre-wrap' }}>
                         {analysisResult.cover_letter}
