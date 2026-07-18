@@ -17,6 +17,16 @@ const OutreachModal = ({
   const [editedValues, setEditedValues] = useState({});
   const [copied, setCopied] = useState(false);
 
+  // Lock body scroll when modal is active
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   // Use messageData directly, with editedValues as overrides
@@ -333,10 +343,11 @@ const OutreachModal = ({
           bottom: 0;
           background: rgba(0, 0, 0, 0.7);
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: center;
           z-index: 1000;
-          padding: 20px;
+          padding: 40px 20px;
+          overflow-y: auto;
         }
 
         .modal-content {
@@ -345,9 +356,8 @@ const OutreachModal = ({
           border-radius: 20px;
           max-width: 800px;
           width: 100%;
-          max-height: 90vh;
-          overflow-y: auto;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+          margin-bottom: 40px;
         }
 
         .outreach-modal {
