@@ -498,7 +498,7 @@ async def find_matching_jobs(
                     "location": job.location,
                     "url": job.url,
                     "source": "Indeed",
-                    "posted_date": job.posted_date,
+                    "posted_date": job.post_date_raw,
                     "score": 0,  # Not scored - external source
                     "estimated": True,
                     "reason": "External source (Indeed) - not scored by our ATS engine"
