@@ -139,20 +139,23 @@ async def scrape_job_description(url: str, browser=None) -> dict:
             return {
                 "title": cleaned_info.get("title", title) or title,
                 "url": url,
-                "description": description
+                "description": description,
+                "html": html
             }
         except Exception as e:
             print(f"Gemini cleaning failed, returning raw text: {e}")
             return {
                 "title": title,
                 "url": url,
-                "description": cleaned_text
+                "description": cleaned_text,
+                "html": html
             }
     except Exception as e:
         return {
             "title": "Failed to Parse",
             "url": url,
-            "description": f"Failed to retrieve job details automatically. Error: {str(e)}"
+            "description": f"Failed to retrieve job details automatically. Error: {str(e)}",
+            "html": ""
         }
     finally:
         await page.close()
