@@ -11,9 +11,9 @@
   --bg-primary: #0A0D14;
   --bg-secondary: rgba(16, 22, 35, 0.65);
   --border-color: rgba(255, 255, 255, 0.08);
-  --accent-primary: #4F46E5;
-  --accent-gradient: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
-  --accent-glow: 0 0 20px rgba(99, 102, 241, 0.3);
+  --accent-primary: #2563EB;
+  --accent-gradient: linear-gradient(135deg, #38BDF8 0%, #2563EB 100%);
+  --accent-glow: 0 0 20px rgba(56, 189, 248, 0.3);
   --accent-green: #10B981;
   --accent-red: #EF4444;
   --accent-amber: #F59E0B;
@@ -63,7 +63,7 @@ body::before {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background-image:
-    radial-gradient(circle at 12% 18%, rgba(99, 102, 241, 0.12) 0%, transparent 45%),
+    radial-gradient(circle at 12% 18%, rgba(56, 189, 248, 0.12) 0%, transparent 45%),
     radial-gradient(circle at 85% 75%, rgba(16, 185, 129, 0.08) 0%, transparent 40%),
     linear-gradient(rgba(255, 255, 255, 0.007) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.007) 1px, transparent 1px);
@@ -100,7 +100,7 @@ h1.title {
   font-size: 1.8rem;
   font-weight: 800;
   letter-spacing: -0.03em;
-  background: linear-gradient(135deg, #FFFFFF 20%, #A5B4FC 100%);
+  background: linear-gradient(135deg, #FFFFFF 20%, #7DD3FC 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   display: flex;
@@ -116,13 +116,13 @@ h1.title {
   border-radius: 20px;
   padding: 28px;
   box-shadow: var(--glass-shadow);
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.4s ease;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(99, 102, 241, 0.3);
-  box-shadow: 0 20px 40px -15px rgba(99, 102, 241, 0.15), var(--glass-shadow);
+  transform: translateY(-2px);
+  border-color: rgba(56, 189, 248, 0.3);
+  box-shadow: 0 20px 40px -15px rgba(56, 189, 248, 0.15), var(--glass-shadow);
 }
 
 h2 {
@@ -169,9 +169,9 @@ input, textarea, select {
 
 input:focus, textarea:focus, select:focus {
   outline: none;
-  border-color: #6366F1;
-  background: rgba(99, 102, 241, 0.03);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  border-color: #38BDF8;
+  background: rgba(56, 189, 248, 0.03);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
 }
 
 /* ─── Buttons ────────────────────────────────────────────── */
@@ -240,6 +240,10 @@ input:focus, textarea:focus, select:focus {
   box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
 }
 
+.btn-overleaf:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
 .btn-overleaf:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -295,8 +299,8 @@ input:focus, textarea:focus, select:focus {
   width: 72px;
   height: 72px;
   border-radius: 20px;
-  background: linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(99,102,241,0.05) 100%);
-  border: 1px solid rgba(99,102,241,0.2);
+  background: linear-gradient(135deg, rgba(56,189,248,0.15) 0%, rgba(56,189,248,0.05) 100%);
+  border: 1px solid rgba(56,189,248,0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -341,7 +345,7 @@ input:focus, textarea:focus, select:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+  box-shadow: 0 4px 12px rgba(56,189,248,0.3);
 }
 
 .empty-step-label {
@@ -357,8 +361,8 @@ input:focus, textarea:focus, select:focus {
   gap: 12px;
   padding: 10px 16px;
   border-radius: 10px;
-  background: rgba(99,102,241,0.06);
-  border: 1px solid rgba(99,102,241,0.18);
+  background: rgba(56,189,248,0.06);
+  border: 1px solid rgba(56,189,248,0.18);
   margin-bottom: 18px;
   font-size: 0.88rem;
 }
@@ -373,8 +377,8 @@ input:focus, textarea:focus, select:focus {
 }
 
 .job-banner-role {
-  background: rgba(99,102,241,0.15);
-  color: #A5B4FC;
+  background: rgba(56,189,248,0.15);
+  color: #7DD3FC;
 }
 
 .job-banner-company {
@@ -383,6 +387,17 @@ input:focus, textarea:focus, select:focus {
 }
 
 /* ─── Score ring & bars ──────────────────────────────────── */
+/* Registering --percent as an animatable <number> custom property is what
+   makes the transition below actually interpolate the conic-gradient sweep
+   frame-by-frame, instead of the ring snapping straight to its final angle
+   (a plain custom property has no interpolable type, so a transition on it
+   is a no-op without this). */
+@property --percent {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
 .match-ring-container {
   display: flex;
   flex-direction: column;
@@ -401,6 +416,7 @@ input:focus, textarea:focus, select:focus {
   position: relative;
   box-shadow: 0 0 20px -5px var(--color);
   animation: scaleIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transition: --percent 1s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.5s ease;
 }
 
 .match-ring::before {
@@ -548,7 +564,7 @@ input:focus, textarea:focus, select:focus {
 .resume-preview-divider {
   border: none;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(99,102,241,0.5), transparent);
+  background: linear-gradient(90deg, transparent, rgba(56,189,248,0.5), transparent);
   margin: 14px 0 16px;
 }
 
@@ -557,11 +573,11 @@ input:focus, textarea:focus, select:focus {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #A5B4FC;
+  color: #7DD3FC;
   margin-bottom: 8px;
   margin-top: 18px;
   padding-bottom: 4px;
-  border-bottom: 1px solid rgba(99,102,241,0.2);
+  border-bottom: 1px solid rgba(56,189,248,0.2);
 }
 
 .resume-skills-grid {
@@ -573,11 +589,11 @@ input:focus, textarea:focus, select:focus {
 .resume-skill-chip {
   padding: 3px 10px;
   border-radius: 6px;
-  background: rgba(99,102,241,0.1);
+  background: rgba(56,189,248,0.1);
   color: #C7D2FE;
   font-size: 0.75rem;
   font-weight: 500;
-  border: 1px solid rgba(99,102,241,0.15);
+  border: 1px solid rgba(56,189,248,0.15);
 }
 
 .resume-exp-item {
@@ -643,7 +659,7 @@ input:focus, textarea:focus, select:focus {
 .mode-btn.active {
   background: var(--accent-gradient);
   color: #fff;
-  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 4px 10px rgba(56, 189, 248, 0.2);
 }
 
 /* ─── Pipeline log terminal ──────────────────────────────── */
@@ -724,7 +740,7 @@ input:focus, textarea:focus, select:focus {
   display: inline-block;
   width: 7px;
   height: 13px;
-  background: #6366F1;
+  background: #38BDF8;
   border-radius: 2px;
   margin-left: 4px;
   vertical-align: middle;
@@ -754,9 +770,9 @@ input:focus, textarea:focus, select:focus {
 }
 
 @keyframes pulseGlow {
-  0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
-  70% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(56, 189, 248, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
 }
 
 @keyframes barGrow {
@@ -772,6 +788,40 @@ input:focus, textarea:focus, select:focus {
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Optimization #2: Enhanced focus styles for accessibility */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--accent-primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.3);
+}
+
+/* Optimization #5: Skeleton loading animation */
+@keyframes skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Optimization #5: Progress bar at top of page */
+.progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-gradient));
+  animation: progress-animation 2s ease-in-out infinite;
+  z-index: 9999;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+
+@keyframes progress-animation {
+  0% { width: 0%; }
+  50% { width: 70%; }
+  100% { width: 100%; }
 }
 
 /* ─── Misc ───────────────────────────────────────────────── */
@@ -791,8 +841,8 @@ input:focus, textarea:focus, select:focus {
   border-radius: 14px;
 }
 .job-card:hover {
-  border-color: rgba(99,102,241,0.25) !important;
-  box-shadow: 0 4px 20px rgba(99,102,241,0.1);
+  border-color: rgba(56,189,248,0.25) !important;
+  box-shadow: 0 4px 20px rgba(56,189,248,0.1);
 }
 
 /* ─── Mobile Responsiveness ──────────────────────────────── */
@@ -828,6 +878,40 @@ input:focus, textarea:focus, select:focus {
   .log-terminal-body {
     max-height: 150px !important;
   }
+
+  /* Optimization #4: Improved mobile touch targets */
+  .btn {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  /* Mode switcher buttons - increase padding for better touch targets */
+  .mode-switcher button {
+    padding: 10px 14px;
+    min-height: 40px;
+  }
+
+  /* Add vertical margin between form groups on mobile */
+  .form-group {
+    margin-bottom: 8px;
+  }
+
+  /* Increase job card click area */
+  .job-card {
+    padding: 16px 14px;
+    min-height: 60px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Optimization #1: Progressive disclosure - hide skill tags on mobile */
+  .job-card .skill-tags {
+    display: none;
+  }
+
+  .job-card.expanded .skill-tags {
+    display: flex;
+  }
 }
 
 @media (max-width: 480px) {
@@ -842,9 +926,22 @@ input:focus, textarea:focus, select:focus {
   .btn {
     font-size: 0.82rem;
     padding: 10px 16px;
+    min-height: 44px;
   }
 
   h2 {
     font-size: 1rem;
+  }
+
+  /* Optimization #4: Additional mobile spacing improvements */
+  .form-group {
+    margin-bottom: 8px;
+  }
+
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+    padding: 10px 12px;
   }
 }
