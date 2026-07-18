@@ -129,10 +129,17 @@ async def scrape_job_description(url: str, browser=None) -> dict:
             response_text = generate_content_with_fallback(prompt, CleanedJobInfo)
             import json
             cleaned_info = json.loads(response_text)
+
+            # Ensure we have a valid description
+            description = cleaned_info.get("description", "") or cleaned_text
+            if not description or len(description.strip()) < 100:
+                # If Gemini returned empty or too short, use the raw cleaned text
+                description = cleaned_text
+
             return {
                 "title": cleaned_info.get("title", title) or title,
                 "url": url,
-                "description": cleaned_info.get("description", cleaned_text)
+                "description": description
             }
         except Exception as e:
             print(f"Gemini cleaning failed, returning raw text: {e}")

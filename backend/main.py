@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 # pyrefly: ignore [missing-import]
 from fastapi.responses import HTMLResponse
 # pyrefly: ignore [missing-import]
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 # pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
@@ -44,6 +44,8 @@ from services.resume_generator import generate_pdf_resume
 from services.autofill_agent import autofill_job_application
 from services.job_searcher import find_matching_jobs
 from services.application_tracker import record_application, list_applications
+from services.recruiter_extractor import extract_recruiter
+from services.outreach_generator import generate_outreach_message
 from services.auth import (
     create_or_get_user,
     create_session,
@@ -65,6 +67,7 @@ UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+MAX_RESUME_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB — generous for a resume PDF/DOCX/TEX
 default_cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
 target_cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
 
@@ -193,6 +196,20 @@ def _safe_key(token: Optional[str]) -> str:
     key = token or "guest"
     key = _re.sub(r'[^a-zA-Z0-9_-]', '', key)[:40]
     return key or "guest"
+
+
+def _is_local_deployment() -> bool:
+    """True only when this process is clearly running on a developer's own
+    machine, not a cloud deployment. Fails CLOSED (returns False) by default —
+    any known cloud-platform env var being present overrides a merely
+    localhost-looking FRONTEND_URL, since that value comes from a config file
+    that could be forgotten/misconfigured on a real deployment. Used to gate
+    /auth/mock, which otherwise mints a valid session for any email with zero
+    verification and must never be reachable in production."""
+    if any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME")):
+        return False
+    frontend_url = os.getenv("FRONTEND_URL", "")
+    return "localhost" in frontend_url or "127.0.0.1" in frontend_url
 
 
 def _user_output_paths(token: Optional[str]) -> tuple[str, str]:
@@ -364,8 +381,8 @@ else:
 
 class JobAnalysisRequest(BaseModel):
     job_url: Optional[str] = None
-    job_title: str
-    job_description: Optional[str] = None
+    job_title: str = Field(max_length=300)
+    job_description: Optional[str] = Field(default=None, max_length=20000)
     skip_tailoring: bool = False
     force_tailoring: bool = False
 
@@ -374,6 +391,20 @@ class ApplyRequest(BaseModel):
     direct_mode: bool = False
     job_title: Optional[str] = None
     company: Optional[str] = None
+
+class GenerateOutreachRequest(BaseModel):
+    job_url: Optional[str] = None
+    job_description: str = Field(max_length=20000)
+    job_title: str = Field(max_length=300)
+    company_name: str = Field(max_length=300)
+    recruiter_name: Optional[str] = None
+    platform: Optional[str] = None
+
+class SendOutreachEmailRequest(BaseModel):
+    recipient_email: str
+    subject: str
+    body: str
+    resume_path: Optional[str] = None
 
 @app.post("/upload_resume")
 async def upload_resume(file: UploadFile = File(...), authorization: Optional[str] = Header(None)):
@@ -391,9 +422,22 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
         if not safe_filename:
             safe_filename = f"resume_upload_{uuid.uuid4().hex[:8]}"
         file_path = os.path.join(UPLOAD_DIR, safe_filename)
+
+        # Stream-copy in chunks rather than shutil.copyfileobj's unbounded read,
+        # so an oversized upload is rejected (and its partial file removed)
+        # instead of being fully written to disk first — there was previously
+        # no cap at all, so a multi-GB upload would happily write to disk and
+        # tie up parse_resume() before anyone noticed.
+        total_written = 0
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
+            while chunk := await file.read(1024 * 1024):
+                total_written += len(chunk)
+                if total_written > MAX_RESUME_UPLOAD_BYTES:
+                    buffer.close()
+                    os.remove(file_path)
+                    raise HTTPException(status_code=413, detail=f"Resume file exceeds the {MAX_RESUME_UPLOAD_BYTES // (1024*1024)}MB upload limit.")
+                buffer.write(chunk)
+
         # Parse resume and extract structured fields
         structured_data = parse_resume(file_path)
         data = structured_data.model_dump()
@@ -418,6 +462,8 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
                 json.dump({"data": data, "path": path}, f, indent=2)
         
         return {"message": "Resume uploaded and parsed successfully", "data": data}
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
@@ -487,8 +533,98 @@ def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, 
         print(f"Error checking page metrics: {e}")
         return 999, 0.0
 
-def _extract_company_from_jd(jd_text: str) -> str:
-    """Heuristically extract the hiring company name from a job description."""
+def _extract_company_from_jd(jd_text: str, job_url: str = None) -> str:
+    """Extract the hiring company name from job URL (mandatory) or job description."""
+
+    # MANDATORY: First try to extract from URL - this is the most reliable source
+    if job_url:
+        try:
+            import re as _re_url
+            from urllib.parse import unquote
+
+            # Decode URL-encoded characters (e.g., %E2%80%8B for zero-width space)
+            decoded_url = unquote(job_url)
+            # Remove zero-width spaces and other invisible characters
+            cleaned_url = decoded_url.replace('​', '').replace('​', '').replace('‌', '').replace('‍', '')
+            print(f"[_extract_company_from_jd] Cleaned URL: {cleaned_url}")
+
+            # LinkedIn Job URL: https://www.linkedin.com/jobs/view/data-scientist-at-merimen-4437635758
+            # Company name is between "at-" and the next "-" followed by digits or "/"
+            linkedin_job_match = _re_url.search(r'-at-([a-z0-9-]+?)(?:-\d+|/|$)', cleaned_url.lower())
+            if linkedin_job_match:
+                company_from_linkedin = linkedin_job_match.group(1).strip().replace('-', ' ').strip().title()
+                if company_from_linkedin and company_from_linkedin.lower() not in {'', 'unknown'}:
+                    print(f"[_extract_company_from_jd] ✓ Extracted from LinkedIn Job URL: {company_from_linkedin}")
+                    return company_from_linkedin
+
+            # LinkedIn Company URL: https://www.linkedin.com/company/merimen-technologies-singapore-pte-ltd/life/
+            # Extract company slug and scrape the page to get the actual company name
+            linkedin_company_match = _re_url.search(r'/company/([a-z0-9\-]+)(?:/|$)', cleaned_url.lower())
+            if linkedin_company_match:
+                company_slug = linkedin_company_match.group(1)
+                print(f"[_extract_company_from_jd] Found LinkedIn company slug: {company_slug}")
+
+                # Try to scrape the LinkedIn company page to get the actual company name
+                try:
+                    from playwright.sync_api import sync_playwright
+                    with sync_playwright() as p:
+                        browser = p.chromium.launch(headless=True)
+                        context = browser.new_context(
+                            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+                        )
+                        page = context.new_page()
+                        try:
+                            page.goto(job_url, wait_until="domcontentloaded", timeout=10000)
+                            # Look for company name in page title or meta tags
+                            page_title = page.title()
+                            # LinkedIn company page title format: "Company Name | LinkedIn"
+                            title_match = _re_url.search(r'^([^|]+)\s*\|', page_title)
+                            if title_match:
+                                company_name = title_match.group(1).strip()
+                                print(f"[_extract_company_from_jd] ✓ Scraped from LinkedIn company page: {company_name}")
+                                browser.close()
+                                return company_name
+                        except Exception as e:
+                            print(f"[_extract_company_from_jd] Failed to scrape LinkedIn company page: {e}")
+                        finally:
+                            browser.close()
+                except Exception as e:
+                    print(f"[_extract_company_from_jd] Playwright scraping failed: {e}")
+
+                # Fallback: use the slug as company name
+                company_from_slug = company_slug.replace('-', ' ').strip().title()
+                if company_from_slug and company_from_slug.lower() not in {'', 'unknown'}:
+                    print(f"[_extract_company_from_jd] ✓ Fallback to slug: {company_from_slug}")
+                    return company_from_slug
+
+            # Indeed: https://www.indeed.com/viewjob?jk=abc123def456&company=CompanyName
+            # Try to extract company from query params
+            indeed_match = _re_url.search(r'[?&]company=([^&]+)', cleaned_url)
+            if indeed_match:
+                company_from_indeed = indeed_match.group(1).replace('+', ' ').replace('%20', ' ').title()
+                print(f"[_extract_company_from_jd] ✓ Extracted from Indeed URL: {company_from_indeed}")
+                return company_from_indeed
+
+            # Generic: try to extract domain company name
+            # e.g., https://careers.google.com/jobs/... -> Google
+            domain_match = _re_url.search(r'(?:careers\.|jobs\.)?([a-z0-9-]+)\.(?:com|io|org|co)', cleaned_url.lower())
+            if domain_match:
+                company_from_domain = domain_match.group(1).capitalize()
+                # Validate it's not a generic domain
+                if company_from_domain.lower() not in {'www', 'mail', 'jobs', 'careers', 'apply', 'recruit', 'linkedin', 'indeed', 'my'}:
+                    print(f"[_extract_company_from_jd] ✓ Extracted from URL domain: {company_from_domain}")
+                    return company_from_domain
+        except Exception as e:
+            print(f"[_extract_company_from_jd] URL extraction failed: {e}")
+            import traceback
+            traceback.print_exc()
+
+    # If URL extraction failed, try JD-based extraction
+    if not jd_text:
+        print(f"[_extract_company_from_jd] ✗ No company found in URL or JD")
+        return ""
+
+    # Try regex patterns on JD
     patterns = [
         r"(?:About|Join|At|with)\s+([A-Z][\w&.,'-]{1,40}(?:\s+[A-Z][\w&.,'-]{1,20}){0,3})",
         r"([A-Z][\w&.,'-]{2,40}(?:\s+[A-Z][\w&.,'-]{1,20}){0,2})\s+is\s+(?:hiring|looking|seeking|a|an)",
@@ -498,9 +634,30 @@ def _extract_company_from_jd(jd_text: str) -> str:
         m = _re.search(pat, jd_text[:1500])
         if m:
             name = m.group(1).strip().rstrip('.,;')
-            # Filter out generic words
-            if name.lower() not in {'the', 'a', 'an', 'we', 'our', 'this', 'you', 'your', 'us'}:
+            # Filter out generic words and frameworks
+            if name.lower() not in {'the', 'a', 'an', 'we', 'our', 'this', 'you', 'your', 'us', 'etl', 'api', 'sdk', 'framework', 'platform', 'tool', 'system', 'devops', 'mlops', 'data', 'engineering'}:
+                print(f"[_extract_company_from_jd] ✓ Regex extracted company: {name}")
                 return name
+
+    # If regex fails, try LLM extraction
+    try:
+        from services.gemini_client import generate_content_with_fallback
+        prompt = f"""Extract the company name from this job description. Return ONLY the company name, nothing else. If you cannot find a company name, return 'Unknown'.
+
+Job Description:
+{jd_text[:1000]}"""
+
+        company_name = generate_content_with_fallback(prompt)
+        company_name = company_name.strip().strip('"\'')
+
+        # Validate it's not a framework/tool name
+        if company_name and len(company_name) < 100 and company_name.lower() not in {'etl', 'api', 'sdk', 'framework', 'platform', 'tool', 'system', 'unknown', 'n/a', 'na', 'devops', 'mlops', 'data', 'engineering'}:
+            print(f"[_extract_company_from_jd] ✓ LLM extracted company: {company_name}")
+            return company_name
+    except Exception as e:
+        print(f"[_extract_company_from_jd] LLM extraction failed: {e}")
+
+    print(f"[_extract_company_from_jd] ✗ Could not extract company name")
     return ""
 
 # In-memory analysis cache: keys are MD5(token + job_title + jd_text), values are AnalysisResponse_model_dump. 1hr TTL, bounded size.
@@ -575,15 +732,20 @@ class RunContext:
         return f"Trace {self.run_id} finished in {time.time() - self.start:.2f}s across {len(self.steps)} steps."
 
 @app.post("/analyze_job")
-async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+async def analyze_job(request: JobAnalysisRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+    # This is the single most expensive endpoint in the app — multiple LLM
+    # calls, an optional Playwright scrape, a Tectonic LaTeX compile, and up
+    # to 3 recruiter-review retry rounds — yet unlike /scrape_job, /apply, and
+    # /search_matching_jobs, it had no rate limit at all.
+    _check_rate_limit(http_request, "analyze_job", max_requests=10, window_seconds=300)
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
-        
+
     session = get_session_data(token)
     session_resume_data = session.get("data")
     session_resume_path = session.get("path")
-    
+
     if not session_resume_data:
         raise HTTPException(status_code=400, detail="Please upload a resume first.")
         
@@ -603,7 +765,7 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                 try:
                     record_application(token, {
                         "job_title": request.job_title,
-                        "company": _extract_company_from_jd(request.job_description),
+                        "company": _extract_company_from_jd(request.job_description, request.job_url),
                         "job_url": request.job_url or "",
                         "score": cached.get("match_analysis", {}).get("overall_score"),
                         "status": "tailored",
@@ -612,10 +774,12 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                     print(f"[analyze_job] Failed to record application history (cache hit): {hist_err}")
             async def cached_event_generator():
                 yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
+                company_name = _extract_company_from_jd(request.job_description, request.job_url)
                 yield json.dumps({
                     "type": "result",
                     "job_title": request.job_title,
                     "job_description": request.job_description,
+                    "company": company_name,
                     "analysis": cached
                 }) + "\n"
             return StreamingResponse(cached_event_generator(), media_type="text/event-stream")
@@ -654,7 +818,7 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                         try:
                             record_application(token, {
                                 "job_title": job_title,
-                                "company": _extract_company_from_jd(jd_text),
+                                "company": _extract_company_from_jd(jd_text, request.job_url),
                                 "job_url": request.job_url or "",
                                 "score": cached.get("match_analysis", {}).get("overall_score"),
                                 "status": "tailored",
@@ -662,17 +826,19 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                         except Exception as hist_err:
                             print(f"[analyze_job] Failed to record application history (cache hit): {hist_err}")
                     yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
+                    company_name = _extract_company_from_jd(jd_text, request.job_url)
                     yield json.dumps({
                         "type": "result",
                         "job_title": job_title,
                         "job_description": jd_text,
+                        "company": company_name,
                         "analysis": cached
                     }) + "\n"
                     return
                 
             yield json.dumps({"type": "log", "message": "🤖 Comparing candidate profile & calculating ATS gap analysis..."}) + "\n"
             master_latex = None
-            if session_resume_path and session_resume_path.endswith(".tex"):
+            if session_resume_path and session_resume_path.endswith(".tex") and os.path.exists(session_resume_path):
                 with open(session_resume_path, "r", encoding="utf-8") as f:
                     master_latex = f.read()
             else:
@@ -707,13 +873,15 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                 yield event
 
             yield json.dumps({"type": "log", "message": "✍️ Generated tailored resume content and cover letter."}) + "\n"
-            
+
             if request.skip_tailoring:
                 dumped = analysis.model_dump()
+                company_name = _extract_company_from_jd(jd_text, request.job_url)
                 yield json.dumps({
                     "type": "result",
                     "job_title": job_title,
                     "job_description": jd_text,
+                    "company": company_name,
                     "analysis": dumped
                 }) + "\n"
                 return
@@ -883,10 +1051,10 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
                 analysis.latex_code = apply_latex_hotfix(analysis.latex_code, optimal_scale, optimal_linespread, master_latex)
             else:
                 analysis.latex_code = apply_latex_hotfix(analysis.latex_code, 1.0, 1.0, master_latex)
-                
+
             dumped = analysis.model_dump()
             set_cached_analysis(token, job_title, jd_text, dumped)
-            company_name = _extract_company_from_jd(jd_text)
+            company_name = _extract_company_from_jd(jd_text, request.job_url)
             try:
                 record_application(token, {
                     "job_title": job_title,
@@ -900,12 +1068,17 @@ async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] 
             yield json.dumps({
                 "type": "result",
                 "job_title": job_title,
-                "job_description": jd_text,
+                "job_description": jd_text or "",
                 "company": company_name,
                 "analysis": dumped
             }) + "\n"
         except Exception as e:
-            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+            import traceback
+            error_msg = str(e)
+            tb_str = traceback.format_exc()
+            print(f"[analyze_job] Exception occurred: {error_msg}")
+            print(f"[analyze_job] Traceback:\n{tb_str}")
+            yield json.dumps({"type": "error", "message": error_msg}) + "\n"
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post("/generate_tailored_resume")
@@ -1100,7 +1273,7 @@ async def apply(request: ApplyRequest, http_request: Request, authorization: Opt
     _, pdf_path = _user_output_paths(token)
     if not os.path.exists(pdf_path):
         # Fallback to master if tailored hasn't been generated
-        if not session_resume_path:
+        if not session_resume_path or not os.path.exists(session_resume_path):
             raise HTTPException(status_code=400, detail="No resume available to upload.")
         pdf_path = session_resume_path
 
@@ -1122,7 +1295,8 @@ async def apply(request: ApplyRequest, http_request: Request, authorization: Opt
                 resume_data=session_resume_data,
                 resume_pdf_path=os.path.abspath(pdf_path),
                 interactive_mode=not request.direct_mode,
-                user_token=token
+                user_token=token,
+                custom_api_key=active_api_key
             )
             update_task_status(task_id, "completed", "Job application form auto-filled successfully!")
             try:
@@ -1416,6 +1590,14 @@ async def auth_callback(code: str):
 
 @app.post("/auth/mock")
 async def auth_mock(request: dict):
+    # This endpoint mints a valid session for ANY email with zero verification
+    # — it exists only for local dev (see the frontend's "Mock Dev Login",
+    # which is itself gated to localhost). Without this server-side guard, the
+    # UI-only restriction was cosmetic: anyone could POST here directly against
+    # a real deployment and obtain a session as any user, bypassing Google
+    # OAuth entirely.
+    if not _is_local_deployment():
+        raise HTTPException(status_code=404, detail="Not Found")
     email = request.get("email", "testuser@example.com")
     user = create_or_get_user(email)
     token = create_session(user["id"])
@@ -1532,6 +1714,114 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                 yield chunk
         
         return StreamingResponse(caching_job_stream(), media_type="application/x-ndjson")
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate_outreach")
+async def generate_outreach(request: GenerateOutreachRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+    """Generate personalized recruiter outreach message."""
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+
+    try:
+        session = get_session_data(token)
+        session_resume_data = session.get("data")
+
+        if not session_resume_data:
+            raise HTTPException(status_code=400, detail="Please upload a resume first.")
+
+        # Get API key
+        db_api_key = None
+        if token:
+            user = get_user_by_token(token)
+            if user:
+                db_api_key = user.get("gemini_api_key")
+        active_api_key = x_gemini_api_key or db_api_key
+
+        # Extract recruiter info if job_url provided
+        recruiter_info = {
+            "recruiter_name": request.recruiter_name,
+            "recruiter_profile_url": None,
+            "company_name": request.company_name,
+            "platform": request.platform or "unknown"
+        }
+
+        if request.job_url:
+            recruiter_info = await extract_recruiter(request.job_url, request.platform)
+            # Fallback to provided company name if extraction failed
+            if not recruiter_info.get("company_name"):
+                recruiter_info["company_name"] = request.company_name
+
+        # Create a mock ATS analysis if not provided (for message generation)
+        # In real usage, this would come from the analyze_job endpoint
+        ats_analysis = {
+            "match_analysis": {
+                "overall_score": 75,
+                "matched_skills": session_resume_data.get("skills", [])[:5],
+                "missing_skills": [],
+                "tailoring_suggestions": []
+            }
+        }
+
+        # Generate outreach message
+        def log_callback(msg_json: str):
+            try:
+                json.loads(msg_json)
+                LLMClientLogQueue.put(msg_json)
+            except Exception:
+                pass
+
+        outreach_msg = generate_outreach_message(
+            job_description=request.job_description,
+            resume_data=session_resume_data,
+            ats_analysis=ats_analysis,
+            recruiter_name=recruiter_info.get("recruiter_name"),
+            company_name=recruiter_info.get("company_name", request.company_name),
+            custom_api_key=active_api_key,
+            on_log=log_callback
+        )
+
+        return {
+            "status": "success",
+            "recruiter_info": recruiter_info,
+            "message": outreach_msg.model_dump()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/send_outreach_email")
+async def send_outreach_email(request: SendOutreachEmailRequest, authorization: Optional[str] = Header(None)):
+    """Send outreach email via SMTP."""
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+
+    try:
+        # For now, return a success response indicating the email would be sent
+        # In production, integrate with an email service (SendGrid, AWS SES, etc.)
+
+        # Validate email format
+        if not request.recipient_email or '@' not in request.recipient_email:
+            raise HTTPException(status_code=400, detail="Invalid recipient email address.")
+
+        # Log the email that would be sent
+        print(f"[Outreach Email] To: {request.recipient_email}")
+        print(f"[Outreach Email] Subject: {request.subject}")
+        print(f"[Outreach Email] Body preview: {request.body[:200]}...")
+
+        return {
+            "status": "success",
+            "message": "Email prepared for sending. In production, this would be sent via SMTP.",
+            "recipient": request.recipient_email,
+            "subject": request.subject
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

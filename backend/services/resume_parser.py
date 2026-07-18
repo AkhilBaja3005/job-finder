@@ -66,21 +66,47 @@ def parse_resume(file_path: str) -> StructuredResume:
     else:
         raise ValueError("Unsupported file format. Please upload PDF, DOCX, or TEX.")
 
+    if not raw_text or not raw_text.strip():
+        raise ValueError("Could not extract text from resume. Please ensure the file is not empty or corrupted.")
+
     prompt = f"""
     You are an expert resume parsing AI. Extract all information from the raw resume text below and organize it into a structured object matching the schema.
-    
+
     CRITICAL RULES:
     1. Clean up any spacing or kerning anomalies in the candidate's name (e.g. "P A L L A V I" → "PALLAVI").
     2. Extract ALL URLs from the resume into the `links` array. This MUST include LinkedIn URLs (e.g. https://linkedin.com/in/username), GitHub URLs, portfolios, etc. Do NOT leave `links` empty if URLs are present.
     3. For each Education entry, extract the GPA, CPI, percentage, or grade score into the `gpa` field (e.g. "CPI: 8.04", "94.2%"). Do NOT omit this even if it appears on the same line as the degree.
     4. Extract the phone number exactly as it appears.
-    
+
     Raw Resume Text:
     ---
     {raw_text}
     ---
     """
-    
+
     response_text = generate_content_with_fallback(prompt, StructuredResume)
     parsed_data = json.loads(response_text)
+
+    # Validate that we got required fields
+    if not parsed_data.get("name"):
+        parsed_data["name"] = "Candidate"
+    if not parsed_data.get("email"):
+        parsed_data["email"] = ""
+    if not parsed_data.get("phone"):
+        parsed_data["phone"] = ""
+    if not parsed_data.get("links"):
+        parsed_data["links"] = []
+    if not parsed_data.get("summary"):
+        parsed_data["summary"] = ""
+    if not parsed_data.get("skills"):
+        parsed_data["skills"] = []
+    if not parsed_data.get("experience"):
+        parsed_data["experience"] = []
+    if not parsed_data.get("education"):
+        parsed_data["education"] = []
+    if not parsed_data.get("projects"):
+        parsed_data["projects"] = []
+    if not parsed_data.get("achievements"):
+        parsed_data["achievements"] = []
+
     return StructuredResume(**parsed_data)

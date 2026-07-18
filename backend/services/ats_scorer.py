@@ -344,13 +344,15 @@ def _parse_date_to_ordinal(date_str: str) -> Optional[int]:
 
 def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, List[Tuple[int, int, float]]]:
     """
-    Merges overlapping professional experience, tracking total years, 
+    Merges overlapping professional experience, tracking total years,
     average structural tenure parameters, and recency coefficients.
     """
     intervals = []
     job_durations = []
-    
+
     for exp in resume_data.get("experience", []):
+        if not isinstance(exp, dict):
+            continue
         start = _parse_date_to_ordinal(exp.get("start_date", ""))
         end = _parse_date_to_ordinal(exp.get("end_date", "") or "Present")
         if start and end and end > start:
@@ -390,7 +392,11 @@ def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, Lis
 # 6. EDUCATION CREDITS, SENIORITY TIERS & TENURE VOLATILITY ADJUSTERS
 # ─────────────────────────────────────────────────────────────────────────────
 def get_highest_education_tier(resume_data: dict) -> str:
-    edu_text = " ".join([edu.get("degree", "").lower() for edu in resume_data.get("education", [])])
+    edu_list = resume_data.get("education", [])
+    edu_text = ""
+    for edu in edu_list:
+        if isinstance(edu, dict):
+            edu_text += " " + edu.get("degree", "").lower()
     if "phd" in edu_text or "ph.d" in edu_text or "doctorate" in edu_text: return "phd"
     if "master" in edu_text or "ms" in edu_text or "msc" in edu_text or "mba" in edu_text: return "masters"
     return "bachelors"
@@ -422,7 +428,12 @@ def get_candidate_seniority_tier(resume_data: dict) -> str:
     """Classifies the candidate's professional tier using their most recent job titles."""
     exp = resume_data.get("experience", [])
     if not exp: return "junior"
-    recent_roles = " ".join([exp[i].get("role", "").lower() for i in range(min(len(exp), 2))])
+
+    recent_roles = ""
+    for i in range(min(len(exp), 2)):
+        exp_item = exp[i]
+        if isinstance(exp_item, dict):
+            recent_roles += " " + exp_item.get("role", "").lower()
 
     for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
         if pattern.search(recent_roles):
@@ -448,9 +459,11 @@ def compute_skills_score(
         return SkillMatchResult(60, [], [], [], [], "No mandatory technical keywords recognized in this JD — skills score is a neutral default, not a real match assessment.")
 
     skills_sec_canon = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
-    
+
     job_profiles: List[Tuple[Set[str], float]] = []
     for exp in resume_data.get("experience", []):
+        if not isinstance(exp, dict):
+            continue
         start = _parse_date_to_ordinal(exp.get("start_date", ""))
         end = _parse_date_to_ordinal(exp.get("end_date", "") or "Present")
         weight = 0.5

@@ -148,10 +148,10 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
     
     print(f"[Job Searcher] Fetching Indeed via Playwright: {url}")
     results = []
-    
+
     # pyrefly: ignore [missing-import]
     from playwright.async_api import async_playwright
-    
+
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -159,28 +159,46 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
                 user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
             )
             page = await context.new_page()
-            
+
             # Inject anti-bot evasion scripts
             await page.add_init_script("""
                 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
                 window.chrome = { runtime: {} };
                 Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
             """)
-            
+
+            response = None
             try:
                 # Use a shorter 8 second timeout
-                await page.goto(url, wait_until="domcontentloaded", timeout=8000)
+                response = await page.goto(url, wait_until="domcontentloaded", timeout=8000)
             except Exception as e:
                 # If network requests time out, proceed to parse whatever HTML was loaded
                 print(f"[Job Searcher] Indeed navigation timed out, checking loaded content: {e}")
-                
+
             await page.wait_for_timeout(500)
             html = await page.content()
+            page_title = await page.title()
+            status = response.status if response else None
             await browser.close()
-            
+
         soup = BeautifulSoup(html, "html.parser")
         cards = soup.select(".job_seen_beacon")
-        
+
+        # Indeed's real block page returns HTTP 403 with the literal title
+        # "Blocked - Indeed.com" (confirmed by directly triggering one) — check
+        # that specifically rather than substring-searching the body for words
+        # like "captcha", which appears on *every* normal Indeed results page
+        # (it bundles its own reCAPTCHA script/config) and would false-positive
+        # on every successful load. Without this check, a block silently looked
+        # identical to "no jobs matched" — zero results, no error, no log signal
+        # distinguishing the two, which is exactly what made this hard to diagnose
+        # on cloud deployments where Indeed's IP-reputation blocking kicks in.
+        if not cards and (status == 403 or "blocked" in page_title.lower()):
+            print(f"[Job Searcher] Indeed appears to be BLOCKING this request (status={status}, title={page_title!r}). "
+                  f"This is common from cloud-hosting IP ranges (Render/Railway/etc.) — Indeed results will be unreliable "
+                  f"from this deployment. LinkedIn results are unaffected.")
+            return results
+
         for card in cards:
             title_elem = card.select_one(".jobTitle a span[title]") or card.select_one(".jobTitle a")
             company_elem = card.select_one("[data-testid='company-name']")
@@ -403,20 +421,23 @@ async def find_matching_jobs(
         yield json.dumps({"type": "log", "message": f"🔎 Generated search queries: {', '.join(queries)}"}) + "\n"
 
     raw_jobs = []
+    indeed_jobs_for_est = []  # Store Indeed jobs for EST section
 
     async def _fetch_query(query: str):
-        yield_msg = f"🌐 Fetching listings from LinkedIn & Indeed ({timeframe}) for '{query}'..."
+        yield_msg = f"🌐 Fetching listings from LinkedIn ({timeframe}) for '{query}'..."
         li_task = asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
+        # Skip Indeed scraping - store for EST section instead
         ind_task = search_indeed_jobs(query, location, timeframe)
         li_jobs, ind_jobs = await asyncio.gather(li_task, ind_task)
-        return yield_msg, li_jobs + ind_jobs
+        return yield_msg, li_jobs, ind_jobs
 
     # Run all queries concurrently instead of sequentially — each query's
     # LinkedIn/Indeed fetch no longer blocks the next query from starting.
     query_results = await asyncio.gather(*[_fetch_query(q) for q in queries])
-    for yield_msg, jobs in query_results:
+    for yield_msg, li_jobs, ind_jobs in query_results:
         yield json.dumps({"type": "log", "message": yield_msg}) + "\n"
-        raw_jobs.extend(jobs)
+        raw_jobs.extend(li_jobs)
+        indeed_jobs_for_est.extend(ind_jobs)  # Collect Indeed jobs for EST section
 
     # Deduplicate by job URL / ID
     seen_ids = set()
@@ -462,5 +483,27 @@ async def find_matching_jobs(
     accurate_count = sum(1 for j in scored_jobs if not j["estimated"])
     estimated_count = len(scored_jobs) - accurate_count
     yield json.dumps({"type": "log", "message": f"🏁 Scanned {len(scored_jobs)} matches successfully! ({accurate_count} JD-scored, {estimated_count} title-estimated)"}) + "\n"
-    yield json.dumps({"type": "result", "jobs": scored_jobs}) + "\n"
+
+    # Prepare EST (External Sources - Indeed) section
+    est_jobs = []
+    if indeed_jobs_for_est:
+        # Deduplicate Indeed jobs
+        seen_indeed_ids = set()
+        for job in indeed_jobs_for_est:
+            if job.job_id not in seen_indeed_ids:
+                seen_indeed_ids.add(job.job_id)
+                est_jobs.append({
+                    "title": job.title,
+                    "company": job.company,
+                    "location": job.location,
+                    "url": job.url,
+                    "source": "Indeed",
+                    "posted_date": job.posted_date,
+                    "score": 0,  # Not scored - external source
+                    "estimated": True,
+                    "reason": "External source (Indeed) - not scored by our ATS engine"
+                })
+        yield json.dumps({"type": "log", "message": f"📌 Found {len(est_jobs)} Indeed jobs in EST section (not scored by our engine)"}) + "\n"
+
+    yield json.dumps({"type": "result", "jobs": scored_jobs, "est_jobs": est_jobs}) + "\n"
 
