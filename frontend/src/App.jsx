@@ -1769,6 +1769,30 @@ function App() {
                                     )}
                                     <div style={{ fontWeight: 700, fontSize: compactMode ? '0.88rem' : '0.95rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{job.title}</div>
                                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{job.company} • {job.location}</div>
+                                    {job.platform === 'LinkedIn' && !job.estimated && (
+                                      job.recruiter_name ? (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', fontSize: '0.72rem' }}>
+                                          <span style={{ color: 'var(--text-muted)' }}>👤 Job poster: <span style={{ color: '#7dd3fc', fontWeight: 600 }}>{job.recruiter_name}</span></span>
+                                          {job.recruiter_profile_url && (
+                                            <a
+                                              href={job.recruiter_profile_url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(e) => e.stopPropagation()}
+                                              style={{ color: '#7dd3fc', fontWeight: 600, flexShrink: 0 }}
+                                            >
+                                              View Profile ↗
+                                            </a>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        !compactMode && (
+                                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', opacity: 0.6, marginTop: '4px' }}>
+                                            👤 Job poster not available
+                                          </div>
+                                        )
+                                      )
+                                    )}
                                     {/* Hide skill tags on mobile compact mode - only show on expand */}
                                     {!compactMode && (
                                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
