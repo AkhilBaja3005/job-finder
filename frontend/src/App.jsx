@@ -1,5 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense, lazy } from 'react';
 
+// Optimization #3: Lazy-load dashboard modes for code splitting
+const TailorMode = lazy(() => import('./components/TailorMode'));
+const DiscoverMode = lazy(() => import('./components/DiscoverMode'));
+const HistoryMode = lazy(() => import('./components/HistoryMode'));
+const SkeletonLoader = lazy(() => import('./components/SkeletonLoader').then(m => ({ default: m.SkeletonLoader })));
+const OutreachModal = lazy(() => import('./components/OutreachModal'));
 
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://127.0.0.1:8000'
@@ -105,14 +111,35 @@ function App() {
   const [searchKeywords, setSearchKeywords] = useState('');
   const [searchTimeframe, setSearchTimeframe] = useState('48h'); // '24h' | '48h' | '1w' | '1m'
   const [isDiscoveryView, setIsDiscoveryView] = useState(false);
-  const [dashboardMode, setDashboardMode] = useState('tailor'); // 'tailor' | 'discover'
+  const [dashboardMode, setDashboardMode] = useState('tailor'); // 'tailor' | 'discover' | 'history'
   const [searchSortMode, setSearchSortMode] = useState('overall'); // 'overall' | 'role_fit' | 'time'
   const [searchPage, setSearchPage] = useState(1);
+
+  const [applicationHistory, setApplicationHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const [user, setUser] = useState(null);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
   const [configStepActive, setConfigStepActive] = useState(true);
+
+  // Optimization #1: Progressive Disclosure - compact mode for mobile
+  const [compactMode, setCompactMode] = useState(window.innerWidth < 640);
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+
+  // Optimization #5: Loading skeleton state
+  const [showSkeleton, setShowSkeleton] = useState(false);
+
+  // Outreach feature state
+  const [outreachModalOpen, setOutreachModalOpen] = useState(false);
+  const [outreachData, setOutreachData] = useState(null);
+  const [outreachRecruiterInfo, setOutreachRecruiterInfo] = useState(null);
+  const [outreachLoading, setOutreachLoading] = useState(false);
+
+  // Store scraped job description in a ref so it's never lost
+  const scrapedJobDescriptionRef = useRef('');
+  const analysisPanelRef = useRef(null);
+  const [outreachAnchorTop, setOutreachAnchorTop] = useState(0);
 
   // Returns the current time in HH:MM:SS using the browser's local timezone
   const nowTs = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
@@ -169,6 +196,28 @@ function App() {
     setStatusMessage('');
     setActiveTab('preview');
     setCoverLetterCopied(false);
+    scrapedJobDescriptionRef.current = '';
+  };
+
+  // Editing the job URL means the user is targeting a different posting —
+  // any analysis/tailoring/JD tied to the previous URL is now stale and must
+  // not linger on screen until the new URL is (re-)analyzed.
+  const handleJobUrlChange = (newUrl) => {
+    if (newUrl.trim() !== jobUrl.trim() && (analysisResult || tailoredResumeData || jobDescription)) {
+      setJobTitle('');
+      setJobDescription('');
+      setCompany('');
+      setAnalysisResult(null);
+      setTailoredResumeData(null);
+      setRejectionWarning(null);
+      setKeepOriginalMode(false);
+      setStatusLogs([]);
+      setStatusMessage('');
+      setActiveTab('preview');
+      setCoverLetterCopied(false);
+      scrapedJobDescriptionRef.current = '';
+    }
+    setJobUrl(newUrl);
   };
 
   // Cmd+Enter / Ctrl+Enter shortcut to trigger analysis
@@ -182,6 +231,29 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, resumeData, jobUrl, jobTitle, jobDescription]);
+
+  // Optimization #1: Handle window resize for compact mode
+  useEffect(() => {
+    const handleResize = () => {
+      setCompactMode(window.innerWidth < 640);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Optimization #2: Keyboard shortcuts - handle ? key for help modal
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === '?' && !showKeyboardHelp) {
+        setShowKeyboardHelp(true);
+      }
+      if (e.key === 'Escape' && showKeyboardHelp) {
+        setShowKeyboardHelp(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [showKeyboardHelp]);
 
   const handleApiKeyChange = (e) => {
     const val = e.target.value;
@@ -395,16 +467,19 @@ function App() {
 
   // Step 1: Initial Job Analysis & Scoring (Fast ATS evaluation)
   const handleAnalyzeJob = async (urlOverride = null, titleOverride = null) => {
+    console.log('[handleAnalyzeJob] START - jobDescription state:', jobDescription?.substring(0, 100) + '...');
+    console.log('[handleAnalyzeJob] START - scrapedJobDescriptionRef:', scrapedJobDescriptionRef.current?.substring(0, 100) + '...');
+
     if (!resumeData) {
       alert('Please upload a resume first.');
       return;
     }
 
     // ─── SAFE STRING SANITIZATION ──────────────────────────────────────────
-    // Force inputs to be primitive strings. If an object/event slipped in, 
+    // Force inputs to be primitive strings. If an object/event slipped in,
     // extracting text fields prevents circular structure crashes.
     const extractString = (val) => {
-      if (!val) return null;
+      if (val === null || val === undefined) return null;
       if (typeof val === 'string') return val;
       if (val.target && typeof val.target.value === 'string') return val.target.value; // Catch accidental event objects
       if (typeof val.toString === 'function') return val.toString();
@@ -416,10 +491,19 @@ function App() {
 
     // Clear out stale job description if we are switching to a new URL override
     let activeDescription = extractString(jobDescription);
+    console.log('[handleAnalyzeJob] activeDescription extracted:', activeDescription?.substring(0, 100) + '...');
+
+    // Use scraped JD from ref if current state is empty
+    if (!activeDescription && scrapedJobDescriptionRef.current) {
+      console.log('[handleAnalyzeJob] Using scraped JD from ref');
+      activeDescription = scrapedJobDescriptionRef.current;
+    }
     if (urlOverride) {
       activeDescription = null;
       setJobDescription('');
     }
+
+    console.log('[handleAnalyzeJob] About to send to backend - activeDescription:', activeDescription?.substring(0, 100) + '...');
 
     setLoading(true);
     setAnalysisResult(null);
@@ -440,12 +524,19 @@ function App() {
       // ─── DEFENSIVE SERIALIZATION ──────────────────────────────────────────
       let requestBody;
       try {
-        requestBody = JSON.stringify({
+        const payload = {
           job_url: targetUrl || null,
           job_title: targetTitle || 'Target Role',
           job_description: activeDescription || null,
           skip_tailoring: true,
+        };
+        console.log('[handleAnalyzeJob] Sending payload:', {
+          job_url: payload.job_url,
+          job_title: payload.job_title,
+          job_description: payload.job_description?.substring(0, 100) + '...',
+          skip_tailoring: payload.skip_tailoring
         });
+        requestBody = JSON.stringify(payload);
       } catch (jsonError) {
         console.error("CRITICAL: The payload items are circular!", { targetUrl, targetTitle, activeDescription });
         throw new Error(`Payload serialization failed: ${jsonError.message}. Check your state bindings.`);
@@ -463,6 +554,7 @@ function App() {
       }
 
       for await (const event of streamNdjson(response)) {
+        console.log('[handleAnalyzeJob] Event received:', event);
         if (event.type === 'log') {
           setStatusMessage(event.message);
           setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
@@ -473,44 +565,101 @@ function App() {
           setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
           setTimeout(scrollConsoleToBottom, 30);
         } else if (event.type === 'scraped_data') {
-          if (event.job_description) setJobDescription(event.job_description);
+          if (event.job_description) {
+            setJobDescription(event.job_description);
+            scrapedJobDescriptionRef.current = event.job_description;
+            console.log('[handleAnalyzeJob] Scraped JD stored in ref:', event.job_description.substring(0, 100) + '...');
+          }
           if (event.job_title) setJobTitle(event.job_title);
         } else if (event.type === 'error') {
+          console.error('[handleAnalyzeJob] Error event from backend:', event);
           throw new Error(event.message);
         } else if (event.type === 'result') {
-          const result = event;
-          setAnalysisResult(result.analysis);
-          if (result.job_title) setJobTitle(result.job_title);
-          if (result.company) setCompany(result.company);
-          if (result.job_description) setJobDescription(result.job_description);
+          try {
+            const result = event;
+            console.log('[handleAnalyzeJob] Result received:', result);
+            console.log('[handleAnalyzeJob] result.analysis:', result.analysis);
+            console.log('[handleAnalyzeJob] result.analysis type:', typeof result.analysis);
+            console.log('[handleAnalyzeJob] result.job_description:', result.job_description?.substring(0, 100) + '...');
 
-          // ─── SAFE RESUME CLONING ──────────────────────────────────────
-          const baseResume = resumeData ? JSON.parse(JSON.stringify(resumeData)) : {};
-          const updates = result.analysis?.suggested_resume_updates || {};
+            setAnalysisResult(result.analysis);
+            if (result.job_title) setJobTitle(result.job_title);
+            if (result.company) setCompany(result.company);
+            // Always use the job_description from result, or fall back to ref
+            const finalJD = result.job_description || scrapedJobDescriptionRef.current || '';
+            console.log('[handleAnalyzeJob] Setting JD to:', finalJD.substring(0, 100) + '...');
+            setJobDescription(finalJD);
+            scrapedJobDescriptionRef.current = finalJD;
 
-          const tailored = {
-            ...baseResume,
-            summary: updates.summary || baseResume.summary || '',
-            skills: updates.skills || baseResume.skills || [],
-            experience: (baseResume.experience || []).map((job, idx) => {
-              const tailoredExperience = updates.experience?.[idx];
+            // ─── SAFE RESUME CLONING ──────────────────────────────────────
+            console.log('[handleAnalyzeJob] resumeData:', resumeData);
+            const baseResume = resumeData ? JSON.parse(JSON.stringify(resumeData)) : {};
+            console.log('[handleAnalyzeJob] baseResume:', baseResume);
 
-              let finalDescription = job.description || [];
-              if (Array.isArray(tailoredExperience)) {
-                finalDescription = tailoredExperience;
-              } else if (tailoredExperience && tailoredExperience.description) {
-                finalDescription = tailoredExperience.description;
-              }
+            const updates = result.analysis?.suggested_resume_updates || {};
+            console.log('[handleAnalyzeJob] updates:', updates);
 
-              return {
-                ...job,
-                description: finalDescription,
-              };
-            }),
-          };
+            // Ensure arrays are actually arrays
+            const baseExperience = Array.isArray(baseResume.experience) ? baseResume.experience : [];
+            const baseProjects = Array.isArray(baseResume.projects) ? baseResume.projects : [];
+            console.log('[handleAnalyzeJob] baseExperience:', baseExperience);
+            console.log('[handleAnalyzeJob] baseProjects:', baseProjects);
 
-          setTailoredResumeData(tailored);
-          setStatusMessage('ATS Scoring complete! Awaiting your instruction to tailor the resume.');
+            console.log('[handleAnalyzeJob] Starting experience mapping...');
+            const tailored = {
+              ...baseResume,
+              summary: updates.summary || baseResume.summary || '',
+              skills: Array.isArray(updates.skills) ? updates.skills : (Array.isArray(baseResume.skills) ? baseResume.skills : []),
+              experience: baseExperience.map((job, idx) => {
+                console.log(`[handleAnalyzeJob] Processing experience item ${idx}:`, job);
+                if (!job || typeof job !== 'object') {
+                  console.warn('[handleAnalyzeJob] Invalid job item at index', idx, job);
+                  return job || {};
+                }
+                const tailoredExperience = updates.experience?.[idx];
+
+                let finalDescription = job.description || [];
+                if (Array.isArray(tailoredExperience)) {
+                  finalDescription = tailoredExperience;
+                } else if (tailoredExperience && tailoredExperience.description) {
+                  finalDescription = tailoredExperience.description;
+                }
+
+                return {
+                  ...job,
+                  description: finalDescription,
+                };
+              }),
+              projects: baseProjects.map((proj, idx) => {
+                console.log(`[handleAnalyzeJob] Processing project item ${idx}:`, proj);
+                if (!proj || typeof proj !== 'object') {
+                  console.warn('[handleAnalyzeJob] Invalid project item at index', idx, proj);
+                  return proj || {};
+                }
+                const tailoredProject = updates.projects?.[idx];
+
+                let finalDescription = proj.description || [];
+                if (Array.isArray(tailoredProject)) {
+                  finalDescription = tailoredProject;
+                } else if (tailoredProject && tailoredProject.description) {
+                  finalDescription = tailoredProject.description;
+                }
+
+                return {
+                  ...proj,
+                  description: finalDescription,
+                };
+              }),
+            };
+
+            console.log('[handleAnalyzeJob] tailored:', tailored);
+            setTailoredResumeData(tailored);
+            setStatusMessage('ATS Scoring complete! Awaiting your instruction to tailor the resume.');
+          } catch (err) {
+            console.error('[handleAnalyzeJob] Error processing result:', err);
+            console.error('[handleAnalyzeJob] Error stack:', err.stack);
+            throw err;
+          }
         }
       }
     } catch (error) {
@@ -531,6 +680,8 @@ function App() {
 
     // Clear out stale job description if we are switching to a new URL override
     let activeDescription = jobDescription;
+    console.log('[handleGenerateTailoredResume] activeDescription:', activeDescription);
+    console.log('[handleGenerateTailoredResume] jobDescription state:', jobDescription);
     if (urlOverride) {
       activeDescription = null;
       setJobDescription('');
@@ -548,6 +699,14 @@ function App() {
         headers['X-Gemini-API-Key'] = geminiApiKey;
       }
       headers['Authorization'] = `Bearer ${getAuthHeader()}`;
+
+      console.log('[handleGenerateTailoredResume] Sending payload:', {
+        job_url: targetUrl,
+        job_title: targetTitle,
+        job_description: activeDescription ? activeDescription.substring(0, 100) + '...' : null,
+        skip_tailoring: false,
+        force_tailoring: overrideForce
+      });
 
       const response = await fetch(`${API_BASE}/analyze_job`, {
         method: 'POST',
@@ -603,6 +762,13 @@ function App() {
                 description: Array.isArray(tailoredExperience) ? tailoredExperience : (tailoredExperience && tailoredExperience.description) || (job || {}).description || [],
               };
             }),
+            projects: ((resumeData || {}).projects || []).map((proj, idx) => {
+              const tailoredProject = updates.projects && updates.projects[idx];
+              return {
+                ...proj,
+                description: Array.isArray(tailoredProject) ? tailoredProject : (tailoredProject && tailoredProject.description) || (proj || {}).description || [],
+              };
+            }),
           };
           setTailoredResumeData(tailored);
           setStatusMessage('LaTeX tailored resume and metrics prepared successfully!');
@@ -614,6 +780,23 @@ function App() {
       setStatusLogs((prev) => [...prev, { message: `❌ Pipeline Interrupted: ${error.message}`, ts: nowTs() }]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/applications`, {
+        headers: { 'Authorization': `Bearer ${getAuthHeader()}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setApplicationHistory(data.applications || []);
+      }
+    } catch (err) {
+      console.error('Failed to load application history', err);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -755,6 +938,29 @@ function App() {
 
 
 
+  const handleDownloadCoverLetter = async () => {
+    if (!analysisResult?.cover_letter) return;
+    try {
+      const response = await fetch(`${API_BASE}/download_cover_letter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cover_letter: analysisResult.cover_letter }),
+      });
+      if (!response.ok) throw new Error('Failed to prepare cover letter download');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'cover_letter.txt';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast(`❌ ${err.message}`, 'error');
+    }
+  };
+
   const openInOverleaf = async () => {
     if (!analysisResult || !analysisResult.latex_code) return;
     setLoading(true);
@@ -811,6 +1017,8 @@ function App() {
         body: JSON.stringify({
           job_url: jobUrl,
           direct_mode: directMode,
+          job_title: jobTitle || '',
+          company: company || '',
         }),
       });
 
@@ -831,8 +1039,121 @@ function App() {
     }
   };
 
+  // Generate personalized recruiter outreach message
+  const handleGenerateOutreach = async () => {
+    console.log('[handleGenerateOutreach] Called', {
+      analysisResult: !!analysisResult,
+      jobDescription: jobDescription?.substring(0, 100) + '...',
+      jobTitle,
+      company,
+      scrapedJDRef: scrapedJobDescriptionRef.current?.substring(0, 100) + '...'
+    });
+
+    // Use ref as fallback if state is empty
+    const finalJD = jobDescription || scrapedJobDescriptionRef.current;
+
+    if (!analysisResult || !finalJD || !jobTitle) {
+      console.log('[handleGenerateOutreach] Missing required fields:', {
+        analysisResult: !!analysisResult,
+        finalJD: !!finalJD,
+        jobTitle: !!jobTitle
+      });
+      showToast('Please analyze a job first', 'error');
+      return;
+    }
+
+    console.log('[handleGenerateOutreach] Starting outreach generation');
+    setOutreachLoading(true);
+    setStatusMessage('Generating personalized outreach message...');
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (geminiApiKey) {
+        headers['X-Gemini-API-Key'] = geminiApiKey;
+      }
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      const payload = {
+        job_url: jobUrl,
+        job_description: finalJD,
+        job_title: jobTitle,
+        company_name: company,
+        recruiter_name: null,
+        platform: jobUrl.includes('linkedin') ? 'linkedin' : jobUrl.includes('indeed') ? 'indeed' : 'unknown',
+      };
+      console.log('[handleGenerateOutreach] Sending request to /generate_outreach', {
+        job_url: payload.job_url,
+        job_description: payload.job_description?.substring(0, 100) + '...',
+        job_title: payload.job_title,
+        company_name: payload.company_name,
+        platform: payload.platform
+      });
+
+      const response = await fetch(`${API_BASE}/generate_outreach`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(payload),
+      });
+
+      console.log('[handleGenerateOutreach] Response received', { status: response.status });
+
+      const result = await response.json();
+      if (response.ok) {
+        console.log('[handleGenerateOutreach] Success', result);
+        setOutreachRecruiterInfo(result.recruiter_info);
+        setOutreachData(result.message);
+        if (analysisPanelRef.current) {
+          setOutreachAnchorTop(analysisPanelRef.current.getBoundingClientRect().top);
+        }
+        setOutreachModalOpen(true);
+        setStatusMessage('Outreach message generated successfully!');
+        showToast('Outreach message ready!', 'success');
+      } else {
+        console.log('[handleGenerateOutreach] Error response', result);
+        setStatusMessage(`Error generating outreach: ${result.detail}`);
+        showToast(`Error: ${result.detail}`, 'error');
+      }
+    } catch (err) {
+      console.log('[handleGenerateOutreach] Exception', err);
+      setStatusMessage(`Network error: ${err.message}`);
+      showToast(`Error: ${err.message}`, 'error');
+    } finally {
+      setOutreachLoading(false);
+    }
+  };
+
+  const handleSendOutreachEmail = async (emailData) => {
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      const response = await fetch(`${API_BASE}/send_outreach_email`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(emailData),
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        showToast('Email prepared for sending!', 'success');
+        setOutreachModalOpen(false);
+      } else {
+        showToast(`Error: ${result.detail}`, 'error');
+      }
+    } catch (err) {
+      showToast(`Error: ${err.message}`, 'error');
+    }
+  };
+
   return (
     <div className="app-container">
+      {/* Optimization #5: Progress bar at top of page */}
+      {loading && <div className="progress-bar" />}
+
       {/* Toast Notification */}
       {toast && (
         <div style={{
@@ -840,9 +1161,9 @@ function App() {
           zIndex: 9999, padding: '12px 22px', borderRadius: '12px', fontWeight: 600,
           fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '10px',
           animation: 'slideDown 0.3s ease both',
-          background: toast.type === 'success' ? 'rgba(16,185,129,0.15)' : toast.type === 'error' ? 'rgba(239,68,68,0.15)' : 'rgba(99,102,241,0.15)',
-          border: `1px solid ${toast.type === 'success' ? 'rgba(16,185,129,0.4)' : toast.type === 'error' ? 'rgba(239,68,68,0.4)' : 'rgba(99,102,241,0.4)'}`,
-          color: toast.type === 'success' ? '#34D399' : toast.type === 'error' ? '#F87171' : '#A5B4FC',
+          background: toast.type === 'success' ? 'rgba(16,185,129,0.15)' : toast.type === 'error' ? 'rgba(239,68,68,0.15)' : 'rgba(56,189,248,0.15)',
+          border: `1px solid ${toast.type === 'success' ? 'rgba(16,185,129,0.4)' : toast.type === 'error' ? 'rgba(239,68,68,0.4)' : 'rgba(56,189,248,0.4)'}`,
+          color: toast.type === 'success' ? '#34D399' : toast.type === 'error' ? '#F87171' : '#7DD3FC',
           backdropFilter: 'blur(16px)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
         }}>
           {toast.message}
@@ -860,22 +1181,32 @@ function App() {
               padding: '5px 12px', borderRadius: '20px', maxWidth: '340px',
               background: statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
                 ? 'rgba(239,68,68,0.1)' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
-                  ? 'rgba(16,185,129,0.1)' : 'rgba(99,102,241,0.1)',
+                  ? 'rgba(16,185,129,0.1)' : 'rgba(56,189,248,0.1)',
               border: `1px solid ${statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
                 ? 'rgba(239,68,68,0.25)' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
-                  ? 'rgba(16,185,129,0.25)' : 'rgba(99,102,241,0.25)'}`,
+                  ? 'rgba(16,185,129,0.25)' : 'rgba(56,189,248,0.25)'}`,
             }}>
               <span style={{
                 width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0, animation: 'pulseGlow 2s infinite',
                 background: statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
                   ? '#EF4444' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
-                    ? '#10B981' : '#6366F1'
+                    ? '#10B981' : '#38BDF8'
               }} />
               <span style={{ fontSize: '0.78rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {statusMessage.length > 55 ? `${statusMessage.substring(0, 55)}…` : statusMessage}
               </span>
             </div>
           )}
+          {/* Optimization #2: Keyboard help button */}
+          <button
+            className="btn btn-secondary"
+            style={{ padding: '6px 10px', fontSize: '0.9rem', minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => setShowKeyboardHelp(true)}
+            aria-label="Show keyboard shortcuts help"
+            title="Press ? for keyboard shortcuts"
+          >
+            ?
+          </button>
           {user && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '0.82rem', color: 'var(--accent-green)', fontWeight: 500 }}>{user.email}</span>
@@ -892,7 +1223,7 @@ function App() {
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '38px' }}>
             {/* Brand mark */}
             <div style={{ textAlign: 'center' }}>
-              <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', margin: '0 auto 14px', boxShadow: '0 8px 24px rgba(99,102,241,0.3)' }}>📄</div>
+              <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', margin: '0 auto 14px', boxShadow: '0 8px 24px rgba(56,189,248,0.3)' }}>📄</div>
               <h2 style={{ textAlign: 'center', fontSize: '1.4rem', marginBottom: '6px' }}>Welcome to Resume Tailor</h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.87rem', lineHeight: 1.6 }}>
                 Paste a job URL, get your ATS score, and receive a tailored LaTeX resume + cover letter in under 60 seconds.
@@ -1042,6 +1373,7 @@ function App() {
                 className="btn btn-secondary"
                 style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
                 onClick={() => setConfigStepActive(true)}
+                aria-label="Open settings"
               >
                 ⚙️ Settings
               </button>
@@ -1069,7 +1401,7 @@ function App() {
                 className={`mode-btn ${dashboardMode === 'tailor' ? 'active' : ''}`}
                 style={{
                   flex: 1,
-                  padding: '8px',
+                  padding: '10px 8px',
                   fontSize: '0.82rem',
                   borderRadius: '6px',
                   fontWeight: 600,
@@ -1077,7 +1409,11 @@ function App() {
                   background: dashboardMode === 'tailor' ? 'var(--accent-primary)' : 'transparent',
                   color: '#fff',
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  minHeight: '40px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
                 }}
                 onClick={() => {
                   setDashboardMode('tailor');
@@ -1090,7 +1426,7 @@ function App() {
                 className={`mode-btn ${dashboardMode === 'discover' ? 'active' : ''}`}
                 style={{
                   flex: 1,
-                  padding: '8px',
+                  padding: '10px 8px',
                   fontSize: '0.82rem',
                   borderRadius: '6px',
                   fontWeight: 600,
@@ -1098,7 +1434,11 @@ function App() {
                   background: dashboardMode === 'discover' ? 'var(--accent-primary)' : 'transparent',
                   color: '#fff',
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  minHeight: '40px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
                 }}
                 onClick={() => {
                   setDashboardMode('discover');
@@ -1107,121 +1447,89 @@ function App() {
               >
                 🔍 Discover Jobs
               </button>
+              <button
+                className={`mode-btn ${dashboardMode === 'history' ? 'active' : ''}`}
+                style={{
+                  flex: 1,
+                  padding: '10px 8px',
+                  fontSize: '0.82rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: 'none',
+                  background: dashboardMode === 'history' ? 'var(--accent-primary)' : 'transparent',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  minHeight: '40px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onClick={() => {
+                  setDashboardMode('history');
+                  setIsDiscoveryView(false);
+                  handleFetchHistory();
+                }}
+              >
+                🕘 History
+              </button>
             </div>
 
             {dashboardMode === 'tailor' && (
-              <>
-                <div className="section-label">Target Job</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-                  <input
-                    type="text"
-                    placeholder="Job Application URL (LinkedIn, Indeed…)"
-                    value={jobUrl}
-                    onChange={(e) => setJobUrl(e.target.value)}
-                    onBlur={handleUrlBlur}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Job Title (e.g. Software Engineer)"
-                    value={jobTitle}
-                    onChange={(e) => setJobTitle(e.target.value)}
-                  />
-                  <textarea
-                    placeholder="Paste Job Description (optional if URL provided)"
-                    rows="6"
-                    value={jobDescription}
-                    onChange={(e) => setJobDescription(e.target.value)}
-                  />
-                  <div style={{ fontSize: '0.72rem', color: jobDescription.length > 500 ? 'var(--accent-green)' : 'var(--text-muted)', marginTop: '-8px', marginBottom: '10px', textAlign: 'right' }}>
-                    {jobDescription.length.toLocaleString()} chars{jobDescription.length < 200 ? ' — paste more for better results' : jobDescription.length < 500 ? ' — good' : ' — ✅ detailed'}
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
-                    {!analysisResult && (
-                      <button className="btn btn-secondary" style={{ flex: 1 }} onClick={handleAnalyzeJob} disabled={loading}>
-                        {loading ? '⏳' : '🔍 Analyze Job'}
-                      </button>
-                    )}
-                    <button className="btn" style={{ flex: 1.2, width: analysisResult ? '100%' : 'auto' }} onClick={() => handleGenerateTailoredResume(false)} disabled={loading} title="Analyze & Tailor (Cmd+Enter)">
-                      {loading ? '⏳' : '⚡ Analyze & Tailor'}
-                    </button>
-                  </div>
-                </div>
-              </>
+              <Suspense fallback={<div style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>Loading...</div>}>
+                <TailorMode
+                  jobUrl={jobUrl}
+                  setJobUrl={handleJobUrlChange}
+                  jobTitle={jobTitle}
+                  setJobTitle={setJobTitle}
+                  jobDescription={jobDescription}
+                  setJobDescription={setJobDescription}
+                  analysisResult={analysisResult}
+                  loading={loading}
+                  handleUrlBlur={handleUrlBlur}
+                  handleAnalyzeJob={handleAnalyzeJob}
+                  handleGenerateTailoredResume={handleGenerateTailoredResume}
+                  onGenerateOutreach={handleGenerateOutreach}
+                />
+              </Suspense>
             )}
 
             {dashboardMode === 'discover' && (
-              <>
-                <div className="section-label">Job Discoverer</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <input
-                    type="text"
-                    placeholder="Preferred Role (e.g. Data Scientist, AI Engineer)"
-                    value={searchKeywords}
-                    onChange={(e) => setSearchKeywords(e.target.value)}
-                    style={{ marginBottom: '2px' }}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Location (e.g. Remote, London)"
-                    value={searchLocation}
-                    onChange={(e) => setSearchLocation(e.target.value)}
-                    style={{ marginBottom: '2px' }}
-                  />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Post Date Timeframe</span>
-                    <select
-                      value={searchTimeframe}
-                      onChange={(e) => setSearchTimeframe(e.target.value)}
-                      style={{
-                        padding: '8px',
-                        fontSize: '0.8rem',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        // This app has one fixed dark theme — it doesn't follow the
-                        // browser/OS light-dark preference. Hardcode explicit dark
-                        // colors instead of CSS vars that were falling back to
-                        // near-white text (--text-main) on a near-transparent
-                        // background, which read as invisible on a light system.
-                        background: 'rgba(255,255,255,0.06)',
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        color: '#fff'
-                      }}
-                    >
-                      <option value="24h">Last 24 Hours</option>
-                      <option value="48h">Last 48 Hours</option>
-                      <option value="1w">Last 1 Week</option>
-                      <option value="1m">Last 1 Month</option>
-                    </select>
-                  </div>
-                  <button
-                    className="btn btn-secondary"
-                    style={{
-                      width: '100%',
-                      background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(79,70,229,0.06) 100%)',
-                      border: '1px solid rgba(99,102,241,0.25)',
-                      color: '#a5b4fc',
-                      fontWeight: 600,
-                      padding: '12px'
-                    }}
-                    onClick={handleSearchJobs}
-                    disabled={discovering || loading}
-                  >
-                    {discovering ? '⏳ Scanning Feeds...' : `🔍 Scan Matches (${searchTimeframe === '24h' ? 'Last 24h' : searchTimeframe === '48h' ? 'Last 48h' : searchTimeframe === '1w' ? 'Last 1w' : 'Last 1m'})`}
-                  </button>
-                </div>
-              </>
+              <Suspense fallback={<div style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>Loading...</div>}>
+                <DiscoverMode
+                  searchKeywords={searchKeywords}
+                  setSearchKeywords={setSearchKeywords}
+                  searchLocation={searchLocation}
+                  setSearchLocation={setSearchLocation}
+                  searchTimeframe={searchTimeframe}
+                  setSearchTimeframe={setSearchTimeframe}
+                  discovering={discovering}
+                  loading={loading}
+                  handleSearchJobs={handleSearchJobs}
+                />
+              </Suspense>
+            )}
+            {dashboardMode === 'history' && (
+              <Suspense fallback={<div style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>Loading...</div>}>
+                <HistoryMode
+                  historyLoading={historyLoading}
+                  handleFetchHistory={handleFetchHistory}
+                />
+              </Suspense>
             )}
           </div>
 
           {/* Right Analysis Panel */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <div ref={analysisPanelRef} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ marginBottom: 0 }}>
-                {isDiscoveryView
+                {dashboardMode === 'history'
+                  ? 'Application History'
+                  : isDiscoveryView
                   ? `Job Discoveries (${searchTimeframe === '24h' ? 'Last 24h' : searchTimeframe === '48h' ? 'Last 48h' : searchTimeframe === '1w' ? 'Last 1 Week' : 'Last 1 Month'})`
                   : 'Analysis & Preview'}
               </h2>
-              {(analysisResult || isDiscoveryView) && (
+              {dashboardMode !== 'history' && (analysisResult || isDiscoveryView) && (
                 <button
                   className="btn btn-secondary"
                   style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '6px' }}
@@ -1232,13 +1540,78 @@ function App() {
                       handleNewJob();
                     }
                   }}
+                  aria-label={isDiscoveryView ? 'Back to active job' : 'Start analyzing a new job'}
                 >
                   {isDiscoveryView ? '← Back to Active' : '+ New Job'}
                 </button>
               )}
             </div>
+
+            {/* Personalized Outreach Modal - Moved to top */}
+            {outreachModalOpen && (
+              <Suspense fallback={null}>
+                <OutreachModal
+                  isOpen={outreachModalOpen}
+                  onClose={() => setOutreachModalOpen(false)}
+                  recruiterInfo={outreachRecruiterInfo}
+                  messageData={outreachData}
+                  jobTitle={jobTitle}
+                  company={company}
+                  onSendEmail={handleSendOutreachEmail}
+                  onCopyToClipboard={() => {}}
+                  anchorTop={outreachAnchorTop}
+                />
+              </Suspense>
+            )}
+
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            {isDiscoveryView && discovering ? (
+            {dashboardMode === 'history' ? (
+              historyLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: '700' }}>
+                  <svg style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" style={{ opacity: 0.25 }} />
+                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>Loading history…</span>
+                </div>
+              ) : applicationHistory.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🕘</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>No history yet</div>
+                  <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>Tailor a resume or apply to a job to see it recorded here.</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '560px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {applicationHistory.map((entry, idx) => {
+                    const statusColor = entry.status === 'applied' ? '#10B981' : entry.status === 'autofilled' ? '#38BDF8' : '#7dd3fc';
+                    const statusLabel = entry.status === 'applied' ? 'Applied' : entry.status === 'autofilled' ? 'Autofilled' : 'Tailored';
+                    const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
+                    return (
+                      <div key={idx} className="card" style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>{entry.job_title || 'Untitled Role'}</div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>{date}</div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                            <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '999px', background: `${statusColor}22`, color: statusColor, fontWeight: 700 }}>
+                              {statusLabel}
+                            </span>
+                            {typeof entry.score === 'number' && (
+                              <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#fff' }}>{entry.score}% match</span>
+                            )}
+                            {entry.job_url && (
+                              <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)' }}>View Post →</a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : isDiscoveryView && discovering ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: '700' }}>
                   <svg style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
@@ -1266,20 +1639,26 @@ function App() {
                     }}
                     style={{ maxHeight: '200px' }}
                   >
-                    {statusLogs.map((entry, index) => {
-                      const msg = typeof entry === 'string' ? entry : entry.message;
-                      const ts = typeof entry === 'object' ? entry.ts : '';
-                      let cls = 'log-entry-msg log-default';
-                      if (msg.includes('🏁') || msg.includes('✅')) cls = 'log-entry-msg log-ok';
-                      else if (msg.includes('🔎') || msg.includes('🌐') || msg.includes('🤖')) cls = 'log-entry-msg log-ai';
-                      else if (msg.includes('❌')) cls = 'log-entry-msg log-warn';
-                      return (
-                        <div key={index} className="log-entry">
-                          <span className="log-entry-ts">{ts}</span>
-                          <span className={cls}>{msg}</span>
-                        </div>
-                      );
-                    })}
+                    {statusLogs.length === 0 ? (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', padding: '12px', fontStyle: 'italic' }}>
+                        Initializing...
+                      </div>
+                    ) : (
+                      statusLogs.map((entry, index) => {
+                        const msg = typeof entry === 'string' ? entry : entry.message;
+                        const ts = typeof entry === 'object' ? entry.ts : '';
+                        let cls = 'log-entry-msg log-default';
+                        if (msg.includes('🏁') || msg.includes('✅')) cls = 'log-entry-msg log-ok';
+                        else if (msg.includes('🔎') || msg.includes('🌐') || msg.includes('🤖')) cls = 'log-entry-msg log-ai';
+                        else if (msg.includes('❌')) cls = 'log-entry-msg log-warn';
+                        return (
+                          <div key={index} className="log-entry">
+                            <span className="log-entry-ts">{ts}</span>
+                            <span className={cls}>{msg}</span>
+                          </div>
+                        );
+                      })
+                    )}
                     <span className="log-cursor" />
                   </div>
                 </div>
@@ -1361,45 +1740,50 @@ function App() {
                           {paginated.map((job, idx) => {
                             const isExpanded = expandedCards.has(idx);
                             const score = job.score || 0;
-                            const scoreColor = score >= 80 ? '#10B981' : score >= 60 ? '#6366F1' : '#E57373';
+                            const scoreColor = score >= 80 ? '#10B981' : score >= 60 ? '#38BDF8' : '#E57373';
                             // Mini SVG arc for score
                             const r = 18, circ = 2 * Math.PI * r;
                             const arc = (score / 100) * circ;
                             return (
                               <div key={idx} className="card job-card" style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', cursor: 'pointer' }}
                                 onClick={() => toggleCard(idx)}>
-                                {/* Collapsed header row */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                      <span style={{
-                                        fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 700,
-                                        background: job.platform === 'LinkedIn' ? 'rgba(10,102,194,0.12)' : 'rgba(255,111,0,0.12)',
-                                        color: job.platform === 'LinkedIn' ? '#0a66c2' : '#ff6f00'
-                                      }}>{job.platform}</span>
-                                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{job.age}</span>
-                                      {job.estimated && (
-                                        <span
-                                          title="Score estimated from job title only (beyond the accurate-scan cap) — not yet based on the full job description."
-                                          style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, background: 'rgba(234,179,8,0.12)', color: '#eab308' }}
-                                        >EST.</span>
-                                      )}
-                                    </div>
-                                    <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{job.title}</div>
+                                {/* Collapsed header row - responsive layout */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: compactMode ? 'wrap' : 'nowrap' }}>
+                                  <div style={{ flex: 1, minWidth: 0, order: compactMode ? 2 : 0 }}>
+                                    {/* Hide platform/age badges on mobile compact mode */}
+                                    {!compactMode && (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                        <span style={{
+                                          fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 700,
+                                          background: job.platform === 'LinkedIn' ? 'rgba(10,102,194,0.12)' : 'rgba(255,111,0,0.12)',
+                                          color: job.platform === 'LinkedIn' ? '#0a66c2' : '#ff6f00'
+                                        }}>{job.platform}</span>
+                                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{job.age}</span>
+                                        {job.estimated && (
+                                          <span
+                                            title="Score estimated from job title only (beyond the accurate-scan cap) — not yet based on the full job description."
+                                            style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, background: 'rgba(234,179,8,0.12)', color: '#eab308' }}
+                                          >EST.</span>
+                                        )}
+                                      </div>
+                                    )}
+                                    <div style={{ fontWeight: 700, fontSize: compactMode ? '0.88rem' : '0.95rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{job.title}</div>
                                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{job.company} • {job.location}</div>
-                                    {/* Top 3 skill tags always visible */}
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
-                                      {(job.matched_skills || []).slice(0, 3).map((s, i) => (
-                                        <span key={i} style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(72,187,120,0.08)', color: '#48bb78', border: '1px solid rgba(72,187,120,0.15)', fontSize: '0.68rem' }}>✓ {s}</span>
-                                      ))}
-                                      {(job.missing_skills || []).slice(0, 2).map((s, i) => (
-                                        <span key={i} style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(229,115,115,0.08)', color: '#e57373', border: '1px solid rgba(229,115,115,0.15)', fontSize: '0.68rem' }}>✗ {s}</span>
-                                      ))}
-                                    </div>
+                                    {/* Hide skill tags on mobile compact mode - only show on expand */}
+                                    {!compactMode && (
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
+                                        {(job.matched_skills || []).slice(0, 3).map((s, i) => (
+                                          <span key={i} style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(72,187,120,0.08)', color: '#48bb78', border: '1px solid rgba(72,187,120,0.15)', fontSize: '0.68rem' }}>✓ {s}</span>
+                                        ))}
+                                        {(job.missing_skills || []).slice(0, 2).map((s, i) => (
+                                          <span key={i} style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(229,115,115,0.08)', color: '#e57373', border: '1px solid rgba(229,115,115,0.15)', fontSize: '0.68rem' }}>✗ {s}</span>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
-                                  {/* Mini score ring */}
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                                    <svg width="48" height="48" viewBox="0 0 48 48">
+                                  {/* Mini score ring - always visible, reorder on mobile */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, order: compactMode ? 1 : 0 }}>
+                                    <svg width={compactMode ? '40' : '48'} height={compactMode ? '40' : '48'} viewBox="0 0 48 48">
                                       <circle cx="24" cy="24" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
                                       <circle
                                         cx="24" cy="24" r={r} fill="none"
@@ -1409,25 +1793,36 @@ function App() {
                                         transform="rotate(-90 24 24)"
                                         style={{ transition: 'stroke-dasharray 0.6s cubic-bezier(0.16,1,0.3,1)' }}
                                       />
-                                      <text x="24" y="28" textAnchor="middle" fill="#fff" fontSize="11" fontWeight="800" fontFamily="Plus Jakarta Sans, sans-serif">{score}%</text>
+                                      <text x="24" y="28" textAnchor="middle" fill="#fff" fontSize={compactMode ? '9' : '11'} fontWeight="800" fontFamily="Plus Jakarta Sans, sans-serif">{score}%</text>
                                     </svg>
-                                    <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '2px' }}>Overall</span>
+                                    {!compactMode && <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '2px' }}>Overall</span>}
                                   </div>
-                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0 }}>{isExpanded ? '▲' : '▼'}</span>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0, order: compactMode ? 3 : 0 }}>{isExpanded ? '▲' : '▼'}</span>
                                 </div>
 
                                 {/* Expanded details */}
                                 {isExpanded && (
                                   <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px', animation: 'fadeIn 0.2s ease both' }}>
+                                    {/* Show skill tags on expand for mobile */}
+                                    {compactMode && (
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                                        {(job.matched_skills || []).slice(0, 3).map((s, i) => (
+                                          <span key={i} style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(72,187,120,0.08)', color: '#48bb78', border: '1px solid rgba(72,187,120,0.15)', fontSize: '0.68rem' }}>✓ {s}</span>
+                                        ))}
+                                        {(job.missing_skills || []).slice(0, 2).map((s, i) => (
+                                          <span key={i} style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(229,115,115,0.08)', color: '#e57373', border: '1px solid rgba(229,115,115,0.15)', fontSize: '0.68rem' }}>✗ {s}</span>
+                                        ))}
+                                      </div>
+                                    )}
                                     {/* Detailed sub-scores grid */}
                                     <div style={{
-                                      display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px',
+                                      display: 'grid', gridTemplateColumns: compactMode ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '8px',
                                       background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)',
                                       borderRadius: '8px', padding: '10px', fontSize: '0.72rem', textAlign: 'center'
                                     }}>
                                       <div>
                                         <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Skills</div>
-                                        <div style={{ fontWeight: 700, color: '#a5b4fc' }}>{job.skills_score || 50}%</div>
+                                        <div style={{ fontWeight: 700, color: '#7dd3fc' }}>{job.skills_score || 50}%</div>
                                         <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>
                                           {((job.matched_skills?.length || 0) + (job.missing_skills?.length || 0)) > 0
                                             ? `${job.matched_skills?.length || 0}/${(job.matched_skills?.length || 0) + (job.missing_skills?.length || 0)} key`
@@ -1436,24 +1831,29 @@ function App() {
                                       </div>
                                       <div>
                                         <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Experience</div>
-                                        <div style={{ fontWeight: 700, color: '#a5b4fc' }}>{job.experience_score || 70}%</div>
+                                        <div style={{ fontWeight: 700, color: '#7dd3fc' }}>{job.experience_score || 70}%</div>
                                         <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>{job.candidate_years || 3}y / {job.required_years || 4}y req</div>
                                       </div>
-                                      <div>
-                                        <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Role Fit</div>
-                                        <div style={{ fontWeight: 700, color: '#a5b4fc' }}>{job.role_fit_score || 65}%</div>
-                                        <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>Semantic</div>
-                                      </div>
-                                      <div>
-                                        <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Overall</div>
-                                        <div style={{ fontWeight: 800, color: scoreColor }}>{score}%</div>
-                                      </div>
+                                      {!compactMode && (
+                                        <>
+                                          <div>
+                                            <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Role Fit</div>
+                                            <div style={{ fontWeight: 700, color: '#7dd3fc' }}>{job.role_fit_score || 65}%</div>
+                                            <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>Semantic</div>
+                                          </div>
+                                          <div>
+                                            <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Overall</div>
+                                            <div style={{ fontWeight: 800, color: scoreColor }}>{score}%</div>
+                                          </div>
+                                        </>
+                                      )}
                                     </div>
-                                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexDirection: compactMode ? 'column' : 'row' }}>
                                       <button
                                         className="btn btn-secondary"
                                         style={{ padding: '8px 12px', fontSize: '0.76rem', flex: 1 }}
                                         onClick={(e) => { e.stopPropagation(); window.open(job.url, '_blank'); }}
+                                        aria-label="View job post on external site"
                                       >
                                         🔗 View Post
                                       </button>
@@ -1608,23 +2008,46 @@ function App() {
                 </div>
               </div>
             ) : !analysisResult ? (
-              <div className="empty-state">
-                <div className="empty-state-icon">🎯</div>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>Ready to find your fit</div>
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Upload your resume and paste a job description to get your ATS match score and a tailored resume in seconds.</div>
-                </div>
-                <div className="empty-state-steps">
-                  <div className="empty-step">
-                    <div className="empty-step-num">1</div>
-                    <div className="empty-step-label">Paste job URL or description</div>
+              loading ? (
+                // Optimization #5: Show skeleton while loading
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    <div style={{ width: '120px', height: '120px', borderRadius: '50%', background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 100%)', backgroundSize: '200% 100%', animation: 'skeleton-loading 1.5s infinite', flexShrink: 0 }} />
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px', minWidth: '200px' }}>
+                      <div style={{ height: '20px', background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 100%)', backgroundSize: '200% 100%', animation: 'skeleton-loading 1.5s infinite', borderRadius: '4px', width: '60%' }} />
+                      <div style={{ height: '16px', background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 100%)', backgroundSize: '200% 100%', animation: 'skeleton-loading 1.5s infinite', borderRadius: '4px', width: '40%' }} />
+                      <div style={{ height: '16px', background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 100%)', backgroundSize: '200% 100%', animation: 'skeleton-loading 1.5s infinite', borderRadius: '4px', width: '50%' }} />
+                    </div>
                   </div>
-                  <div className="empty-step">
-                    <div className="empty-step-num">2</div>
-                    <div className="empty-step-label">Get tailored resume & score</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} style={{ height: '80px', background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 100%)', backgroundSize: '200% 100%', animation: 'skeleton-loading 1.5s infinite', borderRadius: '8px' }} />
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ height: '16px', background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 100%)', backgroundSize: '200% 100%', animation: 'skeleton-loading 1.5s infinite', borderRadius: '4px' }} />
+                    <div style={{ height: '16px', background: 'linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 100%)', backgroundSize: '200% 100%', animation: 'skeleton-loading 1.5s infinite', borderRadius: '4px', width: '80%' }} />
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="empty-state">
+                  <div className="empty-state-icon">🎯</div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>Ready to find your fit</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Upload your resume and paste a job description to get your ATS match score and a tailored resume in seconds.</div>
+                  </div>
+                  <div className="empty-state-steps">
+                    <div className="empty-step">
+                      <div className="empty-step-num">1</div>
+                      <div className="empty-step-label">Paste job URL or description</div>
+                    </div>
+                    <div className="empty-step">
+                      <div className="empty-step-num">2</div>
+                      <div className="empty-step-label">Get tailored resume & score</div>
+                    </div>
+                  </div>
+                </div>
+              )
             ) : (
               <div>
                 {/* ── Job context banner ── */}
@@ -1634,6 +2057,16 @@ function App() {
                     <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Targeting:</span>
                     {jobTitle && <span className="job-banner-chip job-banner-role">{jobTitle}</span>}
                     {company && <span className="job-banner-chip job-banner-company">{company}</span>}
+                  </div>
+                )}
+
+                {/* ── Job Description Display ── */}
+                {jobDescription && (
+                  <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '12px', maxHeight: '300px', overflowY: 'auto' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '10px', color: 'var(--text-muted)' }}>📋 Job Description</div>
+                    <div style={{ fontSize: '0.82rem', lineHeight: '1.5', color: 'var(--text-main)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {jobDescription.substring(0, 1000)}{jobDescription.length > 1000 ? '...' : ''}
+                    </div>
                   </div>
                 )}
 
@@ -1675,7 +2108,7 @@ function App() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
                           <span style={{ fontSize: '0.83rem', fontWeight: 600 }}>{label}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                            <span style={{ fontSize: '0.68rem', padding: '2px 7px', borderRadius: '999px', background: method === 'Deterministic' ? 'rgba(100,220,130,0.12)' : 'rgba(120,120,255,0.12)', color: method === 'Deterministic' ? '#64dc82' : '#9090ff', fontWeight: 600 }}>
+                            <span style={{ fontSize: '0.68rem', padding: '2px 7px', borderRadius: '999px', background: method === 'Deterministic' ? 'rgba(100,220,130,0.12)' : 'rgba(56,189,248,0.12)', color: method === 'Deterministic' ? '#64dc82' : '#38bdf8', fontWeight: 600 }}>
                               {method}
                             </span>
                             <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>{score}%</span>
@@ -1725,12 +2158,12 @@ function App() {
                 {(!analysisResult.latex_code && !keepOriginalMode) ? (
                   <div style={{
                     marginTop: '24px', padding: '32px 28px', borderRadius: '16px',
-                    background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(79,70,229,0.04) 100%)',
-                    border: '1px solid rgba(99,102,241,0.22)',
+                    background: 'linear-gradient(135deg, rgba(56,189,248,0.08) 0%, rgba(37,99,235,0.04) 100%)',
+                    border: '1px solid rgba(56,189,248,0.22)',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '18px', textAlign: 'center',
                     animation: 'slideDown 0.4s ease both'
                   }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', boxShadow: '0 6px 20px rgba(99,102,241,0.3)' }}>🤖</div>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', boxShadow: '0 6px 20px rgba(56,189,248,0.3)' }}>🤖</div>
                     <div>
                       <h3 style={{ margin: '0 0 8px', fontSize: '1.05rem', color: '#fff' }}>ATS Score & Analysis Ready</h3>
                       <p style={{ maxWidth: '520px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
@@ -1761,7 +2194,7 @@ function App() {
                 ) : keepOriginalMode && !analysisResult.latex_code ? (
                   <div style={{
                     marginTop: '24px', padding: '28px', borderRadius: '14px',
-                    background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.18)',
+                    background: 'rgba(56,189,248,0.05)', border: '1px solid rgba(56,189,248,0.18)',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', textAlign: 'center',
                     animation: 'slideDown 0.3s ease both'
                   }}>
@@ -1874,6 +2307,23 @@ function App() {
                                 ))}
                               </>
                             )}
+                            {((tailoredResumeData || {}).projects || []).length > 0 && (
+                              <>
+                                <div className="resume-section-title">Projects</div>
+                                {((tailoredResumeData || {}).projects || []).map((proj, idx) => (
+                                  <div key={idx} className="resume-exp-item">
+                                    <div className="resume-exp-header">
+                                      <span className="resume-exp-role">{proj.title}</span>
+                                    </div>
+                                    <ul className="resume-exp-bullets">
+                                      {(proj.description || []).map((bullet, bidx) => (
+                                        <li key={bidx}>{bullet}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ))}
+                              </>
+                            )}
                           </div>
                         </div>
                       ) : (
@@ -1898,17 +2348,26 @@ function App() {
                     <div className="workspace-panel">
                       <div className="panel-toolbar">
                         <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Generated Cover Letter</h3>
-                        <button
-                          className="btn btn-secondary"
-                          style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
-                          onClick={() => {
-                            navigator.clipboard.writeText(analysisResult.cover_letter || '');
-                            setCoverLetterCopied(true);
-                            setTimeout(() => setCoverLetterCopied(false), 2000);
-                          }}
-                        >
-                          {coverLetterCopied ? '✓ Copied!' : '📋 Copy'}
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            className="btn btn-secondary"
+                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                            onClick={handleDownloadCoverLetter}
+                          >
+                            ⬇️ Download
+                          </button>
+                          <button
+                            className="btn btn-secondary"
+                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                            onClick={() => {
+                              navigator.clipboard.writeText(analysisResult.cover_letter || '');
+                              setCoverLetterCopied(true);
+                              setTimeout(() => setCoverLetterCopied(false), 2000);
+                            }}
+                          >
+                            {coverLetterCopied ? '✓ Copied!' : '📋 Copy'}
+                          </button>
+                        </div>
                       </div>
                       <div className="panel-content" style={{ whiteSpace: 'pre-wrap' }}>
                         {analysisResult.cover_letter}
@@ -1961,6 +2420,59 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Optimization #2: Keyboard Shortcuts Help Modal */}
+      {showKeyboardHelp && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 10000, backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease both'
+        }} onClick={() => setShowKeyboardHelp(false)}>
+          <div style={{
+            background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+            borderRadius: '16px', padding: '32px', maxWidth: '500px', width: '90%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5)', animation: 'slideDown 0.3s ease both'
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 700 }}>Keyboard Shortcuts</h2>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '4px 8px', fontSize: '1.2rem', minWidth: '32px', minHeight: '32px' }}
+                onClick={() => setShowKeyboardHelp(false)}
+                aria-label="Close keyboard shortcuts help"
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '0.88rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span>Analyze & Tailor Resume</span>
+                <kbd style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600 }}>Cmd+Enter</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span>Show Keyboard Shortcuts</span>
+                <kbd style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600 }}>?</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span>Close Modal</span>
+                <kbd style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600 }}>Esc</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Expand/Collapse Job Card</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Click card</span>
+              </div>
+            </div>
+            <button
+              className="btn"
+              style={{ width: '100%', marginTop: '24px', fontWeight: 700 }}
+              onClick={() => setShowKeyboardHelp(false)}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
