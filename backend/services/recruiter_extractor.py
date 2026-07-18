@@ -86,11 +86,21 @@ def _parse_recruiter_html(html: str) -> Dict[str, Optional[str]]:
         profile_match = re.search(r'href="(https://www\.linkedin\.com/in/[^"]+)"', html)
         recruiter_profile_url = profile_match.group(1) if profile_match else None
 
-    # Extract company name from page title
-    title_tag = soup.find('title')
-    page_title = _clean_text(title_tag.get_text()) if title_tag else ""
-    company_match = re.search(r'at\s+([A-Za-z0-9\s&.,\'-]+?)\s+\|', page_title)
-    company_name = company_match.group(1).strip() if company_match else None
+    # Extract company name. LinkedIn's public job page renders the company
+    # name directly in the topcard org-name link — prefer that over the page
+    # <title>, since the title's format varies ("X hiring Y in Z | LinkedIn",
+    # "Y at X | LinkedIn", etc.) and a single regex can't reliably cover all
+    # of them.
+    company_name = None
+    org_tag = soup.select_one("a.topcard__org-name-link") or soup.select_one(".topcard__org-name-link")
+    if org_tag:
+        company_name = _clean_text(org_tag.get_text()) or None
+
+    if not company_name:
+        title_tag = soup.find('title')
+        page_title = _clean_text(title_tag.get_text()) if title_tag else ""
+        company_match = re.search(r'at\s+([A-Za-z0-9\s&.,\'-]+?)\s+\|', page_title)
+        company_name = company_match.group(1).strip() if company_match else None
 
     print(f"[recruiter_extractor] Found recruiter: {recruiter_name}, profile: {recruiter_profile_url}, company: {company_name}")
 
