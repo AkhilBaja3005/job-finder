@@ -1848,6 +1848,34 @@ function App() {
                                         </>
                                       )}
                                     </div>
+                                    {job.platform === 'LinkedIn' && !job.estimated && (
+                                      job.recruiter_name ? (
+                                        <div style={{
+                                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
+                                          background: 'rgba(56,189,248,0.06)', border: '1px solid rgba(56,189,248,0.15)',
+                                          borderRadius: '8px', padding: '8px 12px', fontSize: '0.76rem'
+                                        }}>
+                                          <span style={{ color: 'var(--text-muted)' }}>
+                                            👤 Job poster: <span style={{ color: '#fff', fontWeight: 600 }}>{job.recruiter_name}</span>
+                                          </span>
+                                          {job.recruiter_profile_url && (
+                                            <a
+                                              href={job.recruiter_profile_url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(e) => e.stopPropagation()}
+                                              style={{ color: '#7dd3fc', fontWeight: 600, flexShrink: 0 }}
+                                            >
+                                              View Profile ↗
+                                            </a>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', opacity: 0.7 }}>
+                                          👤 Job poster not available for this posting
+                                        </div>
+                                      )
+                                    )}
                                     <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexDirection: compactMode ? 'column' : 'row' }}>
                                       <button
                                         className="btn btn-secondary"

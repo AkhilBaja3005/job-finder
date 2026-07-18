@@ -16,6 +16,7 @@ from services.ats_scorer import (
     _COMPILED_TITLE_TIER_PATTERNS
 )
 from services.scraper import scrape_job_description
+from services.recruiter_extractor import extract_recruiter
 from utils.ssl_utils import SSL_CONTEXT
 
 # ─── Pydantic Schemas for Search ──────────────────────────────────────────
@@ -303,6 +304,16 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
     role_fit = estimate_role_fit_score(resume_data, jd_text)
     overall_score = compute_overall_score(ats.skills_score, ats.experience_score, role_fit)
 
+    recruiter_name = None
+    recruiter_profile_url = None
+    if job.platform == "LinkedIn":
+        try:
+            recruiter_info = await extract_recruiter(job.url, platform="linkedin", html=scraped.get("html"), browser=browser)
+            recruiter_name = recruiter_info.get("recruiter_name")
+            recruiter_profile_url = recruiter_info.get("recruiter_profile_url")
+        except Exception as e:
+            print(f"[Job Searcher] Failed to extract recruiter info for '{job.title}': {e}")
+
     return {
         "title": job.title,
         "company": job.company,
@@ -319,6 +330,8 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
         "matched_skills": ats.matched_skills,
         "missing_skills": ats.missing_skills,
         "estimated": False,
+        "recruiter_name": recruiter_name,
+        "recruiter_profile_url": recruiter_profile_url,
     }
 
 
