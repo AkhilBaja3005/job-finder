@@ -278,10 +278,22 @@ const OutreachModal = ({
 
               <div className="action-buttons">
                 <button className="btn" onClick={handleCopyLinkedIn}>
-                  {copied ? '✓ Copied!' : '📋 Copy to Clipboard'}
+                  {copied ? '✓ Copied!' : '📋 Copy Message'}
                 </button>
-                <p className="linkedin-note">
-                  Paste this message in LinkedIn's messaging interface to send to the recruiter.
+                {recruiterInfo?.recruiter_profile_url && (
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      handleCopyLinkedIn();
+                      window.open(recruiterInfo.recruiter_profile_url, '_blank');
+                    }}
+                    title="Copies outreach note and opens LinkedIn Profile in a new tab"
+                  >
+                    🚀 Open LinkedIn Profile
+                  </button>
+                )}
+                <p className="linkedin-note" style={{ flexBasis: '100%', marginTop: '6px' }}>
+                  Paste this message in LinkedIn's message request box to connect with the recruiter.
                 </p>
               </div>
             </div>
