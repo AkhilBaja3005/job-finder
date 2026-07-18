@@ -25,7 +25,7 @@ SKILL_ALIASES: Dict[str, List[str]] = {
     "deep learning":       ["deep learning", "dl", "neural network", "neural net", "cnn", "rnn"],
     "llm":                 ["llm", "large language model", "gpt", "gemini", "claude", "chatgpt"],
     "nlp":                 ["nlp", "natural language processing", "text mining"],
-    "computer vision":     ["computer vision", "cv", "image recognition", "object detection"],
+    "computer vision":     ["computer vision", "image recognition", "object detection"], # "cv" dropped: near-universally means "curriculum vitae" in resume/JD text, not this skill
     "generative ai":       ["generative ai", "gen ai", "genai", "diffusion model"],
     "rag":                 ["rag", "retrieval augmented generation", "retrieval-augmented"],
     "fine-tuning":         ["fine-tuning", "finetuning", "lora", "qlora", "peft"],
@@ -48,11 +48,84 @@ SKILL_ALIASES: Dict[str, List[str]] = {
     "ci/cd":               ["ci/cd", "github actions", "jenkins", "gitlab ci", "cicd"],
     "react":               ["react", "reactjs", "react.js"],
     "fastapi":             ["fastapi"],
-    "vector database":     ["vector database", "vector db", "pinecone", "weaviate", "chromadb"]
+    "vector database":     ["vector database", "vector db", "pinecone", "weaviate", "chromadb"],
+
+    # ── Product management ──────────────────────────────────────────────
+    "product management":  ["product management", "product manager", "product owner"],
+    "roadmapping":          ["roadmapping", "product roadmap", "product strategy"],
+    "user research":        ["user research", "usability testing", "customer interviews"],
+    "a/b testing":          ["a/b testing", "ab testing", "split testing", "experimentation"],
+    "jira":                 ["jira", "confluence"],
+    "product analytics":    ["product analytics", "amplitude", "mixpanel", "pendo"],
+    "agile":                ["agile", "scrum", "kanban", "sprint planning"],
+
+    # ── Design ───────────────────────────────────────────────────────────
+    "ux design":            ["ux design", "user experience design", "ux/ui", "ui/ux"],
+    "ui design":            ["ui design", "user interface design", "visual design"],
+    "figma":                ["figma"],
+    "sketch":               ["sketch"],
+    "adobe creative suite": ["adobe creative suite", "photoshop", "illustrator", "indesign", "adobe xd"],
+    "wireframing":          ["wireframing", "wireframes", "prototyping", "prototype"],
+    "design systems":       ["design system", "design systems", "component library"],
+
+    # ── Marketing ────────────────────────────────────────────────────────
+    "seo":                  ["seo", "search engine optimization"],
+    "sem":                  ["sem", "search engine marketing", "google ads", "ppc"],
+    "content marketing":    ["content marketing", "content strategy", "copywriting"],
+    "email marketing":      ["email marketing", "mailchimp", "hubspot", "marketo"],
+    "social media marketing": ["social media marketing", "social media management"],
+    "marketing analytics":  ["marketing analytics", "google analytics", "ga4"],
+    "brand management":     ["brand management", "brand strategy"],
+    "growth marketing":     ["growth marketing", "growth hacking", "demand generation"],
+
+    # ── Sales & business development ────────────────────────────────────
+    "salesforce":           ["salesforce", "sfdc"],
+    "crm":                  ["crm", "customer relationship management"],
+    "account management":   ["account management", "account executive", "key account management"],
+    "business development": ["business development", "biz dev", "bizdev"],
+    "lead generation":      ["lead generation", "lead gen", "prospecting"],
+    "negotiation":          ["negotiation", "contract negotiation"],
+    "cold outreach":        ["cold outreach", "cold calling", "cold emailing"],
+
+    # ── Finance & accounting ────────────────────────────────────────────
+    "financial modeling":   ["financial modeling", "financial modelling", "financial models", "financial analysis"],
+    "financial reporting":  ["financial reporting", "gaap", "ifrs"],
+    "budgeting":            ["budgeting", "forecasting", "budget management"],
+    "excel":                ["microsoft excel", "spreadsheet modeling"], # bare "excel" is guarded via HIGH_RISK_TOKEN_CONTEXT
+    "quickbooks":           ["quickbooks", "netsuite"], # bare "sap" is guarded via HIGH_RISK_TOKEN_CONTEXT
+    "valuation":            ["valuation", "dcf", "discounted cash flow"],
+    "audit":                ["audit", "auditing", "internal controls"],
+
+    # ── HR & people operations ───────────────────────────────────────────
+    "recruiting":           ["recruiting", "talent acquisition", "sourcing"],
+    "hris":                 ["hris", "workday", "bamboohr", "adp"],
+    "onboarding":           ["onboarding", "employee onboarding"],
+    "performance management": ["performance management", "performance reviews"],
+
+    # ── Operations & project management ──────────────────────────────────
+    "project management":   ["project management", "pmp", "prince2"],
+    "supply chain":         ["supply chain", "logistics", "inventory management"],
+    "process improvement":  ["process improvement", "six sigma", "kaizen"], # bare "lean" is guarded via HIGH_RISK_TOKEN_CONTEXT
+    "vendor management":    ["vendor management", "procurement"],
 }
 
-# High-risk single-word collisions that require context protection rules
-HIGH_RISK_TOKENS = {"go", "airflow", "pipeline", "spark"}
+# High-risk single-word collisions that require context protection rules —
+# each of these is a common English word/verb (or, for "sap"/"excel", an
+# ambiguous acronym-adjacent term) with a much more frequent non-skill meaning
+# ("sales pipeline", "excel in your career", "stay lean", "sap morale"). Each
+# maps to a regex of nearby words that must also appear for the match to
+# count; a bare high-risk token with none of its guard words nearby is
+# assumed to be the common-English usage, not the skill.
+HIGH_RISK_TOKEN_CONTEXT: Dict[str, re.Pattern] = {
+    "go":       re.compile(r'\b(golang|programming|language|developer|engineer|backend|code|writing)\b'),
+    "pipeline": re.compile(r'\b(data|etl|elt|ml|ci|cd|build|deploy\w*|orchestrat\w*|airflow|luigi)\b'),
+    "airflow":  re.compile(r'\b(apache|dag|workflow|orchestrat\w*|etl|elt|data)\b'),
+    "spark":    re.compile(r'\b(apache|hadoop|databricks|pyspark|big\s?data|cluster|rdd|dataframe)\b'),
+    "excel":    re.compile(r'\b(microsoft|spreadsheet|pivot\w*|vlookup|macro\w*|workbook|formula\w*|ms)\b'),
+    "lean":     re.compile(r'\b(six\s?sigma|manufactur\w*|methodolog\w*|process|kaizen|agile|kanban|waste)\b'),
+    "sap":      re.compile(r'\b(erp|netsuite|s4\s?hana|hana|module\w*|fico|abap|successfactors)\b'),
+}
+HIGH_RISK_TOKENS = set(HIGH_RISK_TOKEN_CONTEXT.keys())
 
 # Cross-language Seniority & Title Classifications map
 TITLE_TIERS: Dict[str, List[str]] = {
@@ -63,6 +136,24 @@ TITLE_TIERS: Dict[str, List[str]] = {
     "junior":    ["junior", "jr", "associate", "intern", "trainee", "entry level", "softwareentwickler junior"]
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. TEXT SANITIZATION & BOUNDED SCANNING UTILITIES
+# ─────────────────────────────────────────────────────────────────────────────
+# Defined here (ahead of the compiled pattern tables below, which is normally
+# "section 2" territory) because those tables call _clean_text() at module
+# load time to normalize aliases the same way scanned text is normalized.
+def _normalize_alphanumeric(text: str) -> str:
+    """Strips all structural formatting, spaces, and punctuation for safety lookups."""
+    if not text: return ""
+    return re.sub(r'[^a-z0-9]', '', text.lower())
+
+def _clean_text(text: str) -> str:
+    """Standardizes spaces and structural boundary components."""
+    if not text: return ""
+    text = text.lower()
+    text = re.sub(r'[•·▪▸–—\-\_/]', ' ', text)
+    return re.sub(r'\s+', ' ', text).strip()
+
 # Global structural reverse lookups
 _SKILL_LOOKUP: Dict[str, str] = {alias.lower(): canonical for canonical, aliases in SKILL_ALIASES.items() for alias in aliases}
 
@@ -71,19 +162,33 @@ _SKILL_LOOKUP: Dict[str, str] = {alias.lower(): canonical for canonical, aliases
 # — this function runs per job in discovery (up to DISCOVERY_JD_FETCH_CAP
 # times) plus per experience entry in compute_skills_score, so avoiding
 # redundant pattern construction on a hot path matters.
+#
+# Patterns are built from the _clean_text()-normalized alias, not the raw
+# alias string. _extract_taxonomy_skills always searches _clean_text()'d
+# input, which replaces separators (-, _, /, bullets, dashes) with spaces —
+# so a raw alias containing one of those characters (e.g. "ci/cd",
+# "fine-tuning") could never match, since the separator in the pattern would
+# never appear in the text being searched. Normalizing the alias the same way
+# keeps the two sides consistent.
 _COMPILED_SKILL_PATTERNS: List[Tuple[re.Pattern, str]] = [
-    (re.compile(r'\b' + re.escape(alias) + r'\b'), canonical)
+    (re.compile(r'\b' + re.escape(_clean_text(alias)) + r'\b'), canonical)
     for alias, canonical in _SKILL_LOOKUP.items()
     if alias not in HIGH_RISK_TOKENS
 ]
 _COMPILED_HIGH_RISK_PATTERNS: List[Tuple[re.Pattern, str]] = [
-    (re.compile(r'\b' + re.escape(token) + r'\b'), token)
+    (re.compile(r'\b' + re.escape(_clean_text(token)) + r'\b'), token)
     for token in HIGH_RISK_TOKENS
 ]
-_GO_CONTEXT_PATTERN = re.compile(r'\b(golang|programming|language|developer|engineer|backend|code|writing)\b')
+# Canonical display name for each high-risk token — these aren't in
+# SKILL_ALIASES (they're matched via the guarded path below, not the plain
+# alias table), so _SKILL_LOOKUP has no entry for them.
+_HIGH_RISK_CANONICAL: Dict[str, str] = {
+    "go": "go", "pipeline": "data pipelines", "airflow": "airflow",
+    "spark": "apache spark", "excel": "excel", "lean": "process improvement", "sap": "sap",
+}
 
 # Precompiled (tier, pattern) pairs for TITLE_TIERS, in _TIER_ORDER priority
-# (executive > lead > senior > mid > junior). extract_jd_expectations and
+# (executive > lead > senior > junior > mid). extract_jd_expectations and
 # get_candidate_seniority_tier both break on first match, so a title matching
 # keywords from multiple tiers (e.g. "Senior Software Engineer" matches both
 # "senior" and "engineer") now resolves to the highest-priority tier. This is
@@ -91,7 +196,7 @@ _GO_CONTEXT_PATTERN = re.compile(r'\b(golang|programming|language|developer|engi
 # only `break`'d the inner keyword loop, so the outer loop kept iterating and
 # whichever tier's keyword matched LAST in dict insertion order silently won
 # (e.g. "Senior Software Engineer" was misclassified as "mid" via "engineer").
-_TIER_ORDER = ["executive", "lead", "senior", "mid", "junior"]
+_TIER_ORDER = ["executive", "lead", "senior", "junior", "mid"]
 _COMPILED_TITLE_TIER_PATTERNS: List[Tuple[str, re.Pattern]] = [
     (tier, re.compile(r'\b' + re.escape(kw) + r'\b'))
     for tier in _TIER_ORDER
@@ -129,21 +234,6 @@ class ATSScoreResult:
     required_years: int
     score_breakdown: Dict[str, str]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. TEXT SANITIZATION & BOUNDED SCANNING UTILITIES
-# ─────────────────────────────────────────────────────────────────────────────
-def _normalize_alphanumeric(text: str) -> str:
-    """Strips all structural formatting, spaces, and punctuation for safety lookups."""
-    if not text: return ""
-    return re.sub(r'[^a-z0-9]', '', text.lower())
-
-def _clean_text(text: str) -> str:
-    """Standardizes spaces and structural boundary components."""
-    if not text: return ""
-    text = text.lower()
-    text = re.sub(r'[•·▪▸–—\-\_/]', ' ', text)
-    return re.sub(r'\s+', ' ', text).strip()
-
 def _extract_taxonomy_skills(text: str) -> Set[str]:
     """
     Extracts canonical skills safely using alphanumeric matching and strict
@@ -157,16 +247,16 @@ def _extract_taxonomy_skills(text: str) -> Set[str]:
         if pattern.search(cleaned):
             found_skills.add(canonical)
 
-    # 2. Protected validation for high-risk tokens (e.g., checking context rules for "go")
+    # 2. Protected validation for high-risk tokens: each requires one of its
+    # guard words (HIGH_RISK_TOKEN_CONTEXT) to also appear nearby, or it's
+    # treated as ordinary English usage rather than the skill (e.g. "sales
+    # pipeline" vs. "data pipeline", "excel in your career" vs. "MS Excel").
     for pattern, token in _COMPILED_HIGH_RISK_PATTERNS:
         if pattern.search(cleaned):
-            canonical = _SKILL_LOOKUP.get(token, token)
-            # Verify context proximity to engineering terms
-            if token == "go":
-                if _GO_CONTEXT_PATTERN.search(cleaned) or "golang" in cleaned:
-                    found_skills.add(canonical)
-            else:
-                found_skills.add(canonical) # Pass safe non-go tokens if bounded correctly
+            context_pattern = HIGH_RISK_TOKEN_CONTEXT[token]
+            # "golang" is unambiguous on its own — no context word needed.
+            if (token == "go" and "golang" in cleaned) or context_pattern.search(cleaned):
+                found_skills.add(_HIGH_RISK_CANONICAL[token])
 
     return found_skills
 
@@ -254,13 +344,15 @@ def _parse_date_to_ordinal(date_str: str) -> Optional[int]:
 
 def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, List[Tuple[int, int, float]]]:
     """
-    Merges overlapping professional experience, tracking total years, 
+    Merges overlapping professional experience, tracking total years,
     average structural tenure parameters, and recency coefficients.
     """
     intervals = []
     job_durations = []
-    
+
     for exp in resume_data.get("experience", []):
+        if not isinstance(exp, dict):
+            continue
         start = _parse_date_to_ordinal(exp.get("start_date", ""))
         end = _parse_date_to_ordinal(exp.get("end_date", "") or "Present")
         if start and end and end > start:
@@ -300,7 +392,11 @@ def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, Lis
 # 6. EDUCATION CREDITS, SENIORITY TIERS & TENURE VOLATILITY ADJUSTERS
 # ─────────────────────────────────────────────────────────────────────────────
 def get_highest_education_tier(resume_data: dict) -> str:
-    edu_text = " ".join([edu.get("degree", "").lower() for edu in resume_data.get("education", [])])
+    edu_list = resume_data.get("education", [])
+    edu_text = ""
+    for edu in edu_list:
+        if isinstance(edu, dict):
+            edu_text += " " + edu.get("degree", "").lower()
     if "phd" in edu_text or "ph.d" in edu_text or "doctorate" in edu_text: return "phd"
     if "master" in edu_text or "ms" in edu_text or "msc" in edu_text or "mba" in edu_text: return "masters"
     return "bachelors"
@@ -332,7 +428,12 @@ def get_candidate_seniority_tier(resume_data: dict) -> str:
     """Classifies the candidate's professional tier using their most recent job titles."""
     exp = resume_data.get("experience", [])
     if not exp: return "junior"
-    recent_roles = " ".join([exp[i].get("role", "").lower() for i in range(min(len(exp), 2))])
+
+    recent_roles = ""
+    for i in range(min(len(exp), 2)):
+        exp_item = exp[i]
+        if isinstance(exp_item, dict):
+            recent_roles += " " + exp_item.get("role", "").lower()
 
     for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
         if pattern.search(recent_roles):
@@ -358,9 +459,11 @@ def compute_skills_score(
         return SkillMatchResult(60, [], [], [], [], "No mandatory technical keywords recognized in this JD — skills score is a neutral default, not a real match assessment.")
 
     skills_sec_canon = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
-    
+
     job_profiles: List[Tuple[Set[str], float]] = []
     for exp in resume_data.get("experience", []):
+        if not isinstance(exp, dict):
+            continue
         start = _parse_date_to_ordinal(exp.get("start_date", ""))
         end = _parse_date_to_ordinal(exp.get("end_date", "") or "Present")
         weight = 0.5

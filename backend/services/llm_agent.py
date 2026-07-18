@@ -304,14 +304,19 @@ async def analyze_job_fit(
         f"years={cand_years}/{req_years}")
 
     # Prepare inputs for semantic scoring & cover letter
+    experience_list = resume_data.get("experience", [])
+    current_role = ""
+    if experience_list and isinstance(experience_list[0], dict):
+        current_role = experience_list[0].get("role", "")
+
     lean_resume = {
         "name":       resume_data.get("name", ""),
-        "current_role": resume_data.get("experience", [{}])[0].get("role", "") if resume_data.get("experience") else "",
+        "current_role": current_role,
         "total_experience_years": ats.candidate_years,
         "skills":     resume_data.get("skills", []),
-        "recent_companies": [e.get("company", "") for e in resume_data.get("experience", [])[:3]],
-        "education":  [{"institution": e.get("institution", ""), "degree": e.get("degree", "")} for e in resume_data.get("education", [])],
-        "projects":   [{"title": p.get("title", "")} for p in resume_data.get("projects", [])],
+        "recent_companies": [e.get("company", "") for e in experience_list if isinstance(e, dict)][:3],
+        "education":  [{"institution": e.get("institution", ""), "degree": e.get("degree", "")} for e in resume_data.get("education", []) if isinstance(e, dict)],
+        "projects":   [{"title": p.get("title", "")} for p in resume_data.get("projects", []) if isinstance(p, dict)],
     }
 
     semantic_prompt = f"""You are a senior technical recruiter.
@@ -338,8 +343,12 @@ Focus ONLY on:
 """
 
     bullet_counts = {
-        e.get("company", f"job_{i}"): len(e.get("description" or []))
+        e.get("company", f"job_{i}"): len(e.get("description", []))
         for i, e in enumerate(resume_data.get("experience", []))
+    }
+    project_bullet_counts = {
+        p.get("title", f"project_{i}"): len(p.get("description", []))
+        for i, p in enumerate(resume_data.get("projects", []))
     }
     missing_skills_list = ats.missing_skills or []
     cover_prompt = f"""You are an expert career writer.
@@ -354,6 +363,8 @@ RULES:
 - Cover letter: under 300 words, specific to this JD, no generic filler.
 - suggested_resume_updates.experience: MUST have bullet lists matching these counts: {json.dumps(bullet_counts)}
   Do NOT merge, delete, or add bullets.
+- suggested_resume_updates.projects: MUST have bullet lists matching these counts: {json.dumps(project_bullet_counts)}
+  Do NOT merge, delete, or add bullets. Only include this field if the candidate has projects.
 - TRUTHFULNESS: Never claim security clearances, certifications, or specialized regulatory compliance standards if the candidate does not possess them in their profile. Emphasize transferable skills honestly. Never exaggerate the candidate's total years of experience history in the summary or cover letter.
 - suggested_resume_updates.skills: Updated skills list naturally integrating missing skills (only include adjacent skills that are reasonable extensions of their background, do not fabricate unrelated expert skills).
 """
@@ -492,16 +503,21 @@ def review_tailored_resume(
 
     # 1e. Projects — use longest unique keyword (3+ chars) from title for fuzzy match
     for proj in original_resume_data.get("projects", []):
-        title = proj.get("title", "").strip()
-        # Find a distinctive word (>4 chars, not a stopword) to search for
-        stopwords = {'the', 'and', 'for', 'from', 'with', 'using', 'deep', 'data'}
-        words = [w for w in title.split() if len(w) > 4 and w.lower() not in stopwords]
-        key = words[0] if words else title.split()[0] if title else ""
-        if key and key not in plain_latex:
-            issues.append(
-                f"Project '{title}' appears missing from the tailored LaTeX "
-                f"(searched for key term '{key}')."
-            )
+        try:
+            title = proj.get("title", "").strip() if proj else ""
+            # Find a distinctive word (>4 chars, not a stopword) to search for
+            stopwords = {'the', 'and', 'for', 'from', 'with', 'using', 'deep', 'data'}
+            title_words = title.split() if title else []
+            words = [w for w in title_words if len(w) > 4 and w.lower() not in stopwords]
+            key = words[0] if words else (title_words[0] if title_words else "")
+            if key and key not in plain_latex:
+                issues.append(
+                    f"Project '{title}' appears missing from the tailored LaTeX "
+                    f"(searched for key term '{key}')."
+                )
+        except Exception as e:
+            print(f"[Review] Error processing project: {e}")
+            continue
 
     # 1f. Basic LaTeX structure check
     if "\\documentclass" not in tailored_latex:
