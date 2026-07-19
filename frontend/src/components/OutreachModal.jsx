@@ -73,6 +73,15 @@ const OutreachModal = ({
     });
   };
 
+  const handleMailtoFallback = () => {
+    // Fallback: Open standard system mail client (Outlook, Apple Mail, etc.)
+    const subject = encodeURIComponent(displayData.email_subject);
+    const body = encodeURIComponent(displayData.email_body);
+    const to = encodeURIComponent(recruiterInfo?.recruiter_email || '');
+
+    window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+  };
+
   return createPortal(
     <div
       className="modal-overlay"
@@ -220,12 +229,15 @@ const OutreachModal = ({
               </div>
 
               {/* Action Buttons */}
-              <div className="action-buttons">
-                <button className="btn" onClick={handleCopyEmail}>
-                  {copied ? '✓ Copied!' : '📋 Copy to Clipboard'}
+              <div className="action-buttons" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button className="btn" onClick={handleCopyEmail} style={{ flex: '1 1 auto' }}>
+                  {copied ? '✓ Copied!' : '📋 Copy Email'}
                 </button>
-                <button className="btn btn-secondary" onClick={handleSendEmail} title="Opens Gmail with pre-filled draft">
+                <button className="btn btn-secondary" onClick={handleSendEmail} style={{ flex: '1 1 auto' }} title="Opens Gmail with pre-filled draft">
                   📧 Open in Gmail
+                </button>
+                <button className="btn btn-secondary" onClick={handleMailtoFallback} style={{ flex: '1 1 auto' }} title="Opens your default mail client (Outlook, Apple Mail, etc.)">
+                  ✉️ Open Default Mail Client
                 </button>
               </div>
             </div>
