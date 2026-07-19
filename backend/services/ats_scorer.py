@@ -460,27 +460,58 @@ def compute_skills_score(
 
     skills_sec_canon = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
 
+    # Time-Decay weights helper:
+    # Estimate years elapsed since today (2026) for the job's timeline to apply decay factors:
+    # - Job end date within 2 years (since 2024): 1.0x weight modifier
+    # - Job end date 2-5 years ago (2021-2024): 0.8x weight modifier
+    # - Job end date 5+ years ago (before 2021): 0.6x weight modifier
+    current_year = 2026
     job_profiles: List[Tuple[Set[str], float]] = []
     for exp in resume_data.get("experience", []):
         if not isinstance(exp, dict):
             continue
         start = _parse_date_to_ordinal(exp.get("start_date", ""))
-        end = _parse_date_to_ordinal(exp.get("end_date", "") or "Present")
+        end_str = exp.get("end_date", "") or "Present"
+        end = _parse_date_to_ordinal(end_str)
+        
+        # Calculate time decay factor based on job recency
+        decay_factor = 1.0
+        try:
+            # Parse year from end date string (e.g. "2021", "Dec 2022", etc.)
+            end_year_match = re.search(r'\b(20\d{2})\b', end_str)
+            if end_year_match:
+                end_year = int(end_year_match.group(1))
+                years_ago = current_year - end_year
+                if years_ago > 5:
+                    decay_factor = 0.6
+                elif years_ago > 2:
+                    decay_factor = 0.8
+            elif "present" in end_str.lower() or "current" in end_str.lower():
+                decay_factor = 1.0
+        except Exception:
+            pass
+
         weight = 0.5
         if start and end:
             for s_ord, e_ord, w_val in weighted_segments:
                 if start >= s_ord and end <= e_ord:
                     weight = w_val
                     break
+        
+        # Apply the recency decay to the timeline segment weight
+        effective_weight = weight * decay_factor
         job_text = _clean_text(exp.get("role", "") + " " + " ".join(exp.get("description", [])))
-        job_profiles.append((_extract_taxonomy_skills(job_text), weight))
+        job_profiles.append((_extract_taxonomy_skills(job_text), effective_weight))
 
     def evaluate_skill_strength(skill: str) -> float:
+        # Base credit from skills list
         strength = 0.5 if skill in skills_sec_canon else 0.0
         for j_skills, weight in job_profiles:
             if skill in j_skills:
-                strength += (1.0 * weight)
-        return min(1.0, strength) # Hard anti-keyword stuffing cap limit
+                # Add contextual weight. Apply a density scale caps to prevent stuffing:
+                # a skill matching across multiple past jobs adds incrementally but caps out.
+                strength += (0.5 * weight)
+        return min(1.0, strength) # Hard anti-stuffing / density cap limit
 
     matched_req, missing_req, total_req_strength = [], [], 0.0
     for s in required_skills:
@@ -502,7 +533,7 @@ def compute_skills_score(
     pref_score = (total_pref_strength / len(preferred_skills)) * 15 if preferred_skills else 15
     final_skills_score = min(100, max(0, round(req_score + pref_score)))
     
-    detail = f"Required Match Strength: {len(matched_req)}/{len(required_skills)}. Section weights: Mandatory: {round(req_score)}/85"
+    detail = f"Required Match Strength: {len(matched_req)}/{len(required_skills)} (Recency decayed). Section weights: Mandatory: {round(req_score)}/85"
     if preferred_skills: detail += f" + Preferred: {round(pref_score)}/15."
 
     return SkillMatchResult(final_skills_score, matched_req, matched_pref, missing_req, [], detail)
