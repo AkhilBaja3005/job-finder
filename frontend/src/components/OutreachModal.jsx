@@ -278,10 +278,22 @@ const OutreachModal = ({
 
               <div className="action-buttons">
                 <button className="btn" onClick={handleCopyLinkedIn}>
-                  {copied ? '✓ Copied!' : '📋 Copy to Clipboard'}
+                  {copied ? '✓ Copied!' : '📋 Copy Message'}
                 </button>
-                <p className="linkedin-note">
-                  Paste this message in LinkedIn's messaging interface to send to the recruiter.
+                {recruiterInfo?.recruiter_profile_url && (
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      handleCopyLinkedIn();
+                      window.open(recruiterInfo.recruiter_profile_url, '_blank');
+                    }}
+                    title="Copies outreach note and opens LinkedIn Profile in a new tab"
+                  >
+                    🚀 Open LinkedIn Profile
+                  </button>
+                )}
+                <p className="linkedin-note" style={{ flexBasis: '100%', marginTop: '6px' }}>
+                  Paste this message in LinkedIn's message request box to connect with the recruiter.
                 </p>
               </div>
             </div>
@@ -319,12 +331,14 @@ const OutreachModal = ({
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.7);
+          background: rgba(0, 0, 0, 0.85);
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: center;
           z-index: 1000;
-          padding: 20px;
+          padding: 40px 20px;
+          overflow-y: auto;
+          pointer-events: none; /* Let scroll/mouse pass to background */
         }
 
         .modal-content {
@@ -333,9 +347,9 @@ const OutreachModal = ({
           border-radius: 20px;
           max-width: 800px;
           width: 100%;
-          max-height: 90vh;
-          overflow-y: auto;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+          margin-bottom: 40px;
+          pointer-events: auto; /* Keep modal interactive */
         }
 
         .outreach-modal {
