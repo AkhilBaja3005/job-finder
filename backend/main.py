@@ -1580,8 +1580,8 @@ async def auth_url():
 @app.get("/auth/callback")
 async def auth_callback(code: str):
     try:
-        email = exchange_google_code_for_email(code)
-        user = create_or_get_user(email)
+        email, picture_url = exchange_google_code_for_email(code)
+        user = create_or_get_user(email, picture_url)
         token = create_session(user["id"])
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
         return RedirectResponse(url=f"{frontend_url}?token={token}")

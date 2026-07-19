@@ -41,16 +41,25 @@ def supabase_request(path: str, method: str = "GET", data: dict = None) -> list:
         print(f"Supabase request error on {method} {path}: {e}")
         return []
 
-def create_or_get_user(email: str) -> dict:
+def create_or_get_user(email: str, picture_url: Optional[str] = None) -> dict:
     encoded_email = urllib.parse.quote(email)
     users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
     if users:
-        return users[0]
+        # If user exists but picture_url is updated/new, update it in Supabase
+        user = users[0]
+        if picture_url and user.get("picture_url") != picture_url:
+            updated = supabase_request(f"users?id=eq.{user['id']}", "PATCH", {"picture_url": picture_url})
+            if updated:
+                return updated[0]
+        return user
         
-    new_users = supabase_request("users", "POST", {"email": email})
+    payload = {"email": email}
+    if picture_url:
+        payload["picture_url"] = picture_url
+    new_users = supabase_request("users", "POST", payload)
     if new_users:
         return new_users[0]
-    return {"id": None, "email": email, "gemini_api_key": None}
+    return {"id": None, "email": email, "gemini_api_key": None, "picture_url": picture_url}
 
 def create_session(user_id) -> str:
     token = str(uuid.uuid4())
@@ -59,7 +68,7 @@ def create_session(user_id) -> str:
 
 def get_user_by_token(token: str) -> Optional[dict]:
     encoded_token = urllib.parse.quote(token)
-    sessions = supabase_request(f"sessions?token=eq.{encoded_token}&select=token,user_id,users(id,email,gemini_api_key)", "GET")
+    sessions = supabase_request(f"sessions?token=eq.{encoded_token}&select=token,user_id,users(id,email,gemini_api_key,picture_url)", "GET")
     if sessions:
         user_info = sessions[0].get("users")
         if isinstance(user_info, list) and user_info:
@@ -91,7 +100,7 @@ def get_google_auth_url() -> str:
     }
     return f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
 
-def exchange_google_code_for_email(code: str) -> str:
+def exchange_google_code_for_email(code: str) -> tuple[str, Optional[str]]:
     client_id = os.getenv("GOOGLE_CLIENT_ID", "")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback")
@@ -123,4 +132,4 @@ def exchange_google_code_for_email(code: str) -> str:
     with urllib.request.urlopen(req_info, context=context, timeout=15) as response:
         user_info = json.loads(response.read().decode("utf-8"))
         
-    return user_info["email"]
+    return user_info.get("email"), user_info.get("picture")
