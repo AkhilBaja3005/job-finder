@@ -1895,9 +1895,9 @@ function App() {
                                           setStatusLogs([]);
                                           setIsDiscoveryView(false);
                                           setDashboardMode('tailor');
-                                          // Trigger fit analysis first to populate JD and show ATS score panel
+                                          // Directly trigger full tailoring and recruiter analysis immediately
                                           setTimeout(() => {
-                                            handleAnalyzeJob(job.url, job.title);
+                                            handleGenerateTailoredResume(false, job.url, job.title);
                                           }, 50);
                                         }}
                                       >
