@@ -1381,7 +1381,24 @@ function App() {
 
             {/* Profile status card */}
             <div className="profile-status">
-              <div className="profile-avatar">👤</div>
+              {user && user.picture_url ? (
+                <img
+                  src={user.picture_url}
+                  alt="Profile"
+                  className="profile-avatar"
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    border: '1.5px solid var(--accent-green)',
+                    marginRight: '2px'
+                  }}
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="profile-avatar">👤</div>
+              )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: '0.95rem', color: resumeData ? '#fff' : 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {resumeData ? resumeData.name : 'No Resume Loaded'}
@@ -1901,7 +1918,7 @@ function App() {
                                           }, 50);
                                         }}
                                       >
-                                        ⚡ Tailor Resume
+                                        ⚡ Analyze & Scrape
                                       </button>
                                     </div>
                                   </div>
