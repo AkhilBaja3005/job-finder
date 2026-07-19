@@ -195,6 +195,11 @@ def _generate_with_model_list(
     If a specific `custom_api_key` is passed directly to the function, that 
     provider is prioritized immediately.
     """
+    # Dynamic temporal context injection: always append current year context 
+    # to the top of prompt so the agent models have accurate current-date anchoring.
+    current_date_context = "CRITICAL METADATA: The current year is 2026. Keep this in mind for all dates, durations, timelines, and calculations.\n\n"
+    prompt = current_date_context + prompt
+
     # ── OVERRIDE CHECK: Manual Specific Key Provided ─────────────────────────
     if custom_api_key:
         if custom_api_key.startswith("nvapi-"):
