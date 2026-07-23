@@ -350,7 +350,7 @@ Focus ONLY on:
         p.get("title", f"project_{i}"): len(p.get("description", []))
         for i, p in enumerate(resume_data.get("projects", []))
     }
-    missing_skills_list = ats.missing_skills or []
+    missing_skills_list = getattr(ats, "missing_skills", []) or []
     cover_prompt = f"""You are an expert career writer.
 Write a tailored cover letter and resume section updates for this candidate.
 
@@ -360,7 +360,12 @@ MISSING SKILLS TO ADDRESS: {', '.join(missing_skills_list[:8])}
 JD EXCERPT: {jd_truncated[:1200]}
 
 RULES:
-- Cover letter: under 300 words, specific to this JD, no generic filler.
+- Cover letter: under 300 words, specific to this JD.
+- WRITING STYLE CONSTRAINTS:
+  1. STRICTLY NO EM-DASHES (--) OR HYPHENS AS SENTENCE BREAKS. Use commas, periods, or split sentences.
+  2. STRICTLY NO CLICHES or generic filler phrases. Cut statements like: "I am passionate about", "I believe I would be a great fit", "leverage my skills", "hit the ground running", "drive results", or "synergies".
+  3. NO apologetic/passive phrases. Be confident, warm, and direct. Use first-person active voice ("I built", "I managed").
+  4. FORWARD-LOOKING FRAMING: Focus on task-solving — what problems/tasks you can solve for the employer and how, rather than repeating CV details.
 - suggested_resume_updates.experience: MUST have bullet lists matching these counts: {json.dumps(bullet_counts)}
   Do NOT merge, delete, or add bullets.
 - suggested_resume_updates.projects: MUST have bullet lists matching these counts: {json.dumps(project_bullet_counts)}

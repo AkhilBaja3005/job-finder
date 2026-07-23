@@ -272,3 +272,30 @@ async def generate_pdf_resume(resume_data: dict, output_pdf_path: str):
     # Clean up temp HTML
     if os.path.exists(temp_html_path):
         os.remove(temp_html_path)
+
+    # ── PDF verification check integration ──────────────────────────────────
+    import subprocess
+    import re
+    
+    # 1. Page count check
+    try:
+        pdfinfo_res = subprocess.run(["pdfinfo", output_pdf_path], capture_output=True, text=True, check=True)
+        match = re.search(r"^Pages:\s+(\d+)\s*$", pdfinfo_res.stdout, re.MULTILINE)
+        if match:
+            pages = int(match.group(1))
+            print(f"[PDF Verification] Generated PDF has {pages} pages.")
+            if pages > 2:
+                print(f"[WARNING] Resume PDF exceeds the target 2-page limit! Pages found: {pages}")
+    except Exception as e:
+        print(f"[PDF Verification Info] pdfinfo check skipped: {e} (Install poppler-utils to enable page count checks)")
+
+    # 2. ATS text layer check
+    try:
+        pdftotext_res = subprocess.run(["pdftotext", "-layout", output_pdf_path, "-"], capture_output=True, text=True, check=True)
+        extracted = pdftotext_res.stdout.strip()
+        char_count = len(extracted)
+        print(f"[PDF Verification] Extracted ATS text layer size: {char_count} chars.")
+        if char_count < 100:
+            print("[WARNING] Resume PDF text layer is critically low or unreadable by ATS parsers! Verify layout.")
+    except Exception as e:
+        print(f"[PDF Verification Info] pdftotext check skipped: {e} (Install poppler-utils to enable ATS text layer validation)")
