@@ -136,6 +136,11 @@ function App() {
   const [outreachRecruiterInfo, setOutreachRecruiterInfo] = useState(null);
   const [outreachLoading, setOutreachLoading] = useState(false);
 
+  // Interview Prep feature state
+  const [prepModalOpen, setPrepModalOpen] = useState(false);
+  const [prepMarkdown, setPrepMarkdown] = useState('');
+  const [prepJobInfo, setPrepJobInfo] = useState({ jobTitle: '', company: '' });
+
   // Store scraped job description in a ref so it's never lost
   const scrapedJobDescriptionRef = useRef('');
   const analysisPanelRef = useRef(null);
@@ -1681,10 +1686,9 @@ function App() {
                                   });
                                   if (res.ok) {
                                     const data = await res.json();
-                                    // Reuse outreach state pattern to show a markdown modal
-                                    setOutreachRecruiterInfo({ name: "Your AI Interview Coach", title: "STAR Guide Pack" });
-                                    setOutreachData(data.markdown);
-                                    setOutreachModalOpen(true);
+                                    setPrepJobInfo({ jobTitle: entry.job_title || 'Target Role', company: entry.company || 'Target Company' });
+                                    setPrepMarkdown(data.markdown);
+                                    setPrepModalOpen(true);
                                     setStatusMessage('Interview preparation pack generated!');
                                     showToast('STAR Prep Pack ready!', 'success');
                                   } else {
@@ -2590,6 +2594,67 @@ function App() {
             >
               Got it
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Dedicated Interview Prep Modal */}
+      {prepModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, backdropFilter: 'blur(8px)', animation: 'fadeIn 0.25s ease both',
+          padding: '20px'
+        }} onClick={() => setPrepModalOpen(false)}>
+          <div style={{
+            background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+            borderRadius: '16px', padding: '24px', maxWidth: '800px', width: '100%',
+            maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.7)', animation: 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) both'
+          }} onClick={(e) => e.stopPropagation()}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '16px', flexShrink: 0 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  🎤 Interview Preparation Guide
+                </h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                  Prepared for <strong>{prepJobInfo.jobTitle}</strong> at <strong>{prepJobInfo.company}</strong>
+                </div>
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '4px 8px', fontSize: '1.1rem', minWidth: '32px', minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={() => setPrepModalOpen(false)}
+                aria-label="Close interview prep pack"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', fontSize: '0.88rem', lineHeight: 1.65, whiteSpace: 'pre-wrap', color: '#E2E8F0', textAlign: 'left' }}>
+              {prepMarkdown}
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+              <button
+                className="btn"
+                style={{ flex: 1, fontWeight: 700 }}
+                onClick={() => {
+                  navigator.clipboard.writeText(prepMarkdown);
+                  showToast('✓ Copied preparation pack to clipboard!', 'success');
+                }}
+              >
+                📋 Copy Prep Guide
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
+                onClick={() => setPrepModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
