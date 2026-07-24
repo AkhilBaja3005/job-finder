@@ -141,6 +141,11 @@ function App() {
   const [prepMarkdown, setPrepMarkdown] = useState('');
   const [prepJobInfo, setPrepJobInfo] = useState({ jobTitle: '', company: '' });
 
+  // Cron Job Match Mailer Subscription states
+  const [cronEnabled, setCronEnabled] = useState(false);
+  const [cronRole, setCronRole] = useState('');
+  const [cronLocation, setCronLocation] = useState('Remote');
+
   // Store scraped job description in a ref so it's never lost
   const scrapedJobDescriptionRef = useRef('');
   const analysisPanelRef = useRef(null);
@@ -291,6 +296,9 @@ function App() {
           if (data.gemini_api_key) {
             setGeminiApiKey(data.gemini_api_key);
           }
+          setCronEnabled(!!data.cron_enabled);
+          setCronRole(data.cron_role || '');
+          setCronLocation(data.cron_location || 'Remote');
         } else {
           handleLogout();
         }
@@ -432,6 +440,42 @@ function App() {
       }
     } catch (err) {
       setStatusMessage(`Error saving settings: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSubscriptionToCloud = async (enabled, role, location) => {
+    if (!authToken) return;
+    setLoading(true);
+    setStatusMessage('Updating job matching subscription preferences...');
+    try {
+      const res = await fetch(`${API_BASE}/user/subscription`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          cron_enabled: enabled,
+          cron_role: role || null,
+          cron_location: location || 'Remote'
+        })
+      });
+      if (res.ok) {
+        setStatusMessage('Subscription preferences updated successfully!');
+        showToast('📬 Subscription updated!', 'success');
+        const meRes = await fetch(`${API_BASE}/user/me`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const meData = await meRes.json();
+        setUser(meData);
+      } else {
+        throw new Error('Failed to save subscription preferences');
+      }
+    } catch (err) {
+      setStatusMessage(`Error updating subscription: ${err.message}`);
+      showToast(`Error: ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -1335,6 +1379,67 @@ function App() {
                 )}
               </label>
             </div>
+
+            {/* Daily Cron Match Mailer Subscription settings */}
+            {user && (
+              <div style={{ padding: '16px', background: 'rgba(56, 189, 248, 0.03)', border: '1px solid rgba(56, 189, 248, 0.1)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#fff' }}>📬 Daily Job Match Mailer</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>Get daily lists matching your resume automatically.</div>
+                  </div>
+                  <label className="toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '40px', height: '22px' }}>
+                    <input
+                      type="checkbox"
+                      checked={cronEnabled}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setCronEnabled(val);
+                        saveSubscriptionToCloud(val, cronRole, cronLocation);
+                      }}
+                      style={{ opacity: 0, width: 0, height: 0 }}
+                    />
+                    <span style={{
+                      position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                      backgroundColor: cronEnabled ? 'var(--accent-primary)' : 'rgba(255,255,255,0.1)',
+                      transition: '.3s', borderRadius: '34px'
+                    }}>
+                      <span style={{
+                        position: 'absolute', content: '""', height: '16px', width: '16px', left: cronEnabled ? '20px' : '3px', bottom: '3px',
+                        backgroundColor: 'white', transition: '.3s', borderRadius: '50%'
+                      }} />
+                    </span>
+                  </label>
+                </div>
+
+                {cronEnabled && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', animation: 'fadeIn 0.2s ease both' }}>
+                    <div>
+                      <div className="section-label" style={{ fontSize: '0.74rem', marginBottom: '4px' }}>Target Job Role</div>
+                      <input
+                        type="text"
+                        placeholder="e.g. Software Engineer (leave blank to auto-extract)"
+                        value={cronRole}
+                        onChange={(e) => setCronRole(e.target.value)}
+                        onBlur={() => saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation)}
+                        style={{ fontSize: '0.8rem', padding: '8px 12px' }}
+                      />
+                    </div>
+                    <div>
+                      <div className="section-label" style={{ fontSize: '0.74rem', marginBottom: '4px' }}>Preferred Search Location</div>
+                      <input
+                        type="text"
+                        placeholder="e.g. Remote, Hyderabad, Bengaluru"
+                        value={cronLocation}
+                        onChange={(e) => setCronLocation(e.target.value)}
+                        onBlur={() => saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation)}
+                        style={{ fontSize: '0.8rem', padding: '8px 12px' }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {statusMessage && (
               <div style={{

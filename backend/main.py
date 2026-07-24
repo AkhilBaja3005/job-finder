@@ -147,18 +147,126 @@ async def auto_clean_expired_files_loop():
         await asyncio.sleep(1800) # Sleep first, startup clean is handled in lifespan
         await auto_clean_expired_files(force_startup_purge=False)
 
+# Background Loop: Run matching job scanner once every 24 hours
+from services.email_service import send_notification_email
+from datetime import datetime as dt, time as dtime, timedelta, timezone
+
+
+async def daily_match_mailer_loop():
+    """Background task executing job search and mailing digests daily (every 24 hours)."""
+    # Wait for startup to settle (5 seconds) before first check
+    await asyncio.sleep(5)
+    while True:
+        try:
+            print("[Daily Mailer] Scanning active users for subscription digests...")
+            # Query all users with cron digests enabled
+            from services.auth import supabase_request
+            active_users = supabase_request("users?cron_enabled=eq.true", "GET")
+            for user in active_users:
+                user_id = user.get("id")
+                email = user.get("email")
+                if not email:
+                    continue
+                
+                # Fetch user's master resume data
+                resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+                if not resume_rows:
+                    continue
+                
+                resume_data_str = resume_rows[0].get("resume_data")
+                if not resume_data_str:
+                    continue
+                try:
+                    resume_data = json.loads(resume_data_str)
+                except Exception:
+                    continue
+                
+                # Retrieve query parameters: use customized preference or auto-extract target role from resume summary
+                pref_role = user.get("cron_role")
+                if not pref_role:
+                    pref_role = resume_data.get("summary", "")[:100]
+                    # Simple fallback to common keywords
+                    pref_role = pref_role or "Software Engineer"
+                
+                pref_loc = user.get("cron_location", "Remote")
+                
+                print(f"[Daily Mailer] Scraping '{pref_role}' in '{pref_loc}' for user: {email}...")
+                
+                # Execute job search over last 24h
+                scraped_jobs = await find_matching_jobs(pref_loc, pref_role, timeframe="24h")
+                if not scraped_jobs:
+                    print(f"[Daily Mailer] No recent jobs found for user: {email}")
+                    continue
+                
+                # Sort jobs descending by overall match score
+                scraped_jobs.sort(key=lambda j: j.get("overall_score", 0), reverse=True)
+                
+                # Format text digest
+                text_digest = f"Hello {resume_data.get('name', 'Candidate')},\n\nHere are your matching job listings for the past 24 hours:\n\n"
+                html_digest = f"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #E2E8F0; border-radius: 8px;">
+                    <h2 style="color: #0284C7; border-bottom: 2px solid #E2E8F0; padding-bottom: 10px;">Daily Job Matches Digest</h2>
+                    <p>Hello <strong>{resume_data.get('name', 'Candidate')}</strong>, here are your matching roles from the past 24 hours:</p>
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                """
+                
+                for idx, job in enumerate(scraped_jobs[:8]): # limit to top 8 matches
+                    title = job.get("title", "Target Role")
+                    company = job.get("company", "Target Company")
+                    score = job.get("overall_score", 60)
+                    url = job.get("url", "")
+                    
+                    # Embed direct tail-and-apply token link
+                    # In local dev: http://localhost:8000/email_action/tailor?job_url=...&email=...
+                    # In production, we'll construct the absolute base from environment configs
+                    base_url = os.getenv("FRONTEND_URL", "http://localhost:5173").replace(":5173", ":8000")
+                    tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(url)}&email={urllib.parse.quote(email)}"
+                    
+                    text_digest += f"{idx+1}. {title} at {company}\n   Match Score: {score}%\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
+                    html_digest += f"""
+                    <tr style="border-bottom: 1px solid #E2E8F0;">
+                        <td style="padding: 12px 0;">
+                            <div style="font-weight: bold; color: #1E293B; font-size: 0.95rem;">{title}</div>
+                            <div style="font-size: 0.8rem; color: #64748B; margin-top: 2px;">{company}</div>
+                            <div style="font-size: 0.8rem; color: #0284C7; margin-top: 6px; font-weight: bold;">{score}% match</div>
+                        </td>
+                        <td style="text-align: right; padding: 12px 0;">
+                            <a href="{url}" target="_blank" style="display: inline-block; padding: 6px 12px; font-size: 0.78rem; color: #64748B; border: 1px solid #CBD5E1; border-radius: 4px; text-decoration: none; margin-right: 6px;">View Post</a>
+                            <a href="{tailor_url}" target="_blank" style="display: inline-block; padding: 6px 12px; font-size: 0.78rem; color: #fff; background-color: #0284C7; border-radius: 4px; text-decoration: none; font-weight: bold;">⚡ Auto-Tailor</a>
+                        </td>
+                    </tr>
+                    """
+                
+                html_digest += "</table></div>"
+                
+                # Send email
+                send_notification_email(
+                    to_email=email,
+                    subject="Daily Job Matching Digest",
+                    text_body=text_digest,
+                    html_body=html_digest
+                )
+        except Exception as e:
+            print(f"[Daily Mailer ERROR] Exception: {e}")
+        
+        # Sleep for exactly 24 hours before next sweep
+        await asyncio.sleep(86400)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Perform immediate full purge of leftover files from previous deployment container instances
     await auto_clean_expired_files(force_startup_purge=True)
     # Start the background checker loop task
     clean_task = asyncio.create_task(auto_clean_expired_files_loop())
+    # Start daily match mailer loop
+    mailer_task = asyncio.create_task(daily_match_mailer_loop())
     yield
     # Shutdown
     clean_task.cancel()
+    mailer_task.cancel()
     try:
-        await clean_task
-    except asyncio.CancelledError:
+        await asyncio.gather(clean_task, mailer_task, return_exceptions=True)
+    except Exception:
         pass
 
 # Initialize FastAPI with the lifespan handler
@@ -1612,6 +1720,126 @@ async def user_me(authorization: Optional[str] = Header(None)):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
     return user
+
+class SubscriptionRequest(BaseModel):
+    cron_enabled: bool
+    cron_role: Optional[str] = None
+    cron_location: Optional[str] = "Remote"
+
+@app.post("/user/subscription")
+async def user_subscription(request: SubscriptionRequest, authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ")[1]
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    # Save preferences to Supabase
+    from services.auth import supabase_request
+    supabase_request(f"users?id=eq.{user['id']}", "PATCH", {
+        "cron_enabled": request.cron_enabled,
+        "cron_role": request.cron_role,
+        "cron_location": request.cron_location
+    })
+    return {"status": "success"}
+
+@app.get("/email_action/tailor")
+async def email_action_tailor(job_url: str, email: str):
+    """
+    Zero-Click URL handler clicked from matching digest email:
+    Bypasses interactive validation warnings, auto-tailors, compiles PDF, 
+    and notifies the user with the tailored PDF attachment.
+    """
+    try:
+        from services.auth import supabase_request
+        # Lookup user profile
+        encoded_email = urllib.parse.quote(email)
+        users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
+        if not users:
+            return HTMLResponse("<h3>Error: User matching this email address not found.</h3>", status_code=404)
+        
+        user = users[0]
+        user_id = user.get("id")
+        
+        # Load user resume data
+        resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+        if not resume_rows:
+            return HTMLResponse("<h3>Error: Resume context not uploaded. Please upload a resume in the app first.</h3>", status_code=400)
+            
+        resume_data_str = resume_rows[0].get("resume_data")
+        resume_data = json.loads(resume_data_str)
+        
+        # Scrape job details
+        scraped = await scrape_job_description(job_url)
+        job_title = scraped.get("title", "Target Role")
+        jd_text = scraped.get("description", "")
+        company_name = scraped.get("company", "Target Company")
+        
+        # Run ATS scoring
+        from services.ats_scorer import evaluate_ats_fit
+        ats_score, suitability_warning = evaluate_ats_fit(resume_data, jd_text, job_title)
+        
+        # Force tailoring (Auto Mode ignores suitability warnings)
+        tailored_updates = tailor_latex_code(resume_data, job_title, jd_text)
+        
+        # Merge updates
+        tailored_resume = {
+            **resume_data,
+            "summary": tailored_updates.get("summary", resume_data.get("summary", "")),
+            "skills": tailored_updates.get("skills", resume_data.get("skills", [])),
+            "experience": [
+                {**job, "description": tailored_updates.get("experience", [])[i] if i < len(tailored_updates.get("experience", [])) else job.get("description", [])}
+                for i, job in enumerate(resume_data.get("experience", []))
+            ],
+            "projects": [
+                {**proj, "description": tailored_updates.get("projects", [])[i] if i < len(tailored_updates.get("projects", [])) else proj.get("description", [])}
+                for i, proj in enumerate(resume_data.get("projects", []))
+            ]
+        }
+        
+        # Compile PDF
+        pdf_path = await generate_pdf_resume(tailored_resume, output_prefix=f"tailored_{user_id}_{int(time.time())}")
+        
+        # Notify user with PDF Attachment
+        subject = f"⚡ Resume Tailored Completed: {job_title} at {company_name}"
+        text_body = f"Hello,\n\nYour tailored resume for '{job_title}' at '{company_name}' is compiled successfully!\n\nWe have attached the PDF directly. Use it to submit your application."
+        
+        send_notification_email(
+            to_email=email,
+            subject=subject,
+            text_body=text_body,
+            html_body=f"<h3>⚡ Tailoring Completed!</h3><p>Your tailored resume for <strong>{job_title}</strong> at <strong>{company_name}</strong> is ready. We have attached the compiled PDF to this email.</p>",
+            attachment_path=pdf_path,
+            attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
+        )
+        
+        # Log to application history
+        record_id = supabase_request("applications", "POST", {
+            "user_id": user_id,
+            "job_title": job_title,
+            "company": company_name,
+            "job_url": job_url,
+            "status": "tailored",
+            "score": ats_score,
+            "created_at": dt.now(timezone.utc).isoformat()
+        })
+        
+        return HTMLResponse(f"""
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #10B981; border-radius: 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+            <div style="font-size: 3rem; margin-bottom: 12px;">✅</div>
+            <h2 style="color: #10B981; margin: 0 0 10px;">Tailoring Completed Successfully!</h2>
+            <p style="color: #4B5563; font-size: 0.95rem; line-height: 1.6;">
+                The tailored resume for <strong>{job_title}</strong> at <strong>{company_name}</strong> has been compiled. 
+                We have sent it directly to your email address <strong>{email}</strong> as an attachment.
+            </p>
+            <p style="font-size: 0.8rem; color: #9CA3AF; margin-top: 20px;">You can close this tab now.</p>
+        </div>
+        """)
+        
+    except Exception as e:
+        traceback.print_exc()
+        return HTMLResponse(f"<h3>Tailoring failed: {str(e)}</h3>", status_code=500)
 
 class SettingsRequest(BaseModel):
     gemini_api_key: str
