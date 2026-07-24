@@ -206,7 +206,8 @@ RULE 3 — SECTION & CONTENT COMPLETENESS:
   • Preserve the EXACT bullet count per job and per project. Do NOT add or remove bullets.
   • Preserve the original nested itemize structure (sub-bullets under parent bullets).
 
-RULE 4 — ONE-PAGE BUDGET (CRITICAL):
+RULE 4 — ONE-PAGE BUDGET & SUMMARY PLACEMENT (CRITICAL):
+  • The Professional Summary section MUST be placed at the absolute top of the document, directly below the name and contact details header.
   • The entire tailored resume MUST fit on exactly ONE page.
   • Write concise bullets: 1 to 1.5 lines each. Do NOT write sprawling 2-line bullets.
   • Do NOT add extra \\vspace or \\newline commands.
@@ -215,6 +216,7 @@ RULE 5 — LATEX STRUCTURE:
   • Preserve \\documentclass, all \\usepackage lines, geometry, and custom macros (\\mybar, etc.).
   • Keep the exact tabular layout in Technical Skills if present.
   • Do NOT add \\linespread, \\pagestyle, or spacing overrides — these are injected by the compiler.
+  • Keep the Professional Summary block at the top, followed by other sections as ordered in the master template.
 
 RULE 6 — ATS KEYWORD INTEGRATION:
   • Inject relevant missing keywords into Technical Skills and bullets naturally.
