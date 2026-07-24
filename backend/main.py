@@ -1926,15 +1926,69 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
             print(f"[Auto Tailor] Tectonic failed: {result.stderr}")
             return
             
+        # Generate Overleaf Edit link
+        candidate_name = resume_data.get("name", "Candidate")
+        overleaf_url = upload_zip_to_tmpfiles(tailored_latex, candidate_name, job_title, company_name)
+        
         # Notify user with PDF Attachment
         subject = f"⚡ Resume Tailored Completed: {job_title} at {company_name}"
-        text_body = f"Hello,\n\nYour tailored resume for '{job_title}' at '{company_name}' is compiled successfully!\n\nWe have attached the PDF directly. Use it to submit your application."
+        
+        text_body = (
+            f"Hello {candidate_name},\n\n"
+            f"Your tailored resume for '{job_title}' at '{company_name}' has been compiled successfully!\n\n"
+            f"We have attached the PDF directly to this email.\n\n"
+            f"Want to make edits or customize it? Open it directly in Overleaf here:\n{overleaf_url}\n\n"
+            f"Best of luck with your application!"
+        )
+        
+        html_body = f"""
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+            <div style="text-align: center; margin-bottom: 24px;">
+                <span style="font-size: 3rem;">⚡</span>
+                <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.6rem;">Tailoring Completed!</h2>
+                <p style="color: #64748B; font-size: 0.9rem; margin: 0;">For your application at <strong>{company_name}</strong></p>
+            </div>
+            
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem; width: 100px;">Target Role:</td>
+                        <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{job_title}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Company:</td>
+                        <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{company_name}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">ATS Score:</td>
+                        <td style="padding: 6px 0; color: #0284C7; font-size: 0.95rem; font-weight: bold;">{ats_score}% match</td>
+                    </tr>
+                </table>
+            </div>
+
+            <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin: 0 0 20px;">
+                Hello {candidate_name}, we have successfully tailored your experience bullet points and technical keywords to match the target job description. The compiled PDF is attached directly to this email.
+            </p>
+
+            <div style="text-align: center; margin: 30px 0 20px;">
+                <a href="{overleaf_url}" target="_blank" style="display: inline-block; background-color: #0284C7; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);">
+                    🍃 Open & Edit in Overleaf
+                </a>
+                <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 8px;">Allows you to edit LaTeX code and recompile instantly online</div>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
+            <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
+                Sent automatically by your Resume Tailor Assistant.
+            </p>
+        </div>
+        """
         
         send_notification_email(
             to_email=email,
             subject=subject,
             text_body=text_body,
-            html_body=f"<h3>⚡ Tailoring Completed!</h3><p>Your tailored resume for <strong>{job_title}</strong> at <strong>{company_name}</strong> is ready. We have attached the compiled PDF to this email.</p>",
+            html_body=html_body,
             attachment_path=pdf_path,
             attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
         )
