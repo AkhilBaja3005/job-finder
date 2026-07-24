@@ -250,10 +250,14 @@ async def daily_match_mailer_loop():
                 # Format text digest
                 text_digest = f"Hello {resume_data.get('name', 'Candidate')},\n\nHere are your matching job listings for the past 24 hours:\n\n"
                 html_digest = f"""
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #E2E8F0; border-radius: 8px;">
-                    <h2 style="color: #0284C7; border-bottom: 2px solid #E2E8F0; padding-bottom: 10px;">Daily Job Matches Digest</h2>
-                    <p>Hello <strong>{resume_data.get('name', 'Candidate')}</strong>, here are your matching roles from the past 24 hours:</p>
-                    <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+                    <div style="text-align: center; margin-bottom: 24px;">
+                        <span style="font-size: 3rem;">📬</span>
+                        <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem;">Daily Job Matches Digest</h2>
+                        <p style="color: #64748B; font-size: 0.9rem; margin: 0;">Here are your top matching roles from the past 24 hours:</p>
+                    </div>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 16px;">
                 """
                 
                 for idx, job in enumerate(scraped_jobs[:8]): # limit to top 8 matches
@@ -268,21 +272,34 @@ async def daily_match_mailer_loop():
                     tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(url)}&email={urllib.parse.quote(email)}"
                     
                     text_digest += f"{idx+1}. {title} at {company}\n   Match Score: {score}%\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
+                    
+                    # Score color helper
+                    score_color = "#10B981" if score >= 85 else "#F59E0B" if score >= 70 else "#64748B"
+                    
                     html_digest += f"""
-                    <tr style="border-bottom: 1px solid #E2E8F0;">
-                        <td style="padding: 12px 0;">
-                            <div style="font-weight: bold; color: #1E293B; font-size: 0.95rem;">{title}</div>
-                            <div style="font-size: 0.8rem; color: #64748B; margin-top: 2px;">{company}</div>
-                            <div style="font-size: 0.8rem; color: #0284C7; margin-top: 6px; font-weight: bold;">{score}% match</div>
-                        </td>
-                        <td style="text-align: right; padding: 12px 0;">
-                            <a href="{url}" target="_blank" style="display: inline-block; padding: 6px 12px; font-size: 0.78rem; color: #64748B; border: 1px solid #CBD5E1; border-radius: 4px; text-decoration: none; margin-right: 6px;">View Post</a>
-                            <a href="{tailor_url}" target="_blank" style="display: inline-block; padding: 6px 12px; font-size: 0.78rem; color: #fff; background-color: #0284C7; border-radius: 4px; text-decoration: none; font-weight: bold;">⚡ Auto-Tailor</a>
-                        </td>
-                    </tr>
+                    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <h3 style="margin: 0; color: #1E293B; font-size: 1.05rem; font-weight: 700;">{title}</h3>
+                                <p style="margin: 4px 0 0; color: #64748B; font-size: 0.88rem; font-weight: 500;">{company}</p>
+                            </div>
+                            <span style="background-color: {score_color}15; color: {score_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700;">{score}% match</span>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 6px;">
+                            <a href="{url}" target="_blank" style="flex: 1; text-align: center; display: inline-block; padding: 8px 16px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600;">View Listing</a>
+                            <a href="{tailor_url}" target="_blank" style="flex: 1; text-align: center; display: inline-block; padding: 8px 16px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold;">⚡ Auto-Tailor</a>
+                        </div>
+                    </div>
                     """
                 
-                html_digest += "</table></div>"
+                html_digest += """
+                    </div>
+                    <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
+                    <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
+                        Manage your subscription settings anytime inside the Job Finder application.
+                    </p>
+                </div>
+                """
                 
                 # Send email
                 send_notification_email(
@@ -1832,23 +1849,29 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
     tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote('https://careers.google.com')}&email={urllib.parse.quote(email)}"
     
     html_body = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #E2E8F0; border-radius: 8px;">
-        <h2 style="color: #0284C7; border-bottom: 2px solid #E2E8F0; padding-bottom: 10px;">📬 Job Matches Digest (Preview)</h2>
-        <p>Hello! Here is a sample matching role showing how your daily digests will arrive:</p>
-        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
-            <tr style="border-bottom: 1px solid #E2E8F0;">
-                <td style="padding: 12px 0;">
-                    <div style="font-weight: bold; color: #1E293B; font-size: 0.95rem;">Staff Software Engineer</div>
-                    <div style="font-size: 0.8rem; color: #64748B; margin-top: 2px;">Google</div>
-                    <div style="font-size: 0.8rem; color: #0284C7; margin-top: 6px; font-weight: bold;">92% match</div>
-                </td>
-                <td style="text-align: right; padding: 12px 0;">
-                    <a href="https://careers.google.com" target="_blank" style="display: inline-block; padding: 6px 12px; font-size: 0.78rem; color: #64748B; border: 1px solid #CBD5E1; border-radius: 4px; text-decoration: none; margin-right: 6px;">View Post</a>
-                    <a href="{tailor_url}" target="_blank" style="display: inline-block; padding: 6px 12px; font-size: 0.78rem; color: #fff; background-color: #0284C7; border-radius: 4px; text-decoration: none; font-weight: bold;">⚡ Auto-Tailor</a>
-                </td>
-            </tr>
-        </table>
-        <p style="font-size: 0.8rem; color: #64748B; margin-top: 20px; border-top: 1px solid #E2E8F0; padding-top: 10px;">
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <span style="font-size: 3rem;">📬</span>
+            <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem;">Job Matches Digest (Preview)</h2>
+            <p style="color: #64748B; font-size: 0.9rem; margin: 0;">Hello! Here is a sample matching role showing how your daily digests will arrive:</p>
+        </div>
+        
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <h3 style="margin: 0; color: #1E293B; font-size: 1.05rem; font-weight: 700;">Staff Software Engineer</h3>
+                    <p style="margin: 4px 0 0; color: #64748B; font-size: 0.88rem; font-weight: 500;">Google</p>
+                </div>
+                <span style="background-color: #10B98115; color: #10B981; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700;">92% match</span>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 6px;">
+                <a href="https://careers.google.com" target="_blank" style="flex: 1; text-align: center; display: inline-block; padding: 8px 16px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600;">View Listing</a>
+                <a href="{tailor_url}" target="_blank" style="flex: 1; text-align: center; display: inline-block; padding: 8px 16px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold;">⚡ Auto-Tailor</a>
+            </div>
+        </div>
+        
+        <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
+        <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
             This is a mock preview matching your active profile details.
         </p>
     </div>
