@@ -1621,6 +1621,46 @@ function App() {
                             {entry.job_url && (
                               <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)' }}>View Post →</a>
                             )}
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '0.7rem', marginTop: '6px', width: '100%' }}
+                              onClick={async () => {
+                                setLoading(true);
+                                setStatusMessage('Preparing personalized interview pack...');
+                                try {
+                                  const res = await fetch(`${API_BASE}/generate_interview_prep`, {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${getAuthHeader()}`
+                                    },
+                                    body: JSON.stringify({
+                                      job_title: entry.job_title || 'Target Role',
+                                      company: entry.company || 'Target Company',
+                                      job_url: entry.job_url || null
+                                    })
+                                  });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    // Reuse outreach state pattern to show a markdown modal
+                                    setOutreachRecruiterInfo({ name: "Your AI Interview Coach", title: "STAR Guide Pack" });
+                                    setOutreachData(data.markdown);
+                                    setOutreachModalOpen(true);
+                                    setStatusMessage('Interview preparation pack generated!');
+                                    showToast('STAR Prep Pack ready!', 'success');
+                                  } else {
+                                    const err = await res.json();
+                                    showToast(`Error: ${err.detail}`, 'error');
+                                  }
+                                } catch (e) {
+                                  showToast(`Error: ${e.message}`, 'error');
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                            >
+                              🎤 Prep Interview
+                            </button>
                           </div>
                         </div>
                       </div>
