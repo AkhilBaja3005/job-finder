@@ -1877,6 +1877,14 @@ from fastapi import BackgroundTasks
 async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_data: dict, ats_score: int):
     try:
         from services.auth import supabase_request
+        # Load user resume LaTeX master template
+        resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+        if not resume_rows or not resume_rows[0].get("master_latex"):
+            print(f"[Auto Tailor] Missing master latex template for user {user_id}")
+            return
+            
+        master_latex = resume_rows[0].get("master_latex")
+        
         # Scrape job details
         scraped = await scrape_job_description(job_url)
         job_title = scraped.get("title", "Target Role")
@@ -1884,26 +1892,46 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         company_name = scraped.get("company", "Target Company")
         
         # Force tailoring (Auto Mode ignores suitability warnings)
-        tailored_updates = tailor_latex_code(resume_data, job_title, jd_text)
+        from services.llm_agent import analyze_job_fit
+        # Call analyze_job_fit deterministically to get updates details
+        fit_analysis = await analyze_job_fit(resume_data, job_title, jd_text, master_latex, None, on_log=None)
         
         # Merge updates
-        tailored_resume = {
-            **resume_data,
-            "summary": tailored_updates.get("summary", resume_data.get("summary", "")),
-            "skills": tailored_updates.get("skills", resume_data.get("skills", [])),
-            "experience": [
-                {**job, "description": tailored_updates.get("experience", [])[i] if i < len(tailored_updates.get("experience", [])) else job.get("description", [])}
-                for i, job in enumerate(resume_data.get("experience", []))
-            ],
-            "projects": [
-                {**proj, "description": tailored_updates.get("projects", [])[i] if i < len(tailored_updates.get("projects", [])) else proj.get("description", [])}
-                for i, proj in enumerate(resume_data.get("projects", []))
-            ]
-        }
+        tailored_updates = fit_analysis.suggested_resume_updates
+        missing_skills = fit_analysis.match_analysis.missing_skills
         
-        # Compile PDF
-        pdf_path = await generate_pdf_resume(tailored_resume, output_prefix=f"tailored_{user_id}_{int(time.time())}")
+        # Force compiling tailored LaTeX code
+        tailored_latex = await tailor_latex_code(master_latex, job_title, jd_text, tailored_updates, missing_skills, None, "", on_log=None)
+
+        # Compile PDF using Tectonic
+        tex_path = os.path.join(OUTPUT_DIR, f"tailored_{user_id}_{int(time.time())}.tex")
+        pdf_path = tex_path.replace(".tex", ".pdf")
         
+        # Write the tailored LaTeX code
+        fixed_code = apply_latex_hotfix(tailored_latex)
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(fixed_code)
+            
+        # Copy resume.cls to output directory so Tectonic can find it
+        import shutil
+        cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
+        if not os.path.exists(cls_source):
+            cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
+        shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
+            
+        print("Compiling tailored LaTeX background task using Tectonic...")
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["tectonic", tex_path, "--outdir", OUTPUT_DIR],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            print(f"[Auto Tailor] Tectonic failed: {result.stderr}")
+            return
+            
         # Notify user with PDF Attachment
         subject = f"⚡ Resume Tailored Completed: {job_title} at {company_name}"
         text_body = f"Hello,\n\nYour tailored resume for '{job_title}' at '{company_name}' is compiled successfully!\n\nWe have attached the PDF directly. Use it to submit your application."
