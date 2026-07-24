@@ -154,8 +154,9 @@ from datetime import datetime as dt, time as dtime, timedelta, timezone
 
 async def daily_match_mailer_loop():
     """Background task executing job search and mailing digests based on user configured time preferences."""
-    # Wait for startup to settle (5 seconds) before first check
-    await asyncio.sleep(5)
+    # Wait for startup to settle before first check (1 hour delay in production to avoid instant boot digests)
+    # For local development testing, you can change this to a shorter value or trigger on-demand via settings.
+    await asyncio.sleep(3600)
     
     # Store last sent date for users to avoid duplicate notifications on same day
     # format: { (user_id, date_string): True }
@@ -1857,36 +1858,16 @@ async def email_action_tailor(job_url: str, email: str):
     """
     Zero-Click URL handler clicked from matching digest email:
     Bypasses interactive validation warnings, auto-tailors, compiles PDF, 
-    and notifies the user with the tailored PDF attachment.
-    """
+from fastapi import BackgroundTasks
+
+async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_data: dict, ats_score: int):
     try:
         from services.auth import supabase_request
-        # Lookup user profile
-        encoded_email = urllib.parse.quote(email)
-        users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
-        if not users:
-            return HTMLResponse("<h3>Error: User matching this email address not found.</h3>", status_code=404)
-        
-        user = users[0]
-        user_id = user.get("id")
-        
-        # Load user resume data
-        resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
-        if not resume_rows:
-            return HTMLResponse("<h3>Error: Resume context not uploaded. Please upload a resume in the app first.</h3>", status_code=400)
-            
-        resume_data_str = resume_rows[0].get("resume_data")
-        resume_data = json.loads(resume_data_str)
-        
         # Scrape job details
         scraped = await scrape_job_description(job_url)
         job_title = scraped.get("title", "Target Role")
         jd_text = scraped.get("description", "")
         company_name = scraped.get("company", "Target Company")
-        
-        # Run ATS scoring
-        from services.ats_scorer import evaluate_ats_fit
-        ats_score, suitability_warning = evaluate_ats_fit(resume_data, jd_text, job_title)
         
         # Force tailoring (Auto Mode ignores suitability warnings)
         tailored_updates = tailor_latex_code(resume_data, job_title, jd_text)
@@ -1932,14 +1913,56 @@ async def email_action_tailor(job_url: str, email: str):
             "score": ats_score,
             "created_at": dt.now(timezone.utc).isoformat()
         })
+    except Exception as e:
+        traceback.print_exc()
+
+@app.get("/email_action/tailor")
+async def email_action_tailor(job_url: str, email: str, background_tasks: BackgroundTasks):
+    """
+    Zero-Click URL handler clicked from matching digest email:
+    Asynchronously tailors, compiles, and delivers PDF to user email.
+    """
+    try:
+        from services.auth import supabase_request
+        # Lookup user profile
+        encoded_email = urllib.parse.quote(email)
+        users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
+        if not users:
+            return HTMLResponse("<h3>Error: User matching this email address not found.</h3>", status_code=404)
+        
+        user = users[0]
+        user_id = user.get("id")
+        
+        # Load user resume data
+        resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+        if not resume_rows:
+            return HTMLResponse("<h3>Error: Resume context not uploaded. Please upload a resume in the app first.</h3>", status_code=400)
+            
+        resume_data_str = resume_rows[0].get("resume_data")
+        resume_data = json.loads(resume_data_str)
+        
+        # Scrape job details to calculate pre-score quickly
+        scraped = await scrape_job_description(job_url)
+        job_title = scraped.get("title", "Target Role")
+        jd_text = scraped.get("description", "")
+        company_name = scraped.get("company", "Target Company")
+        
+        # Run ATS scoring
+        from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
+        ats_res = compute_ats_score(resume_data, jd_text)
+        role_fit = estimate_role_fit_score(resume_data, jd_text)
+        ats_score = compute_overall_score(ats_res.skills_score, ats_res.experience_score, role_fit)
+        
+        # Queue the heavy tailoring LLM call to run in a background thread immediately
+        background_tasks.add_task(async_tailor_pipeline, email, job_url, user_id, resume_data, ats_score)
         
         return HTMLResponse(f"""
-        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #10B981; border-radius: 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
-            <div style="font-size: 3rem; margin-bottom: 12px;">✅</div>
-            <h2 style="color: #10B981; margin: 0 0 10px;">Tailoring Completed Successfully!</h2>
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #0284C7; border-radius: 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+            <div style="font-size: 3rem; margin-bottom: 12px;">⚙️</div>
+            <h2 style="color: #0284C7; margin: 0 0 10px;">Tailoring In Progress...</h2>
             <p style="color: #4B5563; font-size: 0.95rem; line-height: 1.6;">
-                The tailored resume for <strong>{job_title}</strong> at <strong>{company_name}</strong> has been compiled. 
-                We have sent it directly to your email address <strong>{email}</strong> as an attachment.
+                We are tailoring your resume for <strong>{job_title}</strong> at <strong>{company_name}</strong> in the background.
+                We will email the compiled PDF directly to <strong>{email}</strong> once completed.
             </p>
             <p style="font-size: 0.8rem; color: #9CA3AF; margin-top: 20px;">You can close this tab now.</p>
         </div>

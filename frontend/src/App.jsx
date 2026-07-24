@@ -1211,14 +1211,14 @@ function App() {
       {/* Toast Notification */}
       {toast && (
         <div style={{
-          position: 'fixed', bottom: '28px', left: '50%', transform: 'translateX(-50%)',
-          zIndex: 9999, padding: '12px 22px', borderRadius: '12px', fontWeight: 600,
-          fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '10px',
-          animation: 'slideDown 0.3s ease both',
-          background: toast.type === 'success' ? 'rgba(16,185,129,0.15)' : toast.type === 'error' ? 'rgba(239,68,68,0.15)' : 'rgba(56,189,248,0.15)',
-          border: `1px solid ${toast.type === 'success' ? 'rgba(16,185,129,0.4)' : toast.type === 'error' ? 'rgba(239,68,68,0.4)' : 'rgba(56,189,248,0.4)'}`,
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          zIndex: 99999, padding: '16px 28px', borderRadius: '16px', fontWeight: 700,
+          fontSize: '0.94rem', display: 'flex', alignItems: 'center', gap: '12px',
+          animation: 'fadeIn 0.25s ease both',
+          background: 'rgba(9, 13, 26, 0.95)',
+          border: `1.5px solid ${toast.type === 'success' ? '#10B981' : toast.type === 'error' ? '#EF4444' : '#0284C7'}`,
           color: toast.type === 'success' ? '#34D399' : toast.type === 'error' ? '#F87171' : '#7DD3FC',
-          backdropFilter: 'blur(16px)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+          backdropFilter: 'blur(24px)', boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
         }}>
           {toast.message}
         </div>
