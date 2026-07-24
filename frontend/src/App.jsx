@@ -136,6 +136,11 @@ function App() {
   const [outreachRecruiterInfo, setOutreachRecruiterInfo] = useState(null);
   const [outreachLoading, setOutreachLoading] = useState(false);
 
+  // Interview Prep feature state
+  const [prepModalOpen, setPrepModalOpen] = useState(false);
+  const [prepMarkdown, setPrepMarkdown] = useState('');
+  const [prepJobInfo, setPrepJobInfo] = useState({ jobTitle: '', company: '' });
+
   // Store scraped job description in a ref so it's never lost
   const scrapedJobDescriptionRef = useRef('');
   const analysisPanelRef = useRef(null);
@@ -1598,8 +1603,47 @@ function App() {
                   <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>Tailor a resume or apply to a job to see it recorded here.</div>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '560px', overflowY: 'auto', paddingRight: '4px' }}>
-                  {applicationHistory.map((entry, idx) => {
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '560px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {/* Funnel Metrics Dashboard Card */}
+                  {(() => {
+                    const tailoredCount = applicationHistory.filter(e => e.status === 'tailored').length;
+                    const appliedCount = applicationHistory.filter(e => e.status === 'applied').length;
+                    const total = applicationHistory.length || 1;
+
+                    const tailoredPct = Math.round((tailoredCount / total) * 100);
+                    const appliedPct = Math.round((appliedCount / total) * 100);
+
+                    return (
+                      <div className="card" style={{ padding: '14px', background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.8))', border: '1px solid rgba(56, 189, 248, 0.15)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📊 Application Pipeline Funnel</div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
+                              <span style={{ color: '#7dd3fc', fontWeight: 600 }}>🎯 Resumes Tailored</span>
+                              <span style={{ color: '#fff', fontWeight: 700 }}>{tailoredCount} ({tailoredPct}%)</span>
+                            </div>
+                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${tailoredPct}%`, background: '#7dd3fc', borderRadius: '999px' }} />
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
+                              <span style={{ color: '#10B981', fontWeight: 600 }}>✅ Submitted / Applied</span>
+                              <span style={{ color: '#fff', fontWeight: 700 }}>{appliedCount} ({appliedPct}%)</span>
+                            </div>
+                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${appliedPct}%`, background: '#10B981', borderRadius: '999px' }} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {applicationHistory.map((entry, idx) => {
                     const statusColor = entry.status === 'applied' ? '#10B981' : entry.status === 'autofilled' ? '#38BDF8' : '#7dd3fc';
                     const statusLabel = entry.status === 'applied' ? 'Applied' : entry.status === 'autofilled' ? 'Autofilled' : 'Tailored';
                     const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
@@ -1621,11 +1665,51 @@ function App() {
                             {entry.job_url && (
                               <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)' }}>View Post →</a>
                             )}
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '0.7rem', marginTop: '6px', width: '100%' }}
+                              onClick={async () => {
+                                setLoading(true);
+                                setStatusMessage('Preparing personalized interview pack...');
+                                try {
+                                  const res = await fetch(`${API_BASE}/generate_interview_prep`, {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${getAuthHeader()}`
+                                    },
+                                    body: JSON.stringify({
+                                      job_title: entry.job_title || 'Target Role',
+                                      company: entry.company || 'Target Company',
+                                      job_url: entry.job_url || null
+                                    })
+                                  });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    setPrepJobInfo({ jobTitle: entry.job_title || 'Target Role', company: entry.company || 'Target Company' });
+                                    setPrepMarkdown(data.markdown);
+                                    setPrepModalOpen(true);
+                                    setStatusMessage('Interview preparation pack generated!');
+                                    showToast('STAR Prep Pack ready!', 'success');
+                                  } else {
+                                    const err = await res.json();
+                                    showToast(`Error: ${err.detail}`, 'error');
+                                  }
+                                } catch (e) {
+                                  showToast(`Error: ${e.message}`, 'error');
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                            >
+                              🎤 Prep Interview
+                            </button>
                           </div>
                         </div>
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               )
             ) : isDiscoveryView && discovering ? (
@@ -2510,6 +2594,67 @@ function App() {
             >
               Got it
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Dedicated Interview Prep Modal */}
+      {prepModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, backdropFilter: 'blur(8px)', animation: 'fadeIn 0.25s ease both',
+          padding: '20px'
+        }} onClick={() => setPrepModalOpen(false)}>
+          <div style={{
+            background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+            borderRadius: '16px', padding: '24px', maxWidth: '800px', width: '100%',
+            maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.7)', animation: 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) both'
+          }} onClick={(e) => e.stopPropagation()}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '16px', flexShrink: 0 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  🎤 Interview Preparation Guide
+                </h2>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                  Prepared for <strong>{prepJobInfo.jobTitle}</strong> at <strong>{prepJobInfo.company}</strong>
+                </div>
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '4px 8px', fontSize: '1.1rem', minWidth: '32px', minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={() => setPrepModalOpen(false)}
+                aria-label="Close interview prep pack"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', fontSize: '0.88rem', lineHeight: 1.65, whiteSpace: 'pre-wrap', color: '#E2E8F0', textAlign: 'left' }}>
+              {prepMarkdown}
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
+              <button
+                className="btn"
+                style={{ flex: 1, fontWeight: 700 }}
+                onClick={() => {
+                  navigator.clipboard.writeText(prepMarkdown);
+                  showToast('✓ Copied preparation pack to clipboard!', 'success');
+                }}
+              >
+                📋 Copy Prep Guide
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
+                onClick={() => setPrepModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
