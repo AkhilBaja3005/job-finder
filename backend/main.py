@@ -1906,7 +1906,11 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         scraped = await scrape_job_description(job_url)
         job_title = scraped.get("title", "Target Role")
         jd_text = scraped.get("description", "")
-        company_name = scraped.get("company", "Target Company")
+        company_name = scraped.get("company")
+        if not company_name or company_name == "Target Company":
+            company_name = _extract_company_from_jd(jd_text, job_url)
+        if not company_name:
+            company_name = "Target Company"
         
         # Force tailoring (Auto Mode ignores suitability warnings)
         from services.llm_agent import analyze_job_fit
