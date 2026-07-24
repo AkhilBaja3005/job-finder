@@ -1958,7 +1958,7 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         overleaf_url = upload_zip_to_tmpfiles(tailored_latex, candidate_name, job_title, company_name)
         
         # Notify user with PDF Attachment
-        subject = f"⚡ Resume Tailored Completed: {job_title} at {company_name}"
+        subject = f"📄 Resume Tailored Completed: {job_title} at {company_name}"
         
         text_body = (
             f"Hello {candidate_name},\n\n"
@@ -1971,7 +1971,7 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         html_body = f"""
         <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
             <div style="text-align: center; margin-bottom: 24px;">
-                <span style="font-size: 3rem;">⚡</span>
+                <span style="font-size: 3rem;">📄</span>
                 <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.6rem;">Tailoring Completed!</h2>
                 <p style="color: #64748B; font-size: 0.9rem; margin: 0;">For your application at <strong>{company_name}</strong></p>
             </div>
@@ -2079,7 +2079,7 @@ async def email_action_tailor(job_url: str, email: str, background_tasks: Backgr
         
         return HTMLResponse(f"""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #0284C7; border-radius: 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
-            <div style="font-size: 3rem; margin-bottom: 12px;">&#9881;&#65039;</div>
+            <div style="font-size: 3rem; margin-bottom: 12px;">📄</div>
             <h2 style="color: #0284C7; margin: 0 0 10px;">Tailoring In Progress...</h2>
             <p style="color: #4B5563; font-size: 0.95rem; line-height: 1.6;">
                 We are tailoring your resume for <strong>{job_title}</strong> at <strong>{company_name}</strong> in the background.
