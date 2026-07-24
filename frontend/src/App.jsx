@@ -1602,12 +1602,10 @@ function App() {
                   {/* Funnel Metrics Dashboard Card */}
                   {(() => {
                     const tailoredCount = applicationHistory.filter(e => e.status === 'tailored').length;
-                    const autofilledCount = applicationHistory.filter(e => e.status === 'autofilled').length;
                     const appliedCount = applicationHistory.filter(e => e.status === 'applied').length;
                     const total = applicationHistory.length || 1;
 
                     const tailoredPct = Math.round((tailoredCount / total) * 100);
-                    const autofilledPct = Math.round((autofilledCount / total) * 100);
                     const appliedPct = Math.round((appliedCount / total) * 100);
 
                     return (
@@ -1622,16 +1620,6 @@ function App() {
                             </div>
                             <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
                               <div style={{ height: '100%', width: `${tailoredPct}%`, background: '#7dd3fc', borderRadius: '999px' }} />
-                            </div>
-                          </div>
-
-                          <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
-                              <span style={{ color: '#38BDF8', fontWeight: 600 }}>🤖 Applications Autofilled</span>
-                              <span style={{ color: '#fff', fontWeight: 700 }}>{autofilledCount} ({autofilledPct}%)</span>
-                            </div>
-                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${autofilledPct}%`, background: '#38BDF8', borderRadius: '999px' }} />
                             </div>
                           </div>
 
