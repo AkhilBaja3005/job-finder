@@ -277,26 +277,41 @@ async def daily_match_mailer_loop():
                     score_color = "#10B981" if score >= 85 else "#F59E0B" if score >= 70 else "#64748B"
                     
                     html_digest += f"""
-                    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <div>
-                                <h3 style="margin: 0; color: #1E293B; font-size: 1.05rem; font-weight: 700;">{title}</h3>
-                                <p style="margin: 4px 0 0; color: #64748B; font-size: 0.88rem; font-weight: 500;">{company}</p>
-                            </div>
-                            <span style="background-color: {score_color}15; color: {score_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700;">{score}% match</span>
-                        </div>
-                        <div style="display: flex; gap: 10px; margin-top: 6px;">
-                            <a href="{url}" target="_blank" style="flex: 1; text-align: center; display: inline-block; padding: 8px 16px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600;">View Listing</a>
-                            <a href="{tailor_url}" target="_blank" style="flex: 1; text-align: center; display: inline-block; padding: 8px 16px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold;">⚡ Auto-Tailor</a>
-                        </div>
+                    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; margin-bottom: 12px; box-sizing: border-box; overflow: hidden;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td>
+                                    <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">{title}</h3>
+                                    <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">{company}</p>
+                                </td>
+                                <td style="text-align: right; vertical-align: top; width: 90px;">
+                                    <span style="display: inline-block; background-color: {score_color}15; color: {score_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">{score}% match</span>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 14px;">
+                            <tr>
+                                <td style="width: 50%; padding-right: 5px;">
+                                    <a href="{url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">View Listing</a>
+                                </td>
+                                <td style="width: 50%; padding-left: 5px;">
+                                    <a href="{tailor_url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">⚡ Auto-Tailor</a>
+                                </td>
+                            </tr>
+                        </table>
                     </div>
                     """
                 
-                html_digest += """
+                # Unsubscribe link setup
+                base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+                unsub_url = f"{base_url}/email_action/unsubscribe?email={urllib.parse.quote(email)}"
+                
+                html_digest += f"""
                     </div>
                     <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
-                    <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
-                        Manage your subscription settings anytime inside the Job Finder application.
+                    <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">
+                        Manage your subscription settings inside the app or <a href="{unsub_url}" target="_blank" style="color: #0284C7; text-decoration: underline;">unsubscribe instantly</a>.
                     </p>
                 </div>
                 """
@@ -1856,22 +1871,33 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
             <p style="color: #64748B; font-size: 0.9rem; margin: 0;">Hello! Here is a sample matching role showing how your daily digests will arrive:</p>
         </div>
         
-        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                    <h3 style="margin: 0; color: #1E293B; font-size: 1.05rem; font-weight: 700;">Staff Software Engineer</h3>
-                    <p style="margin: 4px 0 0; color: #64748B; font-size: 0.88rem; font-weight: 500;">Google</p>
-                </div>
-                <span style="background-color: #10B98115; color: #10B981; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700;">92% match</span>
-            </div>
-            <div style="display: flex; gap: 10px; margin-top: 6px;">
-                <a href="https://careers.google.com" target="_blank" style="flex: 1; text-align: center; display: inline-block; padding: 8px 16px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600;">View Listing</a>
-                <a href="{tailor_url}" target="_blank" style="flex: 1; text-align: center; display: inline-block; padding: 8px 16px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold;">⚡ Auto-Tailor</a>
-            </div>
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; box-sizing: border-box; overflow: hidden;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td>
+                        <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Staff Software Engineer</h3>
+                        <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">Google</p>
+                    </td>
+                    <td style="text-align: right; vertical-align: top; width: 90px;">
+                        <span style="display: inline-block; background-color: #10B98115; color: #10B981; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">92% match</span>
+                    </td>
+                </tr>
+            </table>
+            
+            <table style="width: 100%; border-collapse: collapse; margin-top: 14px;">
+                <tr>
+                    <td style="width: 50%; padding-right: 5px;">
+                        <a href="https://careers.google.com" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">View Listing</a>
+                    </td>
+                    <td style="width: 50%; padding-left: 5px;">
+                        <a href="{tailor_url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">⚡ Auto-Tailor</a>
+                    </td>
+                </tr>
+            </table>
         </div>
         
         <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
-        <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
+        <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">
             This is a mock preview matching your active profile details.
         </p>
     </div>
@@ -2116,6 +2142,40 @@ async def email_action_tailor(job_url: str, email: str, background_tasks: Backgr
     except Exception as e:
         traceback.print_exc()
         return HTMLResponse(f"<h3>Tailoring failed: {str(e)}</h3>", status_code=500)
+
+@app.get("/email_action/unsubscribe", response_class=HTMLResponse)
+async def email_action_unsubscribe(email: str):
+    """
+    Zero-Click Unsubscribe handler clicked from matching digest email:
+    Updates Supabase user profile settings to disable daily cron subscription checks.
+    """
+    try:
+        from services.auth import supabase_request
+        encoded_email = urllib.parse.quote(email)
+        users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
+        if not users:
+            return HTMLResponse("<h3>Error: Profile matching this email address not found.</h3>", status_code=404)
+        
+        user = users[0]
+        user_id = user.get("id")
+        
+        # Disable cron matching updates
+        supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_enabled": False})
+        
+        return HTMLResponse(f"""
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #EF4444; border-radius: 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+            <div style="font-size: 3rem; margin-bottom: 12px;">📭</div>
+            <h2 style="color: #EF4444; margin: 0 0 10px;">Unsubscribed Successfully</h2>
+            <p style="color: #4B5563; font-size: 0.95rem; line-height: 1.6;">
+                You have been unsubscribed from the Daily Job Matches Digest for <strong>{email}</strong>.
+                You will no longer receive daily matching reports.
+            </p>
+            <p style="font-size: 0.8rem; color: #9CA3AF; margin-top: 20px;">You can close this tab now.</p>
+        </div>
+        """)
+    except Exception as e:
+        traceback.print_exc()
+        return HTMLResponse(f"<h3>Unsubscribe failed: {str(e)}</h3>", status_code=500)
 
 class SettingsRequest(BaseModel):
     gemini_api_key: str
