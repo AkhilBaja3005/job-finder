@@ -145,6 +145,7 @@ function App() {
   const [cronEnabled, setCronEnabled] = useState(false);
   const [cronRole, setCronRole] = useState('');
   const [cronLocation, setCronLocation] = useState('Remote');
+  const [cronTime, setCronTime] = useState('18:00');
 
   // Store scraped job description in a ref so it's never lost
   const scrapedJobDescriptionRef = useRef('');
@@ -299,6 +300,9 @@ function App() {
           setCronEnabled(!!data.cron_enabled);
           setCronRole(data.cron_role || '');
           setCronLocation(data.cron_location || 'Remote');
+          if (data.cron_time) {
+            setCronTime(data.cron_time.slice(0, 5)); // format HH:MM
+          }
         } else {
           handleLogout();
         }
@@ -445,7 +449,7 @@ function App() {
     }
   };
 
-  const saveSubscriptionToCloud = async (enabled, role, location) => {
+  const saveSubscriptionToCloud = async (enabled, role, location, time) => {
     if (!authToken) return;
     setLoading(true);
     setStatusMessage('Updating job matching subscription preferences...');
@@ -459,7 +463,8 @@ function App() {
         body: JSON.stringify({
           cron_enabled: enabled,
           cron_role: role || null,
-          cron_location: location || 'Remote'
+          cron_location: location || 'Remote',
+          cron_time: time ? `${time}:00` : '18:00:00'
         })
       });
       if (res.ok) {
@@ -1421,7 +1426,7 @@ function App() {
                         placeholder="e.g. Software Engineer (leave blank to auto-extract)"
                         value={cronRole}
                         onChange={(e) => setCronRole(e.target.value)}
-                        onBlur={() => saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation)}
+                        onBlur={() => saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation, cronTime)}
                         style={{ fontSize: '0.8rem', padding: '8px 12px' }}
                       />
                     </div>
@@ -1432,7 +1437,20 @@ function App() {
                         placeholder="e.g. Remote, Hyderabad, Bengaluru"
                         value={cronLocation}
                         onChange={(e) => setCronLocation(e.target.value)}
-                        onBlur={() => saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation)}
+                        onBlur={() => saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation, cronTime)}
+                        style={{ fontSize: '0.8rem', padding: '8px 12px' }}
+                      />
+                    </div>
+                    <div>
+                      <div className="section-label" style={{ fontSize: '0.74rem', marginBottom: '4px' }}>Daily Send Time ({cronTime})</div>
+                      <input
+                        type="time"
+                        value={cronTime}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCronTime(val);
+                          saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation, val);
+                        }}
                         style={{ fontSize: '0.8rem', padding: '8px 12px' }}
                       />
                     </div>
