@@ -1981,7 +1981,11 @@ async def email_action_tailor(job_url: str, email: str, background_tasks: Backgr
         scraped = await scrape_job_description(job_url)
         job_title = scraped.get("title", "Target Role")
         jd_text = scraped.get("description", "")
-        company_name = scraped.get("company", "Target Company")
+        company_name = scraped.get("company")
+        if not company_name or company_name == "Target Company":
+            company_name = _extract_company_from_jd(jd_text, job_url)
+        if not company_name:
+            company_name = "Target Company"
         
         # Run ATS scoring
         from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
