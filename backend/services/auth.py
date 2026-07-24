@@ -68,7 +68,7 @@ def create_session(user_id) -> str:
 
 def get_user_by_token(token: str) -> Optional[dict]:
     encoded_token = urllib.parse.quote(token)
-    sessions = supabase_request(f"sessions?token=eq.{encoded_token}&select=token,user_id,users(id,email,gemini_api_key,picture_url,cron_enabled,cron_role,cron_location)", "GET")
+    sessions = supabase_request(f"sessions?token=eq.{encoded_token}&select=token,user_id,users(id,email,gemini_api_key,picture_url,cron_enabled,cron_role,cron_location,cron_time)", "GET")
     if sessions:
         user_info = sessions[0].get("users")
         if isinstance(user_info, list) and user_info:

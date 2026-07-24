@@ -153,19 +153,45 @@ from datetime import datetime as dt, time as dtime, timedelta, timezone
 
 
 async def daily_match_mailer_loop():
-    """Background task executing job search and mailing digests daily (every 24 hours)."""
+    """Background task executing job search and mailing digests based on user configured time preferences."""
     # Wait for startup to settle (5 seconds) before first check
     await asyncio.sleep(5)
+    
+    # Store last sent date for users to avoid duplicate notifications on same day
+    # format: { (user_id, date_string): True }
+    last_sent_cache = {}
+    
     while True:
         try:
             print("[Daily Mailer] Scanning active users for subscription digests...")
-            # Query all users with cron digests enabled
             from services.auth import supabase_request
             active_users = supabase_request("users?cron_enabled=eq.true", "GET")
+            
+            # Get current local datetime (server time, assumed to match user local timezone configuration or UTC)
+            now = dt.now()
+            today_str = now.strftime("%Y-%m-%d")
+            
             for user in active_users:
                 user_id = user.get("id")
                 email = user.get("email")
-                if not email:
+                if not email or not user_id:
+                    continue
+                
+                # Check if we already sent today's email
+                if last_sent_cache.get((user_id, today_str)):
+                    continue
+                
+                # Parse user's target time (default to 6:00 PM if not set)
+                time_str = user.get("cron_time") or "18:00:00"
+                try:
+                    target_h, target_m = map(int, time_str.split(":")[:2])
+                except Exception:
+                    target_h, target_m = 18, 0
+                
+                # Check if current time has crossed the target send time
+                target_dt = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0)
+                if now < target_dt:
+                    # Not time yet for this user
                     continue
                 
                 # Fetch user's master resume data
@@ -190,12 +216,14 @@ async def daily_match_mailer_loop():
                 
                 pref_loc = user.get("cron_location", "Remote")
                 
-                print(f"[Daily Mailer] Scraping '{pref_role}' in '{pref_loc}' for user: {email}...")
+                print(f"[Daily Mailer] Send time reached ({time_str}) for user {email}. Scraping '{pref_role}' in '{pref_loc}'...")
                 
                 # Execute job search over last 24h
                 scraped_jobs = await find_matching_jobs(pref_loc, pref_role, timeframe="24h")
                 if not scraped_jobs:
                     print(f"[Daily Mailer] No recent jobs found for user: {email}")
+                    # Still mark as checked today so we don't spam checking every minute
+                    last_sent_cache[(user_id, today_str)] = True
                     continue
                 
                 # Sort jobs descending by overall match score
@@ -217,8 +245,6 @@ async def daily_match_mailer_loop():
                     url = job.get("url", "")
                     
                     # Embed direct tail-and-apply token link
-                    # In local dev: http://localhost:8000/email_action/tailor?job_url=...&email=...
-                    # In production, we'll construct the absolute base from environment configs
                     base_url = os.getenv("FRONTEND_URL", "http://localhost:5173").replace(":5173", ":8000")
                     tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(url)}&email={urllib.parse.quote(email)}"
                     
@@ -246,11 +272,20 @@ async def daily_match_mailer_loop():
                     text_body=text_digest,
                     html_body=html_digest
                 )
+                
+                # Mark as successfully sent today
+                last_sent_cache[(user_id, today_str)] = True
+                
+            # Clean up old dates in cache to prevent memory leaks
+            if len(last_sent_cache) > 200:
+                # Retain only current date records
+                last_sent_cache = {k: v for k, v in last_sent_cache.items() if k[1] == today_str}
+                
         except Exception as e:
             print(f"[Daily Mailer ERROR] Exception: {e}")
         
-        # Sleep for exactly 24 hours before next sweep
-        await asyncio.sleep(86400)
+        # Check every 60 seconds for scheduled time match sweeps
+        await asyncio.sleep(60)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1725,6 +1760,7 @@ class SubscriptionRequest(BaseModel):
     cron_enabled: bool
     cron_role: Optional[str] = None
     cron_location: Optional[str] = "Remote"
+    cron_time: Optional[str] = "18:00:00"
 
 @app.post("/user/subscription")
 async def user_subscription(request: SubscriptionRequest, authorization: Optional[str] = Header(None)):
@@ -1740,7 +1776,8 @@ async def user_subscription(request: SubscriptionRequest, authorization: Optiona
     supabase_request(f"users?id=eq.{user['id']}", "PATCH", {
         "cron_enabled": request.cron_enabled,
         "cron_role": request.cron_role,
-        "cron_location": request.cron_location
+        "cron_location": request.cron_location,
+        "cron_time": request.cron_time
     })
     return {"status": "success"}
 
