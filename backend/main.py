@@ -1794,6 +1794,64 @@ async def user_subscription(request: SubscriptionRequest, authorization: Optiona
     })
     return {"status": "success"}
 
+@app.post("/user/test_email")
+async def user_test_email(authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ")[1]
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    email = user.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="User email not found.")
+
+    # Format a beautiful test matching digest email
+    text_body = (
+        "Hello! This is a preview of your Daily Job Matches Digest.\n\n"
+        "1. Staff Software Engineer at Google\n   Match Score: 92%\n"
+        "   View Job: https://careers.google.com\n"
+        "   Auto-Tailor: http://localhost:8000/email_action/tailor?job_url=https://careers.google.com&email=" + email + "\n"
+    )
+    
+    base_url = os.getenv("FRONTEND_URL", "http://localhost:5173").replace(":5173", ":8000")
+    tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote('https://careers.google.com')}&email={urllib.parse.quote(email)}"
+    
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #E2E8F0; border-radius: 8px;">
+        <h2 style="color: #0284C7; border-bottom: 2px solid #E2E8F0; padding-bottom: 10px;">📬 Job Matches Digest (Preview)</h2>
+        <p>Hello! Here is a sample matching role showing how your daily digests will arrive:</p>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <tr style="border-bottom: 1px solid #E2E8F0;">
+                <td style="padding: 12px 0;">
+                    <div style="font-weight: bold; color: #1E293B; font-size: 0.95rem;">Staff Software Engineer</div>
+                    <div style="font-size: 0.8rem; color: #64748B; margin-top: 2px;">Google</div>
+                    <div style="font-size: 0.8rem; color: #0284C7; margin-top: 6px; font-weight: bold;">92% match</div>
+                </td>
+                <td style="text-align: right; padding: 12px 0;">
+                    <a href="https://careers.google.com" target="_blank" style="display: inline-block; padding: 6px 12px; font-size: 0.78rem; color: #64748B; border: 1px solid #CBD5E1; border-radius: 4px; text-decoration: none; margin-right: 6px;">View Post</a>
+                    <a href="{tailor_url}" target="_blank" style="display: inline-block; padding: 6px 12px; font-size: 0.78rem; color: #fff; background-color: #0284C7; border-radius: 4px; text-decoration: none; font-weight: bold;">⚡ Auto-Tailor</a>
+                </td>
+            </tr>
+        </table>
+        <p style="font-size: 0.8rem; color: #64748B; margin-top: 20px; border-top: 1px solid #E2E8F0; padding-top: 10px;">
+            This is a mock preview matching your active profile details.
+        </p>
+    </div>
+    """
+    
+    success = send_notification_email(
+        to_email=email,
+        subject="📬 Daily Job Matches Digest (Sample Preview)",
+        text_body=text_body,
+        html_body=html_body
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send preview email. Verify SMTP settings.")
+    return {"status": "success"}
+
 @app.get("/email_action/tailor")
 async def email_action_tailor(job_url: str, email: str):
     """

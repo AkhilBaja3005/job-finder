@@ -1454,6 +1454,36 @@ function App() {
                         style={{ fontSize: '0.8rem', padding: '8px 12px' }}
                       />
                     </div>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '8px 12px', fontSize: '0.76rem', width: '100%', marginTop: '6px', border: '1px dashed var(--accent-primary)' }}
+                      onClick={async () => {
+                        setLoading(true);
+                        setStatusMessage('Sending preview matches digest to inbox...');
+                        try {
+                          const res = await fetch(`${API_BASE}/user/test_email`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${authToken}`
+                            }
+                          });
+                          if (res.ok) {
+                            showToast('✉️ Sample matches digest sent to your inbox!', 'success');
+                            setStatusMessage('Preview matches digest sent successfully!');
+                          } else {
+                            const err = await res.json();
+                            showToast(`Failed: ${err.detail}`, 'error');
+                          }
+                        } catch (err) {
+                          showToast(`Error: ${err.message}`, 'error');
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                    >
+                      ✉️ Send Test Matches Digest
+                    </button>
                   </div>
                 )}
               </div>
