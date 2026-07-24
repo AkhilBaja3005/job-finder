@@ -1642,6 +1642,60 @@ async def get_applications(authorization: Optional[str] = Header(None)):
         token = authorization.split(" ")[1]
     return {"applications": list_applications(token)}
 
+class InterviewPrepRequest(BaseModel):
+    job_title: str
+    company: str
+    job_url: Optional[str] = None
+
+@app.post("/generate_interview_prep")
+async def generate_interview_prep(request: InterviewPrepRequest, authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ")[1]
+    
+    # 1. Fetch user resume data
+    session = get_session_data(token)
+    resume = session.get("data")
+    if not resume:
+        raise HTTPException(status_code=400, detail="No resume uploaded yet. Upload a resume first to prepare.")
+
+    # 2. Extract job description if URL is available
+    jd_text = ""
+    if request.job_url:
+        try:
+            scraped = await scrape_job_description(request.job_url)
+            jd_text = scraped.get("description", "")
+        except Exception:
+            pass
+
+    # 3. Formulate Prompt
+    prompt = f"""You are a professional Interview Coach.
+Help the candidate prepare for an upcoming interview.
+
+CANDIDATE PROFILE:
+{json.dumps(resume, indent=2)}
+
+TARGET POSITION:
+Role: {request.job_title}
+Company: {request.company}
+Job Description context: {jd_text[:1200] if jd_text else "Not provided"}
+
+Output a complete Markdown Interview Preparation Pack following these sections:
+1. **Behavioral STAR Q&A:** Formulate 3-4 custom STAR stories mapping the candidate's exact experience to likely interview questions for this role. Use actual metrics from the profile.
+2. **Technical Review Checklist:** List 5 key topics or tools mentioned in the job context that the candidate should brush up on.
+3. **Common Tough Questions:** Provide specific, tailored answers for "Why this company?" and "How to address any skill/experience gaps".
+4. **Smart Questions to Ask Them:** List 3-4 highly engaging questions tailored specifically to this company and role.
+
+Do NOT add conversational intro/outro. Output ONLY the raw Markdown.
+"""
+
+    try:
+        from services.gemini_client import generate_content_with_fallback
+        result_text = generate_content_with_fallback(prompt)
+        return {"status": "success", "markdown": result_text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 class ScrapeRequest(BaseModel):
     url: str
 
