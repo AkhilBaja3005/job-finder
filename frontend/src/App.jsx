@@ -1843,7 +1843,6 @@ function App() {
                                     setPrepMarkdown(data.markdown);
                                     setPrepModalOpen(true);
                                     setStatusMessage('Interview preparation pack generated!');
-                                    showToast('STAR Prep Pack ready!', 'success');
                                   } else {
                                     const err = await res.json();
                                     showToast(`Error: ${err.detail}`, 'error');
