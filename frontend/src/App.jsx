@@ -1598,8 +1598,59 @@ function App() {
                   <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>Tailor a resume or apply to a job to see it recorded here.</div>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '560px', overflowY: 'auto', paddingRight: '4px' }}>
-                  {applicationHistory.map((entry, idx) => {
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '560px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {/* Funnel Metrics Dashboard Card */}
+                  {(() => {
+                    const tailoredCount = applicationHistory.filter(e => e.status === 'tailored').length;
+                    const autofilledCount = applicationHistory.filter(e => e.status === 'autofilled').length;
+                    const appliedCount = applicationHistory.filter(e => e.status === 'applied').length;
+                    const total = applicationHistory.length || 1;
+
+                    const tailoredPct = Math.round((tailoredCount / total) * 100);
+                    const autofilledPct = Math.round((autofilledCount / total) * 100);
+                    const appliedPct = Math.round((appliedCount / total) * 100);
+
+                    return (
+                      <div className="card" style={{ padding: '14px', background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.8))', border: '1px solid rgba(56, 189, 248, 0.15)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📊 Application Pipeline Funnel</div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
+                              <span style={{ color: '#7dd3fc', fontWeight: 600 }}>🎯 Resumes Tailored</span>
+                              <span style={{ color: '#fff', fontWeight: 700 }}>{tailoredCount} ({tailoredPct}%)</span>
+                            </div>
+                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${tailoredPct}%`, background: '#7dd3fc', borderRadius: '999px' }} />
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
+                              <span style={{ color: '#38BDF8', fontWeight: 600 }}>🤖 Applications Autofilled</span>
+                              <span style={{ color: '#fff', fontWeight: 700 }}>{autofilledCount} ({autofilledPct}%)</span>
+                            </div>
+                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${autofilledPct}%`, background: '#38BDF8', borderRadius: '999px' }} />
+                            </div>
+                          </div>
+
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
+                              <span style={{ color: '#10B981', fontWeight: 600 }}>✅ Submitted / Applied</span>
+                              <span style={{ color: '#fff', fontWeight: 700 }}>{appliedCount} ({appliedPct}%)</span>
+                            </div>
+                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${appliedPct}%`, background: '#10B981', borderRadius: '999px' }} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {applicationHistory.map((entry, idx) => {
                     const statusColor = entry.status === 'applied' ? '#10B981' : entry.status === 'autofilled' ? '#38BDF8' : '#7dd3fc';
                     const statusLabel = entry.status === 'applied' ? 'Applied' : entry.status === 'autofilled' ? 'Autofilled' : 'Tailored';
                     const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
@@ -1666,6 +1717,7 @@ function App() {
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               )
             ) : isDiscoveryView && discovering ? (
