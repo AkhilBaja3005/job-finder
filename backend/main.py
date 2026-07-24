@@ -219,15 +219,28 @@ async def daily_match_mailer_loop():
                 print(f"[Daily Mailer] Send time reached ({time_str}) for user {email}. Scraping '{pref_role}' in '{pref_loc}'...")
                 
                 # Execute job search over last 24h
-                scraped_jobs = await find_matching_jobs(pref_loc, pref_role, timeframe="24h")
+                scraped_jobs = []
+                async for chunk in find_matching_jobs(
+                    resume_data=resume_data,
+                    location=pref_loc,
+                    keywords=pref_role,
+                    timeframe="24h"
+                ):
+                    try:
+                        parsed = json.loads(chunk.strip())
+                        if parsed.get("type") == "result":
+                            scraped_jobs = parsed.get("jobs", [])
+                    except Exception:
+                        pass
+
                 if not scraped_jobs:
-                    print(f"[Daily Mailer] No recent jobs found for user: {email}")
+                    print(f"[Daily Mailer] No recent jobs found matching {pref_role} for user: {email}")
                     # Still mark as checked today so we don't spam checking every minute
                     last_sent_cache[(user_id, today_str)] = True
                     continue
                 
                 # Sort jobs descending by overall match score
-                scraped_jobs.sort(key=lambda j: j.get("overall_score", 0), reverse=True)
+                scraped_jobs.sort(key=lambda j: j.get("score", 0), reverse=True)
                 
                 # Format text digest
                 text_digest = f"Hello {resume_data.get('name', 'Candidate')},\n\nHere are your matching job listings for the past 24 hours:\n\n"
@@ -241,7 +254,7 @@ async def daily_match_mailer_loop():
                 for idx, job in enumerate(scraped_jobs[:8]): # limit to top 8 matches
                     title = job.get("title", "Target Role")
                     company = job.get("company", "Target Company")
-                    score = job.get("overall_score", 60)
+                    score = job.get("score", 60)
                     url = job.get("url", "")
                     
                     # Embed direct tail-and-apply token link
