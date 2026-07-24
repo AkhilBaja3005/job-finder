@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import asyncio
 import os
 import shutil
@@ -151,12 +152,15 @@ async def auto_clean_expired_files_loop():
 from services.email_service import send_notification_email
 from datetime import datetime as dt, time as dtime, timedelta, timezone
 
-
 async def daily_match_mailer_loop():
-    """Background task executing job search and mailing digests based on user configured time preferences."""
-    # Wait for startup to settle before first check (1 hour delay in production to avoid instant boot digests)
-    # For local development testing, you can change this to a shorter value or trigger on-demand via settings.
-    await asyncio.sleep(3600)
+    # Startup settle logic:
+    # Run immediately (5s delay) if running locally, otherwise wait 1 hour in production.
+    if _is_local_deployment():
+        print("[Daily Mailer] Local deployment detected. Running first cron loop in 5 seconds...")
+        await asyncio.sleep(5)
+    else:
+        print("[Daily Mailer] Production deployment detected. Waiting 1 hour before first cron check loop...")
+        await asyncio.sleep(3600)
     
     # Store last sent date for users to avoid duplicate notifications on same day
     # format: { (user_id, date_string): True }
@@ -258,8 +262,9 @@ async def daily_match_mailer_loop():
                     score = job.get("score", 60)
                     url = job.get("url", "")
                     
-                    # Embed direct tail-and-apply token link
-                    base_url = os.getenv("FRONTEND_URL", "http://localhost:5173").replace(":5173", ":8000")
+                    # Dynamic domain resolution: use BACKEND_URL environment variable if set (ideal for Render),
+                    # fallback to localhost if missing.
+                    base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
                     tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(url)}&email={urllib.parse.quote(email)}"
                     
                     text_digest += f"{idx+1}. {title} at {company}\n   Match Score: {score}%\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
@@ -1796,7 +1801,7 @@ async def user_subscription(request: SubscriptionRequest, authorization: Optiona
     return {"status": "success"}
 
 @app.post("/user/test_email")
-async def user_test_email(authorization: Optional[str] = Header(None)):
+async def user_test_email(request: Request, authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
     token = authorization.split(" ")[1]
@@ -1808,15 +1813,22 @@ async def user_test_email(authorization: Optional[str] = Header(None)):
     if not email:
         raise HTTPException(status_code=400, detail="User email not found.")
 
+    # Dynamically extract base_url from active HTTP request domain headers or BACKEND_URL environment variable
+    backend_env = os.getenv("BACKEND_URL")
+    if backend_env:
+        base_url = backend_env
+    else:
+        # Fallback to current request domain scheme & host headers dynamically
+        base_url = f"{request.url.scheme}://{request.url.netloc}"
+
     # Format a beautiful test matching digest email
     text_body = (
         "Hello! This is a preview of your Daily Job Matches Digest.\n\n"
         "1. Staff Software Engineer at Google\n   Match Score: 92%\n"
         "   View Job: https://careers.google.com\n"
-        "   Auto-Tailor: http://localhost:8000/email_action/tailor?job_url=https://careers.google.com&email=" + email + "\n"
+        "   Auto-Tailor: " + base_url + "/email_action/tailor?job_url=https://careers.google.com&email=" + email + "\n"
     )
     
-    base_url = os.getenv("FRONTEND_URL", "http://localhost:5173").replace(":5173", ":8000")
     tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote('https://careers.google.com')}&email={urllib.parse.quote(email)}"
     
     html_body = f"""
@@ -1858,6 +1870,8 @@ async def email_action_tailor(job_url: str, email: str):
     """
     Zero-Click URL handler clicked from matching digest email:
     Bypasses interactive validation warnings, auto-tailors, compiles PDF, 
+    and notifies the user with the tailored PDF attachment.
+    """
 from fastapi import BackgroundTasks
 
 async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_data: dict, ats_score: int):
@@ -1958,7 +1972,7 @@ async def email_action_tailor(job_url: str, email: str, background_tasks: Backgr
         
         return HTMLResponse(f"""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #0284C7; border-radius: 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
-            <div style="font-size: 3rem; margin-bottom: 12px;">⚙️</div>
+            <div style="font-size: 3rem; margin-bottom: 12px;">&#9881;&#65039;</div>
             <h2 style="color: #0284C7; margin: 0 0 10px;">Tailoring In Progress...</h2>
             <p style="color: #4B5563; font-size: 0.95rem; line-height: 1.6;">
                 We are tailoring your resume for <strong>{job_title}</strong> at <strong>{company_name}</strong> in the background.
