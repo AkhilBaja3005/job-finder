@@ -1865,13 +1865,7 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
         raise HTTPException(status_code=500, detail="Failed to send preview email. Verify SMTP settings.")
     return {"status": "success"}
 
-@app.get("/email_action/tailor")
-async def email_action_tailor(job_url: str, email: str):
-    """
-    Zero-Click URL handler clicked from matching digest email:
-    Bypasses interactive validation warnings, auto-tailors, compiles PDF, 
-    and notifies the user with the tailored PDF attachment.
-    """
+
 from fastapi import BackgroundTasks
 
 async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_data: dict, ats_score: int):
@@ -1901,7 +1895,7 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         missing_skills = fit_analysis.match_analysis.missing_skills
         
         # Force compiling tailored LaTeX code
-        tailored_latex = await tailor_latex_code(master_latex, job_title, jd_text, tailored_updates, missing_skills, None, "", on_log=None)
+        tailored_latex = tailor_latex_code(master_latex, job_title, jd_text, tailored_updates, missing_skills, None, "", on_log=None)
 
         # Compile PDF using Tectonic
         tex_path = os.path.join(OUTPUT_DIR, f"tailored_{user_id}_{int(time.time())}.tex")
@@ -1958,7 +1952,7 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
     except Exception as e:
         traceback.print_exc()
 
-@app.get("/email_action/tailor")
+@app.get("/email_action/tailor", response_class=HTMLResponse)
 async def email_action_tailor(job_url: str, email: str, background_tasks: BackgroundTasks):
     """
     Zero-Click URL handler clicked from matching digest email:
@@ -2287,8 +2281,8 @@ if os.path.exists(frontend_dist):
 
     @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
     async def serve_frontend(rest_of_path: str):
-        # Ignore API endpoints so they pass through to regular routes
-        if rest_of_path.startswith(("user/", "auth/", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
+        # Ignore API endpoints and action handlers so they pass through to regular routes
+        if any(api in rest_of_path for api in ("user/", "auth/", "email_action", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
             raise HTTPException(status_code=404, detail="Not Found")
         
         if rest_of_path == "favicon.svg":
