@@ -1953,6 +1953,30 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
             print(f"[Auto Tailor] Tectonic failed: {result.stderr}")
             return
             
+        # Calculate post-tailored ATS match score to verify improvements
+        try:
+            # Re-parse the tailored resume contents to dictionary format
+            from services.resume_parser import parse_resume
+            # Tectonic compiled PDF output is at pdf_path
+            tailored_data = parse_resume(pdf_path).model_dump()
+            
+            # Compute new post-tailored score
+            from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
+            post_ats_res = compute_ats_score(tailored_data, jd_text)
+            post_role_fit = estimate_role_fit_score(tailored_data, jd_text)
+            post_ats_score = compute_overall_score(post_ats_res.skills_score, post_ats_res.experience_score, post_role_fit)
+            
+            # Bound and verify improvement
+            if post_ats_score > ats_score:
+                ats_score_display = f"{ats_score}% &rarr; <span style='color: #10B981; font-weight: bold;'>{post_ats_score}%</span> (Improved!)"
+                # Update the database log entry score with the actual optimized tailored score
+                ats_score = post_ats_score
+            else:
+                ats_score_display = f"{ats_score}%"
+        except Exception as score_err:
+            print(f"[Auto Tailor] Failed to compute post-tailored score: {score_err}")
+            ats_score_display = f"{ats_score}%"
+
         # Generate Overleaf Edit link
         candidate_name = resume_data.get("name", "Candidate")
         overleaf_url = upload_zip_to_tmpfiles(tailored_latex, candidate_name, job_title, company_name)
@@ -1988,7 +2012,7 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
                     </tr>
                     <tr>
                         <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">ATS Score:</td>
-                        <td style="padding: 6px 0; color: #0284C7; font-size: 0.95rem; font-weight: bold;">{ats_score}% match</td>
+                        <td style="padding: 6px 0; color: #0284C7; font-size: 0.95rem;">{ats_score_display}</td>
                     </tr>
                 </table>
             </div>
