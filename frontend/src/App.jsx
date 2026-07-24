@@ -1856,6 +1856,52 @@ function App() {
                             >
                               🎤 Prep Interview
                             </button>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '0.7rem', marginTop: '6px', width: '100%', borderColor: 'var(--accent-primary)', color: '#fff' }}
+                              onClick={async () => {
+                                setLoading(true);
+                                setStatusMessage('Generating outreach message...');
+                                try {
+                                  const headers = { 
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${getAuthHeader()}`
+                                  };
+                                  if (geminiApiKey) {
+                                    headers['X-Gemini-API-Key'] = geminiApiKey;
+                                  }
+                                  const res = await fetch(`${API_BASE}/generate_outreach`, {
+                                    method: 'POST',
+                                    headers: headers,
+                                    body: JSON.stringify({
+                                      job_url: entry.job_url || '',
+                                      job_description: '', // Scraper extracts JD automatically if empty
+                                      job_title: entry.job_title || 'Target Role',
+                                      company_name: entry.company || 'Target Company',
+                                      recruiter_name: null,
+                                      platform: entry.job_url?.includes('linkedin') ? 'linkedin' : entry.job_url?.includes('indeed') ? 'indeed' : 'unknown'
+                                    })
+                                  });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    setOutreachRecruiterInfo(data.recruiter_info);
+                                    setOutreachData(data.message);
+                                    setOutreachModalOpen(true);
+                                    setStatusMessage('Outreach message generated!');
+                                    showToast('Outreach message ready!', 'success');
+                                  } else {
+                                    const err = await res.json();
+                                    showToast(`Error: ${err.detail}`, 'error');
+                                  }
+                                } catch (e) {
+                                  showToast(`Error: ${e.message}`, 'error');
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                            >
+                              ✉️ Outreach Message
+                            </button>
                           </div>
                         </div>
                       </div>
