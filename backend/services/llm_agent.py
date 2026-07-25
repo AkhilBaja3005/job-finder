@@ -130,7 +130,11 @@ def _sanitize_suggestions(suggestions) -> dict:
         elif isinstance(val, dict):
             return {k: _escape(v) for k, v in val.items()}
         return val
-    return {k: _escape(v) for k, v in suggestions.items()}
+    if isinstance(suggestions, dict):
+        return {k: _escape(v) for k, v in suggestions.items()}
+    elif isinstance(suggestions, list):
+        return [_escape(v) for v in suggestions]
+    return _escape(suggestions)
 
 def _validate_latex_output(latex: str, label: str = "tailor") -> str:
     """
