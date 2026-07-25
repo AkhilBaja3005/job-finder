@@ -1990,8 +1990,8 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         optimal_linespread = 1.0
 
         if pages > 1:
-            # Step 1: Mechanical spacing shrink
-            for ls in [0.95, 0.90, 0.85]:
+            # Step 1: Mechanical spacing shrink (test down to 0.78 for dense multi-section resumes)
+            for ls in [0.95, 0.90, 0.85, 0.80, 0.78]:
                 p, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, 1.0, ls, master_latex)
                 if p == 1:
                     pages = 1
