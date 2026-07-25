@@ -2000,12 +2000,38 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
 
         if pages > 1:
             # Step 2: Mechanical font scaling shrink
-            for scale in [0.85, 0.75]:
+            for scale in [0.85, 0.75, 0.65]:
                 p, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, scale, optimal_linespread, master_latex)
                 if p == 1:
                     pages = 1
                     optimal_scale = scale
                     break
+
+        # Step 3: If still spilled (>1 page), trigger AI text condensation loop
+        condense_attempts = 0
+        while pages > 1 and condense_attempts < 2:
+            print(f"[Auto Tailor] PDF spilled onto page {pages}. Running AI text condensation retry {condense_attempts+1}...")
+            condense_feedback = (
+                "CRITICAL: The resume spilled to page 2. You MUST shorten the experience and project bullets "
+                "to be tighter and more concise (max 1 line per project bullet). Do NOT remove any job, school, project, "
+                "CPI/GPA value, or bullet point — just make each bullet shorter so the compiled PDF fits 1 page."
+            )
+            condensed_latex = await asyncio.to_thread(
+                tailor_latex_code, master_latex, job_title, jd_text, tailored_updates, missing_skills, None, condense_feedback, on_log=None
+            )
+            # Recheck page metrics with condensed text
+            pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, condensed_latex, optimal_scale, optimal_linespread, master_latex)
+            if pages == 1 or condensed_latex != tailored_latex:
+                tailored_latex = condensed_latex
+            condense_attempts += 1
+            if pages > 1:
+                # Try mechanical shrink once more on condensed text
+                for ls in [0.80, 0.75]:
+                    p, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, optimal_scale, ls, master_latex)
+                    if p == 1:
+                        pages = 1
+                        optimal_linespread = ls
+                        break
 
         # Compile final PDF using Tectonic with optimal spacing
         tex_path = os.path.join(OUTPUT_DIR, f"tailored_{user_id}_{int(time.time())}.tex")
