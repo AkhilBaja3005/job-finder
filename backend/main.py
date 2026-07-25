@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import asyncio
 import os
 import shutil
@@ -147,18 +148,237 @@ async def auto_clean_expired_files_loop():
         await asyncio.sleep(1800) # Sleep first, startup clean is handled in lifespan
         await auto_clean_expired_files(force_startup_purge=False)
 
+# Background Loop: Run matching job scanner once every 24 hours
+from services.email_service import send_notification_email
+from datetime import datetime as dt, time as dtime, timedelta, timezone
+
+async def daily_match_mailer_loop():
+    # Startup settle logic:
+    # Run immediately (5s delay) if running locally, otherwise wait 1 hour in production.
+    if _is_local_deployment():
+        print("[Daily Mailer] Local deployment detected. Running first cron loop in 5 seconds...")
+        await asyncio.sleep(5)
+    else:
+        print("[Daily Mailer] Production deployment detected. Waiting 1 hour before first cron check loop...")
+        await asyncio.sleep(3600)
+    
+    # Store last sent date for users to avoid duplicate notifications on same day
+    # format: { (user_id, date_string): True }
+    last_sent_cache = {}
+    
+    while True:
+        try:
+            print("[Daily Mailer] Scanning active users for subscription digests...")
+            from services.auth import supabase_request
+            active_users = supabase_request("users?cron_enabled=eq.true", "GET")
+            
+            # Get current local datetime (server time, assumed to match user local timezone configuration or UTC)
+            now = dt.now()
+            today_str = now.strftime("%Y-%m-%d")
+            
+            for user in active_users:
+                user_id = user.get("id")
+                email = user.get("email")
+                if not email or not user_id:
+                    continue
+                
+                # Check if we already sent today's email
+                if last_sent_cache.get((user_id, today_str)):
+                    continue
+                
+                # Parse user's target time (default to 6:00 PM if not set)
+                time_str = user.get("cron_time") or "18:00:00"
+                try:
+                    target_h, target_m = map(int, time_str.split(":")[:2])
+                except Exception:
+                    target_h, target_m = 18, 0
+                
+                # Check if current time has crossed the target send time
+                target_dt = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0)
+                # In local dev mode, trigger immediately on server startup regardless of time
+                if now < target_dt and not _is_local_deployment():
+                    # Not time yet for this user in production
+                    continue
+                
+                # Fetch user's master resume data
+                resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+                if not resume_rows:
+                    continue
+                
+                resume_data_str = resume_rows[0].get("resume_data")
+                if not resume_data_str:
+                    continue
+                try:
+                    resume_data = json.loads(resume_data_str)
+                except Exception:
+                    continue
+                
+                # Retrieve query parameters: use customized preference or auto-extract target role from resume summary
+                pref_role = user.get("cron_role")
+                if not pref_role:
+                    pref_role = resume_data.get("summary", "")[:100]
+                    # Simple fallback to common keywords
+                    pref_role = pref_role or "Software Engineer"
+                
+                pref_loc = user.get("cron_location", "Remote")
+                
+                print(f"[Daily Mailer] Send time reached ({time_str}) for user {email}. Scraping '{pref_role}' in '{pref_loc}'...")
+                
+                # Execute job search over last 24h
+                scraped_jobs = []
+                async for chunk in find_matching_jobs(
+                    resume_data=resume_data,
+                    location=pref_loc,
+                    keywords=pref_role,
+                    timeframe="24h"
+                ):
+                    try:
+                        parsed = json.loads(chunk.strip())
+                        if parsed.get("type") == "result":
+                            scraped_jobs = parsed.get("jobs", [])
+                    except Exception:
+                        pass
+
+                if not scraped_jobs:
+                    print(f"[Daily Mailer] No recent jobs found matching {pref_role} for user: {email}")
+                    # Still mark as checked today so we don't spam checking every minute
+                    last_sent_cache[(user_id, today_str)] = True
+                    continue
+                
+                # Sort jobs descending by overall match score
+                scraped_jobs.sort(key=lambda j: j.get("score", 0), reverse=True)
+                
+                # Format text digest
+                text_digest = f"Hello {resume_data.get('name', 'Candidate')},\n\nHere are your matching job listings for the past 24 hours:\n\n"
+                html_digest = f"""
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03); box-sizing: border-box;">
+                    <div style="text-align: center; margin-bottom: 24px;">
+                        <span style="font-size: 3rem;">📬</span>
+                        <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem; font-family: 'Segoe UI', Arial, sans-serif;">Daily Job Matches Digest</h2>
+                        <p style="color: #64748B; font-size: 0.9rem; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">Here are your top matching roles from the past 24 hours:</p>
+                    </div>
+                    
+                    <div style="width: 100%;">
+                """
+                
+                for idx, job in enumerate(scraped_jobs[:8]): # limit to top 8 matches
+                    title = job.get("title", "Target Role")
+                    company = job.get("company", "Target Company")
+                    score = job.get("score", 60)
+                    url = job.get("url", "")
+                    
+                    # Dynamic domain resolution: use BACKEND_URL environment variable if set (ideal for Render),
+                    # fallback to localhost if missing.
+                    base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+                    tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(url)}&email={urllib.parse.quote(email)}"
+                    
+                    text_digest += f"{idx+1}. {title} at {company}\n   Match Score: {score}%\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
+                    
+                    # Score color helper
+                    score_color = "#10B981" if score >= 85 else "#F59E0B" if score >= 70 else "#64748B"
+                    
+                    html_digest += f"""
+                    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; margin-bottom: 12px; box-sizing: border-box; overflow: hidden;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td>
+                                    <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">{title}</h3>
+                                    <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">{company}</p>
+                                </td>
+                                <td style="text-align: right; vertical-align: top; width: 90px;">
+                                    <span style="display: inline-block; background-color: {score_color}15; color: {score_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">{score}% match</span>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 14px;">
+                            <tr>
+                                <td style="width: 50%; padding-right: 5px;">
+                                    <a href="{url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">View Listing</a>
+                                </td>
+                                <td style="width: 50%; padding-left: 5px;">
+                                    <a href="{tailor_url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">⚡ Auto-Tailor</a>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    """
+                
+                # Unsubscribe link setup
+                base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+                unsub_url = f"{base_url}/email_action/unsubscribe?email={urllib.parse.quote(email)}"
+                
+                html_digest += f"""
+                    </div>
+                    <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
+                    <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">
+                        Manage your subscription settings inside the app or <a href="{unsub_url}" target="_blank" style="color: #0284C7; text-decoration: underline;">unsubscribe instantly</a>.
+                    </p>
+                </div>
+                """
+                
+                # Send email
+                send_notification_email(
+                    to_email=email,
+                    subject="Daily Job Matching Digest",
+                    text_body=text_digest,
+                    html_body=html_digest
+                )
+                
+                # Mark as successfully sent today
+                last_sent_cache[(user_id, today_str)] = True
+                
+            # Clean up old dates in cache to prevent memory leaks
+            if len(last_sent_cache) > 200:
+                # Retain only current date records
+                last_sent_cache = {k: v for k, v in last_sent_cache.items() if k[1] == today_str}
+                
+        except Exception as e:
+            print(f"[Daily Mailer ERROR] Exception: {e}")
+        
+        # Check every 60 seconds for scheduled time match sweeps
+        await asyncio.sleep(60)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Perform immediate full purge of leftover files from previous deployment container instances
     await auto_clean_expired_files(force_startup_purge=True)
     # Start the background checker loop task
     clean_task = asyncio.create_task(auto_clean_expired_files_loop())
+    # Start daily match mailer loop
+    mailer_task = asyncio.create_task(daily_match_mailer_loop())
+
+    # Check if local deployment and BACKEND_URL contains ngrok
+    ngrok_proc = None
+    if _is_local_deployment():
+        backend_url = os.getenv("BACKEND_URL", "")
+        if "ngrok" in backend_url:
+            try:
+                # Find npx / ngrok command
+                ngrok_cmd = shutil.which("npx") or shutil.which("ngrok")
+                if ngrok_cmd:
+                    cmd = [ngrok_cmd, "ngrok", "http", "8000", f"--url={backend_url}"] if "npx" in ngrok_cmd else [ngrok_cmd, "http", "8000", f"--url={backend_url}"]
+                    print(f"[Ngrok Manager] Launching static tunnel: {backend_url}...")
+                    ngrok_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception as e:
+                print(f"[Ngrok Manager ERROR] Failed to start tunnel: {e}")
+
     yield
+
     # Shutdown
+    if ngrok_proc:
+        print("[Ngrok Manager] Terminating static tunnel process...")
+        try:
+            ngrok_proc.terminate()
+            ngrok_proc.wait(timeout=3)
+        except Exception:
+            ngrok_proc.kill()
+
     clean_task.cancel()
+    mailer_task.cancel()
     try:
-        await clean_task
-    except asyncio.CancelledError:
+        await asyncio.gather(clean_task, mailer_task, return_exceptions=True)
+    except Exception:
         pass
 
 # Initialize FastAPI with the lifespan handler
@@ -176,6 +396,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_ngrok_skip_header(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["ngrok-skip-browser-warning"] = "true"
+    return response
 
 import threading
 
@@ -566,6 +792,7 @@ def _extract_company_from_jd(jd_text: str, job_url: str = None) -> str:
 
                 # Try to scrape the LinkedIn company page to get the actual company name
                 try:
+                    # pyrefly: ignore [missing-import]
                     from playwright.sync_api import sync_playwright
                     with sync_playwright() as p:
                         browser = p.chromium.launch(headless=True)
@@ -1613,6 +1840,426 @@ async def user_me(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid token")
     return user
 
+class SubscriptionRequest(BaseModel):
+    cron_enabled: bool
+    cron_role: Optional[str] = None
+    cron_location: Optional[str] = "Remote"
+    cron_time: Optional[str] = "18:00:00"
+
+@app.post("/user/subscription")
+async def user_subscription(request: SubscriptionRequest, authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ")[1]
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    # Save preferences to Supabase
+    from services.auth import supabase_request
+    supabase_request(f"users?id=eq.{user['id']}", "PATCH", {
+        "cron_enabled": request.cron_enabled,
+        "cron_role": request.cron_role,
+        "cron_location": request.cron_location,
+        "cron_time": request.cron_time
+    })
+    return {"status": "success"}
+
+@app.post("/user/test_email")
+async def user_test_email(request: Request, authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ")[1]
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    email = user.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="User email not found.")
+
+    # Dynamically extract base_url from active HTTP request domain headers or BACKEND_URL environment variable
+    backend_env = os.getenv("BACKEND_URL")
+    if backend_env:
+        base_url = backend_env
+    else:
+        # Fallback to current request domain scheme & host headers dynamically
+        base_url = f"{request.url.scheme}://{request.url.netloc}"
+
+    # Format a beautiful test matching digest email
+    text_body = (
+        "Hello! This is a preview of your Daily Job Matches Digest.\n\n"
+        "1. Staff Software Engineer at Google\n   Match Score: 92%\n"
+        "   View Job: https://careers.google.com\n"
+        "   Auto-Tailor: " + base_url + "/email_action/tailor?job_url=https://careers.google.com&email=" + email + "\n"
+    )
+    
+    tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote('https://careers.google.com')}&email={urllib.parse.quote(email)}"
+    
+    html_body = f"""
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <span style="font-size: 3rem;">📬</span>
+            <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem;">Job Matches Digest (Preview)</h2>
+            <p style="color: #64748B; font-size: 0.9rem; margin: 0;">Hello! Here is a sample matching role showing how your daily digests will arrive:</p>
+        </div>
+        
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; box-sizing: border-box; overflow: hidden;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td>
+                        <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Staff Software Engineer</h3>
+                        <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">Google</p>
+                    </td>
+                    <td style="text-align: right; vertical-align: top; width: 90px;">
+                        <span style="display: inline-block; background-color: #10B98115; color: #10B981; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">92% match</span>
+                    </td>
+                </tr>
+            </table>
+            
+            <table style="width: 100%; border-collapse: collapse; margin-top: 14px;">
+                <tr>
+                    <td style="width: 50%; padding-right: 5px;">
+                        <a href="https://careers.google.com" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">View Listing</a>
+                    </td>
+                    <td style="width: 50%; padding-left: 5px;">
+                        <a href="{tailor_url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">⚡ Auto-Tailor</a>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        
+        <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
+        <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">
+            This is a mock preview matching your active profile details.
+        </p>
+    </div>
+    """
+    
+    success = send_notification_email(
+        to_email=email,
+        subject="📬 Daily Job Matches Digest (Sample Preview)",
+        text_body=text_body,
+        html_body=html_body
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send preview email. Verify SMTP settings.")
+    return {"status": "success"}
+
+
+# pyrefly: ignore [missing-import]
+from fastapi import BackgroundTasks
+
+async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_data: dict, ats_score: int):
+    try:
+        from services.auth import supabase_request
+        # Load user resume LaTeX master template
+        resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+        if not resume_rows or not resume_rows[0].get("master_latex"):
+            print(f"[Auto Tailor] Missing master latex template for user {user_id}")
+            return
+            
+        master_latex = resume_rows[0].get("master_latex")
+        
+        # Scrape job details
+        scraped = await scrape_job_description(job_url)
+        job_title = scraped.get("title", "Target Role")
+        jd_text = scraped.get("description", "")
+        company_name = scraped.get("company")
+        if not company_name or company_name == "Target Company":
+            company_name = _extract_company_from_jd(jd_text, job_url)
+        if not company_name:
+            company_name = "Target Company"
+        
+        # Force tailoring (Auto Mode ignores suitability warnings)
+        from services.llm_agent import analyze_job_fit
+        # Call analyze_job_fit deterministically to get updates details
+        fit_analysis = await analyze_job_fit(resume_data, job_title, jd_text, master_latex, None, on_log=None)
+        
+        # Merge updates
+        tailored_updates = fit_analysis.suggested_resume_updates
+        missing_skills = fit_analysis.match_analysis.missing_skills
+        
+        # Force compiling tailored LaTeX code
+        tailored_latex = tailor_latex_code(master_latex, job_title, jd_text, tailored_updates, missing_skills, None, "", on_log=None)
+
+        # Page-fit check & automatic mechanical shrink / AI condensation loop
+        pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, 1.0, 1.0, master_latex)
+        optimal_scale = 1.0
+        optimal_linespread = 1.0
+
+        if pages > 1:
+            # Step 1: Mechanical spacing shrink (test down to 0.78 for dense multi-section resumes)
+            for ls in [0.95, 0.90, 0.85, 0.80, 0.78]:
+                p, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, 1.0, ls, master_latex)
+                if p == 1:
+                    pages = 1
+                    optimal_linespread = ls
+                    break
+
+        if pages > 1:
+            # Step 2: Mechanical font scaling shrink
+            for scale in [0.85, 0.75, 0.65]:
+                p, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, scale, optimal_linespread, master_latex)
+                if p == 1:
+                    pages = 1
+                    optimal_scale = scale
+                    break
+
+        # Step 3: If still spilled (>1 page), trigger AI text condensation loop
+        condense_attempts = 0
+        while pages > 1 and condense_attempts < 2:
+            print(f"[Auto Tailor] PDF spilled onto page {pages}. Running AI text condensation retry {condense_attempts+1}...")
+            condense_feedback = (
+                "CRITICAL: The resume spilled to page 2. You MUST shorten the experience and project bullets "
+                "to be tighter and more concise (max 1 line per project bullet). Do NOT remove any job, school, project, "
+                "CPI/GPA value, or bullet point — just make each bullet shorter so the compiled PDF fits 1 page."
+            )
+            condensed_latex = await asyncio.to_thread(
+                tailor_latex_code, master_latex, job_title, jd_text, tailored_updates, missing_skills, None, condense_feedback, on_log=None
+            )
+            # Recheck page metrics with condensed text
+            pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, condensed_latex, optimal_scale, optimal_linespread, master_latex)
+            if pages == 1 or condensed_latex != tailored_latex:
+                tailored_latex = condensed_latex
+            condense_attempts += 1
+            if pages > 1:
+                # Try mechanical shrink once more on condensed text
+                for ls in [0.80, 0.75]:
+                    p, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, optimal_scale, ls, master_latex)
+                    if p == 1:
+                        pages = 1
+                        optimal_linespread = ls
+                        break
+
+        # Compile final PDF using Tectonic with optimal spacing
+        tex_path = os.path.join(OUTPUT_DIR, f"tailored_{user_id}_{int(time.time())}.tex")
+        pdf_path = tex_path.replace(".tex", ".pdf")
+        
+        # Write the tailored LaTeX code
+        fixed_code = apply_latex_hotfix(tailored_latex, optimal_scale, optimal_linespread, master_latex)
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(fixed_code)
+            
+        # Copy resume.cls to output directory so Tectonic can find it
+        import shutil
+        cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
+        if not os.path.exists(cls_source):
+            cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
+        shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
+            
+        print("Compiling tailored LaTeX background task using Tectonic...")
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["tectonic", tex_path, "--outdir", OUTPUT_DIR],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            print(f"[Auto Tailor] Tectonic failed: {result.stderr}")
+            return
+            
+        # Calculate post-tailored ATS match score to verify improvements
+        try:
+            # Re-parse the tailored resume contents to dictionary format
+            from services.resume_parser import parse_resume
+            # Tectonic compiled PDF output is at pdf_path
+            tailored_data = parse_resume(pdf_path).model_dump()
+            
+            # Compute new post-tailored score
+            from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
+            post_ats_res = compute_ats_score(tailored_data, jd_text)
+            post_role_fit = estimate_role_fit_score(tailored_data, jd_text)
+            post_ats_score = compute_overall_score(post_ats_res.skills_score, post_ats_res.experience_score, post_role_fit)
+            
+            # Bound and verify improvement
+            if post_ats_score > ats_score:
+                ats_score_display = f"{ats_score}% &rarr; <span style='color: #10B981; font-weight: bold;'>{post_ats_score}%</span> (Improved!)"
+                # Update the database log entry score with the actual optimized tailored score
+                ats_score = post_ats_score
+            else:
+                ats_score_display = f"{ats_score}%"
+        except Exception as score_err:
+            print(f"[Auto Tailor] Failed to compute post-tailored score: {score_err}")
+            ats_score_display = f"{ats_score}%"
+
+        # Generate Overleaf Edit link
+        candidate_name = resume_data.get("name", "Candidate")
+        overleaf_url = upload_zip_to_tmpfiles(tailored_latex, candidate_name, job_title, company_name)
+        
+        # Notify user with PDF Attachment
+        subject = f"📄 Resume Tailored Completed: {job_title} at {company_name}"
+        
+        text_body = (
+            f"Hello {candidate_name},\n\n"
+            f"Your tailored resume for '{job_title}' at '{company_name}' has been compiled successfully!\n\n"
+            f"We have attached the PDF directly to this email.\n\n"
+            f"Want to make edits or customize it? Open it directly in Overleaf here:\n{overleaf_url}\n\n"
+            f"Best of luck with your application!"
+        )
+        
+        html_body = f"""
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+            <div style="text-align: center; margin-bottom: 24px;">
+                <span style="font-size: 3rem;">📄</span>
+                <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.6rem;">Tailoring Completed!</h2>
+                <p style="color: #64748B; font-size: 0.9rem; margin: 0;">For your application at <strong>{company_name}</strong></p>
+            </div>
+            
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem; width: 100px;">Target Role:</td>
+                        <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{job_title}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Company:</td>
+                        <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{company_name}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">ATS Score:</td>
+                        <td style="padding: 6px 0; color: #0284C7; font-size: 0.95rem;">{ats_score_display}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin: 0 0 20px;">
+                Hello {candidate_name}, we have successfully tailored your experience bullet points and technical keywords to match the target job description. The compiled PDF is attached directly to this email.
+            </p>
+
+            <div style="text-align: center; margin: 30px 0 20px;">
+                <a href="{overleaf_url}" target="_blank" style="display: inline-block; background-color: #0284C7; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);">
+                    🍃 Open & Edit in Overleaf
+                </a>
+                <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 8px;">Allows you to edit LaTeX code and recompile instantly online</div>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
+            <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
+                Sent automatically by your Resume Tailor Assistant.
+            </p>
+        </div>
+        """
+        
+        send_notification_email(
+            to_email=email,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body,
+            attachment_path=pdf_path,
+            attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
+        )
+        
+        # Log to application history
+        record_id = supabase_request("applications", "POST", {
+            "user_id": user_id,
+            "job_title": job_title,
+            "company": company_name,
+            "job_url": job_url,
+            "status": "tailored",
+            "score": ats_score,
+            "created_at": dt.now(timezone.utc).isoformat()
+        })
+    except Exception as e:
+        traceback.print_exc()
+
+@app.get("/email_action/tailor", response_class=HTMLResponse)
+async def email_action_tailor(job_url: str, email: str, background_tasks: BackgroundTasks):
+    """
+    Zero-Click URL handler clicked from matching digest email:
+    Asynchronously tailors, compiles, and delivers PDF to user email.
+    """
+    try:
+        from services.auth import supabase_request
+        # Lookup user profile
+        encoded_email = urllib.parse.quote(email)
+        users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
+        if not users:
+            return HTMLResponse("<h3>Error: User matching this email address not found.</h3>", status_code=404)
+        
+        user = users[0]
+        user_id = user.get("id")
+        
+        # Load user resume data
+        resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+        if not resume_rows:
+            return HTMLResponse("<h3>Error: Resume context not uploaded. Please upload a resume in the app first.</h3>", status_code=400)
+            
+        resume_data_str = resume_rows[0].get("resume_data")
+        resume_data = json.loads(resume_data_str)
+        
+        # Scrape job details to calculate pre-score quickly
+        scraped = await scrape_job_description(job_url)
+        job_title = scraped.get("title", "Target Role")
+        jd_text = scraped.get("description", "")
+        company_name = scraped.get("company")
+        if not company_name or company_name == "Target Company":
+            company_name = _extract_company_from_jd(jd_text, job_url)
+        if not company_name:
+            company_name = "Target Company"
+        
+        # Run ATS scoring
+        from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
+        ats_res = compute_ats_score(resume_data, jd_text)
+        role_fit = estimate_role_fit_score(resume_data, jd_text)
+        ats_score = compute_overall_score(ats_res.skills_score, ats_res.experience_score, role_fit)
+        
+        # Queue the heavy tailoring LLM call to run in a background thread immediately
+        background_tasks.add_task(async_tailor_pipeline, email, job_url, user_id, resume_data, ats_score)
+        
+        return HTMLResponse(f"""
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #0284C7; border-radius: 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+            <div style="font-size: 3rem; margin-bottom: 12px;">📄</div>
+            <h2 style="color: #0284C7; margin: 0 0 10px;">Tailoring In Progress...</h2>
+            <p style="color: #4B5563; font-size: 0.95rem; line-height: 1.6;">
+                We are tailoring your resume for <strong>{job_title}</strong> at <strong>{company_name}</strong> in the background.
+                We will email the compiled PDF directly to <strong>{email}</strong> once completed.
+            </p>
+            <p style="font-size: 0.8rem; color: #9CA3AF; margin-top: 20px;">You can close this tab now.</p>
+        </div>
+        """)
+        
+    except Exception as e:
+        traceback.print_exc()
+        return HTMLResponse(f"<h3>Tailoring failed: {str(e)}</h3>", status_code=500)
+
+@app.get("/email_action/unsubscribe", response_class=HTMLResponse)
+async def email_action_unsubscribe(email: str):
+    """
+    Zero-Click Unsubscribe handler clicked from matching digest email:
+    Updates Supabase user profile settings to disable daily cron subscription checks.
+    """
+    try:
+        from services.auth import supabase_request
+        encoded_email = urllib.parse.quote(email)
+        users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
+        if not users:
+            return HTMLResponse("<h3>Error: Profile matching this email address not found.</h3>", status_code=404)
+        
+        user = users[0]
+        user_id = user.get("id")
+        
+        # Disable cron matching updates
+        supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_enabled": False})
+        
+        return HTMLResponse(f"""
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #EF4444; border-radius: 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
+            <div style="font-size: 3rem; margin-bottom: 12px;">📭</div>
+            <h2 style="color: #EF4444; margin: 0 0 10px;">Unsubscribed Successfully</h2>
+            <p style="color: #4B5563; font-size: 0.95rem; line-height: 1.6;">
+                You have been unsubscribed from the Daily Job Matches Digest for <strong>{email}</strong>.
+                You will no longer receive daily matching reports.
+            </p>
+            <p style="font-size: 0.8rem; color: #9CA3AF; margin-top: 20px;">You can close this tab now.</p>
+        </div>
+        """)
+    except Exception as e:
+        traceback.print_exc()
+        return HTMLResponse(f"<h3>Unsubscribe failed: {str(e)}</h3>", status_code=500)
+
 class SettingsRequest(BaseModel):
     gemini_api_key: str
 
@@ -1886,8 +2533,8 @@ if os.path.exists(frontend_dist):
 
     @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
     async def serve_frontend(rest_of_path: str):
-        # Ignore API endpoints so they pass through to regular routes
-        if rest_of_path.startswith(("user/", "auth/", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
+        # Ignore API endpoints and action handlers so they pass through to regular routes
+        if any(api in rest_of_path for api in ("user/", "auth/", "email_action", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
             raise HTTPException(status_code=404, detail="Not Found")
         
         if rest_of_path == "favicon.svg":

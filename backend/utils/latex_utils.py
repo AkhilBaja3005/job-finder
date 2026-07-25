@@ -94,16 +94,26 @@ def apply_latex_hotfix(
     ]:
         fixed = re.sub(pattern, '', fixed)
 
+    # ── Tighten geometry margins (force single-page fit) ─────────────────────
+    # Replace ANY \usepackage[...]{geometry} with our compact defaults.
+    fixed = re.sub(
+        r'\\usepackage\[[^\]]*\]\{geometry\}',
+        r'\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.20in]{geometry}',
+        fixed,
+    )
+
     # ── Inject spacing overrides after \\documentclass ───────────────────────
-    ns  = f"{0.15 * spacing_scale:.3f}em"
-    as_ = f"{0.10 * spacing_scale:.3f}em"
-    ss  = f"{0.25 * spacing_scale:.3f}em"
-    sls = f"{0.10 * spacing_scale:.3f}em"
+    ns  = f"{0.10 * spacing_scale:.3f}em"
+    as_ = f"{0.06 * spacing_scale:.3f}em"
+    ss  = f"{0.20 * spacing_scale:.3f}em"
+    sls = f"{0.08 * spacing_scale:.3f}em"
     spacing_overrides = (
         f"\n\\def\\nameskip{{\\vspace{{{ns}}}}}\n"
         f"\\def\\addressskip{{\\vspace{{{as_}}}}}\n"
         f"\\def\\sectionskip{{\\vspace{{{ss}}}}}\n"
         f"\\def\\sectionlineskip{{\\vspace{{{sls}}}}}\n"
+        # Shrink the trailing gap after each job/project block
+        "\\renewcommand{\\smallskip}{\\vspace{1.5pt}}\n"
     )
     if linespread != 1.0:
         spacing_overrides += f"\\linespread{{{linespread:.2f}}}\n"
@@ -115,8 +125,15 @@ def apply_latex_hotfix(
     else:
         fixed = fixed.replace("\\begin{document}", spacing_overrides + "\\begin{document}", 1)
 
+    # ── Compress itemize / list environment padding ──────────────────────────
+    fixed = fixed.replace("\\begin{itemize}", "\\begin{itemize}\\setlength{\\itemsep}{-1pt}\\setlength{\\parsep}{0pt}\\setlength{\\topsep}{0pt}")
+
+    # ── Replace outdated times package with modern lmodern (ensures full bold weight rendering)
+    fixed = fixed.replace("\\usepackage{times}", "\\usepackage{lmodern}")
+
     # ── Escape unescaped special LaTeX chars ─────────────────────────────────
     fixed = re.sub(r'(?<!\\)&', r'\\&', fixed)
+    # Escape % only when NOT already preceded by \
     fixed = re.sub(r'(?<!\\)%', r'\\%', fixed)
     fixed = re.sub(r'(?<!\\)_', r'\\_', fixed)
     # Undo double-escapes that arise from the above

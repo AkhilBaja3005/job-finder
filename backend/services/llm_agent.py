@@ -130,7 +130,11 @@ def _sanitize_suggestions(suggestions) -> dict:
         elif isinstance(val, dict):
             return {k: _escape(v) for k, v in val.items()}
         return val
-    return {k: _escape(v) for k, v in suggestions.items()}
+    if isinstance(suggestions, dict):
+        return {k: _escape(v) for k, v in suggestions.items()}
+    elif isinstance(suggestions, list):
+        return [_escape(v) for v in suggestions]
+    return _escape(suggestions)
 
 def _validate_latex_output(latex: str, label: str = "tailor") -> str:
     """
@@ -206,20 +210,22 @@ RULE 3 — SECTION & CONTENT COMPLETENESS:
   • Preserve the EXACT bullet count per job and per project. Do NOT add or remove bullets.
   • Preserve the original nested itemize structure (sub-bullets under parent bullets).
 
-RULE 4 — ONE-PAGE BUDGET (CRITICAL):
+RULE 4 — ONE-PAGE BUDGET & SUMMARY PLACEMENT (CRITICAL):
+  • The Professional Summary section MUST be placed at the absolute top of the document, directly below the name and contact details header.
   • The entire tailored resume MUST fit on exactly ONE page.
-  • Write concise bullets: 1 to 1.5 lines each. Do NOT write sprawling 2-line bullets.
+  • Write concise bullets: each bullet MUST occupy between 70% and 150% of one line. A bullet that wraps to a second line is ONLY acceptable if the second line is at least 5 words long (no widow words). Rewrite any bullet that would leave only 1–4 words dangling on a second line.
   • Do NOT add extra \\vspace or \\newline commands.
 
 RULE 5 — LATEX STRUCTURE:
   • Preserve \\documentclass, all \\usepackage lines, geometry, and custom macros (\\mybar, etc.).
   • Keep the exact tabular layout in Technical Skills if present.
   • Do NOT add \\linespread, \\pagestyle, or spacing overrides — these are injected by the compiler.
+  • Keep the Professional Summary block at the top, followed by other sections as ordered in the master template.
 
 RULE 6 — ATS KEYWORD INTEGRATION:
   • Inject relevant missing keywords into Technical Skills and bullets naturally.
-  • Bold existing key metrics (e.g. \\textbf{{50\\%}}) and tools (e.g. \\textbf{{RabbitMQ}}) for visual consistency.
-  • CRITICAL: NEVER use markdown asterisks (e.g. **RabbitMQ** or **50%**) for bold text. You MUST use standard LaTeX command: \\textbf{{RabbitMQ}} or \\textbf{{50\\%}} (always escape percent signs: \\%).
+  • Bold key metrics AND important tool names using \\textbf{{}} — e.g. \\textbf{{50\\%}}, \\textbf{{PySpark}}, \\textbf{{3x}}. Apply \\textbf to at least 2 items per bullet section.
+  • ABSOLUTE CRITICAL: NEVER use markdown asterisks for bold (**word** or __word__). You MUST use ONLY LaTeX \\textbf{{word}}. If you write ** anywhere in the output it will BREAK the PDF compilation.
   • Translate JD phrases into natural accomplishments — NEVER copy-paste verbatim.
 
 RULE 7 — OUTPUT FORMAT:
@@ -245,7 +251,12 @@ MASTER LaTeX (source of truth):
     for attempt in range(max_retries):
         try:
             raw = generate_latex_with_strong_model(prompt, custom_api_key, on_log=on_log)
-            raw = raw.replace("```latex", "").replace("```", "").strip()
+            # Sanitize markdown bold that the LLM sometimes emits despite the rule
+            import re as _re
+            raw = _re.sub(r'\*\*(.+?)\*\*', r'\\textbf{\1}', raw)
+            raw = _re.sub(r'__(.+?)__', r'\\textbf{\1}', raw)
+            # Ensure any unbolded key metrics (percentages, numbers like 50%, 10x, $2M) get bolded automatically
+            raw = _re.sub(r'(?<!\\textbf\{)(?<![\w\\])(\d+%\+|\d+%\b|\$\d+[\d\.]*[MBK]?\b|\d+x\b)', r'\\textbf{\1}', raw)
             return _validate_latex_output(raw, label=f"tailor attempt {attempt+1}")
         except ValueError as e:
             last_err = e
