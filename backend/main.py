@@ -195,8 +195,9 @@ async def daily_match_mailer_loop():
                 
                 # Check if current time has crossed the target send time
                 target_dt = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0)
-                if now < target_dt:
-                    # Not time yet for this user
+                # In local dev mode, trigger immediately on server startup regardless of time
+                if now < target_dt and not _is_local_deployment():
+                    # Not time yet for this user in production
                     continue
                 
                 # Fetch user's master resume data
