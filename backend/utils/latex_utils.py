@@ -128,6 +128,9 @@ def apply_latex_hotfix(
     # ── Compress itemize / list environment padding ──────────────────────────
     fixed = fixed.replace("\\begin{itemize}", "\\begin{itemize}\\setlength{\\itemsep}{-1pt}\\setlength{\\parsep}{0pt}\\setlength{\\topsep}{0pt}")
 
+    # ── Replace outdated times package with modern lmodern (ensures full bold weight rendering)
+    fixed = fixed.replace("\\usepackage{times}", "\\usepackage{lmodern}")
+
     # ── Escape unescaped special LaTeX chars ─────────────────────────────────
     fixed = re.sub(r'(?<!\\)&', r'\\&', fixed)
     # Escape % only when NOT already preceded by \

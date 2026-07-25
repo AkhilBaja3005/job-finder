@@ -792,6 +792,7 @@ def _extract_company_from_jd(jd_text: str, job_url: str = None) -> str:
 
                 # Try to scrape the LinkedIn company page to get the actual company name
                 try:
+                    # pyrefly: ignore [missing-import]
                     from playwright.sync_api import sync_playwright
                     with sync_playwright() as p:
                         browser = p.chromium.launch(headless=True)
@@ -1947,6 +1948,7 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
     return {"status": "success"}
 
 
+# pyrefly: ignore [missing-import]
 from fastapi import BackgroundTasks
 
 async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_data: dict, ats_score: int):
