@@ -141,6 +141,13 @@ function App() {
   const [prepMarkdown, setPrepMarkdown] = useState('');
   const [prepJobInfo, setPrepJobInfo] = useState({ jobTitle: '', company: '' });
 
+  // Cron Job Match Mailer Subscription states
+  const [cronEnabled, setCronEnabled] = useState(false);
+  const [mailerExpanded, setMailerExpanded] = useState(false);
+  const [cronRole, setCronRole] = useState('');
+  const [cronLocation, setCronLocation] = useState('Remote');
+  const [cronTime, setCronTime] = useState('18:00');
+
   // Store scraped job description in a ref so it's never lost
   const scrapedJobDescriptionRef = useRef('');
   const analysisPanelRef = useRef(null);
@@ -291,6 +298,12 @@ function App() {
           if (data.gemini_api_key) {
             setGeminiApiKey(data.gemini_api_key);
           }
+          setCronEnabled(!!data.cron_enabled);
+          setCronRole(data.cron_role || '');
+          setCronLocation(data.cron_location || 'Remote');
+          if (data.cron_time) {
+            setCronTime(data.cron_time.slice(0, 5)); // format HH:MM
+          }
         } else {
           handleLogout();
         }
@@ -432,6 +445,43 @@ function App() {
       }
     } catch (err) {
       setStatusMessage(`Error saving settings: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSubscriptionToCloud = async (enabled, role, location, time) => {
+    if (!authToken) return;
+    setLoading(true);
+    setStatusMessage('Updating job matching subscription preferences...');
+    try {
+      const res = await fetch(`${API_BASE}/user/subscription`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          cron_enabled: enabled,
+          cron_role: role || null,
+          cron_location: location || 'Remote',
+          cron_time: time ? `${time}:00` : '18:00:00'
+        })
+      });
+      if (res.ok) {
+        setStatusMessage('Subscription preferences updated successfully!');
+        showToast('📬 Subscription updated!', 'success');
+        const meRes = await fetch(`${API_BASE}/user/me`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const meData = await meRes.json();
+        setUser(meData);
+      } else {
+        throw new Error('Failed to save subscription preferences');
+      }
+    } catch (err) {
+      setStatusMessage(`Error updating subscription: ${err.message}`);
+      showToast(`Error: ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -1162,14 +1212,14 @@ function App() {
       {/* Toast Notification */}
       {toast && (
         <div style={{
-          position: 'fixed', bottom: '28px', left: '50%', transform: 'translateX(-50%)',
-          zIndex: 9999, padding: '12px 22px', borderRadius: '12px', fontWeight: 600,
-          fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '10px',
-          animation: 'slideDown 0.3s ease both',
-          background: toast.type === 'success' ? 'rgba(16,185,129,0.15)' : toast.type === 'error' ? 'rgba(239,68,68,0.15)' : 'rgba(56,189,248,0.15)',
-          border: `1px solid ${toast.type === 'success' ? 'rgba(16,185,129,0.4)' : toast.type === 'error' ? 'rgba(239,68,68,0.4)' : 'rgba(56,189,248,0.4)'}`,
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          zIndex: 99999, padding: '16px 28px', borderRadius: '16px', fontWeight: 700,
+          fontSize: '0.94rem', display: 'flex', alignItems: 'center', gap: '12px',
+          animation: 'fadeIn 0.25s ease both',
+          background: 'rgba(9, 13, 26, 0.95)',
+          border: `1.5px solid ${toast.type === 'success' ? '#10B981' : toast.type === 'error' ? '#EF4444' : '#0284C7'}`,
           color: toast.type === 'success' ? '#34D399' : toast.type === 'error' ? '#F87171' : '#7DD3FC',
-          backdropFilter: 'blur(16px)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
+          backdropFilter: 'blur(24px)', boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
         }}>
           {toast.message}
         </div>
@@ -1335,6 +1385,130 @@ function App() {
                 )}
               </label>
             </div>
+
+            {/* Daily Cron Match Mailer Subscription settings */}
+            {user && (
+              <div style={{ border: '1px solid rgba(56, 189, 248, 0.1)', borderRadius: '12px', overflow: 'hidden', background: 'rgba(56, 189, 248, 0.03)' }}>
+                {/* Collapsible header */}
+                <div
+                  onClick={() => setMailerExpanded(prev => !prev)}
+                  style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#fff' }}>📬 Daily Job Match Mailer</div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>Get daily lists matching your resume automatically.</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                    {/* Enable toggle — stop propagation so clicking it doesn't collapse */}
+                    <label
+                      className="toggle-switch"
+                      style={{ position: 'relative', display: 'inline-block', width: '40px', height: '22px' }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={cronEnabled}
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          setCronEnabled(val);
+                          saveSubscriptionToCloud(val, cronRole, cronLocation);
+                        }}
+                        style={{ opacity: 0, width: 0, height: 0 }}
+                      />
+                      <span style={{
+                        position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundColor: cronEnabled ? 'var(--accent-primary)' : 'rgba(255,255,255,0.1)',
+                        transition: '.3s', borderRadius: '34px'
+                      }}>
+                        <span style={{
+                          position: 'absolute', height: '16px', width: '16px', left: cronEnabled ? '20px' : '3px', bottom: '3px',
+                          backgroundColor: 'white', transition: '.3s', borderRadius: '50%'
+                        }} />
+                      </span>
+                    </label>
+                    {/* Chevron */}
+                    <svg
+                      width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                      style={{ transition: 'transform 0.2s', transform: mailerExpanded ? 'rotate(180deg)' : 'rotate(0deg)', flexShrink: 0 }}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Collapsible body */}
+                {mailerExpanded && (
+                  <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: '10px', animation: 'fadeIn 0.2s ease both', borderTop: '1px solid rgba(56,189,248,0.08)' }}>
+                    <div style={{ height: '12px' }} />
+                    <div>
+                      <div className="section-label" style={{ fontSize: '0.74rem', marginBottom: '4px' }}>Target Job Role</div>
+                      <input
+                        type="text"
+                        placeholder="e.g. Software Engineer (leave blank to auto-extract)"
+                        value={cronRole}
+                        onChange={(e) => setCronRole(e.target.value)}
+                        onBlur={() => saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation, cronTime)}
+                        style={{ fontSize: '0.8rem', padding: '8px 12px' }}
+                      />
+                    </div>
+                    <div>
+                      <div className="section-label" style={{ fontSize: '0.74rem', marginBottom: '4px' }}>Preferred Search Location</div>
+                      <input
+                        type="text"
+                        placeholder="e.g. Remote, Hyderabad, Bengaluru"
+                        value={cronLocation}
+                        onChange={(e) => setCronLocation(e.target.value)}
+                        onBlur={() => saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation, cronTime)}
+                        style={{ fontSize: '0.8rem', padding: '8px 12px' }}
+                      />
+                    </div>
+                    <div>
+                      <div className="section-label" style={{ fontSize: '0.74rem', marginBottom: '4px' }}>Daily Send Time ({cronTime})</div>
+                      <input
+                        type="time"
+                        value={cronTime}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCronTime(val);
+                          saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation, val);
+                        }}
+                        style={{ fontSize: '0.8rem', padding: '8px 12px' }}
+                      />
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '8px 12px', fontSize: '0.76rem', width: '100%', marginTop: '6px', border: '1px dashed var(--accent-primary)' }}
+                      onClick={async () => {
+                        setLoading(true);
+                        setStatusMessage('Sending preview matches digest to inbox...');
+                        try {
+                          const res = await fetch(`${API_BASE}/user/test_email`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${authToken}`
+                            }
+                          });
+                          if (res.ok) {
+                            showToast('✉️ Sample matches digest sent to your inbox!', 'success');
+                            setStatusMessage('Preview matches digest sent successfully!');
+                          } else {
+                            const err = await res.json();
+                            showToast(`Failed: ${err.detail}`, 'error');
+                          }
+                        } catch (err) {
+                          showToast(`Error: ${err.message}`, 'error');
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                    >
+                      ✉️ Send Test Matches Digest
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {statusMessage && (
               <div style={{
@@ -1665,45 +1839,92 @@ function App() {
                             {entry.job_url && (
                               <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)' }}>View Post →</a>
                             )}
-                            <button
-                              className="btn btn-secondary"
-                              style={{ padding: '4px 10px', fontSize: '0.7rem', marginTop: '6px', width: '100%' }}
-                              onClick={async () => {
-                                setLoading(true);
-                                setStatusMessage('Preparing personalized interview pack...');
-                                try {
-                                  const res = await fetch(`${API_BASE}/generate_interview_prep`, {
-                                    method: 'POST',
-                                    headers: {
+                            <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>
+                              <button
+                                className="btn btn-secondary"
+                                style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', whiteSpace: 'nowrap' }}
+                                onClick={async () => {
+                                  setLoading(true);
+                                  setStatusMessage('Preparing personalized interview pack...');
+                                  try {
+                                    const res = await fetch(`${API_BASE}/generate_interview_prep`, {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${getAuthHeader()}`
+                                      },
+                                      body: JSON.stringify({
+                                        job_title: entry.job_title || 'Target Role',
+                                        company: entry.company || 'Target Company',
+                                        job_url: entry.job_url || null
+                                      })
+                                    });
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      setPrepJobInfo({ jobTitle: entry.job_title || 'Target Role', company: entry.company || 'Target Company' });
+                                      setPrepMarkdown(data.markdown);
+                                      setPrepModalOpen(true);
+                                      setStatusMessage('Interview preparation pack generated!');
+                                    } else {
+                                      const err = await res.json();
+                                      showToast(`Error: ${err.detail}`, 'error');
+                                    }
+                                  } catch (e) {
+                                    showToast(`Error: ${e.message}`, 'error');
+                                  } finally {
+                                    setLoading(false);
+                                  }
+                                }}
+                              >
+                                🎤 Interview Prep
+                              </button>
+                              <button
+                                className="btn btn-secondary"
+                                style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', borderColor: 'var(--accent-primary)', color: '#fff', whiteSpace: 'nowrap' }}
+                                onClick={async () => {
+                                  setLoading(true);
+                                  setStatusMessage('Generating outreach message...');
+                                  try {
+                                    const headers = { 
                                       'Content-Type': 'application/json',
                                       'Authorization': `Bearer ${getAuthHeader()}`
-                                    },
-                                    body: JSON.stringify({
-                                      job_title: entry.job_title || 'Target Role',
-                                      company: entry.company || 'Target Company',
-                                      job_url: entry.job_url || null
-                                    })
-                                  });
-                                  if (res.ok) {
-                                    const data = await res.json();
-                                    setPrepJobInfo({ jobTitle: entry.job_title || 'Target Role', company: entry.company || 'Target Company' });
-                                    setPrepMarkdown(data.markdown);
-                                    setPrepModalOpen(true);
-                                    setStatusMessage('Interview preparation pack generated!');
-                                    showToast('STAR Prep Pack ready!', 'success');
-                                  } else {
-                                    const err = await res.json();
-                                    showToast(`Error: ${err.detail}`, 'error');
+                                    };
+                                    if (geminiApiKey) {
+                                      headers['X-Gemini-API-Key'] = geminiApiKey;
+                                    }
+                                    const res = await fetch(`${API_BASE}/generate_outreach`, {
+                                      method: 'POST',
+                                      headers: headers,
+                                      body: JSON.stringify({
+                                        job_url: entry.job_url || '',
+                                        job_description: '', // Scraper extracts JD automatically if empty
+                                        job_title: entry.job_title || 'Target Role',
+                                        company_name: entry.company || 'Target Company',
+                                        recruiter_name: null,
+                                        platform: entry.job_url?.includes('linkedin') ? 'linkedin' : entry.job_url?.includes('indeed') ? 'indeed' : 'unknown'
+                                      })
+                                    });
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      setOutreachRecruiterInfo(data.recruiter_info);
+                                      setOutreachData(data.message);
+                                      setOutreachModalOpen(true);
+                                      setStatusMessage('Outreach message generated!');
+                                      showToast('Outreach message ready!', 'success');
+                                    } else {
+                                      const err = await res.json();
+                                      showToast(`Error: ${err.detail}`, 'error');
+                                    }
+                                  } catch (e) {
+                                    showToast(`Error: ${e.message}`, 'error');
+                                  } finally {
+                                    setLoading(false);
                                   }
-                                } catch (e) {
-                                  showToast(`Error: ${e.message}`, 'error');
-                                } finally {
-                                  setLoading(false);
-                                }
-                              }}
-                            >
-                              🎤 Prep Interview
-                            </button>
+                                }}
+                              >
+                                ✉️ Outreach
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
