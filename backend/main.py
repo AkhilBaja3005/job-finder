@@ -346,8 +346,33 @@ async def lifespan(app: FastAPI):
     clean_task = asyncio.create_task(auto_clean_expired_files_loop())
     # Start daily match mailer loop
     mailer_task = asyncio.create_task(daily_match_mailer_loop())
+
+    # Check if local deployment and BACKEND_URL contains ngrok
+    ngrok_proc = None
+    if _is_local_deployment():
+        backend_url = os.getenv("BACKEND_URL", "")
+        if "ngrok" in backend_url:
+            try:
+                # Find npx / ngrok command
+                ngrok_cmd = shutil.which("npx") or shutil.which("ngrok")
+                if ngrok_cmd:
+                    cmd = [ngrok_cmd, "ngrok", "http", "8000", f"--url={backend_url}"] if "npx" in ngrok_cmd else [ngrok_cmd, "http", "8000", f"--url={backend_url}"]
+                    print(f"[Ngrok Manager] Launching static tunnel: {backend_url}...")
+                    ngrok_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception as e:
+                print(f"[Ngrok Manager ERROR] Failed to start tunnel: {e}")
+
     yield
+
     # Shutdown
+    if ngrok_proc:
+        print("[Ngrok Manager] Terminating static tunnel process...")
+        try:
+            ngrok_proc.terminate()
+            ngrok_proc.wait(timeout=3)
+        except Exception:
+            ngrok_proc.kill()
+
     clean_task.cancel()
     mailer_task.cancel()
     try:
