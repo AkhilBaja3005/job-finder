@@ -356,9 +356,8 @@ async def lifespan(app: FastAPI):
                 # Find npx / ngrok command
                 ngrok_cmd = shutil.which("npx") or shutil.which("ngrok")
                 if ngrok_cmd:
-                    domain_arg = backend_url.replace("https://", "").replace("http://", "").rstrip("/")
-                    cmd = [ngrok_cmd, "ngrok", "http", "8000", f"--domain={domain_arg}"] if "npx" in ngrok_cmd else [ngrok_cmd, "http", "8000", f"--domain={domain_arg}"]
-                    print(f"[Ngrok Manager] Launching static tunnel for domain: {domain_arg}...")
+                    cmd = [ngrok_cmd, "ngrok", "http", "8000", f"--url={backend_url}"] if "npx" in ngrok_cmd else [ngrok_cmd, "http", "8000", f"--url={backend_url}"]
+                    print(f"[Ngrok Manager] Launching static tunnel: {backend_url}...")
                     ngrok_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception as e:
                 print(f"[Ngrok Manager ERROR] Failed to start tunnel: {e}")
