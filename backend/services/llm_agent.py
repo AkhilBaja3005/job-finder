@@ -247,11 +247,12 @@ MASTER LaTeX (source of truth):
     for attempt in range(max_retries):
         try:
             raw = generate_latex_with_strong_model(prompt, custom_api_key, on_log=on_log)
-            raw = raw.replace("```latex", "").replace("```", "").strip()
             # Sanitize markdown bold that the LLM sometimes emits despite the rule
             import re as _re
             raw = _re.sub(r'\*\*(.+?)\*\*', r'\\textbf{\1}', raw)
             raw = _re.sub(r'__(.+?)__', r'\\textbf{\1}', raw)
+            # Ensure any unbolded key metrics (percentages, numbers like 50%, 10x, $2M) get bolded automatically
+            raw = _re.sub(r'(?<!\\textbf\{)(?<![\w\\])(\d+%\+|\d+%\b|\$\d+[\d\.]*[MBK]?\b|\d+x\b)', r'\\textbf{\1}', raw)
             return _validate_latex_output(raw, label=f"tailor attempt {attempt+1}")
         except ValueError as e:
             last_err = e
