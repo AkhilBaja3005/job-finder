@@ -125,6 +125,9 @@ def apply_latex_hotfix(
     else:
         fixed = fixed.replace("\\begin{document}", spacing_overrides + "\\begin{document}", 1)
 
+    # ── Compress itemize / list environment padding ──────────────────────────
+    fixed = fixed.replace("\\begin{itemize}", "\\begin{itemize}\\setlength{\\itemsep}{-1pt}\\setlength{\\parsep}{0pt}\\setlength{\\topsep}{0pt}")
+
     # ── Escape unescaped special LaTeX chars ─────────────────────────────────
     fixed = re.sub(r'(?<!\\)&', r'\\&', fixed)
     # Escape % only when NOT already preceded by \

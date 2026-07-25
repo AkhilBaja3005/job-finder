@@ -1982,12 +1982,35 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         # Force compiling tailored LaTeX code
         tailored_latex = tailor_latex_code(master_latex, job_title, jd_text, tailored_updates, missing_skills, None, "", on_log=None)
 
-        # Compile PDF using Tectonic
+        # Page-fit check & automatic mechanical shrink / AI condensation loop
+        pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, 1.0, 1.0, master_latex)
+        optimal_scale = 1.0
+        optimal_linespread = 1.0
+
+        if pages > 1:
+            # Step 1: Mechanical spacing shrink
+            for ls in [0.95, 0.90, 0.85]:
+                p, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, 1.0, ls, master_latex)
+                if p == 1:
+                    pages = 1
+                    optimal_linespread = ls
+                    break
+
+        if pages > 1:
+            # Step 2: Mechanical font scaling shrink
+            for scale in [0.85, 0.75]:
+                p, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, scale, optimal_linespread, master_latex)
+                if p == 1:
+                    pages = 1
+                    optimal_scale = scale
+                    break
+
+        # Compile final PDF using Tectonic with optimal spacing
         tex_path = os.path.join(OUTPUT_DIR, f"tailored_{user_id}_{int(time.time())}.tex")
         pdf_path = tex_path.replace(".tex", ".pdf")
         
         # Write the tailored LaTeX code
-        fixed_code = apply_latex_hotfix(tailored_latex)
+        fixed_code = apply_latex_hotfix(tailored_latex, optimal_scale, optimal_linespread, master_latex)
         with open(tex_path, "w", encoding="utf-8") as f:
             f.write(fixed_code)
             
