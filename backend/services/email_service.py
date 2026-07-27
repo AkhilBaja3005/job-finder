@@ -40,14 +40,24 @@ def send_notification_email(
             if html_body:
                 payload["html"] = html_body
             
-            # Note: Cloudflare REST API attachments must be base64 encoded.
-            # For simplicity in fallback, we prioritize SMTP for attachment mails.
-            if not attachment_path:
-                resp = requests.post(url, headers=headers, json=payload, timeout=15)
-                if resp.status_code == 200:
-                    print("[Mailer] Sent successfully via Cloudflare Email API.")
-                    return True
-                print(f"[Mailer] Cloudflare API failed with status {resp.status_code}: {resp.text}")
+            if attachment_path and os.path.exists(attachment_path):
+                import base64
+                with open(attachment_path, "rb") as f:
+                    encoded_b64 = base64.b64encode(f.read()).decode("utf-8")
+                name = attachment_name or os.path.basename(attachment_path)
+                payload["attachments"] = [
+                    {
+                        "filename": name,
+                        "content": encoded_b64,
+                        "type": "application/pdf"
+                    }
+                ]
+            
+            resp = requests.post(url, headers=headers, json=payload, timeout=15)
+            if resp.status_code == 200:
+                print("[Mailer] Sent successfully via Cloudflare Email API.")
+                return True
+            print(f"[Mailer] Cloudflare API failed with status {resp.status_code}: {resp.text}")
         except Exception as e:
             print(f"[Mailer] Cloudflare API exception: {e}. Falling back to SMTP.")
 
@@ -80,13 +90,26 @@ def send_notification_email(
                 part.add_header("Content-Disposition", "attachment", filename=name)
                 msg.attach(part)
 
-        # Connect and send
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(email_from, [to_email], msg.as_string())
-            print("[Mailer] Sent successfully via SMTP.")
-            return True
+        # Connect and send (support both Port 587 STARTTLS and Port 465 SSL)
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15) as server:
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(email_from, [to_email], msg.as_string())
+        else:
+            try:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+                    server.starttls()
+                    server.login(smtp_user, smtp_pass)
+                    server.sendmail(email_from, [to_email], msg.as_string())
+            except (OSError, smtplib.SMTPException) as e:
+                # If Port 587 fails (common outbound block on cloud platforms), try Port 465 SSL fallback
+                print(f"[Mailer] Port {smtp_port} failed ({e}). Trying Port 465 SSL fallback...")
+                with smtplib.SMTP_SSL(smtp_host, 465, timeout=15) as server:
+                    server.login(smtp_user, smtp_pass)
+                    server.sendmail(email_from, [to_email], msg.as_string())
+
+        print("[Mailer] Sent successfully via SMTP.")
+        return True
     except Exception as e:
         print(f"[Mailer ERROR] SMTP delivery failed: {e}")
         return False
