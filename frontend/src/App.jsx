@@ -44,7 +44,7 @@ async function* streamNdjson(response) {
     // `for await` loop), the JS runtime calls this generator's .return(),
     // running this block — release the underlying stream lock so the
     // connection can be cleanly torn down instead of left dangling.
-    reader.cancel().catch(() => {});
+    reader.cancel().catch(() => { });
   }
 }
 
@@ -165,7 +165,6 @@ function App() {
     }
   }, []);
 
-
   // Expanded job cards set
   const [expandedCards, setExpandedCards] = useState(new Set());
   const toggleCard = (idx) => setExpandedCards(prev => {
@@ -186,13 +185,6 @@ function App() {
 
   // Returns the effective Authorization header value: real token > guest UUID
   const getAuthHeader = () => authToken || guestToken;
-
-
-  // Show a transient toast for 3 seconds
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
 
   // Reset all job-related state so the user can target a new job
   const handleNewJob = () => {
@@ -363,14 +355,14 @@ function App() {
         setCompany('');
         setStatusLogs([]);
         setStatusMessage('Caches cleared successfully!');
-        showToast('🧹 All caches and files deleted!', 'success');
+        // showToast('🧹 All caches and files deleted!', 'success');
       } else {
         const err = await res.json();
         throw new Error(err.detail || 'Failed to clear cache');
       }
     } catch (err) {
       setStatusMessage(`Clear cache failed: ${err.message}`);
-      showToast(`❌ ${err.message}`, 'error');
+      // showToast(`❌ ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -470,7 +462,7 @@ function App() {
       });
       if (res.ok) {
         setStatusMessage('Subscription preferences updated successfully!');
-        showToast('📬 Subscription updated!', 'success');
+        // showToast('📬 Subscription updated!', 'success');
         const meRes = await fetch(`${API_BASE}/user/me`, {
           headers: { 'Authorization': `Bearer ${authToken}` }
         });
@@ -481,7 +473,7 @@ function App() {
       }
     } catch (err) {
       setStatusMessage(`Error updating subscription: ${err.message}`);
-      showToast(`Error: ${err.message}`, 'error');
+      // showToast(`Error: ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -857,7 +849,7 @@ function App() {
 
   const handleSearchJobs = async () => {
     if (!resumeData) {
-      showToast("⚠️ Please upload a resume first to generate search queries.", "error");
+      // showToast("⚠️ Please upload a resume first to generate search queries.", "error");
       return;
     }
     setDiscovering(true);
@@ -893,13 +885,13 @@ function App() {
         } else if (event.type === 'result') {
           setDiscoveredJobs(event.jobs || []);
           setStatusMessage(`Found ${event.jobs?.length || 0} matching jobs.`);
-          showToast(`Discovered ${event.jobs?.length || 0} matching jobs!`, 'success');
+          // showToast(`Discovered ${event.jobs?.length || 0} matching jobs!`, 'success');
         }
       }
     } catch (err) {
       setStatusMessage(`Discovery failed: ${err.message}`);
       setStatusLogs((prev) => [...prev, { message: `❌ Discovery failed: ${err.message}`, ts: nowTs() }]);
-      showToast(`❌ ${err.message}`, 'error');
+      // showToast(`❌ ${err.message}`, 'error');
     } finally {
       setDiscovering(false);
     }
@@ -1012,7 +1004,7 @@ function App() {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      showToast(`❌ ${err.message}`, 'error');
+      // showToast(`❌ ${err.message}`, 'error');
     }
   };
 
@@ -1038,10 +1030,10 @@ function App() {
       const data = await response.json();
       window.open(data.url, '_blank');
       setStatusMessage('Overleaf workspace opened!');
-      showToast('✅ Overleaf opened in a new tab!', 'success');
+      // showToast('✅ Overleaf opened in a new tab!', 'success');
     } catch (err) {
       setStatusMessage(`Error opening in Overleaf: ${err.message}`);
-      showToast(`❌ ${err.message}`, 'error');
+      // showToast(`❌ ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -1113,7 +1105,7 @@ function App() {
         finalJD: !!finalJD,
         jobTitle: !!jobTitle
       });
-      showToast('Please analyze a job first', 'error');
+      // showToast('Please analyze a job first', 'error');
       return;
     }
 
@@ -1164,16 +1156,16 @@ function App() {
         }
         setOutreachModalOpen(true);
         setStatusMessage('Outreach message generated successfully!');
-        showToast('Outreach message ready!', 'success');
+        // showToast('Outreach message ready!', 'success');
       } else {
         console.log('[handleGenerateOutreach] Error response', result);
         setStatusMessage(`Error generating outreach: ${result.detail}`);
-        showToast(`Error: ${result.detail}`, 'error');
+        // showToast(`Error: ${result.detail}`, 'error');
       }
     } catch (err) {
       console.log('[handleGenerateOutreach] Exception', err);
       setStatusMessage(`Network error: ${err.message}`);
-      showToast(`Error: ${err.message}`, 'error');
+      // showToast(`Error: ${err.message}`, 'error');
     } finally {
       setOutreachLoading(false);
     }
@@ -1194,13 +1186,13 @@ function App() {
 
       const result = await response.json();
       if (response.ok) {
-        showToast('Email prepared for sending!', 'success');
+        // showToast('Email prepared for sending!', 'success');
         setOutreachModalOpen(false);
       } else {
-        showToast(`Error: ${result.detail}`, 'error');
+        // showToast(`Error: ${result.detail}`, 'error');
       }
     } catch (err) {
-      showToast(`Error: ${err.message}`, 'error');
+      // showToast(`Error: ${err.message}`, 'error');
     }
   };
 
@@ -1490,14 +1482,14 @@ function App() {
                             }
                           });
                           if (res.ok) {
-                            showToast('✉️ Sample matches digest sent to your inbox!', 'success');
+                            // showToast('✉️ Sample matches digest sent to your inbox!', 'success');
                             setStatusMessage('Preview matches digest sent successfully!');
                           } else {
                             const err = await res.json();
-                            showToast(`Failed: ${err.detail}`, 'error');
+                            // showToast(`Failed: ${err.detail}`, 'error');
                           }
                         } catch (err) {
-                          showToast(`Error: ${err.message}`, 'error');
+                          // showToast(`Error: ${err.message}`, 'error');
                         } finally {
                           setLoading(false);
                         }
@@ -1722,8 +1714,8 @@ function App() {
                 {dashboardMode === 'history'
                   ? 'Application History'
                   : isDiscoveryView
-                  ? `Job Discoveries (${searchTimeframe === '24h' ? 'Last 24h' : searchTimeframe === '48h' ? 'Last 48h' : searchTimeframe === '1w' ? 'Last 1 Week' : 'Last 1 Month'})`
-                  : 'Analysis & Preview'}
+                    ? `Job Discoveries (${searchTimeframe === '24h' ? 'Last 24h' : searchTimeframe === '48h' ? 'Last 48h' : searchTimeframe === '1w' ? 'Last 1 Week' : 'Last 1 Month'})`
+                    : 'Analysis & Preview'}
               </h2>
               {dashboardMode !== 'history' && (analysisResult || isDiscoveryView) && (
                 <button
@@ -1754,7 +1746,7 @@ function App() {
                   jobTitle={jobTitle}
                   company={company}
                   onSendEmail={handleSendOutreachEmail}
-                  onCopyToClipboard={() => {}}
+                  onCopyToClipboard={() => { }}
                   anchorTop={outreachAnchorTop}
                 />
               </Suspense>
@@ -1790,7 +1782,7 @@ function App() {
                     return (
                       <div className="card" style={{ padding: '14px', background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.8))', border: '1px solid rgba(56, 189, 248, 0.15)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📊 Application Pipeline Funnel</div>
-                        
+
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
@@ -1818,118 +1810,130 @@ function App() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {applicationHistory.map((entry, idx) => {
-                    const statusColor = entry.status === 'applied' ? '#10B981' : entry.status === 'autofilled' ? '#38BDF8' : '#7dd3fc';
-                    const statusLabel = entry.status === 'applied' ? 'Applied' : entry.status === 'autofilled' ? 'Autofilled' : 'Tailored';
-                    const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
-                    return (
-                      <div key={idx} className="card" style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>{entry.job_title || 'Untitled Role'}</div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>{date}</div>
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
-                            <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '999px', background: `${statusColor}22`, color: statusColor, fontWeight: 700 }}>
-                              {statusLabel}
-                            </span>
-                            {typeof entry.score === 'number' && (
-                              <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#fff' }}>{entry.score}% match</span>
-                            )}
-                            {entry.job_url && (
-                              <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)' }}>View Post →</a>
-                            )}
-                            <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>
-                              <button
-                                className="btn btn-secondary"
-                                style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', whiteSpace: 'nowrap' }}
-                                onClick={async () => {
-                                  setLoading(true);
-                                  setStatusMessage('Preparing personalized interview pack...');
-                                  try {
-                                    const res = await fetch(`${API_BASE}/generate_interview_prep`, {
-                                      method: 'POST',
-                                      headers: {
+                      const statusColor = entry.status === 'applied' ? '#10B981' : entry.status === 'autofilled' ? '#38BDF8' : '#7dd3fc';
+                      const statusLabel = entry.status === 'applied' ? 'Applied' : entry.status === 'autofilled' ? 'Autofilled' : 'Tailored';
+                      const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
+                      return (
+                        <div key={idx} className="card" style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>{entry.job_title || 'Untitled Role'}</div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
+                              {entry.recruiter_name && (
+                                <div style={{ fontSize: '0.75rem', color: '#38BDF8', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                  <span>👤 Recruiter:</span>
+                                  {entry.recruiter_profile_url ? (
+                                    <a href={entry.recruiter_profile_url} target="_blank" rel="noreferrer" style={{ color: '#38BDF8', fontWeight: 600, textDecoration: 'underline' }}>
+                                      {entry.recruiter_name}
+                                    </a>
+                                  ) : (
+                                    <span style={{ fontWeight: 600 }}>{entry.recruiter_name}</span>
+                                  )}
+                                </div>
+                              )}
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>{date}</div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                              <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '999px', background: `${statusColor}22`, color: statusColor, fontWeight: 700 }}>
+                                {statusLabel}
+                              </span>
+                              {typeof entry.score === 'number' && (
+                                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#fff' }}>{entry.score}% match</span>
+                              )}
+                              {entry.job_url && (
+                                <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)' }}>View Post →</a>
+                              )}
+                              <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', whiteSpace: 'nowrap' }}
+                                  onClick={async () => {
+                                    setLoading(true);
+                                    setStatusMessage('Preparing personalized interview pack...');
+                                    try {
+                                      const res = await fetch(`${API_BASE}/generate_interview_prep`, {
+                                        method: 'POST',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          'Authorization': `Bearer ${getAuthHeader()}`
+                                        },
+                                        body: JSON.stringify({
+                                          job_title: entry.job_title || 'Target Role',
+                                          company: entry.company || 'Target Company',
+                                          job_url: entry.job_url || null
+                                        })
+                                      });
+                                      if (res.ok) {
+                                        const data = await res.json();
+                                        setPrepJobInfo({ jobTitle: entry.job_title || 'Target Role', company: entry.company || 'Target Company' });
+                                        setPrepMarkdown(data.markdown);
+                                        setPrepModalOpen(true);
+                                        setStatusMessage('Interview preparation pack generated!');
+                                      } else {
+                                        const err = await res.json();
+                                        // showToast(`Error: ${err.detail}`, 'error');
+                                      }
+                                    } catch (e) {
+                                      // showToast(`Error: ${e.message}`, 'error');
+                                    } finally {
+                                      setLoading(false);
+                                    }
+                                  }}
+                                >
+                                  🎤 Interview Prep
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', borderColor: 'var(--accent-primary)', color: '#fff', whiteSpace: 'nowrap' }}
+                                  onClick={async () => {
+                                    setLoading(true);
+                                    setStatusMessage('Generating outreach message...');
+                                    try {
+                                      const headers = {
                                         'Content-Type': 'application/json',
                                         'Authorization': `Bearer ${getAuthHeader()}`
-                                      },
-                                      body: JSON.stringify({
-                                        job_title: entry.job_title || 'Target Role',
-                                        company: entry.company || 'Target Company',
-                                        job_url: entry.job_url || null
-                                      })
-                                    });
-                                    if (res.ok) {
-                                      const data = await res.json();
-                                      setPrepJobInfo({ jobTitle: entry.job_title || 'Target Role', company: entry.company || 'Target Company' });
-                                      setPrepMarkdown(data.markdown);
-                                      setPrepModalOpen(true);
-                                      setStatusMessage('Interview preparation pack generated!');
-                                    } else {
-                                      const err = await res.json();
-                                      showToast(`Error: ${err.detail}`, 'error');
+                                      };
+                                      if (geminiApiKey) {
+                                        headers['X-Gemini-API-Key'] = geminiApiKey;
+                                      }
+                                      const res = await fetch(`${API_BASE}/generate_outreach`, {
+                                        method: 'POST',
+                                        headers: headers,
+                                        body: JSON.stringify({
+                                          job_url: entry.job_url || '',
+                                          job_description: '', // Scraper extracts JD automatically if empty
+                                          job_title: entry.job_title || 'Target Role',
+                                          company_name: entry.company || 'Target Company',
+                                          recruiter_name: null,
+                                          platform: entry.job_url?.includes('linkedin') ? 'linkedin' : entry.job_url?.includes('indeed') ? 'indeed' : 'unknown'
+                                        })
+                                      });
+                                      if (res.ok) {
+                                        const data = await res.json();
+                                        setOutreachRecruiterInfo(data.recruiter_info);
+                                        setOutreachData(data.message);
+                                        setOutreachModalOpen(true);
+                                        setStatusMessage('Outreach message generated!');
+                                        // showToast('Outreach message ready!', 'success');
+                                      } else {
+                                        const err = await res.json();
+                                        // showToast(`Error: ${err.detail}`, 'error');
+                                      }
+                                    } catch (e) {
+                                      // showToast(`Error: ${e.message}`, 'error');
+                                    } finally {
+                                      setLoading(false);
                                     }
-                                  } catch (e) {
-                                    showToast(`Error: ${e.message}`, 'error');
-                                  } finally {
-                                    setLoading(false);
-                                  }
-                                }}
-                              >
-                                🎤 Interview Prep
-                              </button>
-                              <button
-                                className="btn btn-secondary"
-                                style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', borderColor: 'var(--accent-primary)', color: '#fff', whiteSpace: 'nowrap' }}
-                                onClick={async () => {
-                                  setLoading(true);
-                                  setStatusMessage('Generating outreach message...');
-                                  try {
-                                    const headers = { 
-                                      'Content-Type': 'application/json',
-                                      'Authorization': `Bearer ${getAuthHeader()}`
-                                    };
-                                    if (geminiApiKey) {
-                                      headers['X-Gemini-API-Key'] = geminiApiKey;
-                                    }
-                                    const res = await fetch(`${API_BASE}/generate_outreach`, {
-                                      method: 'POST',
-                                      headers: headers,
-                                      body: JSON.stringify({
-                                        job_url: entry.job_url || '',
-                                        job_description: '', // Scraper extracts JD automatically if empty
-                                        job_title: entry.job_title || 'Target Role',
-                                        company_name: entry.company || 'Target Company',
-                                        recruiter_name: null,
-                                        platform: entry.job_url?.includes('linkedin') ? 'linkedin' : entry.job_url?.includes('indeed') ? 'indeed' : 'unknown'
-                                      })
-                                    });
-                                    if (res.ok) {
-                                      const data = await res.json();
-                                      setOutreachRecruiterInfo(data.recruiter_info);
-                                      setOutreachData(data.message);
-                                      setOutreachModalOpen(true);
-                                      setStatusMessage('Outreach message generated!');
-                                      showToast('Outreach message ready!', 'success');
-                                    } else {
-                                      const err = await res.json();
-                                      showToast(`Error: ${err.detail}`, 'error');
-                                    }
-                                  } catch (e) {
-                                    showToast(`Error: ${e.message}`, 'error');
-                                  } finally {
-                                    setLoading(false);
-                                  }
-                                }}
-                              >
-                                ✉️ Outreach
-                              </button>
+                                  }}
+                                >
+                                  ✉️ Outreach
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
                   </div>
                 </div>
               )
@@ -2530,7 +2534,7 @@ function App() {
                         style={{ padding: '11px 20px' }}
                         onClick={() => {
                           setKeepOriginalMode(true);
-                          showToast('📄 Keeping original resume — Overleaf export is ready.', 'info');
+                          // showToast('📄 Keeping original resume — Overleaf export is ready.', 'info');
                         }}
                       >
                         Keep Original
@@ -2833,7 +2837,7 @@ function App() {
             maxHeight: '85vh', display: 'flex', flexDirection: 'column',
             boxShadow: '0 20px 60px rgba(0,0,0,0.7)', animation: 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) both'
           }} onClick={(e) => e.stopPropagation()}>
-            
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '16px', flexShrink: 0 }}>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2863,7 +2867,7 @@ function App() {
                 style={{ flex: 1, fontWeight: 700 }}
                 onClick={() => {
                   navigator.clipboard.writeText(prepMarkdown);
-                  showToast('✓ Copied preparation pack to clipboard!', 'success');
+                  // showToast('✓ Copied preparation pack to clipboard!', 'success');
                 }}
               >
                 📋 Copy Prep Guide
