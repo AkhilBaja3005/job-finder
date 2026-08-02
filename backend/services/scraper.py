@@ -150,10 +150,21 @@ async def scrape_job_description(url: str, browser=None) -> dict:
                 "html": html
             }
     except Exception as e:
+        # Fallback: extract title slug from URL (e.g. /viewjob?jk=4c1018a1d2d2bf7e or job title slug)
+        fallback_title = "Tailored Job Application"
+        try:
+            if "jk=" in url:
+                jk_val = url.split("jk=")[1].split("&")[0]
+                fallback_title = f"Indeed Job ({jk_val[:8]})"
+            elif "/jobs/view/" in url:
+                slug = url.split("/jobs/view/")[1].split("/")[0].replace("-", " ").title()
+                if slug: fallback_title = slug
+        except Exception:
+            pass
         return {
-            "title": "Failed to Parse",
+            "title": fallback_title,
             "url": url,
-            "description": f"Failed to retrieve job details automatically. Error: {str(e)}",
+            "description": f"Failed to retrieve full job details automatically. Error: {str(e)}",
             "html": ""
         }
     finally:
