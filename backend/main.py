@@ -1322,7 +1322,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             recruiter_profile_url = None
             if request.job_url:
                 try:
-                    rec_info = await extract_recruiter(request.job_url, "unknown")
+                    rec_info = await extract_recruiter(request.job_url, None)
                     recruiter_name = rec_info.get("recruiter_name")
                     recruiter_profile_url = rec_info.get("recruiter_profile_url")
                 except Exception:
@@ -2220,7 +2220,7 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         recruiter_profile_url = None
         if job_url:
             try:
-                rec_info = await extract_recruiter(job_url, "unknown")
+                rec_info = await extract_recruiter(job_url, None)
                 recruiter_name = rec_info.get("recruiter_name")
                 recruiter_profile_url = rec_info.get("recruiter_profile_url")
             except Exception:
