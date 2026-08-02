@@ -272,6 +272,11 @@ async def daily_match_mailer_loop():
                     score = job.get("score", 60)
                     url = job.get("url", "")
                     
+                    # Extract recruiter / HR details if available
+                    recruiter_name = job.get("recruiter_name")
+                    recruiter_profile_url = job.get("recruiter_profile_url")
+                    recruiter_str = f"\n   Recruiter: {recruiter_name}" if recruiter_name else ""
+                    
                     # Detect source platform from job object or URL
                     platform = job.get("platform") or ("LinkedIn" if "linkedin.com" in url else "Indeed" if "indeed.com" in url else "Web")
                     
@@ -280,12 +285,28 @@ async def daily_match_mailer_loop():
                     base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
                     tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(url)}&email={urllib.parse.quote(email)}"
                     
-                    text_digest += f"{idx+1}. {title} at {company} ({platform})\n   Match Score: {score}%\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
+                    text_digest += f"{idx+1}. {title} at {company} ({platform})\n   Match Score: {score}%{recruiter_str}\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
                     
                     # Score color helper
                     score_color = "#10B981" if score >= 85 else "#F59E0B" if score >= 70 else "#64748B"
                     platform_color = "#0A66C2" if platform.lower() == "linkedin" else "#2164F3" if platform.lower() == "indeed" else "#64748B"
                     
+                    recruiter_html = ""
+                    if recruiter_name:
+                        if recruiter_profile_url:
+                            recruiter_html = f"""
+                            <div style="margin-top: 6px; font-size: 0.8rem; color: #0284C7; font-family: 'Segoe UI', Arial, sans-serif;">
+                                👤 <strong>Recruiter / Hiring Manager:</strong> 
+                                <a href="{recruiter_profile_url}" target="_blank" style="color: #0284C7; text-decoration: underline; font-weight: 600;">{recruiter_name}</a>
+                            </div>
+                            """
+                        else:
+                            recruiter_html = f"""
+                            <div style="margin-top: 6px; font-size: 0.8rem; color: #475569; font-family: 'Segoe UI', Arial, sans-serif;">
+                                👤 <strong>Recruiter / Hiring Manager:</strong> {recruiter_name}
+                            </div>
+                            """
+
                     html_digest += f"""
                     <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; margin-bottom: 12px; box-sizing: border-box; overflow: hidden;">
                         <table style="width: 100%; border-collapse: collapse;">
@@ -295,6 +316,7 @@ async def daily_match_mailer_loop():
                                     <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">
                                         {company} &bull; <span style="color: {platform_color}; font-weight: 600;">{platform}</span>
                                     </p>
+                                    {recruiter_html}
                                 </td>
                                 <td style="text-align: right; vertical-align: top; width: 90px;">
                                     <span style="display: inline-block; background-color: {score_color}15; color: {score_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">{score}% match</span>
