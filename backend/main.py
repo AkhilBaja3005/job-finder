@@ -266,7 +266,7 @@ async def daily_match_mailer_loop():
                     <div style="width: 100%;">
                 """
                 
-                for idx, job in enumerate(scraped_jobs[:8]): # limit to top 8 matches
+                for idx, job in enumerate(scraped_jobs[:20]): # top 20 matches per digest
                     title = job.get("title", "Target Role")
                     company = job.get("company", "Target Company")
                     score = job.get("score", 60)
