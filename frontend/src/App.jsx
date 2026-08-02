@@ -1810,8 +1810,7 @@ function App() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {applicationHistory.map((entry, idx) => {
-                      const statusColor = entry.status === 'applied' ? '#10B981' : entry.status === 'autofilled' ? '#38BDF8' : '#7dd3fc';
-                      const statusLabel = entry.status === 'applied' ? 'Applied' : entry.status === 'autofilled' ? 'Autofilled' : 'Tailored';
+                      const statusColor = entry.status === 'applied' ? '#10B981' : '#7dd3fc';
                       const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
                       return (
                         <div key={idx} className="card" style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
@@ -1834,15 +1833,50 @@ function App() {
                               <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>{date}</div>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
-                              <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '999px', background: `${statusColor}22`, color: statusColor, fontWeight: 700 }}>
-                                {statusLabel}
-                              </span>
+                              <select
+                                value={entry.status === 'applied' ? 'applied' : 'tailored'}
+                                onChange={async (e) => {
+                                  const newStatus = e.target.value;
+                                  // Update local UI immediately
+                                  setApplicationHistory(prev => prev.map(item => item.job_url === entry.job_url ? { ...item, status: newStatus } : item));
+                                  try {
+                                    await fetch(`${API_BASE}/update_application_status`, {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${getAuthHeader()}`
+                                      },
+                                      body: JSON.stringify({
+                                        job_url: entry.job_url || '',
+                                        status: newStatus
+                                      })
+                                    });
+                                  } catch (err) {
+                                    console.error('Failed to update status', err);
+                                  }
+                                }}
+                                style={{
+                                  fontSize: '0.68rem', padding: '2px 6px', borderRadius: '6px',
+                                  background: `${statusColor}22`, color: statusColor, fontWeight: 700,
+                                  border: `1px solid ${statusColor}44`, cursor: 'pointer', outline: 'none'
+                                }}
+                              >
+                                <option value="tailored" style={{ background: '#0F172A', color: '#7dd3fc' }}>Tailored</option>
+                                <option value="applied" style={{ background: '#0F172A', color: '#10B981' }}>Applied</option>
+                              </select>
                               {typeof entry.score === 'number' && (
                                 <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#fff' }}>{entry.score}% match</span>
                               )}
-                              {entry.job_url && (
-                                <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)' }}>View Post →</a>
-                              )}
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                {entry.overleaf_url && (
+                                  <a href={entry.overleaf_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    🍃 Overleaf
+                                  </a>
+                                )}
+                                {entry.job_url && (
+                                  <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)' }}>View Post →</a>
+                                )}
+                              </div>
                               <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>
                                 <button
                                   className="btn btn-secondary"
