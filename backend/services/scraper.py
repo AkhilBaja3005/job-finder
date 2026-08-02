@@ -44,9 +44,8 @@ async def scrape_job_description(url: str, browser=None) -> dict:
         for attempt in range(3):
             try:
                 print(f"[Scraper] Attempt {attempt + 1}/3 to scrape: {url}")
-                # On retry attempts, wait longer for network resources to resolve
-                wait_strategy = "networkidle" if attempt > 0 else "domcontentloaded"
-                await page.goto(url, wait_until=wait_strategy, timeout=12000)
+                # Always use domcontentloaded for fast page loads; networkidle hangs on analytics/tracking scripts
+                await page.goto(url, wait_until="domcontentloaded", timeout=10000)
 
                 # Scroll to trigger lazy content
                 await page.wait_for_timeout(500)
