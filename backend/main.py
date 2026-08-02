@@ -860,11 +860,18 @@ def _extract_company_from_jd(jd_text: str, job_url: str = None) -> str:
                     print(f"[_extract_company_from_jd] ✓ Fallback to slug: {company_from_slug}")
                     return company_from_slug
 
-            # Indeed: https://www.indeed.com/viewjob?jk=abc123def456&company=CompanyName
-            # Try to extract company from query params
+            # Indeed Company URL: https://www.indeed.com/cmp/Apple?campaignid=...
+            indeed_cmp_match = _re_url.search(r'/cmp/([a-zA-Z0-9%_\-]+)', cleaned_url)
+            if indeed_cmp_match:
+                company_from_cmp = unquote(indeed_cmp_match.group(1)).replace('+', ' ').replace('-', ' ').title()
+                if company_from_cmp and company_from_cmp.lower() not in {'unknown', ''}:
+                    print(f"[_extract_company_from_jd] ✓ Extracted from Indeed /cmp/ link: {company_from_cmp}")
+                    return company_from_cmp
+
+            # Indeed query parameter: https://www.indeed.com/viewjob?jk=abc123def456&company=CompanyName
             indeed_match = _re_url.search(r'[?&]company=([^&]+)', cleaned_url)
             if indeed_match:
-                company_from_indeed = indeed_match.group(1).replace('+', ' ').replace('%20', ' ').title()
+                company_from_indeed = unquote(indeed_match.group(1)).replace('+', ' ').replace('%20', ' ').title()
                 print(f"[_extract_company_from_jd] ✓ Extracted from Indeed URL: {company_from_indeed}")
                 return company_from_indeed
 
@@ -1327,6 +1334,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             dumped = analysis.model_dump()
             set_cached_analysis(token, job_title, jd_text, dumped)
             company_name = _extract_company_from_jd(jd_text, request.job_url)
+            if (not company_name or company_name == "Target Hiring Company") and "scraped" in locals() and scraped.get("company"):
+                company_name = scraped.get("company")
             recruiter_name = None
             recruiter_profile_url = None
             if request.job_url:

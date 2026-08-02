@@ -47,9 +47,12 @@ async def scrape_job_description(url: str, browser=None) -> dict:
                 # Always use domcontentloaded for fast page loads; networkidle hangs on analytics/tracking scripts
                 await page.goto(url, wait_until="domcontentloaded", timeout=10000)
 
-                # Scroll to trigger lazy content
+                # Scroll to trigger lazy content safely
                 await page.wait_for_timeout(500)
-                await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 3)")
+                try:
+                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 3)")
+                except Exception:
+                    pass
                 await page.wait_for_timeout(500 * (attempt + 1))
 
                 html = await page.content()
@@ -69,10 +72,30 @@ async def scrape_job_description(url: str, browser=None) -> dict:
 
                 # Indeed specific selector matches
                 elif "indeed.com" in url:
+                    # Try to extract title from Indeed DOM elements
+                    indeed_title_elem = (
+                        soup.select_one("h1.jobsearch-JobInfoHeader-title") or
+                        soup.select_one("[data-testid='jobsearch-JobInfoHeader-title']") or
+                        soup.select_one("h1")
+                    )
+                    if indeed_title_elem and indeed_title_elem.get_text().strip():
+                        title = indeed_title_elem.get_text().strip()
+
+                    # Try to extract company name from Indeed /cmp/ link (e.g. href="https://www.indeed.com/cmp/Apple?...")
+                    cmp_anchor = soup.select_one("a[href*='/cmp/']")
+                    if cmp_anchor:
+                        cmp_href = cmp_anchor.get("href", "")
+                        cmp_match = re.search(r'/cmp/([a-zA-Z0-9%_\-]+)', cmp_href)
+                        if cmp_match:
+                            extracted_cmp = cmp_match.group(1).replace('+', ' ').replace('-', ' ').title()
+                            if extracted_cmp:
+                                title = f"{title} at {extracted_cmp}"
+
                     jd_elem = (
                         soup.select_one("#jobDescriptionText") or
                         soup.select_one(".jobsearch-JobComponent-description") or
-                        soup.select_one("[class*='JobComponent-description']")
+                        soup.select_one("[class*='JobComponent-description']") or
+                        soup.select_one(".fastItem")
                     )
                     if jd_elem:
                         body_text = jd_elem.get_text(separator="\n")
@@ -150,21 +173,49 @@ async def scrape_job_description(url: str, browser=None) -> dict:
                 "html": html
             }
     except Exception as e:
-        # Fallback: extract title slug from URL (e.g. /viewjob?jk=4c1018a1d2d2bf7e or job title slug)
+        # Fallback: extract title slug and query search metadata if Playwright gets blocked
         fallback_title = "Tailored Job Application"
+        fallback_company = ""
+        
         try:
+            # 1. Check if Indeed JK key is present
             if "jk=" in url:
                 jk_val = url.split("jk=")[1].split("&")[0]
                 fallback_title = f"Indeed Job ({jk_val[:8]})"
+                
+                # Fetch metadata fallback from DuckDuckGo/Google search index
+                try:
+                    import urllib.request
+                    import json
+                    search_req_url = f"https://html.duckduckgo.com/html/?q={jk_val}+site:indeed.com"
+                    req = urllib.request.Request(search_req_url, headers={
+                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                    })
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        search_html = resp.read().decode("utf-8", errors="ignore")
+                        search_soup = BeautifulSoup(search_html, "html.parser")
+                        snippet_elem = search_soup.select_one(".result__snippet") or search_soup.select_one(".result__title")
+                        if snippet_elem:
+                            snip_text = snippet_elem.get_text()
+                            if " - " in snip_text:
+                                parts = snip_text.split(" - ")
+                                fallback_title = parts[0].strip()
+                                if len(parts) > 1:
+                                    fallback_company = parts[1].split("|")[0].split("Job")[0].strip()
+                except Exception as meta_err:
+                    print(f"[Scraper] Search metadata fallback error: {meta_err}")
+
             elif "/jobs/view/" in url:
                 slug = url.split("/jobs/view/")[1].split("/")[0].replace("-", " ").title()
                 if slug: fallback_title = slug
         except Exception:
             pass
+
         return {
             "title": fallback_title,
+            "company": fallback_company,
             "url": url,
-            "description": f"Failed to retrieve full job details automatically. Error: {str(e)}",
+            "description": f"Retrieved metadata for {fallback_title}. Auto-scraping dropped to fallback.",
             "html": ""
         }
     finally:
