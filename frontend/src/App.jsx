@@ -7,6 +7,16 @@ const HistoryMode = lazy(() => import('./components/HistoryMode'));
 const SkeletonLoader = lazy(() => import('./components/SkeletonLoader').then(m => ({ default: m.SkeletonLoader })));
 const OutreachModal = lazy(() => import('./components/OutreachModal'));
 
+// Automatically inject ngrok-skip-browser-warning header into all frontend fetch requests
+const originalFetch = window.fetch;
+window.fetch = async function (resource, config = {}) {
+  config.headers = {
+    ...config.headers,
+    'ngrok-skip-browser-warning': 'true',
+  };
+  return originalFetch(resource, config);
+};
+
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://127.0.0.1:8000'
   : window.location.origin;

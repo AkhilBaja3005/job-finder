@@ -879,13 +879,22 @@ def _extract_company_from_jd(jd_text: str, job_url: str = None) -> str:
                     return company_from_domain
         except Exception as e:
             print(f"[_extract_company_from_jd] URL extraction failed: {e}")
-            import traceback
-            traceback.print_exc()
+
+    # Fallback to domain host or URL slug if regex/LLM extraction fails
+    if job_url:
+        try:
+            from urllib.parse import urlparse
+            netloc = urlparse(job_url).netloc.replace("www.", "")
+            parts = netloc.split(".")
+            if len(parts) >= 2 and parts[-2].lower() not in {'linkedin', 'indeed', 'glassdoor'}:
+                return parts[-2].capitalize()
+        except Exception:
+            pass
 
     # If URL extraction failed, try JD-based extraction
-    if not jd_text:
+    if not jd_text or "failed to retrieve" in (jd_text or "").lower():
         print(f"[_extract_company_from_jd] ✗ No company found in URL or JD")
-        return ""
+        return "Target Hiring Company"
 
     # Try regex patterns on JD
     patterns = [
