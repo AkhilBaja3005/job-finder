@@ -213,23 +213,20 @@ async def daily_match_mailer_loop():
                 except Exception:
                     continue
                 
-                # Retrieve query parameters: use customized preference or auto-extract target role from resume summary
+                # Retrieve query parameters: use customized preference or let AI extract smart job queries from resume
                 pref_role = user.get("cron_role")
-                if not pref_role:
-                    pref_role = resume_data.get("summary", "")[:100]
-                    # Simple fallback to common keywords
-                    pref_role = pref_role or "Software Engineer"
+                # If user hasn't explicitly configured a cron_role, pass None so find_matching_jobs uses AI query generation
+                keywords_arg = pref_role.strip() if (pref_role and pref_role.strip()) else None
+                pref_loc = user.get("cron_location") or "Remote"
                 
-                pref_loc = user.get("cron_location", "Remote")
-                
-                print(f"[Daily Mailer] Send time reached ({time_str}) for user {email}. Scraping '{pref_role}' in '{pref_loc}'...")
+                print(f"[Daily Mailer] Send time reached ({time_str}) for user {email}. Scraping role '{keywords_arg or 'AI-auto-generated'}' in '{pref_loc}'...")
                 
                 # Execute job search over last 24h
                 scraped_jobs = []
                 async for chunk in find_matching_jobs(
                     resume_data=resume_data,
                     location=pref_loc,
-                    keywords=pref_role,
+                    keywords=keywords_arg,
                     timeframe="24h"
                 ):
                     try:
@@ -248,13 +245,17 @@ async def daily_match_mailer_loop():
                 # Sort jobs descending by overall match score
                 scraped_jobs.sort(key=lambda j: j.get("score", 0), reverse=True)
                 
+                # Extract candidate full name for personalized greeting
+                candidate_name = resume_data.get("name", "").strip() or "Candidate"
+
                 # Format text digest
-                text_digest = f"Hello {resume_data.get('name', 'Candidate')},\n\nHere are your matching job listings for the past 24 hours:\n\n"
+                text_digest = f"Hi {candidate_name},\n\nHere are your top matching roles from the past 24 hours:\n\n"
                 html_digest = f"""
                 <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03); box-sizing: border-box;">
                     <div style="text-align: center; margin-bottom: 24px;">
                         <span style="font-size: 3rem;">📬</span>
                         <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem; font-family: 'Segoe UI', Arial, sans-serif;">Daily Job Matches Digest</h2>
+                        <p style="color: #334155; font-size: 0.98rem; font-weight: 600; margin: 8px 0 4px; font-family: 'Segoe UI', Arial, sans-serif;">Hi {candidate_name},</p>
                         <p style="color: #64748B; font-size: 0.9rem; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">Here are your top matching roles from the past 24 hours:</p>
                     </div>
                     
@@ -317,9 +318,12 @@ async def daily_match_mailer_loop():
                 </div>
                 """
                 
+                # If local deployment, override recipient to developer email to prevent sending test emails to real users locally
+                target_email = "akhilkumarbaja@gmail.com" if _is_local_deployment() else email
+
                 # Send email
                 send_notification_email(
-                    to_email=email,
+                    to_email=target_email,
                     subject="Daily Job Matching Digest",
                     text_body=text_digest,
                     html_body=html_digest
@@ -1282,6 +1286,16 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             dumped = analysis.model_dump()
             set_cached_analysis(token, job_title, jd_text, dumped)
             company_name = _extract_company_from_jd(jd_text, request.job_url)
+            recruiter_name = None
+            recruiter_profile_url = None
+            if request.job_url:
+                try:
+                    rec_info = await extract_recruiter(request.job_url, "unknown")
+                    recruiter_name = rec_info.get("recruiter_name")
+                    recruiter_profile_url = rec_info.get("recruiter_profile_url")
+                except Exception:
+                    pass
+
             try:
                 record_application(token, {
                     "job_title": job_title,
@@ -1289,6 +1303,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     "job_url": request.job_url or "",
                     "score": dumped.get("match_analysis", {}).get("overall_score"),
                     "status": "tailored",
+                    "recruiter_name": recruiter_name,
+                    "recruiter_profile_url": recruiter_profile_url
                 })
             except Exception as hist_err:
                 print(f"[analyze_job] Failed to record application history: {hist_err}")
@@ -1886,33 +1902,45 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
         # Fallback to current request domain scheme & host headers dynamically
         base_url = f"{request.url.scheme}://{request.url.netloc}"
 
+    # Fetch candidate full name
+    candidate_name = "Candidate"
+    try:
+        resume_str = user.get("resume_data")
+        if resume_str:
+            rdata = json.loads(resume_str)
+            candidate_name = rdata.get("name", "").strip() or "Candidate"
+    except Exception:
+        pass
+
     # Format a beautiful test matching digest email
     text_body = (
-        "Hello! This is a preview of your Daily Job Matches Digest.\n\n"
-        "1. Staff Software Engineer at Google\n   Match Score: 92%\n"
-        "   View Job: https://careers.google.com\n"
-        "   Auto-Tailor: " + base_url + "/email_action/tailor?job_url=https://careers.google.com&email=" + email + "\n"
+        f"Hi {candidate_name},\n\n"
+        "Here are your top matching roles from the past 24 hours:\n\n"
+        "1. Solution Analyst - Business Intelligence at Uline\n   Match Score: 82%\n"
+        "   View Job: https://www.linkedin.com/jobs/view/solution-analyst-business-intelligence-at-uline-4409263656\n"
+        "   Auto-Tailor: " + base_url + "/email_action/tailor?job_url=https://www.linkedin.com/jobs/view/solution-analyst-business-intelligence-at-uline-4409263656&email=" + email + "\n"
     )
     
-    tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote('https://careers.google.com')}&email={urllib.parse.quote(email)}"
+    tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote('https://www.linkedin.com/jobs/view/solution-analyst-business-intelligence-at-uline-4409263656')}&email={urllib.parse.quote(email)}"
     
     html_body = f"""
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03); box-sizing: border-box;">
         <div style="text-align: center; margin-bottom: 24px;">
             <span style="font-size: 3rem;">📬</span>
-            <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem;">Job Matches Digest (Preview)</h2>
-            <p style="color: #64748B; font-size: 0.9rem; margin: 0;">Hello! Here is a sample matching role showing how your daily digests will arrive:</p>
+            <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem; font-family: 'Segoe UI', Arial, sans-serif;">Daily Job Matches Digest</h2>
+            <p style="color: #334155; font-size: 0.98rem; font-weight: 600; margin: 8px 0 4px; font-family: 'Segoe UI', Arial, sans-serif;">Hi {candidate_name},</p>
+            <p style="color: #64748B; font-size: 0.9rem; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">Here are your top matching roles from the past 24 hours:</p>
         </div>
         
-        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; box-sizing: border-box; overflow: hidden;">
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; box-sizing: border-box; overflow: hidden; margin-bottom: 12px;">
             <table style="width: 100%; border-collapse: collapse;">
                 <tr>
                     <td>
-                        <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Staff Software Engineer</h3>
-                        <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">Google</p>
+                        <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Solution Analyst - Business Intelligence</h3>
+                        <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">Uline</p>
                     </td>
                     <td style="text-align: right; vertical-align: top; width: 90px;">
-                        <span style="display: inline-block; background-color: #10B98115; color: #10B981; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">92% match</span>
+                        <span style="display: inline-block; background-color: #10B98115; color: #10B981; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">82% match</span>
                     </td>
                 </tr>
             </table>
@@ -1920,7 +1948,7 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
             <table style="width: 100%; border-collapse: collapse; margin-top: 14px;">
                 <tr>
                     <td style="width: 50%; padding-right: 5px;">
-                        <a href="https://careers.google.com" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">View Listing</a>
+                        <a href="https://www.linkedin.com/jobs/view/solution-analyst-business-intelligence-at-uline-4409263656" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">View Listing</a>
                     </td>
                     <td style="width: 50%; padding-left: 5px;">
                         <a href="{tailor_url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">⚡ Auto-Tailor</a>
@@ -1931,7 +1959,7 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
         
         <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
         <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">
-            This is a mock preview matching your active profile details.
+            This is a sample digest preview.
         </p>
     </div>
     """
@@ -2153,8 +2181,19 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
             attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
         )
         
+        # Extract recruiter details if available
+        recruiter_name = None
+        recruiter_profile_url = None
+        if job_url:
+            try:
+                rec_info = await extract_recruiter(job_url, "unknown")
+                recruiter_name = rec_info.get("recruiter_name")
+                recruiter_profile_url = rec_info.get("recruiter_profile_url")
+            except Exception:
+                pass
+
         # Log to application history
-        record_id = supabase_request("applications", "POST", {
+        supa_entry = {
             "user_id": user_id,
             "job_title": job_title,
             "company": company_name,
@@ -2162,7 +2201,13 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
             "status": "tailored",
             "score": ats_score,
             "created_at": dt.now(timezone.utc).isoformat()
-        })
+        }
+        if recruiter_name:
+            supa_entry["recruiter_name"] = recruiter_name
+        if recruiter_profile_url:
+            supa_entry["recruiter_profile_url"] = recruiter_profile_url
+
+        record_id = supabase_request("applications", "POST", supa_entry)
     except Exception as e:
         traceback.print_exc()
 

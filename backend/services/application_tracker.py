@@ -77,7 +77,7 @@ def record_application(token: Optional[str], entry: dict) -> None:
         # success meant a POST that silently failed (bad column type, RLS
         # rejection, etc.) never fell through to the local-file fallback below
         # — the write looked like it worked and the entry was just lost.
-        result = supabase_request("applications", "POST", {
+        supa_payload = {
             "user_id": user["id"],
             "job_title": record.get("job_title", ""),
             "company": record.get("company", ""),
@@ -85,7 +85,13 @@ def record_application(token: Optional[str], entry: dict) -> None:
             "score": record.get("score"),
             "status": record.get("status", "tailored"),
             "created_at": datetime.fromtimestamp(record["timestamp"], tz=timezone.utc).isoformat(),
-        })
+        }
+        if record.get("recruiter_name"):
+            supa_payload["recruiter_name"] = record.get("recruiter_name")
+        if record.get("recruiter_profile_url"):
+            supa_payload["recruiter_profile_url"] = record.get("recruiter_profile_url")
+
+        result = supabase_request("applications", "POST", supa_payload)
         if result:
             return
         print("[application_tracker] Supabase write returned no rows, falling back to local file")
@@ -111,6 +117,8 @@ def list_applications(token: Optional[str]) -> list[dict]:
                     "job_url": r.get("job_url", ""),
                     "score": r.get("score"),
                     "status": r.get("status", "tailored"),
+                    "recruiter_name": r.get("recruiter_name"),
+                    "recruiter_profile_url": r.get("recruiter_profile_url"),
                     # created_at comes back from Supabase as an ISO 8601 string
                     # (timestamptz), but the frontend/local-file fallback both
                     # expect a Unix-epoch float (it does `timestamp * 1000` to
