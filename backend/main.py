@@ -434,7 +434,13 @@ app.add_middleware(
 )
 
 @app.middleware("http")
-async def add_ngrok_skip_header(request: Request, call_next):
+async def bypass_ngrok_browser_warning(request: Request, call_next):
+    # Overwrite incoming User-Agent to custom string (bypasses ngrok warning page for address bar URL visits)
+    custom_headers = dict(request.scope.get("headers", []))
+    custom_headers[b"user-agent"] = b"JobFinderApp/1.0 (Custom Tunnel Client)"
+    custom_headers[b"ngrok-skip-browser-warning"] = b"true"
+    request.scope["headers"] = [(k, v) for k, v in custom_headers.items()]
+    
     response = await call_next(request)
     response.headers["ngrok-skip-browser-warning"] = "true"
     return response
