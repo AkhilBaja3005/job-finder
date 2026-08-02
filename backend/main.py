@@ -272,15 +272,19 @@ async def daily_match_mailer_loop():
                     score = job.get("score", 60)
                     url = job.get("url", "")
                     
+                    # Detect source platform from job object or URL
+                    platform = job.get("platform") or ("LinkedIn" if "linkedin.com" in url else "Indeed" if "indeed.com" in url else "Web")
+                    
                     # Dynamic domain resolution: use BACKEND_URL environment variable if set (ideal for Render),
                     # fallback to localhost if missing.
                     base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
                     tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(url)}&email={urllib.parse.quote(email)}"
                     
-                    text_digest += f"{idx+1}. {title} at {company}\n   Match Score: {score}%\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
+                    text_digest += f"{idx+1}. {title} at {company} ({platform})\n   Match Score: {score}%\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
                     
                     # Score color helper
                     score_color = "#10B981" if score >= 85 else "#F59E0B" if score >= 70 else "#64748B"
+                    platform_color = "#0A66C2" if platform.lower() == "linkedin" else "#2164F3" if platform.lower() == "indeed" else "#64748B"
                     
                     html_digest += f"""
                     <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; margin-bottom: 12px; box-sizing: border-box; overflow: hidden;">
@@ -288,7 +292,9 @@ async def daily_match_mailer_loop():
                             <tr>
                                 <td>
                                     <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">{title}</h3>
-                                    <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">{company}</p>
+                                    <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">
+                                        {company} &bull; <span style="color: {platform_color}; font-weight: 600;">{platform}</span>
+                                    </p>
                                 </td>
                                 <td style="text-align: right; vertical-align: top; width: 90px;">
                                     <span style="display: inline-block; background-color: {score_color}15; color: {score_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">{score}% match</span>
@@ -1941,7 +1947,9 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
                 <tr>
                     <td>
                         <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Solution Analyst - Business Intelligence</h3>
-                        <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">Uline</p>
+                        <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">
+                            Uline &bull; <span style="color: #0A66C2; font-weight: 600;">LinkedIn</span>
+                        </p>
                     </td>
                     <td style="text-align: right; vertical-align: top; width: 90px;">
                         <span style="display: inline-block; background-color: #10B98115; color: #10B981; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">82% match</span>
