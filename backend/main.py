@@ -44,7 +44,7 @@ from services.llm_agent import analyze_job_fit, review_tailored_resume, tailor_l
 from services.resume_generator import generate_pdf_resume
 from services.autofill_agent import autofill_job_application
 from services.job_searcher import find_matching_jobs
-from services.application_tracker import record_application, list_applications
+from services.application_tracker import record_application, list_applications, update_application_status
 from services.recruiter_extractor import extract_recruiter
 from services.outreach_generator import generate_outreach_message
 from services.auth import (
@@ -2240,6 +2240,8 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
             supa_entry["recruiter_name"] = recruiter_name
         if recruiter_profile_url:
             supa_entry["recruiter_profile_url"] = recruiter_profile_url
+        if overleaf_url:
+            supa_entry["overleaf_url"] = overleaf_url
 
         record_id = supabase_request("applications", "POST", supa_entry)
     except Exception as e:
@@ -2367,6 +2369,18 @@ async def get_applications(authorization: Optional[str] = Header(None)):
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
     return {"applications": list_applications(token)}
+
+class UpdateStatusRequest(BaseModel):
+    job_url: str
+    status: str
+
+@app.post("/update_application_status")
+async def update_status_endpoint(request: UpdateStatusRequest, authorization: Optional[str] = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+    success = update_application_status(token, request.job_url, request.status)
+    return {"status": "success" if success else "not_found"}
 
 class InterviewPrepRequest(BaseModel):
     job_title: str

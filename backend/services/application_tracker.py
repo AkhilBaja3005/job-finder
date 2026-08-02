@@ -90,6 +90,8 @@ def record_application(token: Optional[str], entry: dict) -> None:
             supa_payload["recruiter_name"] = record.get("recruiter_name")
         if record.get("recruiter_profile_url"):
             supa_payload["recruiter_profile_url"] = record.get("recruiter_profile_url")
+        if record.get("overleaf_url"):
+            supa_payload["overleaf_url"] = record.get("overleaf_url")
 
         result = supabase_request("applications", "POST", supa_payload)
         if result:
@@ -99,6 +101,30 @@ def record_application(token: Optional[str], entry: dict) -> None:
     entries = _read_local_history(token)
     entries.append(record)
     _write_local_history(token, entries)
+
+
+def update_application_status(token: Optional[str], job_url: str, new_status: str) -> bool:
+    """Updates status ('applied'|'autofilled'|'tailored') for a job URL."""
+    user = get_user_by_token(token) if token else None
+    if user and user.get("id"):
+        result = supabase_request(
+            f"applications?user_id=eq.{user['id']}&job_url=eq.{job_url}",
+            "PATCH",
+            {"status": new_status}
+        )
+        if result:
+            return True
+
+    # Fallback to local JSON file
+    entries = _read_local_history(token)
+    updated = False
+    for entry in entries:
+        if entry.get("job_url") == job_url:
+            entry["status"] = new_status
+            updated = True
+    if updated:
+        _write_local_history(token, entries)
+    return updated
 
 
 def list_applications(token: Optional[str]) -> list[dict]:
@@ -119,11 +145,7 @@ def list_applications(token: Optional[str]) -> list[dict]:
                     "status": r.get("status", "tailored"),
                     "recruiter_name": r.get("recruiter_name"),
                     "recruiter_profile_url": r.get("recruiter_profile_url"),
-                    # created_at comes back from Supabase as an ISO 8601 string
-                    # (timestamptz), but the frontend/local-file fallback both
-                    # expect a Unix-epoch float (it does `timestamp * 1000` to
-                    # build a JS Date) — normalize here so both sources produce
-                    # the same shape.
+                    "overleaf_url": r.get("overleaf_url"),
                     "timestamp": datetime.fromisoformat(r["created_at"]).timestamp() if r.get("created_at") else None,
                 }
                 for r in rows
