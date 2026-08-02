@@ -450,7 +450,7 @@ async def find_matching_jobs(
     for yield_msg, li_jobs, ind_jobs in query_results:
         yield json.dumps({"type": "log", "message": yield_msg}) + "\n"
         raw_jobs.extend(li_jobs)
-        indeed_jobs_for_est.extend(ind_jobs)  # Collect Indeed jobs for EST section
+        raw_jobs.extend(ind_jobs)  # Include Indeed jobs in main ATS scoring pipeline
 
     # Deduplicate by job URL / ID
     seen_ids = set()

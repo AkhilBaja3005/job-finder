@@ -220,6 +220,10 @@ async def daily_match_mailer_loop():
                 pref_loc = user.get("cron_location") or "Remote"
                 
                 print(f"[Daily Mailer] Send time reached ({time_str}) for user {email}. Scraping role '{keywords_arg or 'AI-auto-generated'}' in '{pref_loc}'...")
+                if _is_local_deployment():
+                    if email != "akhilkumarbaja@gmail.com":
+                        print(f"Local Deployment detected, Skipping sending emails for dialy digest to user {email} and continuing")
+                        continue
                 
                 # Execute job search over last 24h
                 scraped_jobs = []
