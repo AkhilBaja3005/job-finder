@@ -148,7 +148,8 @@ function App() {
   const [cronLocation, setCronLocation] = useState('Remote');
   const [cronTime, setCronTime] = useState('18:00');
 
-  // Store scraped job description in a ref so it's never lost
+  const [historyFilter, setHistoryFilter] = useState('all'); // 'all' | 'tailored' | 'applied'
+  const [historySortOrder, setHistorySortOrder] = useState('newest'); // 'newest' | 'oldest'
   const scrapedJobDescriptionRef = useRef('');
   const analysisPanelRef = useRef(null);
   const [outreachAnchorTop, setOutreachAnchorTop] = useState(0);
@@ -1808,8 +1809,74 @@ function App() {
                     );
                   })()}
 
+                  {/* Filter / Sort Control Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 2px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Filter:</span>
+                      <button
+                        onClick={() => setHistoryFilter('all')}
+                        style={{
+                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
+                          background: historyFilter === 'all' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)',
+                          color: historyFilter === 'all' ? '#fff' : 'var(--text-muted)',
+                          border: historyFilter === 'all' ? '1px solid var(--accent-primary)' : '1px solid rgba(255,255,255,0.1)'
+                        }}
+                      >
+                        All ({applicationHistory.length})
+                      </button>
+                      <button
+                        onClick={() => setHistoryFilter('tailored')}
+                        style={{
+                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
+                          background: historyFilter === 'tailored' ? '#7dd3fc22' : 'rgba(255,255,255,0.05)',
+                          color: historyFilter === 'tailored' ? '#7dd3fc' : 'var(--text-muted)',
+                          border: historyFilter === 'tailored' ? '1px solid #7dd3fc' : '1px solid rgba(255,255,255,0.1)'
+                        }}
+                      >
+                        🎯 Tailored ({applicationHistory.filter(e => e.status !== 'applied').length})
+                      </button>
+                      <button
+                        onClick={() => setHistoryFilter('applied')}
+                        style={{
+                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
+                          background: historyFilter === 'applied' ? '#10B98122' : 'rgba(255,255,255,0.05)',
+                          color: historyFilter === 'applied' ? '#10B981' : 'var(--text-muted)',
+                          border: historyFilter === 'applied' ? '1px solid #10B981' : '1px solid rgba(255,255,255,0.1)'
+                        }}
+                      >
+                        ✅ Submitted ({applicationHistory.filter(e => e.status === 'applied').length})
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Sort Date:</span>
+                      <select
+                        value={historySortOrder}
+                        onChange={(e) => setHistorySortOrder(e.target.value)}
+                        style={{
+                          fontSize: '0.68rem', padding: '3px 8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
+                          background: '#0F172A', color: '#38BDF8', border: '1px solid rgba(56, 189, 248, 0.3)', outline: 'none'
+                        }}
+                      >
+                        <option value="newest">📅 Newest First</option>
+                        <option value="oldest">📅 Oldest First</option>
+                      </select>
+                    </div>
+                  </div>
+
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {applicationHistory.map((entry, idx) => {
+                    {applicationHistory
+                      .filter(entry => {
+                        if (historyFilter === 'tailored') return entry.status !== 'applied';
+                        if (historyFilter === 'applied') return entry.status === 'applied';
+                        return true;
+                      })
+                      .sort((a, b) => {
+                        const tsA = a.timestamp || 0;
+                        const tsB = b.timestamp || 0;
+                        return historySortOrder === 'newest' ? tsB - tsA : tsA - tsB;
+                      })
+                      .map((entry, idx) => {
                       const statusColor = entry.status === 'applied' ? '#10B981' : '#7dd3fc';
                       const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
                       return (
