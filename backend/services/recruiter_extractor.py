@@ -39,9 +39,15 @@ def _parse_recruiter_html(html: str) -> Dict[str, Optional[str]]:
     #    h3.base-main-card__title and the profile link in
     #    a.base-card__full-link
     # Try the public-view selector first since that's what we hit in practice.
-    recruiter_section = soup.select_one(".message-the-recruiter")
+    # 1. Check for public message-the-recruiter section
+    recruiter_section = soup.select_one(".message-the-recruiter") or soup.select_one("[class*='message-the-recruiter']") or soup.select_one(".hirer-card") or soup.select_one("[class*='hiring-team']")
     if recruiter_section:
-        name_tag = recruiter_section.select_one("h3.base-main-card__title")
+        name_tag = (
+            recruiter_section.select_one("h3.base-main-card__title") or 
+            recruiter_section.select_one("[class*='title']") or 
+            recruiter_section.select_one("h3") or 
+            recruiter_section.select_one("h4")
+        )
         link_tag = recruiter_section.select_one("a.base-card__full-link") or recruiter_section.find(
             'a', href=re.compile(r'linkedin\.com/in/')
         )
@@ -50,14 +56,12 @@ def _parse_recruiter_html(html: str) -> Dict[str, Optional[str]]:
         if link_tag:
             recruiter_profile_url = link_tag.get('href')
 
-    # LinkedIn's logged-in layout labels the poster card "Job poster"
-    # (previously "Posted by Name" in older markup). Class names are
-    # hashed/rotate per deploy, so anchor on this stable text label
-    # and find the nearest profile link instead of relying on CSS.
+    # 2. Check for "Job poster" / "Hiring team" / "Meet the hiring team" text labels
     if not recruiter_name:
         job_poster_label = None
-        for tag in soup.find_all(['p', 'span', 'div']):
-            if _clean_text(tag.get_text()) == "Job poster":
+        for tag in soup.find_all(['p', 'span', 'div', 'h2', 'h3', 'h4']):
+            cleaned = _clean_text(tag.get_text())
+            if any(cleaned.lower() == k for k in ["job poster", "hiring team", "meet the hiring team", "hiring manager"]):
                 job_poster_label = tag
                 break
 
@@ -69,22 +73,35 @@ def _parse_recruiter_html(html: str) -> Dict[str, Optional[str]]:
                 container = container.parent
                 candidates = container.find_all('a', href=re.compile(r'linkedin\.com/in/'))
                 if candidates:
-                    # The card has both an outer wrapping link (whose text
-                    # is the whole card) and an inner link around just the
-                    # name — the shortest text is the name itself.
                     best = min(candidates, key=lambda a: len(_clean_text(a.get_text())))
                     recruiter_profile_url = recruiter_profile_url or best.get('href')
                     recruiter_name = _clean_text(best.get_text()) or None
                     break
 
-    # Fallback: older "Posted by Name" layout
-    if not recruiter_name:
-        recruiter_match = re.search(r'Posted by\s+([A-Za-z\s]+?)(?:\s*\||<|$)', html)
-        recruiter_name = _clean_text(recruiter_match.group(1)) if recruiter_match else None
-
+    # 3. Comprehensive Regex Fallbacks for public / embedded profile links
     if not recruiter_profile_url:
-        profile_match = re.search(r'href="(https://www\.linkedin\.com/in/[^"]+)"', html)
+        profile_match = re.search(r'href="(https://[a-z]{2,3}\.linkedin\.com/in/[^"?#/]+)', html) or re.search(r'href="(https://www\.linkedin\.com/in/[^"?#/]+)', html)
         recruiter_profile_url = profile_match.group(1) if profile_match else None
+
+    if not recruiter_name:
+        # Fallback 1: "Posted by Name" or "Meet Name"
+        recruiter_match = re.search(r'(?:Posted by|Meet|Hiring Manager:?)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', html)
+        if recruiter_match:
+            recruiter_name = _clean_text(recruiter_match.group(1))
+        elif recruiter_profile_url:
+            # Fallback 2: Extract name from profile link anchor tag or URL path slug
+            profile_anchor = soup.find('a', href=re.compile(re.escape(recruiter_profile_url)))
+            if profile_anchor and _clean_text(profile_anchor.get_text()):
+                recruiter_name = _clean_text(profile_anchor.get_text())
+            else:
+                # Extract slug e.g. "owen-thomas-12345" -> "Owen Thomas"
+                slug_match = re.search(r'/in/([a-zA-Z0-9-]+)', recruiter_profile_url)
+                if slug_match:
+                    slug = slug_match.group(1)
+                    # Strip numerical ID suffix if present
+                    name_parts = [p.capitalize() for p in slug.split('-') if not p.isdigit() and len(p) > 1]
+                    if name_parts:
+                        recruiter_name = " ".join(name_parts)
 
     # Extract company name. LinkedIn's public job page renders the company
     # name directly in the topcard org-name link — prefer that over the page
