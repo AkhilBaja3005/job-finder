@@ -132,8 +132,18 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
 
 # ─── Indeed Scraper (Playwright Stealth Browser) ───────────────────────────
 
+def _is_local_deployment() -> bool:
+    if any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME")):
+        return False
+    frontend_url = os.getenv("FRONTEND_URL", "")
+    return "localhost" in frontend_url or "127.0.0.1" in frontend_url
+
 async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: str = "48h") -> List[JobSearchResult]:
     """Scrapes Indeed public job postings from specified timeframe using Playwright browser emulations."""
+    if not _is_local_deployment():
+        print("[Job Searcher] Non-local/cloud deployment detected. Skipping Indeed scraping (cloud IP ranges blocked by Indeed).")
+        return []
+
     encoded_keyword = urllib.parse.quote(keyword)
     encoded_location = urllib.parse.quote(location)
     
