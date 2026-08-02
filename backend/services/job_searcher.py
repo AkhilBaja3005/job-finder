@@ -230,7 +230,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
         # on cloud deployments where Indeed's IP-reputation blocking kicks in.
         if not cards and (status == 403 or "blocked" in page_title.lower() or "just a moment" in page_title.lower()):
             print(f"[Job Searcher] Indeed Cloudflare Challenge triggered (status={status}, title={page_title!r}). "
-                  f"Cloudflare flagged automated Playwright request signature. LinkedIn results are unaffected.")
+                  f"LinkedIn search remains 100% active and unaffected.")
             return results
 
         for card in cards:
