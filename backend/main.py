@@ -1352,6 +1352,14 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 except Exception:
                     pass
 
+            overleaf_url = None
+            if analysis.latex_code:
+                try:
+                    candidate_name = session_resume_data.get("name", "") if isinstance(session_resume_data, dict) else ""
+                    overleaf_url = await asyncio.to_thread(upload_zip_to_tmpfiles, analysis.latex_code, candidate_name, job_title, company_name)
+                except Exception as ov_err:
+                    print(f"[analyze_job] Failed to generate Overleaf URL: {ov_err}")
+
             try:
                 record_application(token, {
                     "job_title": job_title,
@@ -1360,7 +1368,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     "score": dumped.get("match_analysis", {}).get("overall_score"),
                     "status": "tailored",
                     "recruiter_name": recruiter_name,
-                    "recruiter_profile_url": recruiter_profile_url
+                    "recruiter_profile_url": recruiter_profile_url,
+                    "overleaf_url": overleaf_url
                 })
             except Exception as hist_err:
                 print(f"[analyze_job] Failed to record application history: {hist_err}")
@@ -1369,7 +1378,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 "job_title": job_title,
                 "job_description": jd_text or "",
                 "company": company_name,
-                "analysis": dumped
+                "analysis": dumped,
+                "overleaf_url": overleaf_url
             }) + "\n"
         except Exception as e:
             import traceback
@@ -1992,9 +2002,9 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
             <table style="width: 100%; border-collapse: collapse;">
                 <tr>
                     <td>
-                        <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Solution Analyst - Business Intelligence</h3>
+                        <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Data Scientist - AI & Analytics</h3>
                         <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">
-                            Uline &bull; <span style="color: #0A66C2; font-weight: 600;">LinkedIn</span>
+                            Deloitte &bull; <span style="color: #EC4899; font-weight: 700; background-color: #EC489915; padding: 2px 6px; border-radius: 4px;">Reed.co.uk</span>
                         </p>
                     </td>
                     <td style="text-align: right; vertical-align: top; width: 90px;">
