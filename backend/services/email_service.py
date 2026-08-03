@@ -122,11 +122,16 @@ def build_digest_email_html(candidate_name: str, jobs: list, base_url: str, user
     """
     cards_html = ""
     for job in jobs:
-        platform = job.get("platform", "Unknown")
-        platform_color = "#0A66C2" if platform == "LinkedIn" else "#EC4899" if platform in ("Reed", "Reed.co.uk") else "#FF6F00"
-        platform_bg = "rgba(10,102,194,0.1)" if platform == "LinkedIn" else "rgba(236,72,153,0.12)" if platform in ("Reed", "Reed.co.uk") else "rgba(255,111,0,0.1)"
+        platform = str(job.get("platform", "")).strip()
+        job_url = job.get("url", "") or job.get("job_url", "")
         
-        job_url = job.get("url", "")
+        is_reed = "reed" in platform.lower() or "reed.co.uk" in job_url.lower()
+        is_linkedin = "linkedin" in platform.lower() or "linkedin.com" in job_url.lower()
+        
+        platform_name = "Reed" if is_reed else "LinkedIn" if is_linkedin else (platform or "Job")
+        platform_color = "#EC4899" if is_reed else "#0A66C2" if is_linkedin else "#FF6F00"
+        platform_bg = "#EC489915" if is_reed else "#0A66C215" if is_linkedin else "#FF6F0015"
+        
         tailor_url = f"{base_url}/email_action/tailor?job_url={requests.utils.quote(job_url)}&email={requests.utils.quote(user_email)}"
         
         cards_html += f"""
@@ -136,7 +141,7 @@ def build_digest_email_html(candidate_name: str, jobs: list, base_url: str, user
                     <td>
                         <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">{job.get('title', 'Job Listing')}</h3>
                         <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">
-                            {job.get('company', 'Hiring Company')} &bull; <span style="color: {platform_color}; font-weight: 700; background-color: {platform_bg}; padding: 2px 6px; border-radius: 4px;">{platform}</span>
+                            {job.get('company', 'Hiring Company')} &bull; <span style="color: {platform_color}; font-weight: 700; background-color: {platform_bg}; padding: 2px 6px; border-radius: 4px;">{platform_name}</span>
                         </p>
                     </td>
                     <td style="text-align: right; vertical-align: top; width: 90px;">
