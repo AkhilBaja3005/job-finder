@@ -1,3 +1,4 @@
+import os
 import asyncio
 # pyrefly: ignore [missing-import]
 from playwright.async_api import async_playwright
@@ -7,15 +8,44 @@ import re
 
 async def scrape_job_description(url: str, browser=None) -> dict:
     """
-    Scrapes a job posting page from LinkedIn, Indeed, or any MNC career portal.
-    Extracts job title, company name, location, and the full job description text.
-    Runs up to 3 attempts with progressive delay fallbacks to ensure dynamic JavaScript content loads.
-
-    If `browser` is provided (an already-launched Playwright Browser instance),
-    it's reused instead of launching a new Chromium process — callers that scrape
-    many URLs in a row (e.g. job discovery) should launch one browser and pass it
-    in for every call to avoid the ~1-2s startup cost per job.
+    Scrapes a job posting page from LinkedIn, Indeed, Reed, or any MNC career portal.
+    Uses official Reed Jobs Details REST API when scraping Reed URLs for instant zero-latency JD extraction.
     """
+    # Fast path for Reed URLs via official REST API
+    if "reed.co.uk" in url:
+        import re
+        job_id_match = re.search(r'/(\d+)(?:\?|$)', url)
+        if job_id_match:
+            job_id = job_id_match.group(1)
+            reed_key = os.getenv("REED_API_KEY", "8cd9848f-8afd-4376-adf7-f8958c7a89f2")
+            if reed_key:
+                try:
+                    import base64, urllib.request, json
+                    from utils.ssl_utils import SSL_CONTEXT
+                    auth_str = f"{reed_key}:"
+                    b64_auth = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
+                    req = urllib.request.Request(
+                        f"https://www.reed.co.uk/api/1.0/jobs/{job_id}",
+                        headers={"Authorization": f"Basic {b64_auth}", "User-Agent": "JobFinderApp/1.0"}
+                    )
+                    with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=5) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        raw_html_desc = data.get("jobDescription", "")
+                        from bs4 import BeautifulSoup
+                        parsed_text = BeautifulSoup(raw_html_desc, "html.parser").get_text(separator="\n").strip()
+                        if parsed_text and len(parsed_text) > 50:
+                            print(f"[Scraper] ⚡ Instantly fetched Reed JD via Official Details API for Job ID: {job_id}")
+                            return {
+                                "title": data.get("jobTitle", "Job Posting"),
+                                "description": parsed_text,
+                                "raw_text": raw_html_desc + "\n" + parsed_text,
+                                "company": data.get("employerName", "Reed Employer"),
+                                "url": url,
+                                "html": raw_html_desc
+                            }
+                except Exception as reed_err:
+                    print(f"[Scraper] Reed Details API fallback to Playwright browser ({reed_err})")
+
     own_playwright = None
     own_browser = None
     if browser is None:
