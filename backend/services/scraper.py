@@ -100,9 +100,20 @@ async def scrape_job_description(url: str, browser=None) -> dict:
                     if jd_elem:
                         body_text = jd_elem.get_text(separator="\n")
 
+                # Reed.co.uk specific selector matches
+                elif "reed.co.uk" in url:
+                    jd_elem = (
+                        soup.select_one(".description") or
+                        soup.select_one("[itemprop='description']") or
+                        soup.select_one(".job-description") or
+                        soup.select_one("span[itemprop='description']")
+                    )
+                    if jd_elem:
+                        body_text = jd_elem.get_text(separator="\n")
+
                 # Generic fallback selectors if specific ones failed
                 if not body_text:
-                    for selector in [".job-description", "#job-description", "article", ".main-content"]:
+                    for selector in [".job-description", "#job-description", "article", ".main-content", ".description", "[itemprop='description']"]:
                         jd_elem = soup.select_one(selector)
                         if jd_elem:
                             body_text = jd_elem.get_text(separator="\n")

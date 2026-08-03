@@ -830,6 +830,20 @@ function App() {
           };
           setTailoredResumeData(tailored);
           setStatusMessage('LaTeX tailored resume and metrics prepared successfully!');
+          
+          // Save overleaf_url to history if returned in result
+          if (result.overleaf_url) {
+            fetch(`${API_BASE}/open_in_overleaf`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthHeader()}` },
+              body: JSON.stringify({
+                latex_code: result.analysis.latex_code,
+                candidate_name: resumeData?.name || '',
+                job_title: jobTitle || '',
+                company: company || ''
+              })
+            }).catch(() => {});
+          }
         }
       }
     } catch (error) {
@@ -1944,14 +1958,38 @@ function App() {
                               {typeof entry.score === 'number' && (
                                 <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#fff' }}>{entry.score}% match</span>
                               )}
-                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                {entry.overleaf_url && (
-                                  <a href={entry.overleaf_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                {entry.overleaf_url ? (
+                                  <a
+                                    href={entry.overleaf_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="btn-overleaf"
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      padding: '5px 11px',
+                                      borderRadius: '6px',
+                                      fontWeight: 600,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      textDecoration: 'none',
+                                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)'
+                                    }}
+                                  >
                                     🍃 Overleaf
                                   </a>
+                                ) : (
+                                  <button
+                                    className="btn-overleaf"
+                                    style={{ fontSize: '0.72rem', padding: '5px 11px', borderRadius: '6px', opacity: 0.9, fontWeight: 600 }}
+                                    onClick={() => handleGenerateTailoredResume(false, entry.job_url, entry.job_title)}
+                                  >
+                                    🍃 Overleaf
+                                  </button>
                                 )}
                                 {entry.job_url && (
-                                  <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)' }}>View Post →</a>
+                                  <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', fontWeight: 600, textDecoration: 'none' }}>View Post →</a>
                                 )}
                               </div>
                               <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>
@@ -2192,8 +2230,8 @@ function App() {
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                                         <span style={{
                                           fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 700,
-                                          background: job.platform === 'LinkedIn' ? 'rgba(10,102,194,0.12)' : 'rgba(255,111,0,0.12)',
-                                          color: job.platform === 'LinkedIn' ? '#0a66c2' : '#ff6f00'
+                                          background: job.platform === 'LinkedIn' ? 'rgba(10,102,194,0.12)' : job.platform === 'Reed' ? 'rgba(236,72,153,0.15)' : 'rgba(255,111,0,0.12)',
+                                          color: job.platform === 'LinkedIn' ? '#0a66c2' : job.platform === 'Reed' ? '#ec4899' : '#ff6f00'
                                         }}>{job.platform}</span>
                                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{job.age}</span>
                                         {job.estimated && (
