@@ -202,6 +202,28 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
                             continue
                     except Exception:
                         pass
+
+                # Pre-screen Reed job description directly via Details API to eliminate course fee/guarantee spam BEFORE adding to results
+                if job_id and job_id.isdigit():
+                    try:
+                        detail_req = urllib.request.Request(
+                            f"https://www.reed.co.uk/api/1.0/jobs/{job_id}",
+                            headers=headers
+                        )
+                        with urllib.request.urlopen(detail_req, context=SSL_CONTEXT, timeout=3) as detail_resp:
+                            detail_data = json.loads(detail_resp.read().decode("utf-8"))
+                            jd_raw = (detail_data.get("jobDescription", "") or "").lower()
+                            
+                            jd_spam_patterns = [
+                                "course cost", "course fee", "fees apply", "traineeship", "training course",
+                                "refund you 100%", "fees of £", "fee of £", "training cost", "payable by monthly",
+                                "per month for the course", "get your money back", "job guaranteed", "guaranteed job"
+                            ]
+                            if any(sp in jd_raw for sp in jd_spam_patterns):
+                                print(f"[Job Searcher] 🚫 Pre-screening rejected Reed course/fee listing ID {job_id}: '{title}'")
+                                continue
+                    except Exception:
+                        pass
                 
                 results.append({
                     "job": JobSearchResult(
