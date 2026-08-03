@@ -9,12 +9,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if not os.getenv("REED_API_KEY"):
     os.environ["REED_API_KEY"] = "8cd9848f-8afd-4376-adf7-f8958c7a89f2"
 
-from services.job_searcher import search_reed_jobs, _score_job_with_title_heuristic
+from services.job_searcher import search_reed_jobs, _score_job_with_real_jd
 from services.scraper import scrape_job_description
 
 async def test_reed_pipeline():
     print("=" * 75)
-    print("🔎 TESTING REED.CO.UK JOB SEARCH & DETAILS API PIPELINE")
+    print("🔎 TESTING REED.CO.UK JOB SEARCH & REAL JD ATS SCORING PIPELINE")
     print("=" * 75)
 
     # Dummy resume data for candidate matching
@@ -30,44 +30,34 @@ async def test_reed_pipeline():
     print("\n[Step 1] Executing Reed Search API for 'Data Scientist' in 'London' (timeframe: 48h)...")
     reed_jobs = search_reed_jobs("Data Scientist", "London", timeframe="48h")
     
-    print(f"\n✓ Found {len(reed_jobs)} fresh Reed jobs (sorted newest first):\n")
-    for idx, job in enumerate(reed_jobs[:5], 1):
-        print(f"  [{idx}] {job.title}")
-        print(f"      🏢 Company: {job.company}")
-        print(f"      📍 Location: {job.location}")
-        print(f"      📅 Date Posted: {job.post_date_raw}")
-        print(f"      🔗 URL: {job.url}")
-        
-        # Test title heuristic match
-        heuristic_score = _score_job_with_title_heuristic(job, sample_resume)
-        print(f"      🎯 Estimated Heuristic Match: {heuristic_score.get('score')}%\n")
+    print(f"\n✓ Found {len(reed_jobs)} fresh pre-screened Reed jobs (sorted newest first):\n")
 
     if not reed_jobs:
         print("❌ No Reed jobs returned. Verify API Key and Internet connectivity.")
         return
 
-    # 2. Test Reed Fast-Path Details API Scraping on the first result
-    target_job = reed_jobs[0]
+    # 2. Test Real JD ATS Scoring via _score_job_with_real_jd
     print("=" * 75)
-    print(f"[Step 2] Testing Instant Reed Details API Scraping for: '{target_job.title}'...")
-    print(f"URL: {target_job.url}")
+    print("[Step 2] Computing Accurate ATS Scores with Real JD Parsing (_score_job_with_real_jd)...")
     print("=" * 75)
 
-    import time
-    t0 = time.time()
-    scraped_result = await scrape_job_description(target_job.url)
-    elapsed = (time.time() - t0) * 1000
+    semaphore = asyncio.Semaphore(5)
+    for idx, job in enumerate(reed_jobs[:5], 1):
+        # Call _score_job_with_real_jd directly using real scraped JD
+        scored_result = await _score_job_with_real_jd(job, sample_resume, browser=None, semaphore=semaphore)
+        if scored_result:
+            print(f"  [{idx}] {scored_result['title']}")
+            print(f"      🏢 Company: {scored_result['company']}")
+            print(f"      📍 Location: {scored_result['location']}")
+            print(f"      🎯 Real ATS Overall Score: {scored_result['score']}%")
+            print(f"      📊 Skills Match: {scored_result['skills_score']}% | Exp Score: {scored_result['experience_score']}%")
+            print(f"      ✅ Matched Skills: {', '.join(scored_result['matched_skills']) if scored_result['matched_skills'] else 'None'}")
+            print(f"      ⚠️ Missing Skills: {', '.join(scored_result['missing_skills']) if scored_result['missing_skills'] else 'None'}")
+            print(f"      🔗 URL: {scored_result['url']}\n")
+        else:
+            print(f"  [{idx}] {job.title} — Rejected by JD ATS eligibility or spam filter.\n")
 
-    print(f"\n⚡ Extracted JD in {elapsed:.1f}ms!")
-    print(f"Title: {scraped_result.get('title')}")
-    print(f"Company: {scraped_result.get('company')}")
-    print(f"Description Length: {len(scraped_result.get('description', ''))} chars")
-    print("\nSnippet of Extracted JD:")
-    print("-" * 50)
-    print(scraped_result.get('description', '')[:300] + "...")
-    print("-" * 50)
-    
-    print("\n✅ Reed API Job Search & Details Fast-Path Test Passed Successfully!\n")
+    print("\n✅ Reed API Job Search & Real JD ATS Scoring Test Passed Successfully!\n")
 
 if __name__ == "__main__":
     asyncio.run(test_reed_pipeline())
