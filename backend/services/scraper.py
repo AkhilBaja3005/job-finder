@@ -31,7 +31,6 @@ async def scrape_job_description(url: str, browser=None) -> dict:
                     with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=5) as resp:
                         data = json.loads(resp.read().decode("utf-8"))
                         raw_html_desc = data.get("jobDescription", "")
-                        from bs4 import BeautifulSoup
                         parsed_text = BeautifulSoup(raw_html_desc, "html.parser").get_text(separator="\n").strip()
                         if parsed_text and len(parsed_text) > 50:
                             print(f"[Scraper] ⚡ Instantly fetched Reed JD via Official Details API for Job ID: {job_id}")
