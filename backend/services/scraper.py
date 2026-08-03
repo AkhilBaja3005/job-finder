@@ -38,6 +38,7 @@ async def scrape_job_description(url: str, browser=None) -> dict:
 
         body_text = ""
         title = "Unknown Role"
+        extracted_company = ""
         soup = None
 
         # Execute up to 3 retry attempts
