@@ -177,8 +177,13 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
                 title = job.get("jobTitle", "Job Posting")
                 company = job.get("employerName", "Reed Employer")
                 
-                # Filter out spam/course training company listings (e.g. "Newto Training")
-                if "newto training" in company.lower() or "newto" in company.lower():
+                # Filter out paid course / trainee fee / boot camp spam listings disguised as jobs
+                title_lower = title.lower()
+                company_lower = company.lower()
+                
+                spam_keywords = ["course cost", "job guarantee", "guaranteed job", "trainee fee", "course fee", "refund you 100%", "training package", "newto", "nology", "learning people", "the training room"]
+                
+                if any(kw in company_lower or kw in title_lower for kw in spam_keywords):
                     continue
 
                 loc = job.get("locationName", location)
@@ -416,6 +421,13 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
 
     jd_text = scraped.get("description", "")
     if not jd_text or len(jd_text.strip()) < 100:
+        return None
+
+    # Filter out paid courses / fee-based training schemes disguised as jobs inside the JD body
+    jd_lower = jd_text.lower()
+    fee_patterns = ["course cost", "course fee", "refund you 100%", "fees of £", "fee of £", "training cost", "payable by monthly", "per month for the course"]
+    if any(fp in jd_lower for fp in fee_patterns):
+        print(f"[Job Searcher] 🚫 Rejecting fee-based course/training listing: '{job.title}'")
         return None
 
     ats = compute_ats_score(resume_data, jd_text)
