@@ -176,6 +176,11 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
             for job in data.get("results", []):
                 title = job.get("jobTitle", "Job Posting")
                 company = job.get("employerName", "Reed Employer")
+                
+                # Filter out spam/course training company listings (e.g. "Newto Training")
+                if "newto training" in company.lower() or "newto" in company.lower():
+                    continue
+
                 loc = job.get("locationName", location)
                 job_url = job.get("jobUrl", "")
                 job_id = str(job.get("jobId", job_url))
