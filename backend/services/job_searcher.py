@@ -625,14 +625,19 @@ async def find_matching_jobs(
 
     yield json.dumps({"type": "log", "message": f"📊 Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + "\n"
 
-    deduped_jobs.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
+    # Separate Reed jobs (which use instant API fast-path) from web-scraped jobs (LinkedIn/Indeed)
+    reed_jd_jobs = [j for j in deduped_jobs if j.platform == "Reed"]
+    other_jobs = [j for j in deduped_jobs if j.platform != "Reed"]
+    
+    other_jobs.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
 
-    jd_scored_batch = deduped_jobs[:DISCOVERY_JD_FETCH_CAP]
-    title_only_batch = deduped_jobs[DISCOVERY_JD_FETCH_CAP:]
+    # All fresh Reed jobs get real JD ATS scoring via API fast-path; cap web-scraped jobs to remaining capacity
+    jd_scored_batch = reed_jd_jobs + other_jobs[:max(10, DISCOVERY_JD_FETCH_CAP - len(reed_jd_jobs))]
+    title_only_batch = [j for j in deduped_jobs if j not in jd_scored_batch]
 
     scored_jobs = []
     if jd_scored_batch:
-        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for top {len(jd_scored_batch)} matches to compute accurate ATS scores..."}) + "\n"
+        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(jd_scored_batch)} matches ({len(reed_jd_jobs)} Reed API fast-path) to compute accurate ATS scores..."}) + "\n"
         # pyrefly: ignore [missing-import]
         from playwright.async_api import async_playwright
         semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
