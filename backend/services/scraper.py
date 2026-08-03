@@ -171,16 +171,20 @@ async def scrape_job_description(url: str, browser=None) -> dict:
 
             return {
                 "title": cleaned_info.get("title", title) or title,
-                "url": url,
                 "description": description,
+                "raw_text": cleaned_text,
+                "company": extracted_company,
+                "url": url,
                 "html": html
             }
         except Exception as e:
-            print(f"Gemini cleaning failed, returning raw text: {e}")
+            print(f"[Scraper] Gemini cleanup failed ({e}), falling back to raw extracted text.")
             return {
                 "title": title,
-                "url": url,
                 "description": cleaned_text,
+                "raw_text": cleaned_text,
+                "company": extracted_company,
+                "url": url,
                 "html": html
             }
     except Exception as e:

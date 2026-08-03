@@ -181,7 +181,11 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
                 title_lower = title.lower()
                 company_lower = company.lower()
                 
-                spam_keywords = ["course cost", "job guarantee", "guaranteed job", "trainee fee", "course fee", "refund you 100%", "training package", "newto", "nology", "learning people", "the training room"]
+                spam_keywords = [
+                    "course cost", "job guarantee", "guaranteed job", "trainee fee", "course fee", 
+                    "refund you 100%", "training package", "newto", "nology", "learning people", 
+                    "the training room", "itol recruit", "traineeship", "training course", "fees apply"
+                ]
                 
                 if any(kw in company_lower or kw in title_lower for kw in spam_keywords):
                     continue
@@ -420,13 +424,19 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
             return None
 
     jd_text = scraped.get("description", "")
+    raw_text = scraped.get("raw_text", "")
     if not jd_text or len(jd_text.strip()) < 100:
         return None
 
-    # Filter out paid courses / fee-based training schemes disguised as jobs inside the JD body
-    jd_lower = jd_text.lower()
-    fee_patterns = ["course cost", "course fee", "refund you 100%", "fees of £", "fee of £", "training cost", "payable by monthly", "per month for the course"]
-    if any(fp in jd_lower for fp in fee_patterns):
+    # Filter out paid courses / fee-based training schemes disguised as jobs inside BOTH cleaned JD and raw scraped HTML text
+    combined_text_lower = (jd_text + "\n" + raw_text).lower()
+    fee_patterns = [
+        "course cost", "course fee", "fees apply", "traineeship", "training course and fees",
+        "refund you 100%", "fees of £", "fee of £", "training cost", "payable by monthly",
+        "per month for the course", "get your money back", "job guaranteed - complete",
+        "job guaranteed", "training course", "course fees"
+    ]
+    if any(fp in combined_text_lower for fp in fee_patterns):
         print(f"[Job Searcher] 🚫 Rejecting fee-based course/training listing: '{job.title}'")
         return None
 
