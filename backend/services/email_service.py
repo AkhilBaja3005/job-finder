@@ -113,3 +113,59 @@ def send_notification_email(
     except Exception as e:
         print(f"[Mailer ERROR] SMTP delivery failed: {e}")
         return False
+
+
+def build_digest_email_html(candidate_name: str, jobs: list, base_url: str, user_email: str) -> str:
+    """
+    Generates dynamic HTML body for Daily Job Digest emails.
+    Renders Reed.co.uk platform badges in pink (#EC4899).
+    """
+    cards_html = ""
+    for job in jobs:
+        platform = job.get("platform", "Unknown")
+        platform_color = "#0A66C2" if platform == "LinkedIn" else "#EC4899" if platform in ("Reed", "Reed.co.uk") else "#FF6F00"
+        platform_bg = "rgba(10,102,194,0.1)" if platform == "LinkedIn" else "rgba(236,72,153,0.12)" if platform in ("Reed", "Reed.co.uk") else "rgba(255,111,0,0.1)"
+        
+        job_url = job.get("url", "")
+        tailor_url = f"{base_url}/email_action/tailor?job_url={requests.utils.quote(job_url)}&email={requests.utils.quote(user_email)}"
+        
+        cards_html += f"""
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; box-sizing: border-box; overflow: hidden; margin-bottom: 12px;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td>
+                        <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">{job.get('title', 'Job Listing')}</h3>
+                        <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">
+                            {job.get('company', 'Hiring Company')} &bull; <span style="color: {platform_color}; font-weight: 700; background-color: {platform_bg}; padding: 2px 6px; border-radius: 4px;">{platform}</span>
+                        </p>
+                    </td>
+                    <td style="text-align: right; vertical-align: top; width: 90px;">
+                        <span style="display: inline-block; background-color: #10B98115; color: #10B981; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">{job.get('score', 80)}% match</span>
+                    </td>
+                </tr>
+            </table>
+            
+            <table style="width: 100%; border-collapse: collapse; margin-top: 14px;">
+                <tr>
+                    <td style="width: 50%; padding-right: 5px;">
+                        <a href="{job_url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">View Listing</a>
+                    </td>
+                    <td style="width: 50%; padding-left: 5px;">
+                        <a href="{tailor_url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">⚡ Auto-Tailor</a>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        """
+
+    return f"""
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03); box-sizing: border-box;">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <span style="font-size: 3rem;">📬</span>
+            <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem; font-family: 'Segoe UI', Arial, sans-serif;">Daily Job Matches Digest</h2>
+            <p style="color: #334155; font-size: 0.98rem; font-weight: 600; margin: 8px 0 4px; font-family: 'Segoe UI', Arial, sans-serif;">Hi {candidate_name},</p>
+            <p style="color: #64748B; font-size: 0.9rem; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">Here are your top matching roles from the past 24 hours:</p>
+        </div>
+        {cards_html}
+    </div>
+    """
