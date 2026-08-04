@@ -610,19 +610,15 @@ async def find_matching_jobs(
         queries = [q.strip() for q in keywords.split(",") if q.strip()]
         msg = f"🔎 Using user-preferred search queries: {', '.join(queries)}"
         log_ist(msg)
-        yield json.dumps({"type": "log", "message": msg}) + "\n"
+        yield json.dumps({"type": "log", "message": msg}) + " " * 2048 + "\n"
     else:
         msg1 = "🤖 Analyzing resume context to generate optimal search queries..."
         log_ist(msg1)
-        yield json.dumps({"type": "log", "message": msg1}) + "\n"
-        
-        def _on_llm_log(log_json_str):
-            pass
-            
+        yield json.dumps({"type": "log", "message": msg1}) + " " * 2048 + "\n"
         queries = await asyncio.to_thread(generate_search_queries_from_resume, resume_data, custom_api_key)
         msg2 = f"🔎 Generated search queries: {', '.join(queries)}"
         log_ist(msg2)
-        yield json.dumps({"type": "log", "message": msg2}) + "\n"
+        yield json.dumps({"type": "log", "message": msg2}) + " " * 2048 + "\n"
 
     raw_jobs = []
     indeed_jobs_for_est = []  # Store Indeed jobs for EST section
@@ -631,11 +627,11 @@ async def find_matching_jobs(
     for query in queries:
         yield_msg = f"🌐 Fetching listings from LinkedIn & Reed.co.uk ({timeframe}) for '{query}'..."
         log_ist(yield_msg)
-        yield json.dumps({"type": "log", "message": yield_msg}) + "\n"
+        yield json.dumps({"type": "log", "message": yield_msg}) + " " * 2048 + "\n"
         
         # Execute jobs fetching
         li_jobs = await asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
-        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(li_jobs)} LinkedIn listings for '{query}'"}) + "\n"
+        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(li_jobs)} LinkedIn listings for '{query}'"}) + " " * 2048 + "\n"
         
         reed_jobs = await asyncio.to_thread(search_reed_jobs, query, location, timeframe)
         yield json.dumps({"type": "log", "message": f"✓ Fetched {len(reed_jobs)} Reed.co.uk listings for '{query}'"}) + "\n"
