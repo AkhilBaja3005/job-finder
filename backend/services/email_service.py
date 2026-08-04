@@ -19,97 +19,34 @@ def send_notification_email(
     Tries Cloudflare Email Sending REST API first.
     If credentials are not verified or fail, it automatically falls back to Gmail SMTP.
     """
-    # 1. Try Cloudflare REST API first
-    cf_account = os.getenv("CLOUDFLARE_ACCOUNT_ID")
-    cf_token = os.getenv("CLOUDFLARE_API_TOKEN")
-    cf_from = os.getenv("CLOUDFLARE_EMAIL_FROM")  # Verified domain email required for Cloudflare
-
-    if cf_account and cf_token and cf_from:
+    # 1. Try Brevo (Sendinblue) REST API - Primary Provider (Works without custom domain!)
+    brevo_api_key = os.getenv("BREVO_API_KEY")
+    if brevo_api_key:
         try:
-            url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account}/email/sending/send"
+            url = "https://api.brevo.com/v3/smtp/email"
             headers = {
-                "Authorization": f"Bearer {cf_token}",
-                "Content-Type": "application/json"
+                "api-key": brevo_api_key,
+                "Content-Type": "application/json",
+                "User-Agent": "JobFinderApp/1.0"
             }
+            from_addr = os.getenv("EMAIL_FROM", os.getenv("SMTP_USER", "akhilkumarbaja@gmail.com"))
             payload = {
-                "from": {"address": cf_from, "name": "Job Finder Digest"},
-                "to": to_email,
+                "sender": {"email": from_addr, "name": "AI Job Finder"},
+                "to": [{"email": to_email}],
                 "subject": subject,
-                "text": text_body
+                "textContent": text_body
             }
             if html_body:
-                payload["html"] = html_body
-            
-            if attachment_path and os.path.exists(attachment_path):
-                import base64
-                with open(attachment_path, "rb") as f:
-                    encoded_b64 = base64.b64encode(f.read()).decode("utf-8")
-                name = attachment_name or os.path.basename(attachment_path)
-                payload["attachments"] = [
-                    {
-                        "filename": name,
-                        "content": encoded_b64,
-                        "type": "application/pdf"
-                    }
-                ]
-            
+                payload["htmlContent"] = html_body
             resp = requests.post(url, headers=headers, json=payload, timeout=15)
-            if resp.status_code == 200:
-                print("[Mailer] Sent successfully via Cloudflare Email API.")
+            if resp.status_code in (200, 201):
+                print("[Mailer] Sent successfully via Brevo REST API.")
                 return True
-            print(f"[Mailer] Cloudflare API failed with status {resp.status_code}: {resp.text}")
+            print(f"[Mailer] Brevo API failed with status {resp.status_code}: {resp.text}. Trying backup...")
         except Exception as e:
-            print(f"[Mailer] Cloudflare API exception: {e}. Falling back to next provider.")
+            print(f"[Mailer] Brevo API exception: {e}. Trying backup...")
 
-    # 1.2 Try Plunk (https://github.com/useplunk/plunk) - 100% Open-Source Email Platform!
-    # Works over standard HTTPS REST API (POST /v1/send) — works on Hugging Face Spaces!
-    plunk_api_key = os.getenv("PLUNK_API_KEY")
-    if plunk_api_key:
-        try:
-            plunk_base_url = os.getenv("PLUNK_BASE_URL", "https://next-api.useplunk.com").rstrip("/")
-            url = f"{plunk_base_url}/v1/send"
-            headers = {
-                "Authorization": f"Bearer {plunk_api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "to": to_email,
-                "subject": subject,
-                "body": html_body or text_body
-            }
-            resp = requests.post(url, headers=headers, json=payload, timeout=15)
-            if resp.status_code in (200, 201, 202):
-                print("[Mailer] Sent successfully via Plunk Open-Source API!")
-                return True
-            print(f"[Mailer] Plunk API failed with status {resp.status_code}: {resp.text}")
-        except Exception as e:
-            print(f"[Mailer] Plunk API exception: {e}")
-
-    # 1.5 Try 100% Open-Source Self-Hosted HTTP Mail Relay / Webhook (CUSTOM_MAIL_URL)
-    # Works over standard HTTPS port 443 — perfect for self-hosted open-source microservices
-    custom_mail_url = os.getenv("CUSTOM_MAIL_URL")
-    if custom_mail_url:
-        try:
-            custom_token = os.getenv("CUSTOM_MAIL_TOKEN", "")
-            headers = {"Content-Type": "application/json"}
-            if custom_token:
-                headers["Authorization"] = f"Bearer {custom_token}"
-            payload = {
-                "to": to_email,
-                "subject": subject,
-                "text": text_body,
-                "html": html_body,
-                "from": os.getenv("EMAIL_FROM", os.getenv("SMTP_USER", ""))
-            }
-            resp = requests.post(custom_mail_url, headers=headers, json=payload, timeout=15)
-            if resp.status_code in (200, 201, 202):
-                print("[Mailer] Sent successfully via Custom Self-Hosted Open-Source Mail Relay!")
-                return True
-            print(f"[Mailer] Custom Mail Relay returned status {resp.status_code}: {resp.text}")
-        except Exception as e:
-            print(f"[Mailer] Custom Mail Relay exception: {e}")
-
-    # 2. Try Resend REST API (https://resend.com) - HTTPS REST API, works on Hugging Face Spaces!
+    # 2. Backup 1: Resend REST API (https://resend.com)
     resend_api_key = os.getenv("RESEND_API_KEY")
     if resend_api_key:
         try:
@@ -130,15 +67,62 @@ def send_notification_email(
                 payload["html"] = html_body
             resp = requests.post(url, headers=headers, json=payload, timeout=15)
             if resp.status_code in (200, 201):
-                print("[Mailer] Sent successfully via Resend REST API.")
+                print("[Mailer] Sent successfully via Resend REST API (Backup 1).")
                 return True
-            print(f"[Mailer] Resend API failed with status {resp.status_code}: {resp.text}")
+            print(f"[Mailer] Resend API failed with status {resp.status_code}: {resp.text}. Trying next backup...")
         except Exception as e:
-            print(f"[Mailer] Resend API exception: {e}")
+            print(f"[Mailer] Resend API exception: {e}. Trying next backup...")
 
-    # 3. Try Brevo (Sendinblue) REST API - HTTPS REST API, works on Hugging Face Spaces!
-    brevo_api_key = os.getenv("BREVO_API_KEY")
-    if brevo_api_key:
+    # 3. Backup 2: Plunk REST API (https://github.com/useplunk/plunk)
+    plunk_api_key = os.getenv("PLUNK_API_KEY")
+    if plunk_api_key:
+        try:
+            plunk_base_url = os.getenv("PLUNK_BASE_URL", "https://next-api.useplunk.com").rstrip("/")
+            url = f"{plunk_base_url}/v1/send"
+            headers = {
+                "Authorization": f"Bearer {plunk_api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "to": to_email,
+                "subject": subject,
+                "body": html_body or text_body
+            }
+            resp = requests.post(url, headers=headers, json=payload, timeout=15)
+            if resp.status_code in (200, 201, 202):
+                print("[Mailer] Sent successfully via Plunk Open-Source API (Backup 2).")
+                return True
+            print(f"[Mailer] Plunk API failed with status {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"[Mailer] Plunk API exception: {e}")
+
+    # 4. Backup 3: Cloudflare Email API
+    cf_account = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+    cf_token = os.getenv("CLOUDFLARE_API_TOKEN")
+    cf_from = os.getenv("CLOUDFLARE_EMAIL_FROM")
+
+    if cf_account and cf_token and cf_from:
+        try:
+            url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account}/email/sending/send"
+            headers = {
+                "Authorization": f"Bearer {cf_token}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "from": {"address": cf_from, "name": "Job Finder Digest"},
+                "to": to_email,
+                "subject": subject,
+                "text": text_body
+            }
+            if html_body:
+                payload["html"] = html_body
+            resp = requests.post(url, headers=headers, json=payload, timeout=15)
+            if resp.status_code == 200:
+                print("[Mailer] Sent successfully via Cloudflare Email API.")
+                return True
+            print(f"[Mailer] Cloudflare API failed with status {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"[Mailer] Cloudflare API exception: {e}")
         try:
             url = "https://api.brevo.com/v3/smtp/email"
             headers = {
