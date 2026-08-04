@@ -19,7 +19,7 @@ from services.scraper import scrape_job_description
 from services.recruiter_extractor import extract_recruiter
 from utils.ssl_utils import SSL_CONTEXT
 from utils.ttl_cache import TTLCache
-from services.log_queue import LLMClientLogQueue
+from services.log_queue import LLMClientLogQueue, log_ist
 
 # ─── System Caps & TTL Cache ─────────────────────────────────────────────
 DISCOVERY_JD_FETCH_CAP = 15       # Top 15 web-scraped jobs get real JD ATS scoring
@@ -84,7 +84,7 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
     tpr = tpr_map.get(timeframe, "r172800")
     url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={encoded_keyword}&location={encoded_location}&f_TPR={tpr}&start=0"
     
-    print(f"[Job Searcher] Fetching LinkedIn: {url}")
+    log_ist(f"[Job Searcher] Fetching LinkedIn: {url}")
     results = []
     
     try:
@@ -165,7 +165,7 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
 
     url = f"https://www.reed.co.uk/api/1.0/search?keywords={encoded_keyword}&locationName={encoded_location}&resultsToTake=100"
     
-    print(f"[Job Searcher] Fetching Reed API ({timeframe}): {url}")
+    log_ist(f"[Job Searcher] Fetching Reed API ({timeframe}): {url}")
     raw_candidates = []
     
     import base64
@@ -241,7 +241,7 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
                                 "per month for the course", "get your money back", "job guaranteed", "guaranteed job"
                             ]
                             if any(sp in jd_raw for sp in jd_spam_patterns):
-                                print(f"[Job Searcher] 🚫 Pre-screening rejected Reed course/fee listing ID {j_id}: '{candidate['title']}'")
+                                log_ist(f"[Job Searcher] 🚫 Pre-screening rejected Reed course/fee listing ID {j_id}: '{candidate['title']}'")
                                 return None
                     except Exception:
                         pass
@@ -256,10 +256,10 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
             # Sort by post date descending (newest jobs first)
             valid_results.sort(key=lambda x: x["dt"], reverse=True)
             final_jobs = [r["job"] for r in valid_results[:20]]
-            print(f"[Job Searcher] ✓ Reed API returned {len(final_jobs)} fresh jobs within {timeframe} for '{keyword}' (sorted newest first)")
+            log_ist(f"[Job Searcher] ✓ Reed API returned {len(final_jobs)} fresh jobs within {timeframe} for '{keyword}' (sorted newest first)")
             return final_jobs
     except Exception as e:
-        print(f"[Job Searcher] Reed API search error: {e}")
+        log_ist(f"[Job Searcher] Reed API search error: {e}")
 
     return []
 
@@ -277,7 +277,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
     """Scrapes Indeed public job postings from specified timeframe using Playwright browser emulations."""
     global _indeed_blocked_circuit_breaker
     if _indeed_blocked_circuit_breaker:
-        print("[Job Searcher] Indeed circuit breaker ACTIVE (Cloudflare block detected previously). Skipping Indeed scraping.")
+        log_ist("[Job Searcher] Indeed circuit breaker ACTIVE (Cloudflare block detected previously). Skipping Indeed scraping.")
         return []
 
     encoded_keyword = urllib.parse.quote(keyword)
@@ -293,7 +293,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
     fromage = fromage_map.get(timeframe, "2")
     url = f"https://www.indeed.com/jobs?q={encoded_keyword}&l={encoded_location}&fromage={fromage}"
     
-    print(f"[Job Searcher] Fetching Indeed via Playwright: {url}")
+    log_ist(f"[Job Searcher] Fetching Indeed via Playwright: {url}")
     results = []
 
     # pyrefly: ignore [missing-import]
@@ -364,8 +364,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 
         if not cards and (status == 403 or "blocked" in page_title.lower() or "just a moment" in page_title.lower()):
             _indeed_blocked_circuit_breaker = True
-            print(f"[Job Searcher] ⛔ Indeed Cloudflare Challenge triggered (status={status}, title={page_title!r}). "
-                  f"Flipping circuit breaker ON to skip remaining Indeed calls. LinkedIn & Reed search remain 100% operational.")
+            log_ist(f"[Job Searcher] ⛔ Indeed Cloudflare Challenge triggered (status={status}, title={page_title!r}). Flipping circuit breaker ON to skip remaining Indeed calls. LinkedIn & Reed search remain 100% operational.")
             return results
 
         for card in cards:
@@ -450,14 +449,14 @@ def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:
     return 70 + (matched_count * 8) - (tier_gap * 10)
 
 
-async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, browser, semaphore: asyncio.Semaphore) -> Optional[dict]:
+async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, browser, semaphore: asyncio.Semaphore, on_log=None) -> Optional[dict]:
     """Fetches the real JD for a single job and scores it with the exact same
     deterministic engine (compute_ats_score / compute_overall_score) that the
     Tailor Resume flow uses, so discovery's overall score is directly comparable
     to the ATS score shown after tailoring — not a separately-invented estimate."""
     async with semaphore:
         try:
-            scraped = await scrape_job_description(job.url, browser=browser)
+            scraped = await scrape_job_description(job.url, browser=browser, on_log=on_log)
         except Exception as e:
             print(f"[Job Searcher] Failed to fetch JD for '{job.title}' at {job.url}: {e}")
             return None
@@ -610,16 +609,16 @@ async def find_matching_jobs(
         # User-provided search role overrides
         queries = [q.strip() for q in keywords.split(",") if q.strip()]
         msg = f"🔎 Using user-preferred search queries: {', '.join(queries)}"
-        LLMClientLogQueue.put(msg)
-        yield json.dumps({"type": "log", "message": msg}) + "\n"
+        log_ist(msg)
+        yield json.dumps({"type": "log", "message": msg}) + " " * 2048 + "\n"
     else:
         msg1 = "🤖 Analyzing resume context to generate optimal search queries..."
-        LLMClientLogQueue.put(msg1)
-        yield json.dumps({"type": "log", "message": msg1}) + "\n"
-        queries = generate_search_queries_from_resume(resume_data, custom_api_key)
+        log_ist(msg1)
+        yield json.dumps({"type": "log", "message": msg1}) + " " * 2048 + "\n"
+        queries = await asyncio.to_thread(generate_search_queries_from_resume, resume_data, custom_api_key)
         msg2 = f"🔎 Generated search queries: {', '.join(queries)}"
-        LLMClientLogQueue.put(msg2)
-        yield json.dumps({"type": "log", "message": msg2}) + "\n"
+        log_ist(msg2)
+        yield json.dumps({"type": "log", "message": msg2}) + " " * 2048 + "\n"
 
     raw_jobs = []
     indeed_jobs_for_est = []  # Store Indeed jobs for EST section
@@ -627,17 +626,25 @@ async def find_matching_jobs(
     # Execute search queries sequentially (1 query at a time) to guarantee 0% network timeout on cloud containers
     for query in queries:
         yield_msg = f"🌐 Fetching listings from LinkedIn & Reed.co.uk ({timeframe}) for '{query}'..."
-        LLMClientLogQueue.put(yield_msg)
-        yield json.dumps({"type": "log", "message": yield_msg}) + "\n"
+        log_ist(yield_msg)
+        yield json.dumps({"type": "log", "message": yield_msg}) + " " * 2048 + "\n"
         
-        li_task = asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
-        reed_task = asyncio.to_thread(search_reed_jobs, query, location, timeframe)
-        ind_task = search_indeed_jobs(query, location, timeframe)
+        # Execute jobs fetching
+        li_jobs = await asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
+        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(li_jobs)} LinkedIn listings for '{query}'"}) + " " * 2048 + "\n"
         
-        li_jobs, reed_jobs, ind_jobs = await asyncio.gather(li_task, reed_task, ind_task)
+        reed_jobs = await asyncio.to_thread(search_reed_jobs, query, location, timeframe)
+        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(reed_jobs)} Reed.co.uk listings for '{query}'"}) + " " * 2048 + "\n"
+        
+        ind_jobs = await search_indeed_jobs(query, location, timeframe)
+        
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(ind_jobs)
+        
+        res_msg = f"✓ Found {len(li_jobs)} LinkedIn & {len(reed_jobs)} Reed.co.uk postings for '{query}'"
+        log_ist(res_msg)
+        yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 
     # Deduplicate by job URL / ID
     seen_ids = set()
@@ -647,7 +654,7 @@ async def find_matching_jobs(
             seen_ids.add(job.job_id)
             deduped_jobs.append(job)
 
-    yield json.dumps({"type": "log", "message": f"📊 Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + "\n"
+    yield json.dumps({"type": "log", "message": f"📊 Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + " " * 2048 + "\n"
 
     # Separate Reed jobs (which use instant API fast-path) from web-scraped jobs (LinkedIn/Indeed)
     reed_jd_jobs = [j for j in deduped_jobs if j.platform == "Reed"]
@@ -661,29 +668,46 @@ async def find_matching_jobs(
 
     scored_jobs = []
     if jd_scored_batch:
-        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(jd_scored_batch)} matches ({len(reed_jd_jobs)} Reed API fast-path) to compute accurate ATS scores..."}) + "\n"
+        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(jd_scored_batch)} matches ({len(reed_jd_jobs)} Reed API fast-path) to compute accurate ATS scores..."}) + " " * 2048 + "\n"
         semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
-        if browser is not None:
-            results = await asyncio.gather(*[
-                _score_job_with_real_jd(job, resume_data, browser, semaphore) for job in jd_scored_batch
-            ])
-        else:
-            from playwright.async_api import async_playwright
-            async with async_playwright() as p:
-                own_browser = await p.chromium.launch(headless=True)
-                try:
-                    results = await asyncio.gather(*[
-                        _score_job_with_real_jd(job, resume_data, own_browser, semaphore) for job in jd_scored_batch
-                    ])
-                finally:
-                    await own_browser.close()
-        scored_jobs.extend([r for r in results if r is not None])
+        
+        async def _score_and_stream(job, log_queue_stream):
+            def _ui_logger(msg):
+                log_queue_stream.append(json.dumps({"type": "log", "message": msg}) + " " * 2048 + "\n")
+            if browser is not None:
+                res = await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
+            else:
+                # pyrefly: ignore [missing-import]
+                from playwright.async_api import async_playwright
+                async with async_playwright() as p:
+                    b = await p.chromium.launch(headless=True)
+                    try:
+                        res = await _score_job_with_real_jd(job, resume_data, b, semaphore, on_log=_ui_logger)
+                    finally:
+                        await b.close()
+            return res
+
+        log_queue_stream = []
+        tasks = [asyncio.create_task(_score_and_stream(job, log_queue_stream)) for job in jd_scored_batch]
+        for completed_task in asyncio.as_completed(tasks):
+            r = await completed_task
+            while log_queue_stream:
+                yield log_queue_stream.pop(0)
+            if r is not None:
+                log_msg = f"✓ Scored match: {r['title']} @ {r['company']} ({r['score']}% Match)"
+                yield json.dumps({"type": "log", "message": log_msg}) + " " * 2048 + "\n"
+                if r["score"] >= 55:
+                    scored_jobs.append(r)
+                    # Yield partial progressive results stream so frontend renders card instantly
+                    yield json.dumps({"type": "partial_result", "job": r}) + "\n"
 
     if title_only_batch:
-        yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + "\n"
-        scored_jobs.extend([_score_job_with_title_heuristic(job, resume_data) for job in title_only_batch])
-
-    scored_jobs = [j for j in scored_jobs if j["score"] >= 55]
+        yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + " " * 2048 + "\n"
+        for job in title_only_batch:
+            r = _score_job_with_title_heuristic(job, resume_data)
+            if r["score"] >= 55:
+                scored_jobs.append(r)
+                yield json.dumps({"type": "partial_result", "job": r}) + "\n"
 
     # Sort accurate (JD-scored) jobs before estimated (title-only) ones, since
     # an estimated job's raw score isn't directly comparable to a real

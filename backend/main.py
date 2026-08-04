@@ -388,12 +388,19 @@ async def lifespan(app: FastAPI):
     ngrok_proc = None
     if _is_local_deployment():
         backend_url = os.getenv("BACKEND_URL", "")
+        authtoken = os.getenv("NGROK_AUTHTOKEN", "")
+        domain = os.getenv("NGROK_DOMAIN", "")
         if "ngrok" in backend_url:
             try:
-                # Find npx / ngrok command
-                ngrok_cmd = shutil.which("npx") or shutil.which("ngrok")
+                ngrok_cmd = shutil.which("ngrok") or shutil.which("npx")
                 if ngrok_cmd:
-                    cmd = [ngrok_cmd, "ngrok", "http", "8000", f"--url={backend_url}"] if "npx" in ngrok_cmd else [ngrok_cmd, "http", "8000", f"--url={backend_url}"]
+                    if authtoken:
+                        try:
+                            subprocess.run([ngrok_cmd, "config", "add-authtoken", authtoken], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        except Exception:
+                            pass
+                    domain_arg = f"--domain={domain}" if domain else f"--url={backend_url}"
+                    cmd = [ngrok_cmd, "http", "8000", domain_arg] if "ngrok" in ngrok_cmd else [ngrok_cmd, "ngrok", "http", "8000", domain_arg]
                     print(f"[Ngrok Manager] Launching static tunnel: {backend_url}...")
                     ngrok_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception as e:
@@ -402,6 +409,7 @@ async def lifespan(app: FastAPI):
     app.state.playwright = None
     app.state.browser = None
     try:
+        # pyrefly: ignore [missing-import]
         from playwright.async_api import async_playwright
         app.state.playwright = await async_playwright().start()
         app.state.browser = await app.state.playwright.chromium.launch(
@@ -439,6 +447,7 @@ async def lifespan(app: FastAPI):
         pass
 
 # Add GZipMiddleware to compress HTML, CSS, JavaScript, and JSON responses by 70%-80%
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.gzip import GZipMiddleware
 app = FastAPI(title="AI Job Finder Agent API", lifespan=lifespan)
 
@@ -2536,8 +2545,18 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
     if cached_jobs is not None:
         async def cached_job_stream():
             yield json.dumps({"type": "log", "message": "⚡ Loaded job results from cache (< 5 min old)!"}) + "\n"
+            for job in cached_jobs:
+                yield json.dumps({"type": "partial_result", "job": job}) + "\n"
             yield json.dumps({"type": "result", "jobs": cached_jobs}) + "\n"
-        return StreamingResponse(cached_job_stream(), media_type="application/x-ndjson")
+        return StreamingResponse(
+            cached_job_stream(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
 
     try:
         # Wrap the generator to also cache results on completion
@@ -2561,7 +2580,15 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                     pass
                 yield chunk
         
-        return StreamingResponse(caching_job_stream(), media_type="application/x-ndjson")
+        return StreamingResponse(
+            caching_job_stream(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
@@ -2744,6 +2771,47 @@ async def admin_logs_stream(key: Optional[str] = None):
 
     return StreamingResponse(
         generate_logs(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+@app.get("/user/logs/stream")
+async def user_logs_stream(request: Request):
+    """
+    SSE log stream for the authenticated frontend user.
+    The frontend connects to this during a job search to display all backend
+    pipeline logs (scraper, LLM, recruiter, etc.) in the UI pipeline log box.
+    Authenticated via Authorization Bearer token (same as all other /user/ endpoints).
+    """
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "").strip() if auth_header.startswith("Bearer ") else None
+    if not token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    user = get_user_by_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired session token")
+
+    async def generate_user_logs():
+        yield "data: 🟢 Connected to Live Log Stream\n\n"
+        while True:
+            if await request.is_disconnected():
+                break
+            msgs = LLMClientLogQueue.get_all()
+            if msgs:
+                for msg in msgs:
+                    formatted = msg.replace("\n", " ")
+                    yield f"data: {formatted}\n\n"
+            else:
+                yield ": ping\n\n"
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(
+        generate_user_logs(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",

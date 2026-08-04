@@ -259,41 +259,6 @@ function App() {
     sessionStorage.setItem('dashboard_mode', dashboardMode);
   }, [dashboardMode]);
 
-  // Auto-check server TTL cache on mount if discoveredJobs is empty
-  useEffect(() => {
-    if (discoveredJobs.length === 0 && resumeData) {
-      const checkServerCache = async () => {
-        try {
-          const res = await fetch(`${API_BASE}/search_matching_jobs`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${getAuthHeader()}`
-            },
-            body: JSON.stringify({
-              location: searchLocation,
-              keywords: searchKeywords || null,
-              timeframe: searchTimeframe
-            })
-          });
-          if (res.ok) {
-            for await (const event of streamNdjson(res)) {
-              if (event.type === 'result' && event.jobs?.length > 0) {
-                setDiscoveredJobs(event.jobs);
-                setIsDiscoveryView(true);
-                sessionStorage.setItem('discovered_jobs', JSON.stringify(event.jobs));
-                sessionStorage.setItem('is_discovery_view', 'true');
-              }
-            }
-          }
-        } catch {
-          // Silent cache check fallback
-        }
-      };
-      checkServerCache();
-    }
-  }, [resumeData]);
-
   // Optimization #1: Handle window resize for compact mode
   useEffect(() => {
     const handleResize = () => {
@@ -921,19 +886,77 @@ function App() {
 
   const handleSearchJobs = async () => {
     if (!resumeData) {
-      // showToast("⚠️ Please upload a resume first to generate search queries.", "error");
       return;
     }
     setDiscovering(true);
     setIsDiscoveryView(true);
     setDiscoveredJobs([]);
-    setStatusMessage(`🔎 Scanning LinkedIn and Indeed for matching jobs posted in the last ${searchTimeframe === '24h' ? '24 hours' : searchTimeframe === '48h' ? '48 hours' : searchTimeframe === '1w' ? '1 week' : '1 month'}...`);
+
+    const initMsg = `🔎 Scanning LinkedIn and Reed for matching jobs posted in the last ${searchTimeframe === '24h' ? '24 hours' : searchTimeframe === '48h' ? '48 hours' : searchTimeframe === '1w' ? '1 week' : '1 month'}...`;
+    setStatusMessage(initMsg);
+    setStatusLogs([{ message: initMsg, ts: nowTs() }]);
+
+    // ── SSE log stream: connect to /user/logs/stream to pipe all backend logs
+    // into the pipeline log box in real time, independently of the main search fetch.
+    let logEventSource = null;
+    try {
+      const sseUrl = new URL(`${API_BASE}/user/logs/stream`);
+      logEventSource = new EventSource(sseUrl.toString());
+      // NOTE: EventSource doesn't support custom headers, so we send auth as query param
+      // Recreate with token query param approach via fetch-based SSE reader instead
+      logEventSource.close();
+      logEventSource = null;
+    } catch (e) { /* ignore */ }
+
+    // Filter: which log messages to show in the UI pipeline log box.
+    // The admin stream stays fully verbose; we only suppress internal recruiter noise here.
+    const shouldShowLog = (msg) => {
+      // Strip timestamp prefix e.g. "[19:53:56 IST] " for pattern matching
+      const body = msg.replace(/^\[\d{2}:\d{2}:\d{2} IST\]\s*/, '');
+      // Drop recruiter pre-fetched HTML verbose lines (not useful to users)
+      if (/^\[extract_recruiter_from_linkedin\] Using pre-fetched HTML for:/.test(body)) return false;
+      // Drop raw recruiter_extractor found lines (redundant in UI)
+      if (/^\[recruiter_extractor\]/.test(body)) return false;
+      return true;
+    };
+
+    // Use fetch-based SSE reader (supports Authorization header)
+    let sseAbort = new AbortController();
+    const sseHeaders = { 'Authorization': `Bearer ${getAuthHeader()}`, 'ngrok-skip-browser-warning': 'true' };
+    (async () => {
+      try {
+        const sseRes = await fetch(`${API_BASE}/user/logs/stream`, { headers: sseHeaders, signal: sseAbort.signal });
+        if (!sseRes.ok) return;
+        const sseReader = sseRes.body.getReader();
+        const sseDec = new TextDecoder();
+        let sseBuf = '';
+        while (true) {
+          const { value, done } = await sseReader.read();
+          if (done) break;
+          sseBuf += sseDec.decode(value, { stream: true });
+          const lines = sseBuf.split('\n');
+          sseBuf = lines.pop();
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const msg = line.slice(6).trim();
+              if (!msg || msg.startsWith('🟢')) continue;
+              if (!shouldShowLog(msg)) continue;
+              setStatusMessage(msg);
+              setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
+              setTimeout(scrollConsoleToBottom, 30);
+            }
+          }
+        }
+      } catch (e) {
+        // SSE closed normally (aborted) — ignore
+      }
+    })();
+
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (geminiApiKey) headers['X-Gemini-API-Key'] = geminiApiKey;
       headers['Authorization'] = `Bearer ${getAuthHeader()}`;
 
-      setStatusLogs([]); // Clear logs before fresh sweep
       const response = await fetch(`${API_BASE}/search_matching_jobs`, {
         method: 'POST',
         headers: headers,
@@ -950,10 +973,13 @@ function App() {
       }
 
       for await (const event of streamNdjson(response)) {
-        if (event.type === 'log') {
-          setStatusMessage(event.message);
-          setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
-          setTimeout(scrollConsoleToBottom, 30);
+        if (event.type === 'partial_result' && event.job) {
+          setDiscoveredJobs((prev) => {
+            if (prev.some((j) => j.url === event.job.url)) return prev;
+            const updated = [...prev, event.job].sort((a, b) => (a.estimated === b.estimated ? b.score - a.score : a.estimated ? 1 : -1));
+            try { sessionStorage.setItem('discovered_jobs', JSON.stringify(updated)); } catch (e) {}
+            return updated;
+          });
         } else if (event.type === 'result') {
           const jobsList = event.jobs || [];
           setDiscoveredJobs(jobsList);
@@ -973,11 +999,13 @@ function App() {
     } catch (err) {
       setStatusMessage(`Discovery failed: ${err.message}`);
       setStatusLogs((prev) => [...prev, { message: `❌ Discovery failed: ${err.message}`, ts: nowTs() }]);
-      // showToast(`❌ ${err.message}`, 'error');
     } finally {
+      // Close the SSE log stream
+      sseAbort.abort();
       setDiscovering(false);
     }
   };
+
 
   const sortedAndPaginatedJobs = useMemo(() => {
     // 1. Sort copy of jobs array. Accurate (JD-scored) jobs always sort
@@ -2143,14 +2171,14 @@ function App() {
                   </div>
                 </div>
               )
-            ) : isDiscoveryView && discovering ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            ) : discovering ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: '700' }}>
                   <svg style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" style={{ opacity: 0.25 }} />
                     <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  <span>Searching Platform Feeds…</span>
+                  <span>Searching Platform Feeds… ({discoveredJobs.length} matches found so far)</span>
                 </div>
                 <div className="log-terminal">
                   <div className="log-terminal-header">
@@ -2159,7 +2187,7 @@ function App() {
                       <div className="log-terminal-dot" style={{ background: '#FFBD2E' }} />
                       <div className="log-terminal-dot" style={{ background: '#28CA41' }} />
                     </div>
-                    📋 SEARCH PIPELINE LOGS
+                    📋 LIVE SEARCH PIPELINE LOGS
                   </div>
                   <div
                     className="log-terminal-body"
@@ -2169,18 +2197,18 @@ function App() {
                       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
                       consoleUserScrolled.current = !atBottom;
                     }}
-                    style={{ maxHeight: '200px' }}
+                    style={{ maxHeight: '160px' }}
                   >
                     {statusLogs.length === 0 ? (
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', padding: '12px', fontStyle: 'italic' }}>
-                        Initializing...
+                        Initializing search...
                       </div>
                     ) : (
                       statusLogs.map((entry, index) => {
                         const msg = typeof entry === 'string' ? entry : entry.message;
                         const ts = typeof entry === 'object' ? entry.ts : '';
                         let cls = 'log-entry-msg log-default';
-                        if (msg.includes('🏁') || msg.includes('✅')) cls = 'log-entry-msg log-ok';
+                        if (msg.includes('🏁') || msg.includes('✅') || msg.includes('✓')) cls = 'log-entry-msg log-ok';
                         else if (msg.includes('🔎') || msg.includes('🌐') || msg.includes('🤖')) cls = 'log-entry-msg log-ai';
                         else if (msg.includes('❌')) cls = 'log-entry-msg log-warn';
                         return (
@@ -2194,6 +2222,32 @@ function App() {
                     <span className="log-cursor" />
                   </div>
                 </div>
+
+                {/* Render live streaming job cards immediately as they arrive */}
+                {discoveredJobs.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#10B981', fontWeight: 700 }}>
+                      ⚡ Live Matches Arriving ({discoveredJobs.length}):
+                    </div>
+                    {discoveredJobs.map((job, idx) => {
+                      const score = job.score || 0;
+                      const scoreColor = score >= 80 ? '#10B981' : score >= 60 ? '#38BDF8' : '#E57373';
+                      return (
+                        <div key={idx} className="card job-card" style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(16,185,129,0.3)', animation: 'fadeIn 0.3s ease-out' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#fff' }}>{job.title}</div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{job.company} • {job.location}</div>
+                            </div>
+                            <div style={{ padding: '4px 10px', borderRadius: '20px', background: `${scoreColor}22`, color: scoreColor, fontWeight: 800, fontSize: '0.85rem' }}>
+                              {score}% Match
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : isDiscoveryView ? (
               (() => {
@@ -2406,35 +2460,41 @@ function App() {
                                     </div>
                                     <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexDirection: compactMode ? 'column' : 'row' }}>
                                       <button
-                                        className="btn btn-secondary"
-                                        style={{ padding: '8px 12px', fontSize: '0.76rem', flex: 1 }}
-                                        onClick={(e) => { e.stopPropagation(); window.open(job.url, '_blank'); }}
-                                        aria-label="View job post on external site"
-                                      >
-                                        🔗 View Post
-                                      </button>
-                                      <button
-                                        className="btn"
-                                        style={{ padding: '8px 12px', fontSize: '0.76rem', flex: 1, fontWeight: 700 }}
+                                        className="btn btn-primary"
+                                        style={{ padding: '8px 12px', fontSize: '0.76rem', flex: 1, background: 'linear-gradient(135deg, #0284C7 0%, #2563EB 100%)', fontWeight: 700, border: 'none', color: '#fff', cursor: 'pointer' }}
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setJobUrl(job.url);
-                                          setJobTitle(job.title);
-                                          setCompany(job.company);
-                                          setJobDescription('');
-                                          setAnalysisResult(null);
-                                          setTailoredResumeData(null);
-                                          setStatusLogs([]);
+                                          setJobUrl(job.url || '');
+                                          setJobTitle(job.title || '');
+                                          setCompany(job.company || '');
+                                          setJobDescription(job.raw_text || job.description || '');
                                           setIsDiscoveryView(false);
                                           setDashboardMode('tailor');
-                                          // Trigger fit analysis first to populate JD and show ATS score panel
-                                          setTimeout(() => {
-                                            handleAnalyzeJob(job.url, job.title);
-                                          }, 50);
+                                          window.scrollTo({ top: 0, behavior: 'smooth' });
                                         }}
                                       >
                                         ⚡ Analyze & Scrape
                                       </button>
+                                      {job.url && (
+                                        <a
+                                          href={job.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={(e) => e.stopPropagation()}
+                                          style={{
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            padding: '8px 14px', fontSize: '0.76rem', flex: compactMode ? 1 : 'none',
+                                            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)',
+                                            borderRadius: '6px', color: '#94a3b8', fontWeight: 600,
+                                            textDecoration: 'none', whiteSpace: 'nowrap',
+                                            transition: 'background 0.2s, color 0.2s'
+                                          }}
+                                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; }}
+                                          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#94a3b8'; }}
+                                        >
+                                          🔗 View Post ↗
+                                        </a>
+                                      )}
                                     </div>
                                   </div>
                                 )}
