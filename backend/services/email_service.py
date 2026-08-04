@@ -77,7 +77,12 @@ def send_notification_email(
                         "User-Agent": "JobFinderApp/1.0",
                         "Content-Type": "application/json"
                     }
-                    from_addr = os.getenv("EMAIL_FROM", "onboarding@resend.dev")
+                    from_env = os.getenv("EMAIL_FROM", "")
+                    if from_env and "@gmail.com" not in from_env.lower():
+                        from_addr = from_env
+                    else:
+                        from_addr = "onboarding@resend.dev"
+
                     payload = {
                         "from": from_addr,
                         "to": [to_email],
