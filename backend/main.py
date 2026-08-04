@@ -2538,6 +2538,8 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
     if cached_jobs is not None:
         async def cached_job_stream():
             yield json.dumps({"type": "log", "message": "⚡ Loaded job results from cache (< 5 min old)!"}) + "\n"
+            for job in cached_jobs:
+                yield json.dumps({"type": "partial_result", "job": job}) + "\n"
             yield json.dumps({"type": "result", "jobs": cached_jobs}) + "\n"
         return StreamingResponse(cached_job_stream(), media_type="application/x-ndjson")
 
