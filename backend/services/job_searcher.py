@@ -19,7 +19,7 @@ from services.scraper import scrape_job_description
 from services.recruiter_extractor import extract_recruiter
 from utils.ssl_utils import SSL_CONTEXT
 from utils.ttl_cache import TTLCache
-from services.log_queue import LLMClientLogQueue
+from services.log_queue import LLMClientLogQueue, log_ist
 
 # ─── System Caps & TTL Cache ─────────────────────────────────────────────
 DISCOVERY_JD_FETCH_CAP = 15       # Top 15 web-scraped jobs get real JD ATS scoring
@@ -241,7 +241,7 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
                                 "per month for the course", "get your money back", "job guaranteed", "guaranteed job"
                             ]
                             if any(sp in jd_raw for sp in jd_spam_patterns):
-                                print(f"[Job Searcher] 🚫 Pre-screening rejected Reed course/fee listing ID {j_id}: '{candidate['title']}'")
+                                log_ist(f"[Job Searcher] 🚫 Pre-screening rejected Reed course/fee listing ID {j_id}: '{candidate['title']}'")
                                 return None
                     except Exception:
                         pass
@@ -256,10 +256,10 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
             # Sort by post date descending (newest jobs first)
             valid_results.sort(key=lambda x: x["dt"], reverse=True)
             final_jobs = [r["job"] for r in valid_results[:20]]
-            print(f"[Job Searcher] ✓ Reed API returned {len(final_jobs)} fresh jobs within {timeframe} for '{keyword}' (sorted newest first)")
+            log_ist(f"[Job Searcher] ✓ Reed API returned {len(final_jobs)} fresh jobs within {timeframe} for '{keyword}' (sorted newest first)")
             return final_jobs
     except Exception as e:
-        print(f"[Job Searcher] Reed API search error: {e}")
+        log_ist(f"[Job Searcher] Reed API search error: {e}")
 
     return []
 
@@ -364,8 +364,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 
         if not cards and (status == 403 or "blocked" in page_title.lower() or "just a moment" in page_title.lower()):
             _indeed_blocked_circuit_breaker = True
-            print(f"[Job Searcher] ⛔ Indeed Cloudflare Challenge triggered (status={status}, title={page_title!r}). "
-                  f"Flipping circuit breaker ON to skip remaining Indeed calls. LinkedIn & Reed search remain 100% operational.")
+            log_ist(f"[Job Searcher] ⛔ Indeed Cloudflare Challenge triggered (status={status}, title={page_title!r}). Flipping circuit breaker ON to skip remaining Indeed calls. LinkedIn & Reed search remain 100% operational.")
             return results
 
         for card in cards:
@@ -610,15 +609,15 @@ async def find_matching_jobs(
         # User-provided search role overrides
         queries = [q.strip() for q in keywords.split(",") if q.strip()]
         msg = f"🔎 Using user-preferred search queries: {', '.join(queries)}"
-        LLMClientLogQueue.put(msg)
+        log_ist(msg)
         yield json.dumps({"type": "log", "message": msg}) + "\n"
     else:
         msg1 = "🤖 Analyzing resume context to generate optimal search queries..."
-        LLMClientLogQueue.put(msg1)
+        log_ist(msg1)
         yield json.dumps({"type": "log", "message": msg1}) + "\n"
         queries = generate_search_queries_from_resume(resume_data, custom_api_key)
         msg2 = f"🔎 Generated search queries: {', '.join(queries)}"
-        LLMClientLogQueue.put(msg2)
+        log_ist(msg2)
         yield json.dumps({"type": "log", "message": msg2}) + "\n"
 
     raw_jobs = []
@@ -627,7 +626,7 @@ async def find_matching_jobs(
     # Execute search queries sequentially (1 query at a time) to guarantee 0% network timeout on cloud containers
     for query in queries:
         yield_msg = f"🌐 Fetching listings from LinkedIn & Reed.co.uk ({timeframe}) for '{query}'..."
-        LLMClientLogQueue.put(yield_msg)
+        log_ist(yield_msg)
         yield json.dumps({"type": "log", "message": yield_msg}) + "\n"
         
         li_task = asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
@@ -668,6 +667,7 @@ async def find_matching_jobs(
                 _score_job_with_real_jd(job, resume_data, browser, semaphore) for job in jd_scored_batch
             ])
         else:
+            # pyrefly: ignore [missing-import]
             from playwright.async_api import async_playwright
             async with async_playwright() as p:
                 own_browser = await p.chromium.launch(headless=True)

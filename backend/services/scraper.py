@@ -33,7 +33,8 @@ async def scrape_job_description(url: str, browser=None) -> dict:
                         raw_html_desc = data.get("jobDescription", "")
                         parsed_text = BeautifulSoup(raw_html_desc, "html.parser").get_text(separator="\n").strip()
                         if parsed_text and len(parsed_text) > 50:
-                            print(f"[Scraper] ⚡ Instantly fetched Reed JD via Official Details API for Job ID: {job_id}")
+                            from services.log_queue import log_ist
+                            log_ist(f"[Scraper] ⚡ Instantly fetched Reed JD via Official Details API for Job ID: {job_id}")
                             return {
                                 "title": data.get("jobTitle", "Job Posting"),
                                 "description": parsed_text,
@@ -43,7 +44,8 @@ async def scrape_job_description(url: str, browser=None) -> dict:
                                 "html": raw_html_desc
                             }
                 except Exception as reed_err:
-                    print(f"[Scraper] Reed Details API fallback to Playwright browser ({reed_err})")
+                    from services.log_queue import log_ist
+                    log_ist(f"[Scraper] Reed Details API fallback to Playwright browser ({reed_err})")
 
     own_playwright = None
     own_browser = None
@@ -76,7 +78,8 @@ async def scrape_job_description(url: str, browser=None) -> dict:
         # Execute up to 3 retry attempts
         for attempt in range(3):
             try:
-                print(f"[Scraper] Attempt {attempt + 1}/3 to scrape: {url}")
+                from services.log_queue import log_ist
+                log_ist(f"[Scraper] Attempt {attempt + 1}/3 to scrape: {url}")
                 # Always use domcontentloaded for fast page loads; networkidle hangs on analytics/tracking scripts
                 await page.goto(url, wait_until="domcontentloaded", timeout=10000)
 
