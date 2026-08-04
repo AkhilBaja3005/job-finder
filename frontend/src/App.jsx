@@ -259,41 +259,6 @@ function App() {
     sessionStorage.setItem('dashboard_mode', dashboardMode);
   }, [dashboardMode]);
 
-  // Auto-check server TTL cache on mount if discoveredJobs is empty
-  useEffect(() => {
-    if (discoveredJobs.length === 0 && resumeData) {
-      const checkServerCache = async () => {
-        try {
-          const res = await fetch(`${API_BASE}/search_matching_jobs`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${getAuthHeader()}`
-            },
-            body: JSON.stringify({
-              location: searchLocation,
-              keywords: searchKeywords || null,
-              timeframe: searchTimeframe
-            })
-          });
-          if (res.ok) {
-            for await (const event of streamNdjson(res)) {
-              if (event.type === 'result' && event.jobs?.length > 0) {
-                setDiscoveredJobs(event.jobs);
-                setIsDiscoveryView(true);
-                sessionStorage.setItem('discovered_jobs', JSON.stringify(event.jobs));
-                sessionStorage.setItem('is_discovery_view', 'true');
-              }
-            }
-          }
-        } catch {
-          // Silent cache check fallback
-        }
-      };
-      checkServerCache();
-    }
-  }, [resumeData]);
-
   // Optimization #1: Handle window resize for compact mode
   useEffect(() => {
     const handleResize = () => {
