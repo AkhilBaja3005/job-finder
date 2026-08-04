@@ -2675,6 +2675,7 @@ async def send_outreach_email(request: SendOutreachEmailRequest, authorization: 
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/admin/logs", response_class=HTMLResponse)
+@app.get("/admin/logs/", response_class=HTMLResponse)
 async def admin_logs_dashboard(key: Optional[str] = None):
     """
     Secure admin live log streaming dashboard URL.
