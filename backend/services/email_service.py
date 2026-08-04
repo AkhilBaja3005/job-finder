@@ -61,6 +61,30 @@ def send_notification_email(
         except Exception as e:
             print(f"[Mailer] Cloudflare API exception: {e}. Falling back to next provider.")
 
+    # 1.2 Try Plunk (https://github.com/useplunk/plunk) - 100% Open-Source Email Platform!
+    # Works over standard HTTPS REST API (POST /v1/send) — works on Hugging Face Spaces!
+    plunk_api_key = os.getenv("PLUNK_API_KEY")
+    if plunk_api_key:
+        try:
+            plunk_base_url = os.getenv("PLUNK_BASE_URL", "https://next-api.useplunk.com").rstrip("/")
+            url = f"{plunk_base_url}/v1/send"
+            headers = {
+                "Authorization": f"Bearer {plunk_api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "to": to_email,
+                "subject": subject,
+                "body": html_body or text_body
+            }
+            resp = requests.post(url, headers=headers, json=payload, timeout=15)
+            if resp.status_code in (200, 201, 202):
+                print("[Mailer] Sent successfully via Plunk Open-Source API!")
+                return True
+            print(f"[Mailer] Plunk API failed with status {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"[Mailer] Plunk API exception: {e}")
+
     # 1.5 Try 100% Open-Source Self-Hosted HTTP Mail Relay / Webhook (CUSTOM_MAIL_URL)
     # Works over standard HTTPS port 443 — perfect for self-hosted open-source microservices
     custom_mail_url = os.getenv("CUSTOM_MAIL_URL")
