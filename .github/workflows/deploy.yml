@@ -22,7 +22,9 @@ jobs:
           key: ${{ secrets.GCP_VM_SSH_KEY }}
           script: |
             cd ~/job-finder
-            git pull origin main
+            git fetch origin
+            git checkout feature/gcp-docker-ci || git checkout main
+            git pull
             sudo docker build -t jobfinder .
             sudo docker stop jobfinder-app || true
             sudo docker rm jobfinder-app || true
