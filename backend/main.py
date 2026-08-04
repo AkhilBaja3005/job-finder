@@ -388,12 +388,19 @@ async def lifespan(app: FastAPI):
     ngrok_proc = None
     if _is_local_deployment():
         backend_url = os.getenv("BACKEND_URL", "")
+        authtoken = os.getenv("NGROK_AUTHTOKEN", "")
+        domain = os.getenv("NGROK_DOMAIN", "")
         if "ngrok" in backend_url:
             try:
-                # Find npx / ngrok command
-                ngrok_cmd = shutil.which("npx") or shutil.which("ngrok")
+                ngrok_cmd = shutil.which("ngrok") or shutil.which("npx")
                 if ngrok_cmd:
-                    cmd = [ngrok_cmd, "ngrok", "http", "8000", f"--url={backend_url}"] if "npx" in ngrok_cmd else [ngrok_cmd, "http", "8000", f"--url={backend_url}"]
+                    if authtoken:
+                        try:
+                            subprocess.run([ngrok_cmd, "config", "add-authtoken", authtoken], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        except Exception:
+                            pass
+                    domain_arg = f"--domain={domain}" if domain else f"--url={backend_url}"
+                    cmd = [ngrok_cmd, "http", "8000", domain_arg] if "ngrok" in ngrok_cmd else [ngrok_cmd, "ngrok", "http", "8000", domain_arg]
                     print(f"[Ngrok Manager] Launching static tunnel: {backend_url}...")
                     ngrok_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception as e:
