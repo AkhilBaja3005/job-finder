@@ -2565,7 +2565,15 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                     pass
                 yield chunk
         
-        return StreamingResponse(caching_job_stream(), media_type="application/x-ndjson")
+        return StreamingResponse(
+            caching_job_stream(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
