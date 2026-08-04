@@ -634,7 +634,7 @@ async def find_matching_jobs(
         yield json.dumps({"type": "log", "message": f"✓ Fetched {len(li_jobs)} LinkedIn listings for '{query}'"}) + " " * 2048 + "\n"
         
         reed_jobs = await asyncio.to_thread(search_reed_jobs, query, location, timeframe)
-        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(reed_jobs)} Reed.co.uk listings for '{query}'"}) + "\n"
+        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(reed_jobs)} Reed.co.uk listings for '{query}'"}) + " " * 2048 + "\n"
         
         ind_jobs = await search_indeed_jobs(query, location, timeframe)
         
@@ -644,7 +644,7 @@ async def find_matching_jobs(
         
         res_msg = f"✓ Found {len(li_jobs)} LinkedIn & {len(reed_jobs)} Reed.co.uk postings for '{query}'"
         log_ist(res_msg)
-        yield json.dumps({"type": "log", "message": res_msg}) + "\n"
+        yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 
     # Deduplicate by job URL / ID
     seen_ids = set()
@@ -654,7 +654,7 @@ async def find_matching_jobs(
             seen_ids.add(job.job_id)
             deduped_jobs.append(job)
 
-    yield json.dumps({"type": "log", "message": f"📊 Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + "\n"
+    yield json.dumps({"type": "log", "message": f"📊 Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + " " * 2048 + "\n"
 
     # Separate Reed jobs (which use instant API fast-path) from web-scraped jobs (LinkedIn/Indeed)
     reed_jd_jobs = [j for j in deduped_jobs if j.platform == "Reed"]
@@ -677,6 +677,7 @@ async def find_matching_jobs(
             if browser is not None:
                 res = await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
             else:
+                # pyrefly: ignore [missing-import]
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
                     b = await p.chromium.launch(headless=True)
