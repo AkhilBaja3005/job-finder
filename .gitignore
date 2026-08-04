@@ -10,4 +10,8 @@ uploads/
 __pycache__/
 user_data/
 backend/tectonic
-backend/tectonic.tar.gz
+backend/tectonic.tar.gzuser_data/
+backend/user_data/
+output/
+uploads/
+
