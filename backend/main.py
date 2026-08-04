@@ -161,14 +161,12 @@ async def hf_keep_alive_loop():
     await asyncio.sleep(60) # Wait 1 minute after server startup
     while True:
         try:
-            target_url = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
-            if not target_url.endswith("/"):
-                target_url += "/"
+            # Ping local fast server loop directly (0ms latency, zero timeout risk)
+            target_url = "http://127.0.0.1:8000/"
             import urllib.request
-            from utils.ssl_utils import SSL_CONTEXT
-            req = urllib.request.Request(target_url, headers={"User-Agent": "HFKeepAlive/1.0", "ngrok-skip-browser-warning": "true"})
-            with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=10) as resp:
-                print(f"[Keep Alive] Successfully pinged {target_url} (status={resp.status}) - Space active!")
+            req = urllib.request.Request(target_url, headers={"User-Agent": "HFKeepAlive/1.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                print(f"[Keep Alive] Successfully pinged local server (status={resp.status}) - Space active!")
         except Exception as e:
             print(f"[Keep Alive Warning] Self-ping attempt: {e}")
         await asyncio.sleep(14400) # Ping every 4 hours (14,400 seconds)
