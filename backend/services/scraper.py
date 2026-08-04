@@ -112,6 +112,57 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
             from services.log_queue import log_ist
             log_ist(f"[Scraper] LinkedIn guest API error ({li_err}), falling back to Playwright")
 
+    # Fast path for Indeed URLs via direct viewjob REST endpoint / viewjob parser
+    if "indeed.com" in url:
+        try:
+            import urllib.request, json
+            from utils.ssl_utils import SSL_CONTEXT
+            from services.log_queue import log_ist
+            # Extract Indeed job key (jk=...)
+            jk_match = re.search(r'[?&]jk=([a-f0-9]{16})', url) or re.search(r'/rc/clk\?jk=([a-f0-9]{16})', url) or re.search(r'jk=([a-f0-9]{16})', url)
+            if jk_match:
+                jk = jk_match.group(1)
+                direct_url = f"https://www.indeed.com/viewjob?jk={jk}"
+                req = urllib.request.Request(
+                    direct_url,
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "Accept-Language": "en-US,en;q=0.5",
+                    }
+                )
+                with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=8) as resp:
+                    html_bytes = resp.read()
+                    html = html_bytes.decode("utf-8", errors="ignore")
+                    soup = BeautifulSoup(html, "html.parser")
+
+                    jd_elem = (
+                        soup.select_one("#jobDescriptionText") or
+                        soup.select_one(".jobsearch-JobComponent-description") or
+                        soup.select_one("[class*='JobComponent-description']") or
+                        soup.select_one(".fastItem")
+                    )
+                    title_elem = soup.select_one("h1.jobsearch-JobInfoHeader-title") or soup.select_one("h1")
+                    cmp_anchor = soup.select_one("a[href*='/cmp/']") or soup.select_one("[data-company-name='true']")
+
+                    jd_text = jd_elem.get_text(separator="\n").strip() if jd_elem else ""
+                    title = title_elem.get_text().strip() if title_elem else "Indeed Job"
+                    company = cmp_anchor.get_text().strip() if cmp_anchor else "Indeed Employer"
+
+                    if jd_text and len(jd_text) > 100:
+                        log_ist(f"[Scraper] ⚡ Instantly fetched Indeed JD via direct viewjob endpoint for JK: {jk}")
+                        return {
+                            "title": title,
+                            "description": jd_text,
+                            "raw_text": jd_text,
+                            "company": company,
+                            "url": url,
+                            "html": html
+                        }
+        except Exception as indeed_err:
+            from services.log_queue import log_ist
+            log_ist(f"[Scraper] Indeed direct fetch error ({indeed_err}), falling back to Playwright")
+
 
 
     own_playwright = None
