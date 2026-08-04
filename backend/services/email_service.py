@@ -59,6 +59,14 @@ def send_notification_email(
                     }
                     if html_body:
                         payload["htmlContent"] = html_body
+                    
+                    if attachment_path and os.path.exists(attachment_path):
+                        import base64
+                        with open(attachment_path, "rb") as f:
+                            encoded_b64 = base64.b64encode(f.read()).decode("utf-8")
+                        att_name = attachment_name or os.path.basename(attachment_path)
+                        payload["attachment"] = [{"name": att_name, "content": encoded_b64}]
+
                     resp = requests.post(url, headers=headers, json=payload, timeout=15)
                     if resp.status_code in (200, 201):
                         print(f"[Mailer] Sent successfully to {to_email} via Brevo REST API.")
@@ -91,6 +99,13 @@ def send_notification_email(
                     }
                     if html_body:
                         payload["html"] = html_body
+
+                    if attachment_path and os.path.exists(attachment_path):
+                        import base64
+                        with open(attachment_path, "rb") as f:
+                            encoded_b64 = base64.b64encode(f.read()).decode("utf-8")
+                        att_name = attachment_name or os.path.basename(attachment_path)
+                        payload["attachments"] = [{"filename": att_name, "content": encoded_b64}]
                     resp = requests.post(url, headers=headers, json=payload, timeout=15)
                     if resp.status_code in (200, 201):
                         print(f"[Mailer] Sent successfully to {to_email} via Resend REST API.")
