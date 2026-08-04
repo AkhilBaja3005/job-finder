@@ -2728,15 +2728,28 @@ async def admin_logs_stream(key: Optional[str] = None):
         raise HTTPException(status_code=403, detail="Unauthorized Admin Access")
 
     async def generate_logs():
-        yield "data: 🟢 Connected to Live Admin Log Stream\\n\\n"
+        yield "data: 🟢 Connected to Live Admin Log Stream\n\n"
         while True:
             msgs = LLMClientLogQueue.get_all()
             if msgs:
                 for msg in msgs:
-                    yield f"data: {msg}\\n\\n"
+                    # Escape newlines for SSE data protocol format
+                    formatted = msg.replace("\n", " ")
+                    yield f"data: {formatted}\n\n"
+            else:
+                # Send periodic SSE comment ping every 5s to prevent proxy/GZip buffering
+                yield ": ping\n\n"
             await asyncio.sleep(1)
 
-    return StreamingResponse(generate_logs(), media_type="text/event-stream")
+    return StreamingResponse(
+        generate_logs(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist"))
 if not os.path.exists(frontend_dist):
