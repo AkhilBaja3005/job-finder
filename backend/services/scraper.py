@@ -24,7 +24,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
         job_id_match = re.search(r'/(\d+)(?:\?|$)', url)
         if job_id_match:
             job_id = job_id_match.group(1)
-            reed_key = os.getenv("REED_API_KEY", "8cd9848f-8afd-4376-adf7-f8958c7a89f2")
+            reed_key = os.getenv("REED_API_KEY")
             if reed_key:
                 try:
                     auth_str = f"{reed_key}:"
