@@ -19,6 +19,7 @@ from services.scraper import scrape_job_description
 from services.recruiter_extractor import extract_recruiter
 from utils.ssl_utils import SSL_CONTEXT
 from utils.ttl_cache import TTLCache
+from services.log_queue import LLMClientLogQueue
 
 # ─── System Caps & TTL Cache ─────────────────────────────────────────────
 DISCOVERY_JD_FETCH_CAP = 15       # Top 15 web-scraped jobs get real JD ATS scoring
@@ -608,17 +609,24 @@ async def find_matching_jobs(
     if keywords and keywords.strip():
         # User-provided search role overrides
         queries = [q.strip() for q in keywords.split(",") if q.strip()]
-        yield json.dumps({"type": "log", "message": f"🔎 Using user-preferred search queries: {', '.join(queries)}"}) + "\n"
+        msg = f"🔎 Using user-preferred search queries: {', '.join(queries)}"
+        LLMClientLogQueue.put(msg)
+        yield json.dumps({"type": "log", "message": msg}) + "\n"
     else:
-        yield json.dumps({"type": "log", "message": "🤖 Analyzing resume context to generate optimal search queries..."}) + "\n"
+        msg1 = "🤖 Analyzing resume context to generate optimal search queries..."
+        LLMClientLogQueue.put(msg1)
+        yield json.dumps({"type": "log", "message": msg1}) + "\n"
         queries = generate_search_queries_from_resume(resume_data, custom_api_key)
-        yield json.dumps({"type": "log", "message": f"🔎 Generated search queries: {', '.join(queries)}"}) + "\n"
+        msg2 = f"🔎 Generated search queries: {', '.join(queries)}"
+        LLMClientLogQueue.put(msg2)
+        yield json.dumps({"type": "log", "message": msg2}) + "\n"
 
     raw_jobs = []
     indeed_jobs_for_est = []  # Store Indeed jobs for EST section
 
     async def _fetch_query(query: str):
         yield_msg = f"🌐 Fetching listings from LinkedIn & Reed.co.uk ({timeframe}) for '{query}'..."
+        LLMClientLogQueue.put(yield_msg)
         li_task = asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
         reed_task = asyncio.to_thread(search_reed_jobs, query, location, timeframe)
         ind_task = search_indeed_jobs(query, location, timeframe)
