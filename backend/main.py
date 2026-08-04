@@ -211,10 +211,10 @@ async def daily_match_mailer_loop():
                 
                 # Check if current time has crossed the target send time
                 target_dt = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0)
-                # In local dev mode, trigger immediately on server startup regardless of time
-                if now < target_dt and not _is_local_deployment():
-                    # Not time yet for this user in production
+                # Run catch-up scan on first loop run or if target time is reached
+                if now < target_dt and last_sent_cache.get((user_id, "checked_today")):
                     continue
+                last_sent_cache[(user_id, "checked_today")] = True
                 
                 # Fetch user's master resume data
                 resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")

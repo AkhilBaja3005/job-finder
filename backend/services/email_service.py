@@ -43,9 +43,16 @@ def send_notification_email(
                         "Content-Type": "application/json",
                         "User-Agent": "JobFinderApp/1.0"
                     }
-                    from_addr = os.getenv("EMAIL_FROM", os.getenv("SMTP_USER", "akhilkumarbaja@gmail.com"))
+                    # Brevo works reliably without custom domain if sender is omitted or verified
+                    from_addr = os.getenv("EMAIL_FROM")
+                    sender_dict = {"name": "AI Job Finder"}
+                    if from_addr:
+                        sender_dict["email"] = from_addr
+                    else:
+                        sender_dict["email"] = os.getenv("SMTP_USER", "akhilkumarbaja@gmail.com")
+
                     payload = {
-                        "sender": {"email": from_addr, "name": "AI Job Finder"},
+                        "sender": sender_dict,
                         "to": [{"email": to_email}],
                         "subject": subject,
                         "textContent": text_body
