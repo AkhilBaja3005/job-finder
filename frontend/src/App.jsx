@@ -2415,9 +2415,6 @@ function App() {
                                           setIsDiscoveryView(false);
                                           setDashboardMode('tailor');
                                           window.scrollTo({ top: 0, behavior: 'smooth' });
-                                          setTimeout(() => {
-                                            handleAnalyzeJob(job.url, job.title);
-                                          }, 50);
                                         }}
                                       >
                                         ⚡ Analyze & Scrape
