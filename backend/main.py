@@ -398,8 +398,29 @@ async def lifespan(app: FastAPI):
                     ngrok_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception as e:
                 print(f"[Ngrok Manager ERROR] Failed to start tunnel: {e}")
+    # Startup Playwright Persistent Shared Browser
+    app.state.playwright = None
+    app.state.browser = None
+    try:
+        from playwright.async_api import async_playwright
+        app.state.playwright = await async_playwright().start()
+        app.state.browser = await app.state.playwright.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+        )
+        print("[System Startup] ⚡ Persistent Shared Playwright Browser Launched!")
+    except Exception as pw_startup_err:
+        print(f"[System Startup] Shared Playwright Browser Startup Warning: {pw_startup_err}")
 
     yield
+
+    # Shutdown Playwright Shared Browser
+    if getattr(app.state, "browser", None):
+        try: await app.state.browser.close()
+        except Exception: pass
+    if getattr(app.state, "playwright", None):
+        try: await app.state.playwright.stop()
+        except Exception: pass
 
     # Shutdown
     if ngrok_proc:
@@ -417,14 +438,12 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
-# Initialize FastAPI with the lifespan handler
+# Add GZipMiddleware to compress HTML, CSS, JavaScript, and JSON responses by 70%-80%
+from fastapi.middleware.gzip import GZipMiddleware
 app = FastAPI(title="AI Job Finder Agent API", lifespan=lifespan)
 
-# FIX #5: allow_origins=["*"] combined with allow_credentials=True is invalid per the
-# CORS spec (browsers will reject it even though FastAPI won't error at startup).
-# This API authenticates via a Bearer token header, not cookies, so credentialed
-# CORS requests aren't actually needed. If you later need cookie-based auth,
-# replace allow_origins=["*"] with an explicit list of trusted origins instead.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -2529,7 +2548,8 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                 location=request.location,
                 keywords=request.keywords,
                 timeframe=request.timeframe or "48h",
-                custom_api_key=active_api_key
+                custom_api_key=active_api_key,
+                browser=getattr(http_request.app.state, "browser", None)
             ):
                 # Intercept result events to extract jobs for caching
                 try:

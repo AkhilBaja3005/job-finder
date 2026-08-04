@@ -6,7 +6,7 @@ import re
 import asyncio
 # pyrefly: ignore [missing-import]
 from bs4 import BeautifulSoup
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 from services.gemini_client import generate_content_with_fallback
@@ -590,7 +590,8 @@ async def find_matching_jobs(
     location: str = "Remote",
     keywords: Optional[str] = None,
     timeframe: str = "48h",
-    custom_api_key: Optional[str] = None
+    custom_api_key: Optional[str] = None,
+    browser: Optional[Any] = None
 ):
     """
     Main aggregator pipeline:
@@ -654,17 +655,21 @@ async def find_matching_jobs(
     scored_jobs = []
     if jd_scored_batch:
         yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(jd_scored_batch)} matches ({len(reed_jd_jobs)} Reed API fast-path) to compute accurate ATS scores..."}) + "\n"
-        # pyrefly: ignore [missing-import]
-        from playwright.async_api import async_playwright
         semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            try:
-                results = await asyncio.gather(*[
-                    _score_job_with_real_jd(job, resume_data, browser, semaphore) for job in jd_scored_batch
-                ])
-            finally:
-                await browser.close()
+        if browser is not None:
+            results = await asyncio.gather(*[
+                _score_job_with_real_jd(job, resume_data, browser, semaphore) for job in jd_scored_batch
+            ])
+        else:
+            from playwright.async_api import async_playwright
+            async with async_playwright() as p:
+                own_browser = await p.chromium.launch(headless=True)
+                try:
+                    results = await asyncio.gather(*[
+                        _score_job_with_real_jd(job, resume_data, own_browser, semaphore) for job in jd_scored_batch
+                    ])
+                finally:
+                    await own_browser.close()
         scored_jobs.extend([r for r in results if r is not None])
 
     if title_only_batch:
