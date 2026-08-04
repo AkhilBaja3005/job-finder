@@ -24,6 +24,7 @@ from utils.ttl_cache import TTLCache
 DISCOVERY_JD_FETCH_CAP = 15       # Top 15 web-scraped jobs get real JD ATS scoring
 DISCOVERY_FETCH_CONCURRENCY = 5  # Scaled up to 5 concurrent browser tasks utilizing 3GB combined memory
 _job_search_cache = TTLCache(ttl_seconds=300)  # 5-minute TTL search cache
+_indeed_blocked_circuit_breaker = False        # Flips to True if 1 Indeed request gets Cloudflare blocked
 
 # ─── Pydantic Schemas for Search ──────────────────────────────────────────
 
@@ -273,6 +274,10 @@ def _is_local_deployment() -> bool:
 
 async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: str = "48h") -> List[JobSearchResult]:
     """Scrapes Indeed public job postings from specified timeframe using Playwright browser emulations."""
+    global _indeed_blocked_circuit_breaker
+    if _indeed_blocked_circuit_breaker:
+        print("[Job Searcher] Indeed circuit breaker ACTIVE (Cloudflare block detected previously). Skipping Indeed scraping.")
+        return []
 
     encoded_keyword = urllib.parse.quote(keyword)
     encoded_location = urllib.parse.quote(location)
@@ -357,8 +362,9 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
         cards = soup.select(".job_seen_beacon")
 
         if not cards and (status == 403 or "blocked" in page_title.lower() or "just a moment" in page_title.lower()):
-            print(f"[Job Searcher] Indeed Cloudflare Challenge triggered (status={status}, title={page_title!r}). "
-                  f"LinkedIn, Reed search remains 100% active and operational.")
+            _indeed_blocked_circuit_breaker = True
+            print(f"[Job Searcher] ⛔ Indeed Cloudflare Challenge triggered (status={status}, title={page_title!r}). "
+                  f"Flipping circuit breaker ON to skip remaining Indeed calls. LinkedIn & Reed search remain 100% operational.")
             return results
 
         for card in cards:
