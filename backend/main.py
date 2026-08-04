@@ -2113,7 +2113,7 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
             company_name = "Target Company"
         
         # Force tailoring (Auto Mode ignores suitability warnings)
-        from services.llm_agent import analyze_job_fit
+        from services.llm_agent import analyze_job_fit, review_tailored_resume
         # Call analyze_job_fit deterministically to get updates details
         fit_analysis = await analyze_job_fit(resume_data, job_title, jd_text, master_latex, None, on_log=None)
         
@@ -2123,6 +2123,15 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         
         # Force compiling tailored LaTeX code
         tailored_latex = tailor_latex_code(master_latex, job_title, jd_text, tailored_updates, missing_skills, None, "", on_log=None)
+
+        # Run Two-Phase Reviewer Agent (Structural Integrity + Truthfulness + Quality check)
+        review_res = review_tailored_resume(tailored_latex, resume_data, job_title, jd_text, None, on_log=None)
+        if not review_res.satisfied:
+            print(f"[Auto Tailor] Reviewer agent flagged quality/truthfulness issues: {review_res.feedback}. Running refinement...")
+            tailored_latex = tailor_latex_code(
+                master_latex, job_title, jd_text, tailored_updates, missing_skills, None,
+                f"REVIEWER AGENT FEEDBACK: {review_res.feedback}", on_log=None
+            )
 
         # Page-fit check & automatic mechanical shrink / AI condensation loop
         pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, 1.0, 1.0, master_latex)
