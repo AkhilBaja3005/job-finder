@@ -624,22 +624,17 @@ async def find_matching_jobs(
     raw_jobs = []
     indeed_jobs_for_est = []  # Store Indeed jobs for EST section
 
-    # Limit search query execution to 2 queries at a time to prevent CPU/RAM exhaustion on GCP 1GB VM
-    query_semaphore = asyncio.Semaphore(2)
-
-    async def _fetch_query(query: str):
-        async with query_semaphore:
-            yield_msg = f"🌐 Fetching listings from LinkedIn & Reed.co.uk ({timeframe}) for '{query}'..."
-            LLMClientLogQueue.put(yield_msg)
-            li_task = asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
-            reed_task = asyncio.to_thread(search_reed_jobs, query, location, timeframe)
-            ind_task = search_indeed_jobs(query, location, timeframe)
-            li_jobs, reed_jobs, ind_jobs = await asyncio.gather(li_task, reed_task, ind_task)
-            return yield_msg, li_jobs, reed_jobs, ind_jobs
-
-    query_results = await asyncio.gather(*[_fetch_query(q) for q in queries])
-    for yield_msg, li_jobs, reed_jobs, ind_jobs in query_results:
+    # Execute search queries sequentially (1 query at a time) to guarantee 0% network timeout on cloud containers
+    for query in queries:
+        yield_msg = f"🌐 Fetching listings from LinkedIn & Reed.co.uk ({timeframe}) for '{query}'..."
+        LLMClientLogQueue.put(yield_msg)
         yield json.dumps({"type": "log", "message": yield_msg}) + "\n"
+        
+        li_task = asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
+        reed_task = asyncio.to_thread(search_reed_jobs, query, location, timeframe)
+        ind_task = search_indeed_jobs(query, location, timeframe)
+        
+        li_jobs, reed_jobs, ind_jobs = await asyncio.gather(li_task, reed_task, ind_task)
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(ind_jobs)
