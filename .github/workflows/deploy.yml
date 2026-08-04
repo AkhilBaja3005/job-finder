@@ -29,7 +29,7 @@ jobs:
             sudo docker run -d \
               --name jobfinder-app \
               --restart always \
-              -p 8000:8000 \
+              -p 80:8000 \
               --env-file backend/.env \
               jobfinder
             echo "🚀 Automated Deployment Complete!"
