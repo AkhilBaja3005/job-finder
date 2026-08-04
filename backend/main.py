@@ -402,6 +402,7 @@ async def lifespan(app: FastAPI):
     app.state.playwright = None
     app.state.browser = None
     try:
+        # pyrefly: ignore [missing-import]
         from playwright.async_api import async_playwright
         app.state.playwright = await async_playwright().start()
         app.state.browser = await app.state.playwright.chromium.launch(
@@ -439,6 +440,7 @@ async def lifespan(app: FastAPI):
         pass
 
 # Add GZipMiddleware to compress HTML, CSS, JavaScript, and JSON responses by 70%-80%
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.gzip import GZipMiddleware
 app = FastAPI(title="AI Job Finder Agent API", lifespan=lifespan)
 

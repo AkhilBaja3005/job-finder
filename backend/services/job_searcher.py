@@ -662,28 +662,36 @@ async def find_matching_jobs(
     if jd_scored_batch:
         yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(jd_scored_batch)} matches ({len(reed_jd_jobs)} Reed API fast-path) to compute accurate ATS scores..."}) + "\n"
         semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
-        if browser is not None:
-            results = await asyncio.gather(*[
-                _score_job_with_real_jd(job, resume_data, browser, semaphore) for job in jd_scored_batch
-            ])
-        else:
-            # pyrefly: ignore [missing-import]
-            from playwright.async_api import async_playwright
-            async with async_playwright() as p:
-                own_browser = await p.chromium.launch(headless=True)
-                try:
-                    results = await asyncio.gather(*[
-                        _score_job_with_real_jd(job, resume_data, own_browser, semaphore) for job in jd_scored_batch
-                    ])
-                finally:
-                    await own_browser.close()
-        scored_jobs.extend([r for r in results if r is not None])
+        
+        async def _score_and_stream(job):
+            if browser is not None:
+                res = await _score_job_with_real_jd(job, resume_data, browser, semaphore)
+            else:
+                from playwright.async_api import async_playwright
+                async with async_playwright() as p:
+                    b = await p.chromium.launch(headless=True)
+                    try:
+                        res = await _score_job_with_real_jd(job, resume_data, b, semaphore)
+                    finally:
+                        await b.close()
+            return res
+
+        # Run scoring concurrently and yield jobs progressively as each completes
+        tasks = [asyncio.create_task(_score_and_stream(job)) for job in jd_scored_batch]
+        for completed_task in asyncio.as_completed(tasks):
+            r = await completed_task
+            if r is not None and r["score"] >= 55:
+                scored_jobs.append(r)
+                # Yield partial progressive results stream so frontend renders card instantly
+                yield json.dumps({"type": "partial_result", "job": r}) + "\n"
 
     if title_only_batch:
         yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + "\n"
-        scored_jobs.extend([_score_job_with_title_heuristic(job, resume_data) for job in title_only_batch])
-
-    scored_jobs = [j for j in scored_jobs if j["score"] >= 55]
+        for job in title_only_batch:
+            r = _score_job_with_title_heuristic(job, resume_data)
+            if r["score"] >= 55:
+                scored_jobs.append(r)
+                yield json.dumps({"type": "partial_result", "job": r}) + "\n"
 
     # Sort accurate (JD-scored) jobs before estimated (title-only) ones, since
     # an estimated job's raw score isn't directly comparable to a real

@@ -954,6 +954,13 @@ function App() {
           setStatusMessage(event.message);
           setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
           setTimeout(scrollConsoleToBottom, 30);
+        } else if (event.type === 'partial_result' && event.job) {
+          setDiscoveredJobs((prev) => {
+            if (prev.some((j) => j.url === event.job.url)) return prev;
+            const updated = [...prev, event.job].sort((a, b) => (a.estimated === b.estimated ? b.score - a.score : a.estimated ? 1 : -1));
+            try { sessionStorage.setItem('discovered_jobs', JSON.stringify(updated)); } catch (e) {}
+            return updated;
+          });
         } else if (event.type === 'result') {
           const jobsList = event.jobs || [];
           setDiscoveredJobs(jobsList);
@@ -2406,10 +2413,6 @@ function App() {
                                     </div>
                                     <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexDirection: compactMode ? 'column' : 'row' }}>
                                       <button
-                                        className="btn btn-secondary"
-                                        style={{ padding: '8px 12px', fontSize: '0.76rem', flex: 1 }}
-                                        onClick={(e) => { e.stopPropagation(); window.open(job.url, '_blank'); }}
-                                        aria-label="View job post on external site"
                                       >
                                         🔗 View Post
                                       </button>
