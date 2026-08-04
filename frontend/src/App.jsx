@@ -2116,13 +2116,13 @@ function App() {
                 </div>
               )
             ) : isDiscoveryView && discovering ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: '700' }}>
                   <svg style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" style={{ opacity: 0.25 }} />
                     <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  <span>Searching Platform Feeds…</span>
+                  <span>Searching Platform Feeds… ({discoveredJobs.length} matches found so far)</span>
                 </div>
                 <div className="log-terminal">
                   <div className="log-terminal-header">
@@ -2131,7 +2131,7 @@ function App() {
                       <div className="log-terminal-dot" style={{ background: '#FFBD2E' }} />
                       <div className="log-terminal-dot" style={{ background: '#28CA41' }} />
                     </div>
-                    📋 SEARCH PIPELINE LOGS
+                    📋 LIVE SEARCH PIPELINE LOGS
                   </div>
                   <div
                     className="log-terminal-body"
@@ -2141,18 +2141,18 @@ function App() {
                       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
                       consoleUserScrolled.current = !atBottom;
                     }}
-                    style={{ maxHeight: '200px' }}
+                    style={{ maxHeight: '160px' }}
                   >
                     {statusLogs.length === 0 ? (
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', padding: '12px', fontStyle: 'italic' }}>
-                        Initializing...
+                        Initializing search...
                       </div>
                     ) : (
                       statusLogs.map((entry, index) => {
                         const msg = typeof entry === 'string' ? entry : entry.message;
                         const ts = typeof entry === 'object' ? entry.ts : '';
                         let cls = 'log-entry-msg log-default';
-                        if (msg.includes('🏁') || msg.includes('✅')) cls = 'log-entry-msg log-ok';
+                        if (msg.includes('🏁') || msg.includes('✅') || msg.includes('✓')) cls = 'log-entry-msg log-ok';
                         else if (msg.includes('🔎') || msg.includes('🌐') || msg.includes('🤖')) cls = 'log-entry-msg log-ai';
                         else if (msg.includes('❌')) cls = 'log-entry-msg log-warn';
                         return (
@@ -2166,6 +2166,32 @@ function App() {
                     <span className="log-cursor" />
                   </div>
                 </div>
+
+                {/* Render live streaming job cards immediately as they arrive */}
+                {discoveredJobs.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#10B981', fontWeight: 700 }}>
+                      ⚡ Live Matches Arriving ({discoveredJobs.length}):
+                    </div>
+                    {discoveredJobs.map((job, idx) => {
+                      const score = job.score || 0;
+                      const scoreColor = score >= 80 ? '#10B981' : score >= 60 ? '#38BDF8' : '#E57373';
+                      return (
+                        <div key={idx} className="card job-card" style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(16,185,129,0.3)', animation: 'fadeIn 0.3s ease-out' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#fff' }}>{job.title}</div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{job.company} • {job.location}</div>
+                            </div>
+                            <div style={{ padding: '4px 10px', borderRadius: '20px', background: `${scoreColor}22`, color: scoreColor, fontWeight: 800, fontSize: '0.85rem' }}>
+                              {score}% Match
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : isDiscoveryView ? (
               (() => {
