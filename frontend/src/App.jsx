@@ -1439,11 +1439,21 @@ function App() {
 
             {/* API Key section */}
             <div>
-              <div className="section-label">LLM API Key</div>
+              <div className="section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>LLM API Key</span>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: '0.73rem', color: '#38BDF8', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '3px' }}
+                >
+                  🔑 Get Free Gemini Key from Google ↗
+                </a>
+              </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
                   type="password"
-                  placeholder="Gemini (AIza...), Groq (gsk_...), or Claude (sk-ant-...)"
+                  placeholder="Paste Gemini (AIza...), Groq (gsk_...), or Claude (sk-ant-...) key"
                   value={geminiApiKey}
                   onChange={handleApiKeyChange}
                   style={{ fontFamily: 'var(--font-mono)', flexGrow: 1, marginBottom: 0, fontSize: '0.84rem' }}
@@ -1453,7 +1463,7 @@ function App() {
                 </button>
               </div>
               <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-                Supports Gemini, Groq, and Anthropic Claude keys. Stored securely in the cloud.
+                Supports Gemini, Groq, and Anthropic Claude keys. Stored securely in your session/cloud account.
               </div>
             </div>
 
@@ -1565,7 +1575,9 @@ function App() {
                       />
                     </div>
                     <div>
-                      <div className="section-label" style={{ fontSize: '0.74rem', marginBottom: '4px' }}>Daily Send Time ({cronTime})</div>
+                      <div className="section-label" style={{ fontSize: '0.74rem', marginBottom: '4px' }}>
+                        Daily Send Time ({cronTime}) &bull; <span style={{ color: '#38BDF8' }}>{Intl.DateTimeFormat().resolvedOptions().timeZone} ({new Date().toLocaleTimeString('en-us', { timeZoneName: 'short' }).split(' ')[2] || 'Local'})</span>
+                      </div>
                       <input
                         type="time"
                         value={cronTime}
