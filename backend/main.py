@@ -392,17 +392,30 @@ async def lifespan(app: FastAPI):
         domain = os.getenv("NGROK_DOMAIN", "")
         if "ngrok" in backend_url:
             try:
-                ngrok_cmd = shutil.which("ngrok") or shutil.which("npx")
-                if ngrok_cmd:
-                    if authtoken:
-                        try:
-                            subprocess.run([ngrok_cmd, "config", "add-authtoken", authtoken], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        except Exception:
-                            pass
-                    domain_arg = f"--domain={domain}" if domain else f"--url={backend_url}"
-                    cmd = [ngrok_cmd, "http", "8000", domain_arg] if "ngrok" in ngrok_cmd else [ngrok_cmd, "ngrok", "http", "8000", domain_arg]
-                    print(f"[Ngrok Manager] Launching static tunnel: {backend_url}...")
-                    ngrok_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                # First kill any lingering ngrok processes on local machine
+                try:
+                    subprocess.run(["pkill", "-f", "ngrok"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    time.sleep(0.5)
+                except Exception:
+                    pass
+
+                ngrok_bin = shutil.which("ngrok")
+                npx_bin = shutil.which("npx")
+                
+                if authtoken:
+                    try:
+                        auth_cmd = [ngrok_bin, "config", "add-authtoken", authtoken] if ngrok_bin else [npx_bin, "-y", "ngrok", "config", "add-authtoken", authtoken]
+                        subprocess.run(auth_cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    except Exception:
+                        pass
+                
+                target_url = domain or backend_url
+                if target_url and not target_url.startswith("http"):
+                    target_url = f"https://{target_url}"
+                
+                cmd = [ngrok_bin, "http", "8000", f"--url={target_url}"] if ngrok_bin else [npx_bin, "-y", "ngrok", "http", "8000", f"--url={target_url}"]
+                print(f"[Ngrok Manager] Launching static tunnel: {target_url}...")
+                ngrok_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception as e:
                 print(f"[Ngrok Manager ERROR] Failed to start tunnel: {e}")
     # Startup Playwright Persistent Shared Browser
