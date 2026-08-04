@@ -84,7 +84,7 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
     tpr = tpr_map.get(timeframe, "r172800")
     url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={encoded_keyword}&location={encoded_location}&f_TPR={tpr}&start=0"
     
-    print(f"[Job Searcher] Fetching LinkedIn: {url}")
+    log_ist(f"[Job Searcher] Fetching LinkedIn: {url}")
     results = []
     
     try:
@@ -165,7 +165,7 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
 
     url = f"https://www.reed.co.uk/api/1.0/search?keywords={encoded_keyword}&locationName={encoded_location}&resultsToTake=100"
     
-    print(f"[Job Searcher] Fetching Reed API ({timeframe}): {url}")
+    log_ist(f"[Job Searcher] Fetching Reed API ({timeframe}): {url}")
     raw_candidates = []
     
     import base64
@@ -277,7 +277,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
     """Scrapes Indeed public job postings from specified timeframe using Playwright browser emulations."""
     global _indeed_blocked_circuit_breaker
     if _indeed_blocked_circuit_breaker:
-        print("[Job Searcher] Indeed circuit breaker ACTIVE (Cloudflare block detected previously). Skipping Indeed scraping.")
+        log_ist("[Job Searcher] Indeed circuit breaker ACTIVE (Cloudflare block detected previously). Skipping Indeed scraping.")
         return []
 
     encoded_keyword = urllib.parse.quote(keyword)
@@ -293,7 +293,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
     fromage = fromage_map.get(timeframe, "2")
     url = f"https://www.indeed.com/jobs?q={encoded_keyword}&l={encoded_location}&fromage={fromage}"
     
-    print(f"[Job Searcher] Fetching Indeed via Playwright: {url}")
+    log_ist(f"[Job Searcher] Fetching Indeed via Playwright: {url}")
     results = []
 
     # pyrefly: ignore [missing-import]
