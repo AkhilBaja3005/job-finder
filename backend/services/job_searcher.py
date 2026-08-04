@@ -615,7 +615,11 @@ async def find_matching_jobs(
         msg1 = "🤖 Analyzing resume context to generate optimal search queries..."
         log_ist(msg1)
         yield json.dumps({"type": "log", "message": msg1}) + "\n"
-        queries = generate_search_queries_from_resume(resume_data, custom_api_key)
+        
+        def _on_llm_log(log_json_str):
+            pass
+            
+        queries = await asyncio.to_thread(generate_search_queries_from_resume, resume_data, custom_api_key)
         msg2 = f"🔎 Generated search queries: {', '.join(queries)}"
         log_ist(msg2)
         yield json.dumps({"type": "log", "message": msg2}) + "\n"
