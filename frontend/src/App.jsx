@@ -115,13 +115,20 @@ function App() {
   const [toast, setToast] = useState(null); // { message, type: 'success'|'error'|'info' }
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
 
-  const [discoveredJobs, setDiscoveredJobs] = useState([]);
+  const [discoveredJobs, setDiscoveredJobs] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('discovered_jobs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [discovering, setDiscovering] = useState(false);
-  const [searchLocation, setSearchLocation] = useState('Remote');
-  const [searchKeywords, setSearchKeywords] = useState('');
-  const [searchTimeframe, setSearchTimeframe] = useState('48h'); // '24h' | '48h' | '1w' | '1m'
-  const [isDiscoveryView, setIsDiscoveryView] = useState(false);
-  const [dashboardMode, setDashboardMode] = useState('tailor'); // 'tailor' | 'discover' | 'history'
+  const [searchLocation, setSearchLocation] = useState(() => sessionStorage.getItem('search_location') || 'Remote');
+  const [searchKeywords, setSearchKeywords] = useState(() => sessionStorage.getItem('search_keywords') || '');
+  const [searchTimeframe, setSearchTimeframe] = useState(() => sessionStorage.getItem('search_timeframe') || '48h'); // '24h' | '48h' | '1w' | '1m'
+  const [isDiscoveryView, setIsDiscoveryView] = useState(() => sessionStorage.getItem('is_discovery_view') === 'true');
+  const [dashboardMode, setDashboardMode] = useState(() => sessionStorage.getItem('dashboard_mode') || 'tailor'); // 'tailor' | 'discover' | 'history'
   const [searchSortMode, setSearchSortMode] = useState('overall'); // 'overall' | 'role_fit' | 'time'
   const [searchPage, setSearchPage] = useState(1);
 
@@ -246,6 +253,46 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, resumeData, jobUrl, jobTitle, jobDescription]);
+
+  // Save active dashboardMode to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('dashboard_mode', dashboardMode);
+  }, [dashboardMode]);
+
+  // Auto-check server TTL cache on mount if discoveredJobs is empty
+  useEffect(() => {
+    if (discoveredJobs.length === 0 && resumeData) {
+      const checkServerCache = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/search_matching_jobs`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${getAuthHeader()}`
+            },
+            body: JSON.stringify({
+              location: searchLocation,
+              keywords: searchKeywords || null,
+              timeframe: searchTimeframe
+            })
+          });
+          if (res.ok) {
+            for await (const event of streamNdjson(res)) {
+              if (event.type === 'result' && event.jobs?.length > 0) {
+                setDiscoveredJobs(event.jobs);
+                setIsDiscoveryView(true);
+                sessionStorage.setItem('discovered_jobs', JSON.stringify(event.jobs));
+                sessionStorage.setItem('is_discovery_view', 'true');
+              }
+            }
+          }
+        } catch {
+          // Silent cache check fallback
+        }
+      };
+      checkServerCache();
+    }
+  }, [resumeData]);
 
   // Optimization #1: Handle window resize for compact mode
   useEffect(() => {
@@ -908,9 +955,19 @@ function App() {
           setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
           setTimeout(scrollConsoleToBottom, 30);
         } else if (event.type === 'result') {
-          setDiscoveredJobs(event.jobs || []);
-          setStatusMessage(`Found ${event.jobs?.length || 0} matching jobs.`);
-          // showToast(`Discovered ${event.jobs?.length || 0} matching jobs!`, 'success');
+          const jobsList = event.jobs || [];
+          setDiscoveredJobs(jobsList);
+          try {
+            sessionStorage.setItem('discovered_jobs', JSON.stringify(jobsList));
+            sessionStorage.setItem('search_location', searchLocation);
+            sessionStorage.setItem('search_keywords', searchKeywords);
+            sessionStorage.setItem('search_timeframe', searchTimeframe);
+            sessionStorage.setItem('is_discovery_view', 'true');
+            sessionStorage.setItem('dashboard_mode', 'discover');
+          } catch (e) {
+            console.error('Failed to save discovered jobs to sessionStorage:', e);
+          }
+          setStatusMessage(`Found ${jobsList.length} matching jobs.`);
         }
       }
     } catch (err) {
