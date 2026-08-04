@@ -264,12 +264,18 @@ async def scrape_job_description(url: str, browser=None) -> dict:
             "html": ""
         }
     finally:
-        await page.close()
-        await context.close()
+        if page is not None:
+            try: await page.close()
+            except Exception: pass
+        if context is not None:
+            try: await context.close()
+            except Exception: pass
         if own_browser is not None:
-            await own_browser.close()
+            try: await own_browser.close()
+            except Exception: pass
         if own_playwright is not None:
-            await own_playwright.stop()
+            try: await own_playwright.stop()
+            except Exception: pass
         
         # Explicitly invoke garbage collection to clear unneeded browser context resources
         import gc
