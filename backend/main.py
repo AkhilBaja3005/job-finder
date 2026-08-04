@@ -152,15 +152,31 @@ async def auto_clean_expired_files_loop():
 from services.email_service import send_notification_email
 from datetime import datetime as dt, time as dtime, timedelta, timezone
 
+async def hf_keep_alive_loop():
+    """
+    Self-ping background task that runs every 4 hours.
+    Simulates internal HTTP traffic to keep Hugging Face Spaces awake
+    and prevent the 48-hour inactivity sleep timer from triggering.
+    """
+    await asyncio.sleep(60) # Wait 1 minute after server startup
+    while True:
+        try:
+            target_url = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
+            if not target_url.endswith("/"):
+                target_url += "/"
+            import urllib.request
+            from utils.ssl_utils import SSL_CONTEXT
+            req = urllib.request.Request(target_url, headers={"User-Agent": "HFKeepAlive/1.0", "ngrok-skip-browser-warning": "true"})
+            with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=10) as resp:
+                print(f"[Keep Alive] Successfully pinged {target_url} (status={resp.status}) - Space active!")
+        except Exception as e:
+            print(f"[Keep Alive Warning] Self-ping attempt: {e}")
+        await asyncio.sleep(14400) # Ping every 4 hours (14,400 seconds)
+
 async def daily_match_mailer_loop():
     # Startup settle logic:
-    # Run immediately (5s delay) if running locally, otherwise wait 1 hour in production.
-    if _is_local_deployment():
-        print("[Daily Mailer] Local deployment detected. Running first cron loop in 5 seconds...")
-        await asyncio.sleep(5)
-    else:
-        print("[Daily Mailer] Production deployment detected. Waiting 1 hour before first cron check loop...")
-        await asyncio.sleep(3600)
+    print("[Daily Mailer] Running first cron check loop in 10 seconds...")
+    await asyncio.sleep(10)
     
     # Store last sent date for users to avoid duplicate notifications on same day
     # format: { (user_id, date_string): True }
@@ -383,6 +399,8 @@ async def lifespan(app: FastAPI):
     clean_task = asyncio.create_task(auto_clean_expired_files_loop())
     # Start daily match mailer loop
     mailer_task = asyncio.create_task(daily_match_mailer_loop())
+    # Start Hugging Face anti-sleep self-ping loop
+    keepalive_task = asyncio.create_task(hf_keep_alive_loop())
 
     # Check if local deployment and BACKEND_URL contains ngrok
     ngrok_proc = None
