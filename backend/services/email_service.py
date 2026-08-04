@@ -19,59 +19,73 @@ def send_notification_email(
     Tries Cloudflare Email Sending REST API first.
     If credentials are not verified or fail, it automatically falls back to Gmail SMTP.
     """
-    # 1. Try Resend REST API - Primary Provider (Delivers in <2s!)
-    resend_api_key = os.getenv("RESEND_API_KEY")
-    if resend_api_key:
-        try:
-            url = "https://api.resend.com/emails"
-            headers = {
-                "Authorization": f"Bearer {resend_api_key}",
-                "User-Agent": "JobFinderApp/1.0",
-                "Content-Type": "application/json"
-            }
-            from_addr = os.getenv("EMAIL_FROM", "onboarding@resend.dev")
-            payload = {
-                "from": from_addr,
-                "to": [to_email],
-                "subject": subject,
-                "text": text_body
-            }
-            if html_body:
-                payload["html"] = html_body
-            resp = requests.post(url, headers=headers, json=payload, timeout=15)
-            if resp.status_code in (200, 201):
-                print("[Mailer] Sent successfully via Resend REST API.")
-                return True
-            print(f"[Mailer] Resend API failed with status {resp.status_code}: {resp.text}. Trying backup...")
-        except Exception as e:
-            print(f"[Mailer] Resend API exception: {e}. Trying backup...")
+    # Smart Routing:
+    # 1. Brevo allows sending 300 emails/day to ANY recipient email (perfect for all users!)
+    # 2. Resend delivers in <2s for the account owner email (akhilkumarbaja@gmail.com)
+    owner_email = os.getenv("SMTP_USER", "akhilkumarbaja@gmail.com").lower()
+    is_owner = to_email.lower() == owner_email
 
-    # 2. Backup 1: Brevo REST API
-    brevo_api_key = os.getenv("BREVO_API_KEY")
-    if brevo_api_key:
-        try:
-            url = "https://api.brevo.com/v3/smtp/email"
-            headers = {
-                "api-key": brevo_api_key,
-                "Content-Type": "application/json",
-                "User-Agent": "JobFinderApp/1.0"
-            }
-            from_addr = os.getenv("EMAIL_FROM", os.getenv("SMTP_USER", "akhilkumarbaja@gmail.com"))
-            payload = {
-                "sender": {"email": from_addr, "name": "AI Job Finder"},
-                "to": [{"email": to_email}],
-                "subject": subject,
-                "textContent": text_body
-            }
-            if html_body:
-                payload["htmlContent"] = html_body
-            resp = requests.post(url, headers=headers, json=payload, timeout=15)
-            if resp.status_code in (200, 201):
-                print("[Mailer] Sent successfully via Brevo REST API.")
-                return True
-            print(f"[Mailer] Brevo API failed with status {resp.status_code}: {resp.text}. Trying backup...")
-        except Exception as e:
-            print(f"[Mailer] Brevo API exception: {e}. Trying backup...")
+    # Try Brevo first for general users, or as secondary fallback
+    providers = []
+    if is_owner:
+        providers = ["resend", "brevo", "plunk"]
+    else:
+        providers = ["brevo", "resend", "plunk"]
+
+    for provider in providers:
+        if provider == "brevo":
+            brevo_api_key = os.getenv("BREVO_API_KEY")
+            if brevo_api_key:
+                try:
+                    url = "https://api.brevo.com/v3/smtp/email"
+                    headers = {
+                        "api-key": brevo_api_key,
+                        "Content-Type": "application/json",
+                        "User-Agent": "JobFinderApp/1.0"
+                    }
+                    from_addr = os.getenv("EMAIL_FROM", os.getenv("SMTP_USER", "akhilkumarbaja@gmail.com"))
+                    payload = {
+                        "sender": {"email": from_addr, "name": "AI Job Finder"},
+                        "to": [{"email": to_email}],
+                        "subject": subject,
+                        "textContent": text_body
+                    }
+                    if html_body:
+                        payload["htmlContent"] = html_body
+                    resp = requests.post(url, headers=headers, json=payload, timeout=15)
+                    if resp.status_code in (200, 201):
+                        print(f"[Mailer] Sent successfully to {to_email} via Brevo REST API.")
+                        return True
+                    print(f"[Mailer] Brevo API failed with status {resp.status_code}: {resp.text}. Trying next fallback...")
+                except Exception as e:
+                    print(f"[Mailer] Brevo API exception: {e}. Trying next fallback...")
+
+        elif provider == "resend":
+            resend_api_key = os.getenv("RESEND_API_KEY")
+            if resend_api_key:
+                try:
+                    url = "https://api.resend.com/emails"
+                    headers = {
+                        "Authorization": f"Bearer {resend_api_key}",
+                        "User-Agent": "JobFinderApp/1.0",
+                        "Content-Type": "application/json"
+                    }
+                    from_addr = os.getenv("EMAIL_FROM", "onboarding@resend.dev")
+                    payload = {
+                        "from": from_addr,
+                        "to": [to_email],
+                        "subject": subject,
+                        "text": text_body
+                    }
+                    if html_body:
+                        payload["html"] = html_body
+                    resp = requests.post(url, headers=headers, json=payload, timeout=15)
+                    if resp.status_code in (200, 201):
+                        print(f"[Mailer] Sent successfully to {to_email} via Resend REST API.")
+                        return True
+                    print(f"[Mailer] Resend API failed with status {resp.status_code}: {resp.text}. Trying next fallback...")
+                except Exception as e:
+                    print(f"[Mailer] Resend API exception: {e}. Trying next fallback...")
 
     # 3. Backup 2: Plunk REST API (https://github.com/useplunk/plunk)
     plunk_api_key = os.getenv("PLUNK_API_KEY")
