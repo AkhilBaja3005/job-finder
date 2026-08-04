@@ -23,7 +23,7 @@ from utils.ttl_cache import TTLCache
 # ─── System Caps & TTL Cache ─────────────────────────────────────────────
 DISCOVERY_JD_FETCH_CAP = 15       # Top 15 web-scraped jobs get real JD ATS scoring
 DISCOVERY_FETCH_CONCURRENCY = 5  # Scaled up to 5 concurrent browser tasks utilizing 3GB combined memory
-_job_search_cache = TTLCache(default_ttl=300)  # 5-minute TTL search cache
+_job_search_cache = TTLCache(ttl_seconds=300)  # 5-minute TTL search cache
 
 # ─── Pydantic Schemas for Search ──────────────────────────────────────────
 
