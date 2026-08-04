@@ -22,16 +22,16 @@ jobs:
           key: ${{ secrets.GCP_VM_SSH_KEY }}
           script: |
             cd ~/job-finder
-            git fetch origin
-            git checkout feature/gcp-docker-ci || git checkout main
-            git pull
-            sudo docker build -t jobfinder .
-            sudo docker stop jobfinder-app || true
-            sudo docker rm jobfinder-app || true
-            sudo docker run -d \
+            git fetch origin main
+            git reset --hard origin/main
+            docker build -t jobfinder .
+            docker stop jobfinder-app || true
+            docker rm jobfinder-app || true
+            docker run -d \
               --name jobfinder-app \
               --restart always \
               -p 80:8000 \
+              -p 8000:8000 \
               --env-file backend/.env \
               jobfinder
             echo "🚀 Automated Deployment Complete!"
