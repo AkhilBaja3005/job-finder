@@ -59,9 +59,61 @@ def send_notification_email(
                 return True
             print(f"[Mailer] Cloudflare API failed with status {resp.status_code}: {resp.text}")
         except Exception as e:
-            print(f"[Mailer] Cloudflare API exception: {e}. Falling back to SMTP.")
+            print(f"[Mailer] Cloudflare API exception: {e}. Falling back to next provider.")
 
-    # 2. SMTP Fallback (Gmail App Password)
+    # 2. Try Resend REST API (https://resend.com) - HTTPS REST API, works on Hugging Face Spaces!
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    if resend_api_key:
+        try:
+            url = "https://api.resend.com/emails"
+            headers = {
+                "Authorization": f"Bearer {resend_api_key}",
+                "Content-Type": "application/json"
+            }
+            from_addr = os.getenv("EMAIL_FROM", "onboarding@resend.dev")
+            payload = {
+                "from": from_addr,
+                "to": [to_email],
+                "subject": subject,
+                "text": text_body
+            }
+            if html_body:
+                payload["html"] = html_body
+            resp = requests.post(url, headers=headers, json=payload, timeout=15)
+            if resp.status_code in (200, 201):
+                print("[Mailer] Sent successfully via Resend REST API.")
+                return True
+            print(f"[Mailer] Resend API failed with status {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"[Mailer] Resend API exception: {e}")
+
+    # 3. Try Brevo (Sendinblue) REST API - HTTPS REST API, works on Hugging Face Spaces!
+    brevo_api_key = os.getenv("BREVO_API_KEY")
+    if brevo_api_key:
+        try:
+            url = "https://api.brevo.com/v3/smtp/email"
+            headers = {
+                "api-key": brevo_api_key,
+                "Content-Type": "application/json"
+            }
+            from_addr = os.getenv("EMAIL_FROM", os.getenv("SMTP_USER", "noreply@jobfinder.app"))
+            payload = {
+                "sender": {"email": from_addr, "name": "Job Finder"},
+                "to": [{"email": to_email}],
+                "subject": subject,
+                "textContent": text_body
+            }
+            if html_body:
+                payload["htmlContent"] = html_body
+            resp = requests.post(url, headers=headers, json=payload, timeout=15)
+            if resp.status_code in (200, 201):
+                print("[Mailer] Sent successfully via Brevo REST API.")
+                return True
+            print(f"[Mailer] Brevo API failed with status {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"[Mailer] Brevo API exception: {e}")
+
+    # 4. Standard SMTP Fallback (Gmail App Password)
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER")
