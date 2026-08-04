@@ -273,9 +273,6 @@ def _is_local_deployment() -> bool:
 
 async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: str = "48h") -> List[JobSearchResult]:
     """Scrapes Indeed public job postings from specified timeframe using Playwright browser emulations."""
-    if not _is_local_deployment():
-        print("[Job Searcher] Non-local/cloud deployment detected. Skipping Indeed scraping (cloud IP ranges blocked by Indeed).")
-        return []
 
     encoded_keyword = urllib.parse.quote(keyword)
     encoded_location = urllib.parse.quote(location)
