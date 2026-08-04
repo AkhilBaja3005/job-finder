@@ -886,21 +886,64 @@ function App() {
 
   const handleSearchJobs = async () => {
     if (!resumeData) {
-      // showToast("⚠️ Please upload a resume first to generate search queries.", "error");
       return;
     }
     setDiscovering(true);
     setIsDiscoveryView(true);
     setDiscoveredJobs([]);
-    setStatusMessage(`🔎 Scanning LinkedIn and Indeed for matching jobs posted in the last ${searchTimeframe === '24h' ? '24 hours' : searchTimeframe === '48h' ? '48 hours' : searchTimeframe === '1w' ? '1 week' : '1 month'}...`);
+
+    const initMsg = `🔎 Scanning LinkedIn and Reed for matching jobs posted in the last ${searchTimeframe === '24h' ? '24 hours' : searchTimeframe === '48h' ? '48 hours' : searchTimeframe === '1w' ? '1 week' : '1 month'}...`;
+    setStatusMessage(initMsg);
+    setStatusLogs([{ message: initMsg, ts: nowTs() }]);
+
+    // ── SSE log stream: connect to /user/logs/stream to pipe all backend logs
+    // into the pipeline log box in real time, independently of the main search fetch.
+    let logEventSource = null;
+    try {
+      const sseUrl = new URL(`${API_BASE}/user/logs/stream`);
+      logEventSource = new EventSource(sseUrl.toString());
+      // NOTE: EventSource doesn't support custom headers, so we send auth as query param
+      // Recreate with token query param approach via fetch-based SSE reader instead
+      logEventSource.close();
+      logEventSource = null;
+    } catch (e) { /* ignore */ }
+
+    // Use fetch-based SSE reader (supports Authorization header)
+    let sseAbort = new AbortController();
+    const sseHeaders = { 'Authorization': `Bearer ${getAuthHeader()}`, 'ngrok-skip-browser-warning': 'true' };
+    (async () => {
+      try {
+        const sseRes = await fetch(`${API_BASE}/user/logs/stream`, { headers: sseHeaders, signal: sseAbort.signal });
+        if (!sseRes.ok) return;
+        const sseReader = sseRes.body.getReader();
+        const sseDec = new TextDecoder();
+        let sseBuf = '';
+        while (true) {
+          const { value, done } = await sseReader.read();
+          if (done) break;
+          sseBuf += sseDec.decode(value, { stream: true });
+          const lines = sseBuf.split('\n');
+          sseBuf = lines.pop();
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const msg = line.slice(6).trim();
+              if (!msg || msg.startsWith('🟢')) continue;
+              setStatusMessage(msg);
+              setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
+              setTimeout(scrollConsoleToBottom, 30);
+            }
+          }
+        }
+      } catch (e) {
+        // SSE closed normally (aborted) — ignore
+      }
+    })();
+
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (geminiApiKey) headers['X-Gemini-API-Key'] = geminiApiKey;
       headers['Authorization'] = `Bearer ${getAuthHeader()}`;
 
-      const initMsg = `🔎 Scanning LinkedIn and Reed for matching jobs posted in the last ${searchTimeframe === '24h' ? '24 hours' : searchTimeframe === '48h' ? '48 hours' : searchTimeframe === '1w' ? '1 week' : '1 month'}...`;
-      setStatusMessage(initMsg);
-      setStatusLogs([{ message: initMsg, ts: nowTs() }]);
       const response = await fetch(`${API_BASE}/search_matching_jobs`, {
         method: 'POST',
         headers: headers,
@@ -917,11 +960,7 @@ function App() {
       }
 
       for await (const event of streamNdjson(response)) {
-        if (event.type === 'log') {
-          setStatusMessage(event.message);
-          setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
-          setTimeout(scrollConsoleToBottom, 30);
-        } else if (event.type === 'partial_result' && event.job) {
+        if (event.type === 'partial_result' && event.job) {
           setDiscoveredJobs((prev) => {
             if (prev.some((j) => j.url === event.job.url)) return prev;
             const updated = [...prev, event.job].sort((a, b) => (a.estimated === b.estimated ? b.score - a.score : a.estimated ? 1 : -1));
@@ -947,11 +986,13 @@ function App() {
     } catch (err) {
       setStatusMessage(`Discovery failed: ${err.message}`);
       setStatusLogs((prev) => [...prev, { message: `❌ Discovery failed: ${err.message}`, ts: nowTs() }]);
-      // showToast(`❌ ${err.message}`, 'error');
     } finally {
+      // Close the SSE log stream
+      sseAbort.abort();
       setDiscovering(false);
     }
   };
+
 
   const sortedAndPaginatedJobs = useMemo(() => {
     // 1. Sort copy of jobs array. Accurate (JD-scored) jobs always sort
