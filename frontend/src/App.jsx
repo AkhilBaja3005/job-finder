@@ -2404,24 +2404,17 @@ function App() {
                                     </div>
                                     <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexDirection: compactMode ? 'column' : 'row' }}>
                                       <button
-                                      >
-                                        🔗 View Post
-                                      </button>
-                                      <button
-                                        className="btn"
-                                        style={{ padding: '8px 12px', fontSize: '0.76rem', flex: 1, fontWeight: 700 }}
+                                        className="btn btn-primary"
+                                        style={{ padding: '8px 12px', fontSize: '0.76rem', flex: 1, background: 'linear-gradient(135deg, #0284C7 0%, #2563EB 100%)', fontWeight: 700, border: 'none', color: '#fff', cursor: 'pointer' }}
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setJobUrl(job.url);
-                                          setJobTitle(job.title);
-                                          setCompany(job.company);
-                                          setJobDescription('');
-                                          setAnalysisResult(null);
-                                          setTailoredResumeData(null);
-                                          setStatusLogs([]);
+                                          setJobUrl(job.url || '');
+                                          setJobTitle(job.title || '');
+                                          setCompany(job.company || '');
+                                          setJobDescription(job.raw_text || job.description || '');
                                           setIsDiscoveryView(false);
                                           setDashboardMode('tailor');
-                                          // Trigger fit analysis first to populate JD and show ATS score panel
+                                          window.scrollTo({ top: 0, behavior: 'smooth' });
                                           setTimeout(() => {
                                             handleAnalyzeJob(job.url, job.title);
                                           }, 50);
