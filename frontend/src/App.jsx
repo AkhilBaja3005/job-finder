@@ -2117,7 +2117,7 @@ function App() {
                   </div>
                 </div>
               )
-            ) : isDiscoveryView && discovering ? (
+            ) : discovering ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: '700' }}>
                   <svg style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
