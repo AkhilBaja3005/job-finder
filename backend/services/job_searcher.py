@@ -158,7 +158,7 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
     url = f"https://www.reed.co.uk/api/1.0/search?keywords={encoded_keyword}&locationName={encoded_location}&resultsToTake=100"
     
     print(f"[Job Searcher] Fetching Reed API ({timeframe}): {url}")
-    results = []
+    raw_candidates = []
     
     import base64
     auth_str = f"{REED_API_KEY}:"
@@ -203,29 +203,7 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
                     except Exception:
                         pass
 
-                # Pre-screen Reed job description directly via Details API to eliminate course fee/guarantee spam BEFORE adding to results
-                if job_id and job_id.isdigit():
-                    try:
-                        detail_req = urllib.request.Request(
-                            f"https://www.reed.co.uk/api/1.0/jobs/{job_id}",
-                            headers=headers
-                        )
-                        with urllib.request.urlopen(detail_req, context=SSL_CONTEXT, timeout=3) as detail_resp:
-                            detail_data = json.loads(detail_resp.read().decode("utf-8"))
-                            jd_raw = (detail_data.get("jobDescription", "") or "").lower()
-                            
-                            jd_spam_patterns = [
-                                "course cost", "course fee", "fees apply", "traineeship", "training course",
-                                "refund you 100%", "fees of £", "fee of £", "training cost", "payable by monthly",
-                                "per month for the course", "get your money back", "job guaranteed", "guaranteed job"
-                            ]
-                            if any(sp in jd_raw for sp in jd_spam_patterns):
-                                print(f"[Job Searcher] 🚫 Pre-screening rejected Reed course/fee listing ID {job_id}: '{title}'")
-                                continue
-                    except Exception:
-                        pass
-                
-                results.append({
+                raw_candidates.append({
                     "job": JobSearchResult(
                         title=title,
                         company=company,
@@ -235,12 +213,41 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "4
                         post_date_raw=post_date_str or "Recent",
                         job_id=job_id
                     ),
+                    "job_id": job_id,
+                    "title": title,
                     "dt": job_dt or datetime.min
                 })
 
+            # Concurrent pre-screening via ThreadPoolExecutor instead of sequential HTTP requests
+            def _check_reed_spam(candidate):
+                j_id = candidate["job_id"]
+                if j_id and j_id.isdigit():
+                    try:
+                        detail_req = urllib.request.Request(f"https://www.reed.co.uk/api/1.0/jobs/{j_id}", headers=headers)
+                        with urllib.request.urlopen(detail_req, context=SSL_CONTEXT, timeout=3) as detail_resp:
+                            detail_data = json.loads(detail_resp.read().decode("utf-8"))
+                            jd_raw = (detail_data.get("jobDescription", "") or "").lower()
+                            jd_spam_patterns = [
+                                "course cost", "course fee", "fees apply", "traineeship", "training course",
+                                "refund you 100%", "fees of £", "fee of £", "training cost", "payable by monthly",
+                                "per month for the course", "get your money back", "job guaranteed", "guaranteed job"
+                            ]
+                            if any(sp in jd_raw for sp in jd_spam_patterns):
+                                print(f"[Job Searcher] 🚫 Pre-screening rejected Reed course/fee listing ID {j_id}: '{candidate['title']}'")
+                                return None
+                    except Exception:
+                        pass
+                return candidate
+
+            # Run pre-screening checks concurrently across threads
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                screened_results = list(executor.map(_check_reed_spam, raw_candidates[:40]))
+            valid_results = [r for r in screened_results if r is not None]
+
             # Sort by post date descending (newest jobs first)
-            results.sort(key=lambda x: x["dt"], reverse=True)
-            final_jobs = [r["job"] for r in results[:20]]
+            valid_results.sort(key=lambda x: x["dt"], reverse=True)
+            final_jobs = [r["job"] for r in valid_results[:20]]
             print(f"[Job Searcher] ✓ Reed API returned {len(final_jobs)} fresh jobs within {timeframe} for '{keyword}' (sorted newest first)")
             return final_jobs
     except Exception as e:
