@@ -256,9 +256,11 @@ def _generate_with_model_list(
         for retry_attempt in range(3):
             try:
                 _throttle_for_rpm(model_name)
+                msg_llm = f"[LLM] Attempting generation with model: {model_name} (try {retry_attempt + 1})..."
+                from services.log_queue import log_ist
+                log_ist(msg_llm)
                 if on_log:
-                    on_log(json.dumps({"type": "llm_info", "message": f"🤖 Attempting Gemini model {model_name} (try {retry_attempt + 1})..."}))
-                print(f"Attempting generation with model: {model_name} (try {retry_attempt + 1})...")
+                    on_log(json.dumps({"type": "llm_info", "message": msg_llm}))
 
                 response = client.models.generate_content(
                     model=model_name,

@@ -151,10 +151,14 @@ async def extract_recruiter_from_linkedin(job_url: str, html: Optional[str] = No
     """
     if html is not None:
         try:
-            print(f"[extract_recruiter_from_linkedin] Using pre-fetched HTML for: {job_url}")
-            return _parse_recruiter_html(html)
+            from services.log_queue import log_ist
+            log_ist(f"[extract_recruiter_from_linkedin] Using pre-fetched HTML for: {job_url}")
+            result = _parse_recruiter_html(html)
+            log_ist(f"[recruiter_extractor] Found recruiter: {result.get('recruiter_name')}, profile: {result.get('recruiter_profile_url')}, company: {result.get('company_name')}")
+            return result
         except Exception as e:
-            print(f"[extract_recruiter_from_linkedin] Error parsing pre-fetched HTML: {e}")
+            from services.log_queue import log_ist
+            log_ist(f"[extract_recruiter_from_linkedin] Error parsing pre-fetched HTML: {e}")
             return {
                 "recruiter_name": None,
                 "recruiter_profile_url": None,
@@ -164,8 +168,8 @@ async def extract_recruiter_from_linkedin(job_url: str, html: Optional[str] = No
 
     try:
         from playwright.async_api import async_playwright
-
-        print(f"[extract_recruiter_from_linkedin] Scraping: {job_url}")
+        from services.log_queue import log_ist
+        log_ist(f"[extract_recruiter_from_linkedin] Scraping: {job_url}")
 
         own_playwright = None
         own_browser = None
@@ -188,10 +192,14 @@ async def extract_recruiter_from_linkedin(job_url: str, html: Optional[str] = No
             await page.wait_for_timeout(1500)
 
             html = await page.content()
-            return _parse_recruiter_html(html)
+            result = _parse_recruiter_html(html)
+            from services.log_queue import log_ist
+            log_ist(f"[recruiter_extractor] Found recruiter: {result.get('recruiter_name')}, profile: {result.get('recruiter_profile_url')}, company: {result.get('company_name')}")
+            return result
 
         except Exception as e:
-            print(f"[extract_recruiter_from_linkedin] Scraping error: {e}")
+            from services.log_queue import log_ist
+            log_ist(f"[extract_recruiter_from_linkedin] Scraping error: {e}")
             return {
                 "recruiter_name": None,
                 "recruiter_profile_url": None,
@@ -207,7 +215,8 @@ async def extract_recruiter_from_linkedin(job_url: str, html: Optional[str] = No
                 await own_playwright.stop()
 
     except Exception as e:
-        print(f"[extract_recruiter_from_linkedin] Error: {e}")
+        from services.log_queue import log_ist
+        log_ist(f"[extract_recruiter_from_linkedin] Error: {e}")
         import traceback
         traceback.print_exc()
         return {

@@ -157,10 +157,12 @@ async def scrape_job_description(url: str, browser=None) -> dict:
 
                 # Check if we successfully got a substantial block of text
                 if body_text and len(body_text.strip()) > 200:
-                    print(f"[Scraper] Success on attempt {attempt + 1}! Length: {len(body_text)}")
+                    from services.log_queue import log_ist
+                    log_ist(f"[Scraper] Success on attempt {attempt + 1}! Length: {len(body_text)}")
                     break
             except Exception as attempt_err:
-                print(f"[Scraper] Attempt {attempt + 1} failed: {attempt_err}")
+                from services.log_queue import log_ist
+                log_ist(f"[Scraper] Attempt {attempt + 1} failed: {attempt_err}")
                 if attempt == 2:
                     raise attempt_err
                 await page.wait_for_timeout(1000)
