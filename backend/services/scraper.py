@@ -6,7 +6,7 @@ from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 import re
 
-async def scrape_job_description(url: str, browser=None) -> dict:
+async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     """
     Scrapes a job posting page from LinkedIn, Indeed, Reed, or any MNC career portal.
     Uses official Reed Jobs Details REST API when scraping Reed URLs for instant zero-latency JD extraction.
