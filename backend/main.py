@@ -2654,6 +2654,70 @@ async def send_outreach_email(request: SendOutreachEmailRequest, authorization: 
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/admin/logs", response_class=HTMLResponse)
+async def admin_logs_dashboard(key: Optional[str] = None):
+    """
+    Secure admin live log streaming dashboard URL.
+    Access via: https://your-domain.com/admin/logs?key=ADMIN_SECRET
+    """
+    admin_key = os.getenv("ADMIN_LOG_KEY", "akhil-admin-secret-123")
+    if key != admin_key:
+        raise HTTPException(status_code=403, detail="Unauthorized Admin Access")
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Live Server Logs - Job Finder Admin</title>
+        <style>
+            body {{ background-color: #0F172A; color: #38BDF8; font-family: monospace; padding: 20px; font-size: 13px; }}
+            h2 {{ color: #F43F5E; font-family: sans-serif; display: flex; align-items: center; justify-content: space-between; }}
+            #logs {{ background: #1E293B; border: 1px solid #334155; border-radius: 8px; padding: 15px; height: 75vh; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; }}
+            .btn {{ background: #0284C7; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }}
+            .btn:hover {{ background: #0369A1; }}
+        </style>
+    </head>
+    <body>
+        <h2>
+            <span>🚀 Live Server Logs (Real-time Stream)</span>
+            <button class="btn" onclick="document.getElementById('logs').innerText=''">Clear Screen</button>
+        </h2>
+        <div id="logs">Connecting to live server log stream...</div>
+        <script>
+            const logDiv = document.getElementById('logs');
+            const eventSource = new EventSource('/admin/logs/stream?key={admin_key}');
+            
+            eventSource.onmessage = function(e) {{
+                logDiv.innerText += e.data + "\\n";
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }};
+            
+            eventSource.onerror = function() {{
+                logDiv.innerText += "\\n[Stream Disconnected. Reconnecting...]\\n";
+            }};
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+@app.get("/admin/logs/stream")
+async def admin_logs_stream(key: Optional[str] = None):
+    admin_key = os.getenv("ADMIN_LOG_KEY", "akhil-admin-secret-123")
+    if key != admin_key:
+        raise HTTPException(status_code=403, detail="Unauthorized Admin Access")
+
+    async def generate_logs():
+        yield "data: 🟢 Connected to Live Admin Log Stream\\n\\n"
+        while True:
+            msgs = LLMClientLogQueue.get_all()
+            if msgs:
+                for msg in msgs:
+                    yield f"data: {msg}\\n\\n"
+            await asyncio.sleep(1)
+
+    return StreamingResponse(generate_logs(), media_type="text/event-stream")
+
 frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist"))
 if not os.path.exists(frontend_dist):
     frontend_dist = "/app/frontend/dist"
