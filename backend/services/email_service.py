@@ -116,6 +116,7 @@ def send_notification_email(
             url = "https://api.resend.com/emails"
             headers = {
                 "Authorization": f"Bearer {resend_api_key}",
+                "User-Agent": "JobFinderApp/1.0",
                 "Content-Type": "application/json"
             }
             from_addr = os.getenv("EMAIL_FROM", "onboarding@resend.dev")
