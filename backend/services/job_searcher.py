@@ -668,16 +668,15 @@ async def find_matching_jobs(
 
     scored_jobs = []
     if jd_scored_batch:
-        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(jd_scored_batch)} matches ({len(reed_jd_jobs)} Reed API fast-path) to compute accurate ATS scores..."}) + "\n"
+        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(jd_scored_batch)} matches ({len(reed_jd_jobs)} Reed API fast-path) to compute accurate ATS scores..."}) + " " * 2048 + "\n"
         semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
         
         async def _score_and_stream(job, log_queue_stream):
             def _ui_logger(msg):
-                log_queue_stream.append(json.dumps({"type": "log", "message": msg}) + "\n")
+                log_queue_stream.append(json.dumps({"type": "log", "message": msg}) + " " * 2048 + "\n")
             if browser is not None:
                 res = await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
             else:
-                # pyrefly: ignore [missing-import]
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
                     b = await p.chromium.launch(headless=True)
@@ -695,14 +694,14 @@ async def find_matching_jobs(
                 yield log_queue_stream.pop(0)
             if r is not None:
                 log_msg = f"✓ Scored match: {r['title']} @ {r['company']} ({r['score']}% Match)"
-                yield json.dumps({"type": "log", "message": log_msg}) + "\n"
+                yield json.dumps({"type": "log", "message": log_msg}) + " " * 2048 + "\n"
                 if r["score"] >= 55:
                     scored_jobs.append(r)
                     # Yield partial progressive results stream so frontend renders card instantly
                     yield json.dumps({"type": "partial_result", "job": r}) + "\n"
 
     if title_only_batch:
-        yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + "\n"
+        yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + " " * 2048 + "\n"
         for job in title_only_batch:
             r = _score_job_with_title_heuristic(job, resume_data)
             if r["score"] >= 55:
