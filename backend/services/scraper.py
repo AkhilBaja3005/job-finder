@@ -83,20 +83,30 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                 log_ist(msg_attempt)
                 if on_log:
                     on_log(msg_attempt)
-                # Always use domcontentloaded for fast page loads; networkidle hangs on analytics/tracking scripts
-                await page.goto(url, wait_until="domcontentloaded", timeout=10000)
 
-                # Scroll to trigger lazy content safely
-                await page.wait_for_timeout(500)
+                async def _do_attempt():
+                    # Always use domcontentloaded for fast page loads; networkidle hangs on analytics/tracking scripts
+                    await page.goto(url, wait_until="domcontentloaded", timeout=10000)
+
+                    # Scroll to trigger lazy content safely
+                    await page.wait_for_timeout(500)
+                    try:
+                        await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 3)")
+                    except Exception:
+                        pass
+                    await page.wait_for_timeout(500 * (attempt + 1))
+                    return await page.content(), await page.title()
+
+                # Hard cap: 20s per attempt — prevents GCP from hanging on stalled LinkedIn JS
                 try:
-                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 3)")
-                except Exception:
-                    pass
-                await page.wait_for_timeout(500 * (attempt + 1))
+                    html, title = await asyncio.wait_for(_do_attempt(), timeout=20)
+                except asyncio.TimeoutError:
+                    log_ist(f"[Scraper] Attempt {attempt + 1} timed out after 20s: {url}")
+                    if attempt == 2:
+                        break
+                    continue
 
-                html = await page.content()
                 soup = BeautifulSoup(html, 'html.parser')
-                title = await page.title()
 
                 # LinkedIn specific selector matches
                 if "linkedin.com" in url:
