@@ -680,10 +680,13 @@ async def find_matching_jobs(
         tasks = [asyncio.create_task(_score_and_stream(job)) for job in jd_scored_batch]
         for completed_task in asyncio.as_completed(tasks):
             r = await completed_task
-            if r is not None and r["score"] >= 55:
-                scored_jobs.append(r)
-                # Yield partial progressive results stream so frontend renders card instantly
-                yield json.dumps({"type": "partial_result", "job": r}) + "\n"
+            if r is not None:
+                log_msg = f"✓ Scored match: {r['title']} @ {r['company']} ({r['score']}% Match)"
+                yield json.dumps({"type": "log", "message": log_msg}) + "\n"
+                if r["score"] >= 55:
+                    scored_jobs.append(r)
+                    # Yield partial progressive results stream so frontend renders card instantly
+                    yield json.dumps({"type": "partial_result", "job": r}) + "\n"
 
     if title_only_batch:
         yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + "\n"
