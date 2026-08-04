@@ -24,7 +24,7 @@ jobs:
             cd ~/job-finder
             git fetch origin main
             git reset --hard origin/main
-            docker build -t jobfinder .
+            DOCKER_BUILDKIT=1 docker build -t jobfinder .
             docker stop jobfinder-app || true
             docker rm jobfinder-app || true
             docker run -d \
