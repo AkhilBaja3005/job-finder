@@ -449,14 +449,14 @@ def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:
     return 70 + (matched_count * 8) - (tier_gap * 10)
 
 
-async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, browser, semaphore: asyncio.Semaphore) -> Optional[dict]:
+async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, browser, semaphore: asyncio.Semaphore, on_log=None) -> Optional[dict]:
     """Fetches the real JD for a single job and scores it with the exact same
     deterministic engine (compute_ats_score / compute_overall_score) that the
     Tailor Resume flow uses, so discovery's overall score is directly comparable
     to the ATS score shown after tailoring — not a separately-invented estimate."""
     async with semaphore:
         try:
-            scraped = await scrape_job_description(job.url, browser=browser)
+            scraped = await scrape_job_description(job.url, browser=browser, on_log=on_log)
         except Exception as e:
             print(f"[Job Searcher] Failed to fetch JD for '{job.title}' at {job.url}: {e}")
             return None
@@ -671,24 +671,27 @@ async def find_matching_jobs(
         yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(jd_scored_batch)} matches ({len(reed_jd_jobs)} Reed API fast-path) to compute accurate ATS scores..."}) + "\n"
         semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
         
-        async def _score_and_stream(job):
+        async def _score_and_stream(job, log_queue_stream):
+            def _ui_logger(msg):
+                log_queue_stream.append(json.dumps({"type": "log", "message": msg}) + "\n")
             if browser is not None:
-                res = await _score_job_with_real_jd(job, resume_data, browser, semaphore)
+                res = await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
             else:
-                # pyrefly: ignore [missing-import]
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
                     b = await p.chromium.launch(headless=True)
                     try:
-                        res = await _score_job_with_real_jd(job, resume_data, b, semaphore)
+                        res = await _score_job_with_real_jd(job, resume_data, b, semaphore, on_log=_ui_logger)
                     finally:
                         await b.close()
             return res
 
-        # Run scoring concurrently and yield jobs progressively as each completes
-        tasks = [asyncio.create_task(_score_and_stream(job)) for job in jd_scored_batch]
+        log_queue_stream = []
+        tasks = [asyncio.create_task(_score_and_stream(job, log_queue_stream)) for job in jd_scored_batch]
         for completed_task in asyncio.as_completed(tasks):
             r = await completed_task
+            while log_queue_stream:
+                yield log_queue_stream.pop(0)
             if r is not None:
                 log_msg = f"✓ Scored match: {r['title']} @ {r['company']} ({r['score']}% Match)"
                 yield json.dumps({"type": "log", "message": log_msg}) + "\n"
