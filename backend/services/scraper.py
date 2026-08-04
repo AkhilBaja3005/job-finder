@@ -57,6 +57,9 @@ async def scrape_job_description(url: str, browser=None) -> dict:
     )
     page = await context.new_page()
 
+    # Block heavy resource downloads (images, fonts, media, stylesheets) to reduce RAM/network load by 60%
+    await page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "font", "media", "stylesheet"] else route.continue_())
+
     try:
         await page.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });

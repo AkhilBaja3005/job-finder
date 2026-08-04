@@ -18,6 +18,12 @@ from services.ats_scorer import (
 from services.scraper import scrape_job_description
 from services.recruiter_extractor import extract_recruiter
 from utils.ssl_utils import SSL_CONTEXT
+from utils.ttl_cache import TTLCache
+
+# ─── System Caps & TTL Cache ─────────────────────────────────────────────
+DISCOVERY_JD_FETCH_CAP = 15       # Top 15 web-scraped jobs get real JD ATS scoring
+DISCOVERY_FETCH_CONCURRENCY = 3  # Playwright concurrency cap to keep RAM under 1GB
+_job_search_cache = TTLCache(default_ttl=300)  # 5-minute TTL search cache
 
 # ─── Pydantic Schemas for Search ──────────────────────────────────────────
 
@@ -638,8 +644,8 @@ async def find_matching_jobs(
     
     other_jobs.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
 
-    # All fresh Reed jobs get real JD ATS scoring via API fast-path; cap web-scraped jobs to remaining capacity
-    jd_scored_batch = reed_jd_jobs + other_jobs[:max(10, DISCOVERY_JD_FETCH_CAP - len(reed_jd_jobs))]
+    # All fresh Reed jobs get real JD ATS scoring via API fast-path; cap web-scraped jobs to top 15
+    jd_scored_batch = reed_jd_jobs + other_jobs[:DISCOVERY_JD_FETCH_CAP]
     title_only_batch = [j for j in deduped_jobs if j not in jd_scored_batch]
 
     scored_jobs = []
@@ -692,6 +698,10 @@ async def find_matching_jobs(
                     "reason": "External source (Indeed) - not scored by our ATS engine"
                 })
         yield json.dumps({"type": "log", "message": f"📌 Found {len(est_jobs)} Indeed jobs in EST section (not scored by our engine)"}) + "\n"
+
+    # Save results to 5-minute TTL cache
+    cache_key = (keywords or "", location or "Remote", timeframe or "48h")
+    _job_search_cache.set(cache_key, scored_jobs)
 
     yield json.dumps({"type": "result", "jobs": scored_jobs, "est_jobs": est_jobs}) + "\n"
 
