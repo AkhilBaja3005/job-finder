@@ -6,7 +6,7 @@ from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 import re
 
-async def scrape_job_description(url: str, browser=None) -> dict:
+async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     """
     Scrapes a job posting page from LinkedIn, Indeed, Reed, or any MNC career portal.
     Uses official Reed Jobs Details REST API when scraping Reed URLs for instant zero-latency JD extraction.
@@ -33,7 +33,8 @@ async def scrape_job_description(url: str, browser=None) -> dict:
                         raw_html_desc = data.get("jobDescription", "")
                         parsed_text = BeautifulSoup(raw_html_desc, "html.parser").get_text(separator="\n").strip()
                         if parsed_text and len(parsed_text) > 50:
-                            print(f"[Scraper] ⚡ Instantly fetched Reed JD via Official Details API for Job ID: {job_id}")
+                            from services.log_queue import log_ist
+                            log_ist(f"[Scraper] ⚡ Instantly fetched Reed JD via Official Details API for Job ID: {job_id}")
                             return {
                                 "title": data.get("jobTitle", "Job Posting"),
                                 "description": parsed_text,
@@ -43,7 +44,8 @@ async def scrape_job_description(url: str, browser=None) -> dict:
                                 "html": raw_html_desc
                             }
                 except Exception as reed_err:
-                    print(f"[Scraper] Reed Details API fallback to Playwright browser ({reed_err})")
+                    from services.log_queue import log_ist
+                    log_ist(f"[Scraper] Reed Details API fallback to Playwright browser ({reed_err})")
 
     own_playwright = None
     own_browser = None
@@ -76,7 +78,11 @@ async def scrape_job_description(url: str, browser=None) -> dict:
         # Execute up to 3 retry attempts
         for attempt in range(3):
             try:
-                print(f"[Scraper] Attempt {attempt + 1}/3 to scrape: {url}")
+                from services.log_queue import log_ist
+                msg_attempt = f"[Scraper] Attempt {attempt + 1}/3 to scrape: {url}"
+                log_ist(msg_attempt)
+                if on_log:
+                    on_log(msg_attempt)
                 # Always use domcontentloaded for fast page loads; networkidle hangs on analytics/tracking scripts
                 await page.goto(url, wait_until="domcontentloaded", timeout=10000)
 
@@ -154,10 +160,12 @@ async def scrape_job_description(url: str, browser=None) -> dict:
 
                 # Check if we successfully got a substantial block of text
                 if body_text and len(body_text.strip()) > 200:
-                    print(f"[Scraper] Success on attempt {attempt + 1}! Length: {len(body_text)}")
+                    from services.log_queue import log_ist
+                    log_ist(f"[Scraper] Success on attempt {attempt + 1}! Length: {len(body_text)}")
                     break
             except Exception as attempt_err:
-                print(f"[Scraper] Attempt {attempt + 1} failed: {attempt_err}")
+                from services.log_queue import log_ist
+                log_ist(f"[Scraper] Attempt {attempt + 1} failed: {attempt_err}")
                 if attempt == 2:
                     raise attempt_err
                 await page.wait_for_timeout(1000)
