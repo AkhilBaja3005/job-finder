@@ -1,11 +1,17 @@
 import queue
+from datetime import datetime, timezone, timedelta
+
+# India Standard Time (IST = UTC + 5:30)
+IST_TZ = timezone(timedelta(hours=5, minutes=30))
 
 class LLMClientLogQueue:
     _queue = queue.Queue()
     
     @classmethod
     def put(cls, msg: str):
-        cls._queue.put(msg)
+        ist_now = datetime.now(IST_TZ).strftime("%H:%M:%S IST")
+        formatted_msg = f"[{ist_now}] {msg}"
+        cls._queue.put(formatted_msg)
 
     @classmethod
     def get(cls, block: bool = True, timeout: float = None):
