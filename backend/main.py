@@ -2559,27 +2559,59 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
         )
 
     try:
-        # Wrap the generator to also cache results on completion
+        # Wrap the generator to also cache results on completion,
+        # and interleave keepalive pings every 10s so ngrok never drops the connection.
         async def caching_job_stream():
+            q: asyncio.Queue = asyncio.Queue()
             all_jobs = []
-            async for chunk in find_matching_jobs(
-                resume_data=session_resume_data,
-                location=request.location,
-                keywords=request.keywords,
-                timeframe=request.timeframe or "48h",
-                custom_api_key=active_api_key,
-                browser=getattr(http_request.app.state, "browser", None)
-            ):
-                # Intercept result events to extract jobs for caching
+            search_done = False
+
+            async def _producer():
+                nonlocal all_jobs, search_done
                 try:
-                    parsed = json.loads(chunk.strip())
-                    if parsed.get("type") == "result" and parsed.get("jobs"):
-                        all_jobs = parsed["jobs"]
-                        _job_search_cache.set(cache_key, all_jobs)
-                except Exception:
+                    async for chunk in find_matching_jobs(
+                        resume_data=session_resume_data,
+                        location=request.location,
+                        keywords=request.keywords,
+                        timeframe=request.timeframe or "48h",
+                        custom_api_key=active_api_key,
+                        browser=getattr(http_request.app.state, "browser", None)
+                    ):
+                        try:
+                            parsed = json.loads(chunk.strip())
+                            if parsed.get("type") == "result" and parsed.get("jobs"):
+                                all_jobs = parsed["jobs"]
+                                _job_search_cache.set(cache_key, all_jobs)
+                        except Exception:
+                            pass
+                        await q.put(chunk)
+                finally:
+                    search_done = True
+                    await q.put(None)  # Sentinel to signal completion
+
+            async def _keepalive():
+                while not search_done:
+                    await asyncio.sleep(10)
+                    if not search_done:
+                        # NDJSON comment — not valid JSON so frontend silently skips it
+                        await q.put("{\"type\":\"ping\"}" + " " * 2048 + "\n")
+
+            producer_task = asyncio.create_task(_producer())
+            keepalive_task = asyncio.create_task(_keepalive())
+
+            try:
+                while True:
+                    chunk = await q.get()
+                    if chunk is None:
+                        break
+                    yield chunk
+            finally:
+                keepalive_task.cancel()
+                try:
+                    await keepalive_task
+                except asyncio.CancelledError:
                     pass
-                yield chunk
-        
+
         return StreamingResponse(
             caching_job_stream(),
             media_type="application/x-ndjson",
@@ -2592,6 +2624,7 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/generate_outreach")
 async def generate_outreach(request: GenerateOutreachRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
