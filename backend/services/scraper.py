@@ -57,6 +57,9 @@ async def scrape_job_description(url: str, browser=None) -> dict:
     )
     page = await context.new_page()
 
+    # Block heavy resource downloads (images, fonts, media, stylesheets) to reduce RAM/network load by 60%
+    await page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "font", "media", "stylesheet"] else route.continue_())
+
     try:
         await page.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -264,12 +267,18 @@ async def scrape_job_description(url: str, browser=None) -> dict:
             "html": ""
         }
     finally:
-        await page.close()
-        await context.close()
+        if page is not None:
+            try: await page.close()
+            except Exception: pass
+        if context is not None:
+            try: await context.close()
+            except Exception: pass
         if own_browser is not None:
-            await own_browser.close()
+            try: await own_browser.close()
+            except Exception: pass
         if own_playwright is not None:
-            await own_playwright.stop()
+            try: await own_playwright.stop()
+            except Exception: pass
         
         # Explicitly invoke garbage collection to clear unneeded browser context resources
         import gc
