@@ -61,6 +61,30 @@ def send_notification_email(
         except Exception as e:
             print(f"[Mailer] Cloudflare API exception: {e}. Falling back to next provider.")
 
+    # 1.5 Try 100% Open-Source Self-Hosted HTTP Mail Relay / Webhook (CUSTOM_MAIL_URL)
+    # Works over standard HTTPS port 443 — perfect for self-hosted open-source microservices
+    custom_mail_url = os.getenv("CUSTOM_MAIL_URL")
+    if custom_mail_url:
+        try:
+            custom_token = os.getenv("CUSTOM_MAIL_TOKEN", "")
+            headers = {"Content-Type": "application/json"}
+            if custom_token:
+                headers["Authorization"] = f"Bearer {custom_token}"
+            payload = {
+                "to": to_email,
+                "subject": subject,
+                "text": text_body,
+                "html": html_body,
+                "from": os.getenv("EMAIL_FROM", os.getenv("SMTP_USER", ""))
+            }
+            resp = requests.post(custom_mail_url, headers=headers, json=payload, timeout=15)
+            if resp.status_code in (200, 201, 202):
+                print("[Mailer] Sent successfully via Custom Self-Hosted Open-Source Mail Relay!")
+                return True
+            print(f"[Mailer] Custom Mail Relay returned status {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"[Mailer] Custom Mail Relay exception: {e}")
+
     # 2. Try Resend REST API (https://resend.com) - HTTPS REST API, works on Hugging Face Spaces!
     resend_api_key = os.getenv("RESEND_API_KEY")
     if resend_api_key:
