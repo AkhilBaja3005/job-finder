@@ -898,7 +898,9 @@ function App() {
       if (geminiApiKey) headers['X-Gemini-API-Key'] = geminiApiKey;
       headers['Authorization'] = `Bearer ${getAuthHeader()}`;
 
-      setStatusLogs([]); // Clear logs before fresh sweep
+      const initMsg = `🔎 Scanning LinkedIn and Reed for matching jobs posted in the last ${searchTimeframe === '24h' ? '24 hours' : searchTimeframe === '48h' ? '48 hours' : searchTimeframe === '1w' ? '1 week' : '1 month'}...`;
+      setStatusMessage(initMsg);
+      setStatusLogs([{ message: initMsg, ts: nowTs() }]);
       const response = await fetch(`${API_BASE}/search_matching_jobs`, {
         method: 'POST',
         headers: headers,

@@ -637,6 +637,10 @@ async def find_matching_jobs(
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(ind_jobs)
+        
+        res_msg = f"✓ Found {len(li_jobs)} LinkedIn & {len(reed_jobs)} Reed.co.uk postings for '{query}'"
+        log_ist(res_msg)
+        yield json.dumps({"type": "log", "message": res_msg}) + "\n"
 
     # Deduplicate by job URL / ID
     seen_ids = set()

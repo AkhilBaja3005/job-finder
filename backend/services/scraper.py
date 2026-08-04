@@ -79,7 +79,10 @@ async def scrape_job_description(url: str, browser=None) -> dict:
         for attempt in range(3):
             try:
                 from services.log_queue import log_ist
-                log_ist(f"[Scraper] Attempt {attempt + 1}/3 to scrape: {url}")
+                msg_attempt = f"[Scraper] Attempt {attempt + 1}/3 to scrape: {url}"
+                log_ist(msg_attempt)
+                if on_log:
+                    on_log(msg_attempt)
                 # Always use domcontentloaded for fast page loads; networkidle hangs on analytics/tracking scripts
                 await page.goto(url, wait_until="domcontentloaded", timeout=10000)
 
