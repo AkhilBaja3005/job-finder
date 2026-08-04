@@ -1,3 +1,13 @@
+---
+title: AI Job Finder Agent
+emoji: 🚀
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 8000
+pinned: false
+---
+
 # AI Job Finder Agent
 
 An AI-powered job search and application assistant. Upload a resume once, then let it discover matching job postings, score your fit against a job description, tailor a one-page LaTeX resume and cover letter for a specific role, and (optionally) auto-fill the job application form in a real browser.

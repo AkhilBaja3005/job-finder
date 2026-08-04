@@ -502,7 +502,7 @@ def _is_local_deployment() -> bool:
     that could be forgotten/misconfigured on a real deployment. Used to gate
     /auth/mock, which otherwise mints a valid session for any email with zero
     verification and must never be reachable in production."""
-    if any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME")):
+    if any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")):
         return False
     frontend_url = os.getenv("FRONTEND_URL", "")
     return "localhost" in frontend_url or "127.0.0.1" in frontend_url
