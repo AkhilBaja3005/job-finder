@@ -19,7 +19,34 @@ def send_notification_email(
     Tries Cloudflare Email Sending REST API first.
     If credentials are not verified or fail, it automatically falls back to Gmail SMTP.
     """
-    # 1. Try Brevo (Sendinblue) REST API - Primary Provider (Works without custom domain!)
+    # 1. Try Resend REST API - Primary Provider (Delivers in <2s!)
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    if resend_api_key:
+        try:
+            url = "https://api.resend.com/emails"
+            headers = {
+                "Authorization": f"Bearer {resend_api_key}",
+                "User-Agent": "JobFinderApp/1.0",
+                "Content-Type": "application/json"
+            }
+            from_addr = os.getenv("EMAIL_FROM", "onboarding@resend.dev")
+            payload = {
+                "from": from_addr,
+                "to": [to_email],
+                "subject": subject,
+                "text": text_body
+            }
+            if html_body:
+                payload["html"] = html_body
+            resp = requests.post(url, headers=headers, json=payload, timeout=15)
+            if resp.status_code in (200, 201):
+                print("[Mailer] Sent successfully via Resend REST API.")
+                return True
+            print(f"[Mailer] Resend API failed with status {resp.status_code}: {resp.text}. Trying backup...")
+        except Exception as e:
+            print(f"[Mailer] Resend API exception: {e}. Trying backup...")
+
+    # 2. Backup 1: Brevo REST API
     brevo_api_key = os.getenv("BREVO_API_KEY")
     if brevo_api_key:
         try:
@@ -45,33 +72,6 @@ def send_notification_email(
             print(f"[Mailer] Brevo API failed with status {resp.status_code}: {resp.text}. Trying backup...")
         except Exception as e:
             print(f"[Mailer] Brevo API exception: {e}. Trying backup...")
-
-    # 2. Backup 1: Resend REST API (https://resend.com)
-    resend_api_key = os.getenv("RESEND_API_KEY")
-    if resend_api_key:
-        try:
-            url = "https://api.resend.com/emails"
-            headers = {
-                "Authorization": f"Bearer {resend_api_key}",
-                "User-Agent": "JobFinderApp/1.0",
-                "Content-Type": "application/json"
-            }
-            from_addr = os.getenv("EMAIL_FROM", "onboarding@resend.dev")
-            payload = {
-                "from": from_addr,
-                "to": [to_email],
-                "subject": subject,
-                "text": text_body
-            }
-            if html_body:
-                payload["html"] = html_body
-            resp = requests.post(url, headers=headers, json=payload, timeout=15)
-            if resp.status_code in (200, 201):
-                print("[Mailer] Sent successfully via Resend REST API (Backup 1).")
-                return True
-            print(f"[Mailer] Resend API failed with status {resp.status_code}: {resp.text}. Trying next backup...")
-        except Exception as e:
-            print(f"[Mailer] Resend API exception: {e}. Trying next backup...")
 
     # 3. Backup 2: Plunk REST API (https://github.com/useplunk/plunk)
     plunk_api_key = os.getenv("PLUNK_API_KEY")
