@@ -633,11 +633,15 @@ async def find_matching_jobs(
         log_ist(yield_msg)
         yield json.dumps({"type": "log", "message": yield_msg}) + "\n"
         
-        li_task = asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
-        reed_task = asyncio.to_thread(search_reed_jobs, query, location, timeframe)
-        ind_task = search_indeed_jobs(query, location, timeframe)
+        # Execute jobs fetching
+        li_jobs = await asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
+        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(li_jobs)} LinkedIn listings for '{query}'"}) + "\n"
         
-        li_jobs, reed_jobs, ind_jobs = await asyncio.gather(li_task, reed_task, ind_task)
+        reed_jobs = await asyncio.to_thread(search_reed_jobs, query, location, timeframe)
+        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(reed_jobs)} Reed.co.uk listings for '{query}'"}) + "\n"
+        
+        ind_jobs = await search_indeed_jobs(query, location, timeframe)
+        
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(ind_jobs)
