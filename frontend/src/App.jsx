@@ -908,6 +908,26 @@ function App() {
       logEventSource = null;
     } catch (e) { /* ignore */ }
 
+    // Filter: which log messages to show in the UI pipeline log box.
+    // The admin stream stays fully verbose; we only surface intuitive progress here.
+    const shouldShowLog = (msg) => {
+      // Strip timestamp prefix e.g. "[19:53:56 IST] " for pattern matching
+      const body = msg.replace(/^\[\d{2}:\d{2}:\d{2} IST\]\s*/, '');
+      // Drop raw scraper attempt lines with URLs
+      if (/^\[Scraper\] Attempt \d+\/\d+ to scrape: /.test(body)) return false;
+      // Drop raw scraper success byte-length lines
+      if (/^\[Scraper\] Success on attempt \d+! Length: \d+/.test(body)) return false;
+      // Drop LLM model retry attempt lines
+      if (/^\[LLM\] Attempting generation with model:/.test(body)) return false;
+      // Drop recruiter pre-fetched HTML verbose lines
+      if (/^\[extract_recruiter_from_linkedin\] Using pre-fetched HTML for:/.test(body)) return false;
+      // Drop raw recruiter_extractor found lines (redundant in UI)
+      if (/^\[recruiter_extractor\] Found recruiter:/.test(body)) return false;
+      // Drop duplicate bare recruiter_extractor lines without timestamp
+      if (/^\[recruiter_extractor\]/.test(body)) return false;
+      return true;
+    };
+
     // Use fetch-based SSE reader (supports Authorization header)
     let sseAbort = new AbortController();
     const sseHeaders = { 'Authorization': `Bearer ${getAuthHeader()}`, 'ngrok-skip-browser-warning': 'true' };
@@ -928,6 +948,7 @@ function App() {
             if (line.startsWith('data: ')) {
               const msg = line.slice(6).trim();
               if (!msg || msg.startsWith('🟢')) continue;
+              if (!shouldShowLog(msg)) continue;
               setStatusMessage(msg);
               setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
               setTimeout(scrollConsoleToBottom, 30);
