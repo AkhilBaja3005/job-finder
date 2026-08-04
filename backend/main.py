@@ -2541,7 +2541,15 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
             for job in cached_jobs:
                 yield json.dumps({"type": "partial_result", "job": job}) + "\n"
             yield json.dumps({"type": "result", "jobs": cached_jobs}) + "\n"
-        return StreamingResponse(cached_job_stream(), media_type="application/x-ndjson")
+        return StreamingResponse(
+            cached_job_stream(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
 
     try:
         # Wrap the generator to also cache results on completion
