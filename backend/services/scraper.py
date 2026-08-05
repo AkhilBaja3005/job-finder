@@ -122,43 +122,64 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
             jk_match = re.search(r'[?&]jk=([a-f0-9]{16})', url) or re.search(r'/rc/clk\?jk=([a-f0-9]{16})', url) or re.search(r'jk=([a-f0-9]{16})', url)
             if jk_match:
                 jk = jk_match.group(1)
-                direct_url = f"https://www.indeed.com/viewjob?jk={jk}"
-                req = urllib.request.Request(
-                    direct_url,
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                        "Accept-Language": "en-US,en;q=0.5",
-                    }
-                )
-                with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=8) as resp:
-                    html_bytes = resp.read()
-                    html = html_bytes.decode("utf-8", errors="ignore")
-                    soup = BeautifulSoup(html, "html.parser")
+                # Try mobile & desktop viewjob endpoints to bypass Cloudflare 403 blocks
+                for direct_url in [f"https://m.indeed.com/rpc/jobdescs?jks={jk}", f"https://www.indeed.com/viewjob?jk={jk}"]:
+                    try:
+                        req = urllib.request.Request(
+                            direct_url,
+                            headers={
+                                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1",
+                                "Accept": "text/html,application/json,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                                "Accept-Language": "en-US,en;q=0.9",
+                                "Referer": "https://www.google.com/"
+                            }
+                        )
+                        with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=8) as resp:
+                            content_type = resp.headers.get("Content-Type", "")
+                            raw_data = resp.read().decode("utf-8", errors="ignore")
+                            
+                            # Handle mobile JSON API endpoint response
+                            if "json" in content_type:
+                                jdata = json.loads(raw_data)
+                                if isinstance(jdata, dict) and jk in jdata:
+                                    html_desc = jdata[jk]
+                                    parsed_text = BeautifulSoup(html_desc, "html.parser").get_text(separator="\n").strip()
+                                    if len(parsed_text) > 50:
+                                        log_ist(f"[Scraper] ⚡ Instantly fetched Indeed JD via Mobile API for JK: {jk}")
+                                        return {
+                                            "title": "Indeed Job",
+                                            "description": parsed_text,
+                                            "raw_text": parsed_text,
+                                            "company": "Indeed Employer",
+                                            "url": url,
+                                            "html": html_desc
+                                        }
 
-                    jd_elem = (
-                        soup.select_one("#jobDescriptionText") or
-                        soup.select_one(".jobsearch-JobComponent-description") or
-                        soup.select_one("[class*='JobComponent-description']") or
-                        soup.select_one(".fastItem")
-                    )
-                    title_elem = soup.select_one("h1.jobsearch-JobInfoHeader-title") or soup.select_one("h1")
-                    cmp_anchor = soup.select_one("a[href*='/cmp/']") or soup.select_one("[data-company-name='true']")
-
-                    jd_text = jd_elem.get_text(separator="\n").strip() if jd_elem else ""
-                    title = title_elem.get_text().strip() if title_elem else "Indeed Job"
-                    company = cmp_anchor.get_text().strip() if cmp_anchor else "Indeed Employer"
-
-                    if jd_text and len(jd_text) > 100:
-                        log_ist(f"[Scraper] ⚡ Instantly fetched Indeed JD via direct viewjob endpoint for JK: {jk}")
-                        return {
-                            "title": title,
-                            "description": jd_text,
-                            "raw_text": jd_text,
-                            "company": company,
-                            "url": url,
-                            "html": html
-                        }
+                            # Handle HTML response
+                            soup = BeautifulSoup(raw_data, "html.parser")
+                            jd_elem = (
+                                soup.select_one("#jobDescriptionText") or
+                                soup.select_one(".jobsearch-JobComponent-description") or
+                                soup.select_one("[class*='JobComponent-description']") or
+                                soup.select_one(".fastItem")
+                            )
+                            if jd_elem and len(jd_elem.get_text().strip()) > 100:
+                                title_elem = soup.select_one("h1.jobsearch-JobInfoHeader-title") or soup.select_one("h1")
+                                cmp_anchor = soup.select_one("a[href*='/cmp/']") or soup.select_one("[data-company-name='true']")
+                                jd_text = jd_elem.get_text(separator="\n").strip()
+                                title = title_elem.get_text().strip() if title_elem else "Indeed Job"
+                                company = cmp_anchor.get_text().strip() if cmp_anchor else "Indeed Employer"
+                                log_ist(f"[Scraper] ⚡ Instantly fetched Indeed JD via direct HTML for JK: {jk}")
+                                return {
+                                    "title": title,
+                                    "description": jd_text,
+                                    "raw_text": jd_text,
+                                    "company": company,
+                                    "url": url,
+                                    "html": raw_data
+                                }
+                    except Exception:
+                        continue
         except Exception as indeed_err:
             from services.log_queue import log_ist
             log_ist(f"[Scraper] Indeed direct fetch error ({indeed_err}), falling back to Playwright")

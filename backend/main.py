@@ -172,9 +172,10 @@ async def hf_keep_alive_loop():
         await asyncio.sleep(14400) # Ping every 4 hours (14,400 seconds)
 
 async def daily_match_mailer_loop():
-    # Startup settle logic:
-    print("[Daily Mailer] Running first cron check loop in 10 seconds...")
-    await asyncio.sleep(10)
+    # Startup settle logic: Wait 5 minutes before first background mailer scan
+    # so Uvicorn can serve web traffic instantly with zero CPU contention.
+    print("[Daily Mailer] Production deployment detected. Waiting 5 minutes before first cron check loop...")
+    await asyncio.sleep(300)
     
     # Store last sent date for users to avoid duplicate notifications on same day
     # format: { (user_id, date_string): True }
@@ -297,7 +298,7 @@ async def daily_match_mailer_loop():
                     # Dynamic domain resolution: use BACKEND_URL environment variable if set (ideal for Render),
                     # fallback to localhost if missing.
                     base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
-                    tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(url)}&email={urllib.parse.quote(email)}"
+                    tailor_url = f"{base_url}/email_action/tailor?job_url={url}&email={urllib.parse.quote(email)}"
                     
                     text_digest += f"{idx+1}. {title} at {company} ({platform})\n   Match Score: {score}%{recruiter_str}\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
                     
@@ -2031,7 +2032,7 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
         "   Auto-Tailor: " + base_url + "/email_action/tailor?job_url=https://www.linkedin.com/jobs/view/solution-analyst-business-intelligence-at-uline-4409263656&email=" + email + "\n"
     )
     
-    tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote('https://www.linkedin.com/jobs/view/solution-analyst-business-intelligence-at-uline-4409263656')}&email={urllib.parse.quote(email)}"
+    tailor_url = f"{base_url}/email_action/tailor?job_url=https://www.linkedin.com/jobs/view/solution-analyst-business-intelligence-at-uline-4409263656&email={urllib.parse.quote(email)}"
     
     html_body = f"""
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03); box-sizing: border-box;">
