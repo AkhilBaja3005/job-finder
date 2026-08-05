@@ -1,5 +1,7 @@
 fastapi
 uvicorn
+uvloop
+httptools
 pydantic
 pypdf
 python-docx

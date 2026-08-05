@@ -406,10 +406,11 @@ async def daily_match_mailer_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Cap maximum background threads to 4 to prevent Out-Of-Memory crashes & CPU thrashing on cloud containers
+    # Cap maximum background threads — bumped to 6 for 2-vCPU/16GB HF tier
+    # (more headroom for concurrent Tectonic compiles + sync HTTP calls)
     import concurrent.futures
     loop = asyncio.get_running_loop()
-    loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=4))
+    loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=6))
 
     # Startup: Perform immediate full purge of leftover files from previous deployment container instances
     await auto_clean_expired_files(force_startup_purge=True)
@@ -441,30 +442,30 @@ async def lifespan(app: FastAPI):
                     ngrok_proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception as e:
                 print(f"[Ngrok Manager ERROR] Failed to start tunnel: {e}")
-    # Startup Playwright Persistent Shared Browser
-    app.state.playwright = None
-    app.state.browser = None
+    # Startup Playwright Persistent Shared Browser (via scraper module singleton)
+    # This single browser instance is reused by ALL scrape calls (tailor pipeline,
+    # analyze_job, scrape_job, job search) — eliminates 2-3s Chromium launch per request.
     try:
-        # pyrefly: ignore [missing-import]
-        from playwright.async_api import async_playwright
-        app.state.playwright = await async_playwright().start()
-        app.state.browser = await app.state.playwright.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
-        )
-        print("[System Startup] ⚡ Persistent Shared Playwright Browser Launched!")
+        from services.scraper import init_shared_browser
+        await init_shared_browser()
+        # Mirror into app.state so legacy callers that pass browser= still work
+        from services import scraper as _scraper_mod
+        app.state.browser = _scraper_mod._shared_browser
+        app.state.playwright = _scraper_mod._shared_playwright
     except Exception as pw_startup_err:
-        print(f"[System Startup] Shared Playwright Browser Startup Warning: {pw_startup_err}")
+        print(f"[System Startup] Shared Playwright Browser Warning: {pw_startup_err}")
+        app.state.browser = None
+        app.state.playwright = None
 
     yield
 
     # Shutdown Playwright Shared Browser
-    if getattr(app.state, "browser", None):
-        try: await app.state.browser.close()
-        except Exception: pass
-    if getattr(app.state, "playwright", None):
-        try: await app.state.playwright.stop()
-        except Exception: pass
+    # Shutdown: close shared Playwright browser via scraper module
+    try:
+        from services.scraper import close_shared_browser
+        await close_shared_browser()
+    except Exception:
+        pass
 
     # Shutdown
     if ngrok_proc:
@@ -2955,7 +2956,24 @@ if not os.path.exists(frontend_dist):
     frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "frontend/dist"))
 
 if os.path.exists(frontend_dist):
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+    # Serve hashed assets (/assets/*.js, *.css) with long-lived immutable cache headers.
+    # Vite produces content-hashed filenames so stale content is never served.
+    from starlette.staticfiles import StaticFiles as _SF
+    from starlette.responses import Response as _R
+    from starlette.types import ASGIApp, Scope, Receive, Send
+
+    class CachedStaticFiles(_SF):
+        """StaticFiles subclass that adds Cache-Control: immutable for hashed assets."""
+        async def __call__(self, scope: Scope, receive: Receive, send: Send):
+            async def send_with_cache(message):
+                if message["type"] == "http.response.start":
+                    headers = dict(message.get("headers", []))
+                    headers[b"cache-control"] = b"public, max-age=31536000, immutable"
+                    message = {**message, "headers": list(headers.items())}
+                await send(message)
+            await super().__call__(scope, receive, send_with_cache)
+
+    app.mount("/assets", CachedStaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
 
     @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
     async def serve_frontend(rest_of_path: str):
@@ -2977,6 +2995,14 @@ if os.path.exists(frontend_dist):
 if __name__ == "__main__":
     # pyrefly: ignore [missing-import]
     import uvicorn
-    # Bind to PORT env variable specified by Render
     port = int(os.getenv("PORT", "8000"))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        reload=False,
+        loop="uvloop",
+        http="httptools",
+        timeout_keep_alive=30,
+        log_level="warning",
+    )

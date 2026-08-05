@@ -6,6 +6,50 @@ from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 import re
 
+# ── Module-level shared Playwright browser ─────────────────────────────────
+# Initialised once by init_shared_browser() (called from FastAPI lifespan).
+# Every scrape call reuses this instance instead of launching a new Chromium
+# process (~2-3s saved per request). Falls back to per-call browser when
+# the shared one is not yet ready (e.g. during startup).
+_shared_playwright = None
+_shared_browser = None
+
+async def init_shared_browser():
+    """Launch the persistent shared Playwright browser. Called once at startup."""
+    global _shared_playwright, _shared_browser
+    try:
+        _shared_playwright = await async_playwright().start()
+        _shared_browser = await _shared_playwright.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-extensions",
+                "--no-first-run",
+                "--no-zygote",
+            ]
+        )
+        print("[Scraper] ⚡ Shared Playwright browser ready")
+    except Exception as e:
+        print(f"[Scraper] Shared browser init failed: {e}")
+        _shared_playwright = None
+        _shared_browser = None
+
+async def close_shared_browser():
+    """Gracefully shut down the shared browser. Called on app shutdown."""
+    global _shared_playwright, _shared_browser
+    if _shared_browser:
+        try: await _shared_browser.close()
+        except Exception: pass
+        _shared_browser = None
+    if _shared_playwright:
+        try: await _shared_playwright.stop()
+        except Exception: pass
+        _shared_playwright = None
+# ───────────────────────────────────────────────────────────────────────────
+
 async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     """
     Scrapes a job posting page from LinkedIn, Indeed, Reed, or any MNC career portal.
@@ -228,10 +272,17 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
 
     own_playwright = None
     own_browser = None
-    if browser is None:
+    # Prefer the module-level shared browser (zero startup overhead),
+    # then the caller-supplied browser, then spin up a temporary one.
+    effective_browser = browser or _shared_browser
+    if effective_browser is None:
         own_playwright = await async_playwright().start()
-        browser = await own_playwright.chromium.launch(headless=True)
-        own_browser = browser
+        effective_browser = await own_playwright.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+        )
+        own_browser = effective_browser
+    browser = effective_browser
 
     context = await browser.new_context(
         user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
