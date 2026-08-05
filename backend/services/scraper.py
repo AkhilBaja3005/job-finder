@@ -14,9 +14,28 @@ import re
 _shared_playwright = None
 _shared_browser = None
 
+# ── Pre-warmed browser context pool ─────────────────────────────────────────
+# Context creation + stealth init script takes ~200-500ms; pre-creating a
+# small pool of ready-to-use contexts avoids paying that cost on every scrape
+# when several run concurrently against the shared browser.
+CONTEXT_POOL_SIZE = 2
+_context_pool = None  # asyncio.Queue[BrowserContext] once init_shared_browser() runs
+_STEALTH_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+_STEALTH_INIT_SCRIPT = """
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    window.chrome = { runtime: {} };
+    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+"""
+
+async def _create_stealth_context(browser):
+    context = await browser.new_context(user_agent=_STEALTH_USER_AGENT)
+    await context.add_init_script(_STEALTH_INIT_SCRIPT)
+    return context
+
 async def init_shared_browser():
     """Launch the persistent shared Playwright browser. Called once at startup."""
-    global _shared_playwright, _shared_browser
+    global _shared_playwright, _shared_browser, _context_pool
     try:
         _shared_playwright = await async_playwright().start()
         _shared_browser = await _shared_playwright.chromium.launch(
@@ -32,6 +51,15 @@ async def init_shared_browser():
             ]
         )
         print("[Scraper] ⚡ Shared Playwright browser ready")
+        try:
+            pool = asyncio.Queue()
+            for _ in range(CONTEXT_POOL_SIZE):
+                pool.put_nowait(await _create_stealth_context(_shared_browser))
+            _context_pool = pool
+            print(f"[Scraper] ⚡ Pre-warmed {CONTEXT_POOL_SIZE} browser contexts")
+        except Exception as pool_err:
+            print(f"[Scraper] Context pool warm-up failed: {pool_err}")
+            _context_pool = None
     except Exception as e:
         print(f"[Scraper] Shared browser init failed: {e}")
         _shared_playwright = None
@@ -39,7 +67,16 @@ async def init_shared_browser():
 
 async def close_shared_browser():
     """Gracefully shut down the shared browser. Called on app shutdown."""
-    global _shared_playwright, _shared_browser
+    global _shared_playwright, _shared_browser, _context_pool
+    if _context_pool is not None:
+        while not _context_pool.empty():
+            try:
+                ctx = _context_pool.get_nowait()
+                try: await ctx.close()
+                except Exception: pass
+            except asyncio.QueueEmpty:
+                break
+        _context_pool = None
     if _shared_browser:
         try: await _shared_browser.close()
         except Exception: pass
@@ -284,22 +321,25 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
         own_browser = effective_browser
     browser = effective_browser
 
-    context = await browser.new_context(
-        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    )
+    # Pull a pre-warmed context from the pool when scraping against the
+    # shared browser (skips new_context + add_init_script, ~200-500ms saved).
+    context = None
+    from_pool = False
+    if browser is _shared_browser and _context_pool is not None:
+        try:
+            context = _context_pool.get_nowait()
+            from_pool = True
+        except asyncio.QueueEmpty:
+            context = None
+    if context is None:
+        context = await _create_stealth_context(browser)
+
     page = await context.new_page()
 
     # Block heavy resource downloads (images, fonts, media, stylesheets) to reduce RAM/network load by 60%
     await page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "font", "media", "stylesheet"] else route.continue_())
 
     try:
-        await page.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            window.chrome = { runtime: {} };
-            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-        """)
-
         body_text = ""
         title = "Unknown Role"
         extracted_company = ""
@@ -462,7 +502,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                 title: str
                 description: str
 
-            response_text = generate_content_with_fallback(prompt, CleanedJobInfo)
+            response_text = await asyncio.to_thread(generate_content_with_fallback, prompt, CleanedJobInfo)
             import json
             cleaned_info = json.loads(response_text)
 
@@ -541,15 +581,23 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
             try: await page.close()
             except Exception: pass
         if context is not None:
-            try: await context.close()
-            except Exception: pass
+            if from_pool and _context_pool is not None:
+                try:
+                    await context.clear_cookies()
+                    _context_pool.put_nowait(context)
+                except Exception:
+                    try: await context.close()
+                    except Exception: pass
+            else:
+                try: await context.close()
+                except Exception: pass
         if own_browser is not None:
             try: await own_browser.close()
             except Exception: pass
         if own_playwright is not None:
             try: await own_playwright.stop()
             except Exception: pass
-        
+
         # Explicitly invoke garbage collection to clear unneeded browser context resources
         import gc
         gc.collect()

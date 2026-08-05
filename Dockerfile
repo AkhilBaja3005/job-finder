@@ -54,6 +54,15 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 # Copy backend codebase
 COPY backend/ ./backend/
 
+# Pre-warm Tectonic's font cache: the first real compile after a cold start
+# downloads fonts from the internet (5-15s on HF's network). Running one
+# dummy compile here bakes the font cache into this image layer instead.
+RUN mkdir -p /tmp/tectonic-warmup \
+    && cp backend/assets/resume.cls /tmp/tectonic-warmup/ \
+    && printf '\\documentclass{resume}\n\\begin{document}\nWarmup\n\\end{document}\n' > /tmp/tectonic-warmup/warmup.tex \
+    && tectonic /tmp/tectonic-warmup/warmup.tex --outdir /tmp/tectonic-warmup \
+    && rm -rf /tmp/tectonic-warmup
+
 WORKDIR /app/backend
 EXPOSE 8000
 CMD ["python", "main.py"]
