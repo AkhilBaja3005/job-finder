@@ -306,7 +306,13 @@ async def daily_match_mailer_loop():
                     # Dynamic domain resolution: use BACKEND_URL environment variable if set (ideal for Render),
                     # fallback to localhost if missing.
                     base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
-                    tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(url, safe='')}&email={urllib.parse.quote(email)}"
+                    tailor_url = (
+                        f"{base_url}/email_action/tailor"
+                        f"?job_url={urllib.parse.quote(url, safe='')}"
+                        f"&email={urllib.parse.quote(email)}"
+                        f"&title={urllib.parse.quote(title, safe='')}"
+                        f"&company={urllib.parse.quote(company, safe='')}"
+                    )
                     
                     text_digest += f"{idx+1}. {title} at {company} ({platform})\n   Match Score: {score}%{recruiter_str}\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
                     
@@ -2113,7 +2119,23 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
 # pyrefly: ignore [missing-import]
 from fastapi import BackgroundTasks
 
-async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_data: dict, ats_score: int):
+async def async_tailor_pipeline(
+    email: str,
+    job_url: str,
+    user_id: str,
+    resume_data: dict,
+    ats_score: int,
+    hint_title: str = "",
+    hint_company: str = "",
+):
+    # Titles that indicate a bot-block / challenge page rather than a real job listing
+    _BOT_TITLES = {
+        "target role", "unknown role", "verification required",
+        "just a moment", "error processing your request",
+        "access denied", "attention required", "indeed job",
+        "linkedin job", "tailored job application",
+    }
+
     try:
         from services.auth import supabase_request
         # Load user resume LaTeX master template
@@ -2126,13 +2148,34 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         
         # Scrape job details
         scraped = await scrape_job_description(job_url)
-        job_title = scraped.get("title", "Target Role")
+        job_title = scraped.get("title", "")
         jd_text = scraped.get("description", "")
-        company_name = scraped.get("company")
-        if not company_name or company_name == "Target Company":
+        company_name = scraped.get("company", "")
+
+        # ── Fallback to digest hints when scraper was bot-blocked ──────────
+        # A bot-block page title or an empty/short description means the scraper
+        # hit a Cloudflare challenge / "Verification Required" page.
+        scrape_blocked = (
+            not job_title
+            or job_title.lower().strip() in _BOT_TITLES
+            or not jd_text
+            or len(jd_text.strip()) < 100
+        )
+        if scrape_blocked and hint_title:
+            print(f"[Auto Tailor] Scrape blocked (title='{job_title}'). Using digest hint: '{hint_title}'")
+            job_title = hint_title
+        elif not job_title or job_title.lower().strip() in _BOT_TITLES:
+            job_title = "Target Role"
+
+        # Company: prefer scraped → URL extraction → digest hint → fallback
+        if not company_name or company_name.lower() in {"target company", "indeed employer", "linkedin job", ""}:
             company_name = _extract_company_from_jd(jd_text, job_url)
+        if (not company_name or company_name.lower() in {"target company", ""}) and hint_company:
+            print(f"[Auto Tailor] Using digest hint company: '{hint_company}'")
+            company_name = hint_company
         if not company_name:
             company_name = "Target Company"
+
 
         # Calculate actual pre-tailored initial ATS score
         from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
@@ -2369,10 +2412,18 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         traceback.print_exc()
 
 @app.get("/email_action/tailor", response_class=HTMLResponse)
-async def email_action_tailor(job_url: str, email: str, background_tasks: BackgroundTasks):
+async def email_action_tailor(
+    job_url: str,
+    email: str,
+    background_tasks: BackgroundTasks,
+    title: str = "",
+    company: str = "",
+):
     """
     Zero-Click URL handler clicked from matching digest email:
     Asynchronously tailors, compiles, and delivers PDF to user email.
+    title and company are optional hints from the digest — used as fallback
+    when the job page is blocked by Cloudflare/bot-detection.
     """
     try:
         from services.auth import supabase_request
@@ -2394,7 +2445,8 @@ async def email_action_tailor(job_url: str, email: str, background_tasks: Backgr
         resume_data = json.loads(resume_data_str)
         
         # Queue the entire scraping, tailoring, review, compilation, and email delivery to run in background
-        background_tasks.add_task(async_tailor_pipeline, email, job_url, user_id, resume_data, 0)
+        # Pass hint_title / hint_company so the pipeline can fall back to known values when scraping is blocked
+        background_tasks.add_task(async_tailor_pipeline, email, job_url, user_id, resume_data, 0, title, company)
         
         return HTMLResponse(f"""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #0284C7; border-radius: 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
@@ -2782,7 +2834,7 @@ async def send_outreach_email(request: SendOutreachEmailRequest, authorization: 
 async def admin_logs_dashboard(key: Optional[str] = None):
     """
     Secure admin live log streaming dashboard URL.
-    Access via: https://your-domain.com/admin/logs?key=ADMIN_SECRET
+    Access via: https://your-domain.com/admin/logs?key=akhil-admin-secret-123
     """
     admin_key = os.getenv("ADMIN_LOG_KEY", "akhil-admin-secret-123")
     if key != admin_key:

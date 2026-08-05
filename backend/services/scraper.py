@@ -180,8 +180,11 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                                 "just a moment",
                                 "access denied",
                                 "verify you are human",
+                                "verification required",
                                 "enable javascript",
                                 "checking your browser",
+                                "please wait",
+                                "security check",
                             ]
                             raw_lower = raw_data[:2000].lower()
                             if any(p in raw_lower for p in bot_block_phrases):

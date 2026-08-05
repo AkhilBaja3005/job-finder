@@ -17,9 +17,10 @@ window.fetch = async function (resource, config = {}) {
   return originalFetch(resource, config);
 };
 
-const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ? 'http://127.0.0.1:8000'
-  : window.location.origin;
+const API_BASE = import.meta.env.VITE_API_BASE
+  || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://127.0.0.1:8000'
+      : window.location.origin);
 
 // Reads a newline-delimited JSON (NDJSON) streaming response body and yields
 // each parsed event object as it arrives. Shared by every SSE/NDJSON endpoint
