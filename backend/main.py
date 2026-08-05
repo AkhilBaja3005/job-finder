@@ -2111,25 +2111,31 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
             company_name = _extract_company_from_jd(jd_text, job_url)
         if not company_name:
             company_name = "Target Company"
-        
+
+        # Retrieve user custom API key if saved in database
+        custom_api_key = None
+        users = supabase_request(f"users?id=eq.{user_id}", "GET")
+        if users and users[0].get("gemini_api_key"):
+            custom_api_key = users[0].get("gemini_api_key")
+
         # Force tailoring (Auto Mode ignores suitability warnings)
         from services.llm_agent import analyze_job_fit, review_tailored_resume
         # Call analyze_job_fit deterministically to get updates details
-        fit_analysis = await analyze_job_fit(resume_data, job_title, jd_text, master_latex, None, on_log=None)
+        fit_analysis = await analyze_job_fit(resume_data, job_title, jd_text, master_latex, custom_api_key, on_log=None)
         
         # Merge updates
         tailored_updates = fit_analysis.suggested_resume_updates
         missing_skills = fit_analysis.match_analysis.missing_skills
         
         # Force compiling tailored LaTeX code
-        tailored_latex = tailor_latex_code(master_latex, job_title, jd_text, tailored_updates, missing_skills, None, "", on_log=None)
+        tailored_latex = tailor_latex_code(master_latex, job_title, jd_text, tailored_updates, missing_skills, custom_api_key, "", on_log=None)
 
         # Run Two-Phase Reviewer Agent (Structural Integrity + Truthfulness + Quality check)
-        review_res = review_tailored_resume(tailored_latex, resume_data, job_title, jd_text, None, on_log=None)
+        review_res = review_tailored_resume(tailored_latex, resume_data, job_title, jd_text, custom_api_key, on_log=None)
         if not review_res.satisfied:
             print(f"[Auto Tailor] Reviewer agent flagged quality/truthfulness issues: {review_res.feedback}. Running refinement...")
             tailored_latex = tailor_latex_code(
-                master_latex, job_title, jd_text, tailored_updates, missing_skills, None,
+                master_latex, job_title, jd_text, tailored_updates, missing_skills, custom_api_key,
                 f"REVIEWER AGENT FEEDBACK: {review_res.feedback}", on_log=None
             )
 
