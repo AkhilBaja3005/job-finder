@@ -161,12 +161,15 @@ async def hf_keep_alive_loop():
     await asyncio.sleep(60) # Wait 1 minute after server startup
     while True:
         try:
-            # Ping local fast server loop directly (0ms latency, zero timeout risk)
+            # Ping local fast server loop in a background thread (0ms latency, zero main thread block)
             target_url = "http://127.0.0.1:8000/"
-            import urllib.request
-            req = urllib.request.Request(target_url, headers={"User-Agent": "HFKeepAlive/1.0"})
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                print(f"[Keep Alive] Successfully pinged local server (status={resp.status}) - Space active!")
+            def _ping():
+                import urllib.request
+                req = urllib.request.Request(target_url, headers={"User-Agent": "HFKeepAlive/1.0"})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    return resp.status
+            status = await asyncio.to_thread(_ping)
+            print(f"[Keep Alive] Successfully pinged local server (status={status}) - Space active!")
         except Exception as e:
             print(f"[Keep Alive Warning] Self-ping attempt: {e}")
         await asyncio.sleep(14400) # Ping every 4 hours (14,400 seconds)
@@ -174,8 +177,13 @@ async def hf_keep_alive_loop():
 async def daily_match_mailer_loop():
     # Startup settle logic: Wait 5 minutes before first background mailer scan
     # so Uvicorn can serve web traffic instantly with zero CPU contention.
-    print("[Daily Mailer] Production deployment detected. Waiting 5 minutes before first cron check loop...")
-    await asyncio.sleep(300)
+
+    if _is_local_deployment():
+        print("[Daily Mailer] Local deployment detected. Waiting 10 seconds before first cron check loop...")
+        await asyncio.sleep(10)
+    else:
+        print("[Daily Mailer] Production deployment detected. Waiting 5 minutes before first cron check loop...")
+        await asyncio.sleep(300)
     
     # Store last sent date for users to avoid duplicate notifications on same day
     # format: { (user_id, date_string): True }
@@ -392,6 +400,11 @@ async def daily_match_mailer_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Cap maximum background threads to 4 to prevent Out-Of-Memory crashes & CPU thrashing on cloud containers
+    import concurrent.futures
+    loop = asyncio.get_running_loop()
+    loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=4))
+
     # Startup: Perform immediate full purge of leftover files from previous deployment container instances
     await auto_clean_expired_files(force_startup_purge=True)
     # Start the background checker loop task
@@ -2113,6 +2126,12 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         if not company_name:
             company_name = "Target Company"
 
+        # Calculate actual pre-tailored initial ATS score
+        from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
+        ats_res = compute_ats_score(resume_data, jd_text)
+        role_fit = estimate_role_fit_score(resume_data, jd_text)
+        ats_score = compute_overall_score(ats_res.skills_score, ats_res.experience_score, role_fit)
+
         # Retrieve user custom API key if saved in database
         custom_api_key = None
         users = supabase_request(f"users?id=eq.{user_id}", "GET")
@@ -2146,8 +2165,8 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
         optimal_linespread = 1.0
 
         if pages > 1:
-            # Step 1: Mechanical spacing shrink (test down to 0.78 for dense multi-section resumes)
-            for ls in [0.95, 0.90, 0.85, 0.80, 0.78]:
+            # Step 1: Mechanical spacing shrink (test 0.85 and 0.78 directly for fast compilation)
+            for ls in [0.85, 0.78]:
                 p, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, 1.0, ls, master_latex)
                 if p == 1:
                     pages = 1
@@ -2155,8 +2174,8 @@ async def async_tailor_pipeline(email: str, job_url: str, user_id: str, resume_d
                     break
 
         if pages > 1:
-            # Step 2: Mechanical font scaling shrink
-            for scale in [0.85, 0.75, 0.65]:
+            # Step 2: Mechanical font scaling shrink (test 0.85 and 0.75)
+            for scale in [0.85, 0.75]:
                 p, _ = await asyncio.to_thread(compile_and_check_page_metrics, tailored_latex, scale, optimal_linespread, master_latex)
                 if p == 1:
                     pages = 1

@@ -293,8 +293,48 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
     fromage = fromage_map.get(timeframe, "2")
     url = f"https://www.indeed.com/jobs?q={encoded_keyword}&l={encoded_location}&fromage={fromage}"
     
-    log_ist(f"[Job Searcher] Fetching Indeed via Playwright: {url}")
+    log_ist(f"[Job Searcher] Fetching Indeed: {url}")
     results = []
+
+    # Fast path: Parse Indeed RSS XML feed directly via urllib (bypasses Cloudflare & Playwright)
+    try:
+        rss_url = f"https://www.indeed.com/rss?q={urllib.parse.quote(keyword)}&l={urllib.parse.quote(location)}"
+        req = urllib.request.Request(
+            rss_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1",
+                "Accept": "application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.8",
+                "Referer": "https://www.google.com/"
+            }
+        )
+        with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=5) as resp:
+            rss_xml = resp.read().decode("utf-8", errors="ignore")
+            rss_soup = BeautifulSoup(rss_xml, "xml")
+            items = rss_soup.find_all("item")
+            if items:
+                for item in items[:15]:
+                    raw_title = item.find("title").get_text().strip() if item.find("title") else "Indeed Job"
+                    link = item.find("link").get_text().strip() if item.find("link") else url
+                    pub_date = item.find("pubDate").get_text().strip() if item.find("pubDate") else "Recent"
+                    source_elem = item.find("source")
+                    company_name = source_elem.get_text().strip() if source_elem else "Indeed Employer"
+                    
+                    jk_match = re.search(r'[?&]jk=([a-f0-9]{16})', link)
+                    j_id = jk_match.group(1) if jk_match else None
+
+                    results.append(JobSearchResult(
+                        title=raw_title,
+                        company=company_name,
+                        location=location,
+                        url=link,
+                        platform="Indeed",
+                        post_date_raw=pub_date,
+                        job_id=j_id
+                    ))
+                log_ist(f"[Job Searcher] ⚡ Instantly fetched {len(results)} Indeed jobs via RSS XML feed for '{keyword}'")
+                return results
+    except Exception as rss_err:
+        log_ist(f"[Job Searcher] Indeed RSS fetch skipped ({rss_err}), attempting Playwright fallback...")
 
     # pyrefly: ignore [missing-import]
     from playwright.async_api import async_playwright

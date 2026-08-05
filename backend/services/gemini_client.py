@@ -24,8 +24,10 @@ PROVIDERS = [
     {"name": "groq",        "key_prefix": "gsk_",     "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]},
     {"name": "openrouter",  "key_prefix": "sk-or-",   "models": ["google/gemini-2.5-flash", "google/gemini-2.5-flash-lite"]},
     {"name": "nvidia",      "key_prefix": "nvapi-",   "models": ['meta/llama-3.1-8b-instruct', "meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "mistralai/mixtral-8x22b-instruct-v0.1"]},
-    {"name": "gemini",      "key_prefix": "AIza",     "models": ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-2.0-flash"]},
+    {"name": "gemini",      "key_prefix": "AIza",     "models": ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.6-flash" , "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash"]},
 ]
+
+     
 
 # Updated for low-latency resume generation and screening pipelines
 # Cleaned: Removed invalid catalog tracks to speed up response routing
@@ -35,16 +37,11 @@ NVIDIA_FALLBACK_MODELS = [
 ]
 
 JSON_FALLBACK_MODELS = [
-    'gemini-3.1-flash-lite',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
+"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.6-flash" , "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", 
 ]
 
 LATEX_FALLBACK_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-3.1-flash-lite',
-    'gemini-2.0-flash',
+"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.6-flash" , "gemini-3.5-flash", "gemini-3.0-flash","gemini-2.5-flash", 
 ]
 
 GROQ_FALLBACK_MODELS = [
@@ -122,7 +119,12 @@ def get_gemini_client(custom_api_key: Optional[str] = None) -> genai.Client:
 # sleeps before making a call if the model is already at its RPM ceiling.
 GEMINI_MODEL_RPM_LIMITS = {
     "gemini-3.1-flash-lite": 15,
-    "gemini-2.5-flash": 5
+    "gemini-3.5-flash-lite": 15,
+    "gemini-2.5-flash": 5,
+    "gemini-3.0-flash": 5,
+    "gemini-3.5-flash": 5,
+    "gemini-3.6-flash": 5,
+    "gemini-2.5-flash-lite": 10
 }
 _rpm_call_log: Dict[str, list] = {}
 _rpm_lock = threading.Lock()
@@ -253,7 +255,7 @@ def _generate_with_model_list(
 
     last_error = None
     for model_name in model_list:
-        for retry_attempt in range(3):
+        for retry_attempt in range(1):  # Single attempt per model variant to fail fast & prevent thread starvation
             try:
                 _throttle_for_rpm(model_name)
                 msg_llm = f"[LLM] Attempting generation with model: {model_name} (try {retry_attempt + 1})..."
@@ -275,8 +277,9 @@ def _generate_with_model_list(
                 last_error = e
                 err_str = str(e).lower()
                 if any(x in err_str for x in ["429", "quota", "rate limit", "resource_exhausted"]):
-                    _cooperative_sleep(10)
-                    continue
+                    from services.log_queue import log_ist
+                    log_ist(f"[LLM] Model {model_name} rate limited (429). Switching immediately to next fallback model...")
+                    break  # Break out of loop for this model to try the next model immediately
                 break # Non-rate-limit client problems move strictly forward to downstream models
 
     raise RuntimeError(f"All sequence pipelines and model alternatives exhausted. Final floor exception: {last_error}")
@@ -534,7 +537,6 @@ def _execute_openrouter(prompt: str, model_list: list, response_schema, api_key:
         'gemini-3.1-flash-lite': 'google/gemini-2.5-flash-lite',
         'gemini-2.5-flash-lite': 'google/gemini-2.5-flash-lite',
         'gemini-2.5-flash': 'google/gemini-2.5-flash',
-        'gemini-2.0-flash': 'google/gemini-2.5-flash',
     }
     last_error = None
     for model_name in model_list:
