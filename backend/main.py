@@ -306,7 +306,7 @@ async def daily_match_mailer_loop():
                     # Dynamic domain resolution: use BACKEND_URL environment variable if set (ideal for Render),
                     # fallback to localhost if missing.
                     base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
-                    tailor_url = f"{base_url}/email_action/tailor?job_url={url}&email={urllib.parse.quote(email)}"
+                    tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(url, safe='')}&email={urllib.parse.quote(email)}"
                     
                     text_digest += f"{idx+1}. {title} at {company} ({platform})\n   Match Score: {score}%{recruiter_str}\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
                     
@@ -875,13 +875,21 @@ def _extract_company_from_jd(jd_text: str, job_url: str = None) -> str:
             print(f"[_extract_company_from_jd] Cleaned URL: {cleaned_url}")
 
             # LinkedIn Job URL: https://www.linkedin.com/jobs/view/data-scientist-at-merimen-4437635758
-            # Company name is between "at-" and the next "-" followed by digits or "/"
-            linkedin_job_match = _re_url.search(r'-at-([a-z0-9-]+?)(?:-\d+|/|$)', cleaned_url.lower())
-            if linkedin_job_match:
-                company_from_linkedin = linkedin_job_match.group(1).strip().replace('-', ' ').strip().title()
-                if company_from_linkedin and company_from_linkedin.lower() not in {'', 'unknown'}:
-                    print(f"[_extract_company_from_jd] ✓ Extracted from LinkedIn Job URL: {company_from_linkedin}")
-                    return company_from_linkedin
+            # Job title can itself contain "-at-CompanyA-at-CompanyB-{jobId}", so we MUST look for
+            # the LAST "-at-" segment immediately before the numeric job ID — not the first one.
+            # Strategy: strip the job-ID suffix first, then split on "-at-" and take the last part.
+            li_slug_match = _re_url.search(r'/jobs/view/(.+?)(?:/|\?|$)', cleaned_url)
+            if li_slug_match:
+                slug = li_slug_match.group(1).lower()
+                # Remove trailing job ID (7-13 digits)
+                slug_without_id = _re_url.sub(r'-\d{7,13}$', '', slug)
+                if '-at-' in slug_without_id:
+                    # Split on "-at-" and take the last segment → the actual company slug
+                    company_slug_part = slug_without_id.split('-at-')[-1]
+                    company_from_linkedin = company_slug_part.strip().replace('-', ' ').strip().title()
+                    if company_from_linkedin and company_from_linkedin.lower() not in {'', 'unknown'}:
+                        print(f"[_extract_company_from_jd] ✓ Extracted from LinkedIn Job URL slug: {company_from_linkedin}")
+                        return company_from_linkedin
 
             # LinkedIn Company URL: https://www.linkedin.com/company/merimen-technologies-singapore-pte-ltd/life/
             # Extract company slug and scrape the page to get the actual company name

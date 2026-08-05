@@ -129,12 +129,20 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
             import urllib.request, json
             from utils.ssl_utils import SSL_CONTEXT
             from services.log_queue import log_ist
-            # Extract Indeed job key (jk=...)
-            jk_match = re.search(r'[?&]jk=([a-f0-9]{16})', url) or re.search(r'/rc/clk\?jk=([a-f0-9]{16})', url) or re.search(r'jk=([a-f0-9]{16})', url)
+            # Extract Indeed job key (jk=...) — supports /rc/clk?jk=, /viewjob?jk=, and bare jk= params
+            jk_match = (
+                re.search(r'[?&]jk=([a-f0-9]{16})', url) or
+                re.search(r'/rc/clk\?jk=([a-f0-9]{16})', url) or
+                re.search(r'jk=([a-f0-9]{16})', url)
+            )
             if jk_match:
                 jk = jk_match.group(1)
                 # Try mobile & desktop viewjob endpoints to bypass Cloudflare 403 blocks
-                for direct_url in [f"https://m.indeed.com/rpc/jobdescs?jks={jk}", f"https://www.indeed.com/viewjob?jk={jk}"]:
+                for direct_url in [
+                    f"https://m.indeed.com/rpc/jobdescs?jks={jk}",
+                    f"https://www.indeed.com/viewjob?jk={jk}",
+                    f"https://m.indeed.com/viewjob?jk={jk}"
+                ]:
                     try:
                         req = urllib.request.Request(
                             direct_url,
@@ -148,7 +156,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                         with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=8) as resp:
                             content_type = resp.headers.get("Content-Type", "")
                             raw_data = resp.read().decode("utf-8", errors="ignore")
-                            
+
                             # Handle mobile JSON API endpoint response
                             if "json" in content_type:
                                 jdata = json.loads(raw_data)
@@ -166,7 +174,20 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                                             "html": html_desc
                                         }
 
-                            # Handle HTML response
+                            # Handle HTML response — check for bot-block / error pages first
+                            bot_block_phrases = [
+                                "error processing your request",
+                                "just a moment",
+                                "access denied",
+                                "verify you are human",
+                                "enable javascript",
+                                "checking your browser",
+                            ]
+                            raw_lower = raw_data[:2000].lower()
+                            if any(p in raw_lower for p in bot_block_phrases):
+                                log_ist(f"[Scraper] Indeed bot-block detected on {direct_url}, trying next endpoint")
+                                continue
+
                             soup = BeautifulSoup(raw_data, "html.parser")
                             jd_elem = (
                                 soup.select_one("#jobDescriptionText") or
@@ -178,7 +199,10 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                                 title_elem = soup.select_one("h1.jobsearch-JobInfoHeader-title") or soup.select_one("h1")
                                 cmp_anchor = soup.select_one("a[href*='/cmp/']") or soup.select_one("[data-company-name='true']")
                                 jd_text = jd_elem.get_text(separator="\n").strip()
-                                title = title_elem.get_text().strip() if title_elem else "Indeed Job"
+                                raw_title = title_elem.get_text().strip() if title_elem else "Indeed Job"
+                                # Guard against bot-block page titles leaking into job title
+                                error_titles = {"error processing your request", "just a moment", "access denied", "attention required"}
+                                title = raw_title if raw_title.lower() not in error_titles else "Indeed Job"
                                 company = cmp_anchor.get_text().strip() if cmp_anchor else "Indeed Employer"
                                 log_ist(f"[Scraper] ⚡ Instantly fetched Indeed JD via direct HTML for JK: {jk}")
                                 return {
@@ -191,6 +215,8 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                                 }
                     except Exception:
                         continue
+            else:
+                log_ist(f"[Scraper] Indeed URL has no jk= key, cannot use fast path: {url}")
         except Exception as indeed_err:
             from services.log_queue import log_ist
             log_ist(f"[Scraper] Indeed direct fetch error ({indeed_err}), falling back to Playwright")
@@ -258,6 +284,24 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
 
                 soup = BeautifulSoup(html, 'html.parser')
 
+                # ── Bot-block / error page detection ──────────────────────────
+                # Indeed (and Cloudflare) show "Error Processing Request", "Just a moment",
+                # or CAPTCHA pages to datacenter IPs. Detect these early and skip retries.
+                _bot_block_phrases = [
+                    "error processing your request",
+                    "just a moment",
+                    "access denied",
+                    "verify you are human",
+                    "enable javascript and cookies",
+                    "checking your browser",
+                    "please enable cookies",
+                ]
+                _page_lower = (title + " " + html[:3000]).lower()
+                if "indeed.com" in url and any(p in _page_lower for p in _bot_block_phrases):
+                    log_ist(f"[Scraper] Indeed bot-block page detected via Playwright (title='{title}'). Stopping retries.")
+                    break  # No point retrying — datacenter IP is blocked by Indeed
+                # ──────────────────────────────────────────────────────────────
+
                 # LinkedIn specific selector matches
                 if "linkedin.com" in url:
                     jd_elem = (
@@ -278,7 +322,11 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                         soup.select_one("h1")
                     )
                     if indeed_title_elem and indeed_title_elem.get_text().strip():
-                        title = indeed_title_elem.get_text().strip()
+                        raw_title = indeed_title_elem.get_text().strip()
+                        # Guard: don't use error-page h1 as a job title
+                        _error_h1s = {"error processing your request", "just a moment", "access denied", "attention required"}
+                        if raw_title.lower() not in _error_h1s:
+                            title = raw_title
 
                     # Try to extract company name from Indeed /cmp/ link (e.g. href="https://www.indeed.com/cmp/Apple?...")
                     cmp_anchor = soup.select_one("a[href*='/cmp/']")
