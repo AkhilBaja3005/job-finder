@@ -241,7 +241,7 @@ def _generate_with_model_list(
                 on_log(json.dumps({"type": "llm_warn", "provider": "cloudflare", "message": f"Cloudflare failed: {str(cf_err)[:100]}"}))
 
     # ── STAGE 3: Native Gemini Client (Final Fallback Floor) ─────────────────
-    gemini_key = custom_api_key if (custom_api_key and custom_api_key.startswith("AIza")) else os.getenv("GEMINI_API_KEY")
+    gemini_key = custom_api_key if (custom_api_key and (custom_api_key.startswith("AIza") or custom_api_key.startswith("AQ."))) else os.getenv("GEMINI_API_KEY")
     if not gemini_key:
         raise ValueError("Pipeline dropped to final floor, but GEMINI_API_KEY environment variable is missing.")
 
