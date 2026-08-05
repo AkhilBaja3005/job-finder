@@ -9,6 +9,8 @@ const TailorMode = ({
   setJobDescription,
   analysisResult,
   loading,
+  urlScraping,
+  urlScrapeError,
   handleUrlBlur,
   handleAnalyzeJob,
   handleGenerateTailoredResume,
@@ -25,6 +27,19 @@ const TailorMode = ({
           onChange={(e) => setJobUrl(e.target.value)}
           onBlur={handleUrlBlur}
         />
+        {(urlScraping || urlScrapeError) && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.74rem',
+            marginTop: '-8px', marginBottom: '10px',
+            color: urlScrapeError ? 'var(--accent-red)' : 'var(--accent-secondary)'
+          }}>
+            {urlScraping ? (
+              <>⏳ Scraping job description from URL…</>
+            ) : (
+              <>⚠️ {urlScrapeError}</>
+            )}
+          </div>
+        )}
         <input
           type="text"
           placeholder="Job Title (e.g. Software Engineer)"
@@ -42,14 +57,19 @@ const TailorMode = ({
         </div>
         <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
           {!analysisResult && (
-            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => handleAnalyzeJob()} disabled={loading}>
+            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => handleAnalyzeJob()} disabled={loading || urlScraping} title="Get your ATS match score only — no resume changes yet">
               {loading ? '⏳' : '🔍 Analyze Job'}
             </button>
           )}
-          <button className="btn" style={{ flex: 1.2, width: analysisResult ? '100%' : 'auto' }} onClick={() => handleGenerateTailoredResume(false)} disabled={loading} title="Analyze & Tailor (Cmd+Enter)">
+          <button className="btn" style={{ flex: 1.2, width: analysisResult ? '100%' : 'auto' }} onClick={() => handleGenerateTailoredResume(false)} disabled={loading || urlScraping} title="Score + rewrite your resume and cover letter for this job (Cmd+Enter)">
             {loading ? '⏳' : '⚡ Analyze & Tailor'}
           </button>
         </div>
+        {!analysisResult && (
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.5 }}>
+            <strong>Analyze Job</strong> gives you a quick match score. <strong>Analyze &amp; Tailor</strong> also rewrites your resume &amp; cover letter for this job.
+          </div>
+        )}
         {analysisResult && (
           <button
             className="btn btn-secondary"

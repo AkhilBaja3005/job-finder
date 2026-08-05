@@ -2390,6 +2390,7 @@ async def async_tailor_pipeline(
             f"Hello {candidate_name},\n\n"
             f"Your tailored resume for '{job_title}' at '{company_name}' has been compiled successfully!\n\n"
             f"We have attached the PDF directly to this email.\n\n"
+            f"View the job listing and apply here:\n{job_url}\n\n"
             f"Want to make edits or customize it? Open it directly in Overleaf here:\n{overleaf_url}\n\n"
             f"Best of luck with your application!"
         )
@@ -2424,6 +2425,11 @@ async def async_tailor_pipeline(
             </p>
 
             <div style="text-align: center; margin: 30px 0 20px;">
+                <a href="{job_url}" target="_blank" style="display: inline-block; background-color: #10B981; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25); margin-bottom: 12px;">
+                    🚀 View Job & Apply
+                </a>
+                <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 8px; margin-bottom: 20px;">Opens the original job listing so you can submit your application</div>
+
                 <a href="{overleaf_url}" target="_blank" style="display: inline-block; background-color: #0284C7; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.25);">
                     🍃 Open & Edit in Overleaf
                 </a>
@@ -2514,11 +2520,21 @@ async def email_action_tailor(
         # Queue the entire scraping, tailoring, review, compilation, and email delivery to run in background
         # Pass hint_title / hint_company so the pipeline can fall back to known values when scraping is blocked
         background_tasks.add_task(async_tailor_pipeline, email, job_url, user_id, resume_data, 0, title, company)
-        
+
+        import html as _html
+        job_summary_html = ""
+        if title or company:
+            role_html = _html.escape(title) if title else "this role"
+            company_html = f" at <strong>{_html.escape(company)}</strong>" if company else ""
+            job_summary_html = f"""
+            <p style="color: #1E293B; font-size: 0.95rem; font-weight: 600; margin: 0 0 4px;">{role_html}{company_html}</p>
+            """
+
         return HTMLResponse(f"""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #0284C7; border-radius: 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
             <div style="font-size: 3rem; margin-bottom: 12px;">📄</div>
             <h2 style="color: #0284C7; margin: 0 0 10px;">Tailoring In Progress...</h2>
+            {job_summary_html}
             <p style="color: #4B5563; font-size: 0.95rem; line-height: 1.6;">
                 We are tailoring your resume for the job in the background.
                 We will email the compiled PDF directly to <strong>{email}</strong> once completed.
