@@ -67,47 +67,58 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                 li_id_match = re.search(r'-(\d{7,13})(?:/|\?|$)', url)
             if li_id_match:
                 job_id = li_id_match.group(1)
-                api_url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
-                req = urllib.request.Request(
-                    api_url,
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                        "Accept-Language": "en-US,en;q=0.5",
-                    }
-                )
-                with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=8) as resp:
-                    html_bytes = resp.read()
-                    html = html_bytes.decode("utf-8", errors="ignore")
-                    soup = BeautifulSoup(html, "html.parser")
+                user_agents = [
+                    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1",
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
+                ]
+                endpoints = [
+                    f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}",
+                    f"https://www.linkedin.com/jobs/view/{job_id}"
+                ]
+                for api_url in endpoints:
+                    for ua in user_agents:
+                        try:
+                            req = urllib.request.Request(
+                                api_url,
+                                headers={
+                                    "User-Agent": ua,
+                                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                                    "Accept-Language": "en-US,en;q=0.5",
+                                    "Referer": "https://www.google.com/"
+                                }
+                            )
+                            with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=8) as resp:
+                                html_bytes = resp.read()
+                                html = html_bytes.decode("utf-8", errors="ignore")
+                                soup = BeautifulSoup(html, "html.parser")
 
-                    # Extract JD from LinkedIn guest API response
-                    jd_elem = (
-                        soup.select_one(".show-more-less-html__markup") or
-                        soup.select_one(".description__text") or
-                        soup.select_one("[class*='description__text']") or
-                        soup.select_one("section.description") or
-                        soup.select_one(".jobs-description__container")
-                    )
-                    title_elem = soup.select_one("h2.top-card-layout__title") or soup.select_one("h1")
-                    company_elem = soup.select_one("a.topcard__org-name-link") or soup.select_one(".topcard__flavor")
+                                jd_elem = (
+                                    soup.select_one(".show-more-less-html__markup") or
+                                    soup.select_one(".description__text") or
+                                    soup.select_one("[class*='description__text']") or
+                                    soup.select_one("section.description") or
+                                    soup.select_one(".jobs-description__container")
+                                )
+                                title_elem = soup.select_one("h2.top-card-layout__title") or soup.select_one("h1")
+                                company_elem = soup.select_one("a.topcard__org-name-link") or soup.select_one(".topcard__flavor")
 
-                    jd_text = jd_elem.get_text(separator="\n").strip() if jd_elem else ""
-                    title = title_elem.get_text().strip() if title_elem else "LinkedIn Job"
-                    company = company_elem.get_text().strip() if company_elem else ""
+                                jd_text = jd_elem.get_text(separator="\n").strip() if jd_elem else ""
+                                title = title_elem.get_text().strip() if title_elem else "LinkedIn Job"
+                                company = company_elem.get_text().strip() if company_elem else ""
 
-                    if jd_text and len(jd_text) > 100:
-                        log_ist(f"[Scraper] ⚡ Instantly fetched LinkedIn JD via guest API for Job ID: {job_id}")
-                        return {
-                            "title": title,
-                            "description": jd_text,
-                            "raw_text": jd_text,
-                            "company": company,
-                            "url": url,
-                            "html": html
-                        }
-                    else:
-                        log_ist(f"[Scraper] LinkedIn guest API returned thin content for {job_id}, falling back to Playwright")
+                                if jd_text and len(jd_text) > 100:
+                                    log_ist(f"[Scraper] ⚡ Instantly fetched LinkedIn JD via guest API for Job ID: {job_id}")
+                                    return {
+                                        "title": title,
+                                        "description": jd_text,
+                                        "raw_text": jd_text,
+                                        "company": company,
+                                        "url": url,
+                                        "html": html
+                                    }
+                        except Exception:
+                            continue
         except Exception as li_err:
             from services.log_queue import log_ist
             log_ist(f"[Scraper] LinkedIn guest API error ({li_err}), falling back to Playwright")
