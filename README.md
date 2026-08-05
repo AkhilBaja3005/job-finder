@@ -1,11 +1,11 @@
 ---
 title: AI Job Finder Agent
-emoji: 🚀
+emoji: 📚
 colorFrom: blue
 colorTo: indigo
 sdk: docker
 app_port: 8000
-pinned: false
+pinned: true
 ---
 
 # AI Job Finder Agent
