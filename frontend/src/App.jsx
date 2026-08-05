@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense, lazy } from 'react';
+import { useModalA11y } from './hooks/useModalA11y';
 
 // Optimization #3: Lazy-load dashboard modes for code splitting
 const TailorMode = lazy(() => import('./components/TailorMode'));
@@ -96,6 +97,12 @@ const RocketIcon = () => (
   </svg>
 );
 
+// Single source of truth for score → color mapping, used by every score
+// ring/bar/badge in the app. Previously each call site hardcoded its own
+// thresholds (some used >=55 for the "medium" cutoff, others >=60), so the
+// same score could render a different color depending on which screen showed it.
+const getScoreColor = (score) => (score >= 80 ? '#10B981' : score >= 60 ? '#38BDF8' : '#E57373');
+
 function App() {
   const [resumeData, setResumeData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -103,9 +110,10 @@ function App() {
   const [jobTitle, setJobTitle] = useState('');
   const [company, setCompany] = useState('');
   const [jobDescription, setJobDescription] = useState('');
+  const [urlScraping, setUrlScraping] = useState(false);
+  const [urlScrapeError, setUrlScrapeError] = useState('');
   const [analysisResult, setAnalysisResult] = useState(null);
   const [tailoredResumeData, setTailoredResumeData] = useState(null);
-  const [directMode, setDirectMode] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [statusLogs, setStatusLogs] = useState([]); // each entry: { message, ts }
   const [activeTab, setActiveTab] = useState('preview');
@@ -158,6 +166,12 @@ function App() {
   const [prepModalOpen, setPrepModalOpen] = useState(false);
   const [prepMarkdown, setPrepMarkdown] = useState('');
   const [prepJobInfo, setPrepJobInfo] = useState({ jobTitle: '', company: '' });
+
+  // Escape-to-close + focus trap/return for each modal (shared behavior)
+  const closeKeyboardHelp = useCallback(() => setShowKeyboardHelp(false), []);
+  const keyboardHelpModalRef = useModalA11y(showKeyboardHelp, closeKeyboardHelp);
+  const closePrepModal = useCallback(() => setPrepModalOpen(false), []);
+  const prepModalRef = useModalA11y(prepModalOpen, closePrepModal);
 
   // Cron Job Match Mailer Subscription states
   const [cronEnabled, setCronEnabled] = useState(false);
@@ -226,6 +240,7 @@ function App() {
   // any analysis/tailoring/JD tied to the previous URL is now stale and must
   // not linger on screen until the new URL is (re-)analyzed.
   const handleJobUrlChange = (newUrl) => {
+    setUrlScrapeError('');
     if (newUrl.trim() !== jobUrl.trim() && (analysisResult || tailoredResumeData || jobDescription)) {
       setJobTitle('');
       setJobDescription('');
@@ -269,14 +284,13 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Optimization #2: Keyboard shortcuts - handle ? key for help modal
+  // Optimization #2: Keyboard shortcut - '?' opens the help modal.
+  // Escape-to-close and focus trapping for the modal itself are handled by
+  // useModalA11y (shared across all modals) once it's open.
   useEffect(() => {
     const handler = (e) => {
       if (e.key === '?' && !showKeyboardHelp) {
         setShowKeyboardHelp(true);
-      }
-      if (e.key === 'Escape' && showKeyboardHelp) {
-        setShowKeyboardHelp(false);
       }
     };
     window.addEventListener('keydown', handler);
@@ -1044,7 +1058,8 @@ function App() {
 
   const handleUrlBlur = async () => {
     if (!jobUrl || !jobUrl.startsWith('http')) return;
-    setLoading(true);
+    setUrlScraping(true);
+    setUrlScrapeError('');
     setStatusMessage('Scraping job description automatically...');
     try {
       const res = await fetch(`${API_BASE}/scrape_job`, {
@@ -1062,8 +1077,9 @@ function App() {
       }
     } catch (err) {
       setStatusMessage(`Auto-scrape failed: ${err.message}`);
+      setUrlScrapeError(err.message);
     } finally {
-      setLoading(false);
+      setUrlScraping(false);
     }
   };
 
@@ -1145,53 +1161,6 @@ function App() {
     } catch (err) {
       setStatusMessage(`Error opening in Overleaf: ${err.message}`);
       // showToast(`❌ ${err.message}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Trigger Playwright Autofill Agent
-  const handleApply = async () => {
-    if (!jobUrl) {
-      alert('Please provide a Job Application URL to auto-apply.');
-      return;
-    }
-
-    setLoading(true);
-    setStatusMessage('Spawning automated browser agent to autofill your application...');
-
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (geminiApiKey) {
-        headers['X-Gemini-API-Key'] = geminiApiKey;
-      }
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
-
-      const response = await fetch(`${API_BASE}/apply`, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({
-          job_url: jobUrl,
-          direct_mode: directMode,
-          job_title: jobTitle || '',
-          company: company || '',
-        }),
-      });
-
-      const result = await response.json();
-      if (response.ok) {
-        setStatusMessage(
-          directMode
-            ? 'Application submitted successfully (Direct Mode)!'
-            : 'Form autofilled! Review details in the opened browser window and submit when ready.'
-        );
-      } else {
-        setStatusMessage(`Error starting application: ${result.detail}`);
-      }
-    } catch (err) {
-      setStatusMessage(`Network error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -1347,8 +1316,8 @@ function App() {
               <span style={{
                 width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0, animation: 'pulseGlow 2s infinite',
                 background: statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
-                  ? '#EF4444' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
-                    ? '#10B981' : '#38BDF8'
+                  ? 'var(--accent-red)' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
+                    ? 'var(--accent-green)' : 'var(--accent-secondary)'
               }} />
               <span style={{ fontSize: '0.78rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {statusMessage.length > 55 ? `${statusMessage.substring(0, 55)}…` : statusMessage}
@@ -1446,7 +1415,7 @@ function App() {
                   href="https://aistudio.google.com/app/apikey"
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ fontSize: '0.73rem', color: '#38BDF8', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '3px' }}
+                  style={{ fontSize: '0.73rem', color: 'var(--accent-secondary)', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '3px' }}
                 >
                   🔑 Get Free Gemini Key from Google ↗
                 </a>
@@ -1577,7 +1546,7 @@ function App() {
                     </div>
                     <div>
                       <div className="section-label" style={{ fontSize: '0.74rem', marginBottom: '4px' }}>
-                        Daily Send Time ({cronTime}) &bull; <span style={{ color: '#38BDF8' }}>{Intl.DateTimeFormat().resolvedOptions().timeZone} ({new Date().toLocaleTimeString('en-us', { timeZoneName: 'short' }).split(' ')[2] || 'Local'})</span>
+                        Daily Send Time ({cronTime}) &bull; <span style={{ color: 'var(--accent-secondary)' }}>{Intl.DateTimeFormat().resolvedOptions().timeZone} ({new Date().toLocaleTimeString('en-us', { timeZoneName: 'short' }).split(' ')[2] || 'Local'})</span>
                       </div>
                       <input
                         type="time"
@@ -1797,6 +1766,8 @@ function App() {
                   setJobDescription={setJobDescription}
                   analysisResult={analysisResult}
                   loading={loading}
+                  urlScraping={urlScraping}
+                  urlScrapeError={urlScrapeError}
                   handleUrlBlur={handleUrlBlur}
                   handleAnalyzeJob={handleAnalyzeJob}
                   handleGenerateTailoredResume={handleGenerateTailoredResume}
@@ -1886,10 +1857,12 @@ function App() {
                   <span>Loading history…</span>
                 </div>
               ) : applicationHistory.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-                  <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🕘</div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>No history yet</div>
-                  <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>Tailor a resume or apply to a job to see it recorded here.</div>
+                <div className="empty-state">
+                  <div className="empty-state-icon">🕘</div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>No history yet</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Tailor a resume or apply to a job to see it recorded here.</div>
+                  </div>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '560px', overflowY: 'auto', paddingRight: '4px' }}>
@@ -1909,21 +1882,21 @@ function App() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
-                              <span style={{ color: '#7dd3fc', fontWeight: 600 }}>🎯 Resumes Tailored</span>
+                              <span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>🎯 Resumes Tailored</span>
                               <span style={{ color: '#fff', fontWeight: 700 }}>{tailoredCount} ({tailoredPct}%)</span>
                             </div>
                             <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${tailoredPct}%`, background: '#7dd3fc', borderRadius: '999px' }} />
+                              <div style={{ height: '100%', width: `${tailoredPct}%`, background: 'var(--accent-cyan)', borderRadius: '999px' }} />
                             </div>
                           </div>
 
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
-                              <span style={{ color: '#10B981', fontWeight: 600 }}>✅ Submitted / Applied</span>
+                              <span style={{ color: 'var(--accent-green)', fontWeight: 600 }}>✅ Submitted / Applied</span>
                               <span style={{ color: '#fff', fontWeight: 700 }}>{appliedCount} ({appliedPct}%)</span>
                             </div>
                             <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${appliedPct}%`, background: '#10B981', borderRadius: '999px' }} />
+                              <div style={{ height: '100%', width: `${appliedPct}%`, background: 'var(--accent-green)', borderRadius: '999px' }} />
                             </div>
                           </div>
                         </div>
@@ -1951,8 +1924,8 @@ function App() {
                         style={{
                           fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
                           background: historyFilter === 'tailored' ? '#7dd3fc22' : 'rgba(255,255,255,0.05)',
-                          color: historyFilter === 'tailored' ? '#7dd3fc' : 'var(--text-muted)',
-                          border: historyFilter === 'tailored' ? '1px solid #7dd3fc' : '1px solid rgba(255,255,255,0.1)'
+                          color: historyFilter === 'tailored' ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                          border: historyFilter === 'tailored' ? '1px solid var(--accent-cyan)' : '1px solid rgba(255,255,255,0.1)'
                         }}
                       >
                         🎯 Tailored ({applicationHistory.filter(e => e.status !== 'applied').length})
@@ -1962,8 +1935,8 @@ function App() {
                         style={{
                           fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
                           background: historyFilter === 'applied' ? '#10B98122' : 'rgba(255,255,255,0.05)',
-                          color: historyFilter === 'applied' ? '#10B981' : 'var(--text-muted)',
-                          border: historyFilter === 'applied' ? '1px solid #10B981' : '1px solid rgba(255,255,255,0.1)'
+                          color: historyFilter === 'applied' ? 'var(--accent-green)' : 'var(--text-muted)',
+                          border: historyFilter === 'applied' ? '1px solid var(--accent-green)' : '1px solid rgba(255,255,255,0.1)'
                         }}
                       >
                         ✅ Submitted ({applicationHistory.filter(e => e.status === 'applied').length})
@@ -1977,7 +1950,7 @@ function App() {
                         onChange={(e) => setHistorySortOrder(e.target.value)}
                         style={{
                           fontSize: '0.68rem', padding: '3px 8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: '#0F172A', color: '#38BDF8', border: '1px solid rgba(56, 189, 248, 0.3)', outline: 'none'
+                          background: '#0F172A', color: 'var(--accent-secondary)', border: '1px solid rgba(56, 189, 248, 0.3)', outline: 'none'
                         }}
                       >
                         <option value="newest">📅 Newest First</option>
@@ -1999,7 +1972,7 @@ function App() {
                         return historySortOrder === 'newest' ? tsB - tsA : tsA - tsB;
                       })
                       .map((entry, idx) => {
-                      const statusColor = entry.status === 'applied' ? '#10B981' : '#7dd3fc';
+                      const statusColor = entry.status === 'applied' ? 'var(--accent-green)' : 'var(--accent-cyan)';
                       const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
                       return (
                         <div key={idx} className="card" style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
@@ -2008,10 +1981,10 @@ function App() {
                               <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>{entry.job_title || 'Untitled Role'}</div>
                               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
                               {entry.recruiter_name && (
-                                <div style={{ fontSize: '0.75rem', color: '#38BDF8', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--accent-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                   <span>👤 Recruiter:</span>
                                   {entry.recruiter_profile_url ? (
-                                    <a href={entry.recruiter_profile_url} target="_blank" rel="noreferrer" style={{ color: '#38BDF8', fontWeight: 600, textDecoration: 'underline' }}>
+                                    <a href={entry.recruiter_profile_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-secondary)', fontWeight: 600, textDecoration: 'underline' }}>
                                       {entry.recruiter_name}
                                     </a>
                                   ) : (
@@ -2050,8 +2023,8 @@ function App() {
                                   border: `1px solid ${statusColor}44`, cursor: 'pointer', outline: 'none'
                                 }}
                               >
-                                <option value="tailored" style={{ background: '#0F172A', color: '#7dd3fc' }}>Tailored</option>
-                                <option value="applied" style={{ background: '#0F172A', color: '#10B981' }}>Applied</option>
+                                <option value="tailored" style={{ background: '#0F172A', color: 'var(--accent-cyan)' }}>Tailored</option>
+                                <option value="applied" style={{ background: '#0F172A', color: 'var(--accent-green)' }}>Applied</option>
                               </select>
                               {typeof entry.score === 'number' && (
                                 <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#fff' }}>{entry.score}% match</span>
@@ -2239,12 +2212,12 @@ function App() {
                 {/* Render live streaming job cards immediately as they arrive */}
                 {discoveredJobs.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#10B981', fontWeight: 700 }}>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--accent-green)', fontWeight: 700 }}>
                       ⚡ Live Matches Arriving ({discoveredJobs.length}):
                     </div>
                     {discoveredJobs.map((job, idx) => {
                       const score = job.score || 0;
-                      const scoreColor = score >= 80 ? '#10B981' : score >= 60 ? '#38BDF8' : '#E57373';
+                      const scoreColor = getScoreColor(score);
                       return (
                         <div key={idx} className="card job-card" style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(16,185,129,0.3)', animation: 'fadeIn 0.3s ease-out' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
@@ -2328,10 +2301,12 @@ function App() {
                     </div>
 
                     {sorted.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-                        <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🔍</div>
-                        <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>No matching listings found</div>
-                        <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>Enter search keywords or location and scan matches.</div>
+                      <div className="empty-state">
+                        <div className="empty-state-icon">🔍</div>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>No matching listings found</div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Enter search keywords or location and scan matches.</div>
+                        </div>
                       </div>
                     ) : (
                       <>
@@ -2339,7 +2314,7 @@ function App() {
                           {paginated.map((job, idx) => {
                             const isExpanded = expandedCards.has(idx);
                             const score = job.score || 0;
-                            const scoreColor = score >= 80 ? '#10B981' : score >= 60 ? '#38BDF8' : '#E57373';
+                            const scoreColor = getScoreColor(score);
                             // Mini SVG arc for score
                             const r = 18, circ = 2 * Math.PI * r;
                             const arc = (score / 100) * circ;
@@ -2371,14 +2346,14 @@ function App() {
                                     {job.platform === 'LinkedIn' && !job.estimated && (
                                       job.recruiter_name ? (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', fontSize: '0.72rem' }}>
-                                          <span style={{ color: 'var(--text-muted)' }}>👤 Job poster: <span style={{ color: '#7dd3fc', fontWeight: 600 }}>{job.recruiter_name}</span></span>
+                                          <span style={{ color: 'var(--text-muted)' }}>👤 Job poster: <span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>{job.recruiter_name}</span></span>
                                           {job.recruiter_profile_url && (
                                             <a
                                               href={job.recruiter_profile_url}
                                               target="_blank"
                                               rel="noopener noreferrer"
                                               onClick={(e) => e.stopPropagation()}
-                                              style={{ color: '#7dd3fc', fontWeight: 600, flexShrink: 0 }}
+                                              style={{ color: 'var(--accent-cyan)', fontWeight: 600, flexShrink: 0 }}
                                             >
                                               View Profile ↗
                                             </a>
@@ -2445,7 +2420,7 @@ function App() {
                                     }}>
                                       <div>
                                         <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Skills</div>
-                                        <div style={{ fontWeight: 700, color: '#7dd3fc' }}>{job.skills_score || 50}%</div>
+                                        <div style={{ fontWeight: 700, color: 'var(--accent-cyan)' }}>{job.skills_score || 50}%</div>
                                         <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>
                                           {((job.matched_skills?.length || 0) + (job.missing_skills?.length || 0)) > 0
                                             ? `${job.matched_skills?.length || 0}/${(job.matched_skills?.length || 0) + (job.missing_skills?.length || 0)} key`
@@ -2454,14 +2429,14 @@ function App() {
                                       </div>
                                       <div>
                                         <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Experience</div>
-                                        <div style={{ fontWeight: 700, color: '#7dd3fc' }}>{job.experience_score || 70}%</div>
+                                        <div style={{ fontWeight: 700, color: 'var(--accent-cyan)' }}>{job.experience_score || 70}%</div>
                                         <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>{job.candidate_years || 3}y / {job.required_years || 4}y req</div>
                                       </div>
                                       {!compactMode && (
                                         <>
                                           <div>
                                             <div style={{ color: 'var(--text-muted)', fontSize: '0.64rem', marginBottom: '2px' }}>Role Fit</div>
-                                            <div style={{ fontWeight: 700, color: '#7dd3fc' }}>{job.role_fit_score || 65}%</div>
+                                            <div style={{ fontWeight: 700, color: 'var(--accent-cyan)' }}>{job.role_fit_score || 65}%</div>
                                             <div style={{ fontSize: '0.58rem', opacity: 0.55 }}>Semantic</div>
                                           </div>
                                           <div>
@@ -2560,7 +2535,7 @@ function App() {
                   <h3 style={{ margin: 0, color: 'var(--accent-amber)', fontSize: '1rem' }}>Candidate Suitability Warning</h3>
                 </div>
                 <p style={{ maxWidth: '600px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
-                  The AI Recruiter flagged potential mismatches after 3 checks. Review the feedback below before proceeding.
+                  Before tailoring, an AI reviewer compared your resume against{jobTitle ? <> the <strong>{jobTitle}</strong>{company ? <> role at <strong>{company}</strong></> : null} job description</> : ' this job\'s description'} and flagged potential mismatches after 3 checks. Review its feedback below before proceeding.
                 </p>
                 <div className="rejection-feedback-box" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.18)', borderRadius: '8px', padding: '16px', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.6, maxHeight: '200px', overflowY: 'auto' }}>
                   {rejectionWarning}
@@ -2584,8 +2559,9 @@ function App() {
                       setKeepOriginalMode(true);
                       setStatusMessage('Tailoring cancelled by user.');
                     }}
+                    title="Keeps your original, untailored resume instead"
                   >
-                    Cancel
+                    No, Keep Original Resume
                   </button>
                 </div>
               </div>
@@ -2708,12 +2684,7 @@ function App() {
                       className="match-ring"
                       style={{
                         '--percent': analysisResult.match_analysis.overall_score,
-                        '--color':
-                          analysisResult.match_analysis.overall_score >= 80
-                            ? 'var(--accent-green)'
-                            : analysisResult.match_analysis.overall_score >= 55
-                              ? 'var(--accent-primary)'
-                              : '#e57373',
+                        '--color': getScoreColor(analysisResult.match_analysis.overall_score),
                       }}
                     >
                       <span className="match-ring-text">
@@ -2748,7 +2719,7 @@ function App() {
                             className="score-bar-fill"
                             style={{
                               width: `${score}%`,
-                              background: score >= 80 ? 'var(--accent-green)' : score >= 55 ? 'var(--accent-primary)' : '#e57373',
+                              background: getScoreColor(score),
                               animationDelay: `${i * 0.12}s`
                             }}
                           />
@@ -3056,18 +3027,25 @@ function App() {
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
           background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 10000, backdropFilter: 'blur(4px)', animation: 'fadeIn 0.2s ease both'
-        }} onClick={() => setShowKeyboardHelp(false)}>
-          <div style={{
-            background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
-            borderRadius: '16px', padding: '32px', maxWidth: '500px', width: '90%',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.5)', animation: 'slideDown 0.3s ease both'
-          }} onClick={(e) => e.stopPropagation()}>
+        }} onClick={closeKeyboardHelp}>
+          <div
+            ref={keyboardHelpModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Keyboard Shortcuts"
+            tabIndex={-1}
+            style={{
+              background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+              borderRadius: '16px', padding: '32px', maxWidth: '500px', width: '90%',
+              maxHeight: '85vh', overflowY: 'auto',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)', animation: 'slideDown 0.3s ease both'
+            }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 700 }}>Keyboard Shortcuts</h2>
               <button
                 className="btn btn-secondary"
                 style={{ padding: '4px 8px', fontSize: '1.2rem', minWidth: '32px', minHeight: '32px' }}
-                onClick={() => setShowKeyboardHelp(false)}
+                onClick={closeKeyboardHelp}
                 aria-label="Close keyboard shortcuts help"
               >
                 ✕
@@ -3094,7 +3072,7 @@ function App() {
             <button
               className="btn"
               style={{ width: '100%', marginTop: '24px', fontWeight: 700 }}
-              onClick={() => setShowKeyboardHelp(false)}
+              onClick={closeKeyboardHelp}
             >
               Got it
             </button>
@@ -3109,13 +3087,19 @@ function App() {
           background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 9999, backdropFilter: 'blur(8px)', animation: 'fadeIn 0.25s ease both',
           padding: '20px'
-        }} onClick={() => setPrepModalOpen(false)}>
-          <div style={{
-            background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
-            borderRadius: '16px', padding: '24px', maxWidth: '800px', width: '100%',
-            maxHeight: '85vh', display: 'flex', flexDirection: 'column',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.7)', animation: 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) both'
-          }} onClick={(e) => e.stopPropagation()}>
+        }} onClick={closePrepModal}>
+          <div
+            ref={prepModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Interview Preparation Guide"
+            tabIndex={-1}
+            style={{
+              background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+              borderRadius: '16px', padding: '24px', maxWidth: '800px', width: '100%',
+              maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.7)', animation: 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) both'
+            }} onClick={(e) => e.stopPropagation()}>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '16px', flexShrink: 0 }}>
               <div>
@@ -3129,7 +3113,7 @@ function App() {
               <button
                 className="btn btn-secondary"
                 style={{ padding: '4px 8px', fontSize: '1.1rem', minWidth: '32px', minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={() => setPrepModalOpen(false)}
+                onClick={closePrepModal}
                 aria-label="Close interview prep pack"
               >
                 ✕
@@ -3154,7 +3138,7 @@ function App() {
               <button
                 className="btn btn-secondary"
                 style={{ flex: 1 }}
-                onClick={() => setPrepModalOpen(false)}
+                onClick={closePrepModal}
               >
                 Close
               </button>

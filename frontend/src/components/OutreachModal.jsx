@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useModalA11y } from '../hooks/useModalA11y';
 
 const OutreachModal = ({
   isOpen,
@@ -16,6 +17,7 @@ const OutreachModal = ({
   const [editingSection, setEditingSection] = useState(null);
   const [editedValues, setEditedValues] = useState({});
   const [copied, setCopied] = useState(false);
+  const modalRef = useModalA11y(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -88,7 +90,15 @@ const OutreachModal = ({
       onClick={onClose}
       style={{ alignItems: 'flex-start', paddingTop: Math.max(20, anchorTop) }}
     >
-      <div className="modal-content outreach-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={modalRef}
+        className="modal-content outreach-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Personalized Outreach"
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="modal-header">
           <div>
