@@ -108,8 +108,6 @@ async def async_get_user_by_token(token: str) -> Optional[dict]:
 
 def invalidate_token_cache(token: str):
     """Call after updating user settings so the cache reflects changes immediately."""
-    _token_cache.set(token, None)  # set to None acts as a tombstone; next read will re-fetch
-    # Actually just delete — safest approach
     with _token_cache._lock:
         _token_cache._store.pop(token, None)
 

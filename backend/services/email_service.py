@@ -278,7 +278,12 @@ def build_digest_email_html(candidate_name: str, jobs: list, base_url: str, user
         platform_color = "#EC4899" if is_reed else "#0A66C2" if is_linkedin else "#FF6F00"
         platform_bg = "#EC489915" if is_reed else "#0A66C215" if is_linkedin else "#FF6F0015"
         
-        tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(job_url, safe='')}&email={urllib.parse.quote(user_email, safe='')}"
+        tailor_url = (
+            f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(job_url, safe='')}"
+            f"&email={urllib.parse.quote(user_email, safe='')}"
+            f"&title={urllib.parse.quote(str(job.get('title', '')), safe='')}"
+            f"&company={urllib.parse.quote(str(job.get('company', '')), safe='')}"
+        )
         
         cards_html += f"""
         <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; box-sizing: border-box; overflow: hidden; margin-bottom: 12px;">

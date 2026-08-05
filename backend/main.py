@@ -51,6 +51,8 @@ from services.auth import (
     create_or_get_user,
     create_session,
     get_user_by_token,
+    async_get_user_by_token,
+    invalidate_token_cache,
     update_user_api_key,
     get_google_auth_url,
     exchange_google_code_for_email
@@ -788,7 +790,7 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
                 buffer.write(chunk)
 
         # Parse resume and extract structured fields
-        structured_data = parse_resume(file_path)
+        structured_data = await asyncio.to_thread(parse_resume, file_path)
         data = structured_data.model_dump()
         path = file_path
         
@@ -1137,9 +1139,10 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 # the same way, or repeat visits to an already-cached job silently
                 # never show up in history.
                 try:
-                    record_application(token, {
+                    entry_company = await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
+                    await asyncio.to_thread(record_application, token, {
                         "job_title": request.job_title,
-                        "company": _extract_company_from_jd(request.job_description, request.job_url),
+                        "company": entry_company,
                         "job_url": request.job_url or "",
                         "score": cached.get("match_analysis", {}).get("overall_score"),
                         "status": "tailored",
@@ -1148,7 +1151,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     print(f"[analyze_job] Failed to record application history (cache hit): {hist_err}")
             async def cached_event_generator():
                 yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
-                company_name = _extract_company_from_jd(request.job_description, request.job_url)
+                company_name = await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
                 yield json.dumps({
                     "type": "result",
                     "job_title": request.job_title,
@@ -1164,7 +1167,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
         try:
             db_api_key = None
             if token:
-                user = get_user_by_token(token)
+                user = await async_get_user_by_token(token)
                 if user:
                     db_api_key = user.get("gemini_api_key")
             
@@ -1190,9 +1193,10 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         cached["latex_code"] = ""
                     elif not request.skip_tailoring:
                         try:
-                            record_application(token, {
+                            entry_company = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
+                            await asyncio.to_thread(record_application, token, {
                                 "job_title": job_title,
-                                "company": _extract_company_from_jd(jd_text, request.job_url),
+                                "company": entry_company,
                                 "job_url": request.job_url or "",
                                 "score": cached.get("match_analysis", {}).get("overall_score"),
                                 "status": "tailored",
@@ -1200,7 +1204,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         except Exception as hist_err:
                             print(f"[analyze_job] Failed to record application history (cache hit): {hist_err}")
                     yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
-                    company_name = _extract_company_from_jd(jd_text, request.job_url)
+                    company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
                     yield json.dumps({
                         "type": "result",
                         "job_title": job_title,
@@ -1250,7 +1254,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             if request.skip_tailoring:
                 dumped = analysis.model_dump()
-                company_name = _extract_company_from_jd(jd_text, request.job_url)
+                company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
                 yield json.dumps({
                     "type": "result",
                     "job_title": job_title,
@@ -1428,7 +1432,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             dumped = analysis.model_dump()
             set_cached_analysis(token, job_title, jd_text, dumped)
-            company_name = _extract_company_from_jd(jd_text, request.job_url)
+            company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
             if (not company_name or company_name == "Target Hiring Company") and "scraped" in locals() and scraped.get("company"):
                 company_name = scraped.get("company")
             recruiter_name = None
@@ -1450,7 +1454,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     print(f"[analyze_job] Failed to generate Overleaf URL: {ov_err}")
 
             try:
-                record_application(token, {
+                await asyncio.to_thread(record_application, token, {
                     "job_title": job_title,
                     "company": company_name,
                     "job_url": request.job_url or "",
@@ -1677,7 +1681,7 @@ async def apply(request: ApplyRequest, http_request: Request, authorization: Opt
 
     db_api_key = None
     if token:
-        user = get_user_by_token(token)
+        user = await async_get_user_by_token(token)
         if user:
             db_api_key = user.get("gemini_api_key")
     active_api_key = x_gemini_api_key or db_api_key
@@ -1698,7 +1702,7 @@ async def apply(request: ApplyRequest, http_request: Request, authorization: Opt
             )
             update_task_status(task_id, "completed", "Job application form auto-filled successfully!")
             try:
-                record_application(token, {
+                await asyncio.to_thread(record_application, token, {
                     "job_title": request.job_title or "",
                     "company": request.company or "",
                     "job_url": request.job_url,
@@ -2006,7 +2010,7 @@ async def user_me(authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
     token = authorization.split(" ")[1]
-    user = get_user_by_token(token)
+    user = await async_get_user_by_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
     return user
@@ -2022,10 +2026,10 @@ async def user_subscription(request: SubscriptionRequest, authorization: Optiona
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
     token = authorization.split(" ")[1]
-    user = get_user_by_token(token)
+    user = await async_get_user_by_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
-    
+
     # Save preferences to Supabase
     from services.auth import supabase_request
     supabase_request(f"users?id=eq.{user['id']}", "PATCH", {
@@ -2034,6 +2038,7 @@ async def user_subscription(request: SubscriptionRequest, authorization: Optiona
         "cron_location": request.cron_location,
         "cron_time": request.cron_time
     })
+    invalidate_token_cache(token)
     return {"status": "success"}
 
 @app.post("/user/test_email")
@@ -2041,7 +2046,7 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
     token = authorization.split(" ")[1]
-    user = get_user_by_token(token)
+    user = await async_get_user_by_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
     
@@ -2209,23 +2214,29 @@ async def async_tailor_pipeline(
 
         # ── Fallback to digest hints when scraper was bot-blocked ──────────
         # A bot-block page title or an empty/short description means the scraper
-        # hit a Cloudflare challenge / "Verification Required" page.
+        # hit a Cloudflare challenge / "Verification Required" page. The digest
+        # hint itself can also be a placeholder (e.g. Indeed's RSS feed defaults
+        # an untitled listing's title to literal "Indeed Job") — a hint must be
+        # checked against the same bot-title set before being trusted.
         scrape_blocked = (
             not job_title
             or job_title.lower().strip() in _BOT_TITLES
             or not jd_text
             or len(jd_text.strip()) < 100
         )
-        if scrape_blocked and hint_title:
+        hint_title_usable = bool(hint_title) and hint_title.lower().strip() not in _BOT_TITLES
+        if scrape_blocked and hint_title_usable:
             print(f"[Auto Tailor] Scrape blocked (title='{job_title}'). Using digest hint: '{hint_title}'")
             job_title = hint_title
         elif not job_title or job_title.lower().strip() in _BOT_TITLES:
             job_title = "Target Role"
 
         # Company: prefer scraped → URL extraction → digest hint → fallback
-        if not company_name or company_name.lower() in {"target company", "indeed employer", "linkedin job", ""}:
-            company_name = _extract_company_from_jd(jd_text, job_url)
-        if (not company_name or company_name.lower() in {"target company", ""}) and hint_company:
+        _PLACEHOLDER_COMPANIES = {"target company", "indeed employer", "linkedin job", ""}
+        if not company_name or company_name.lower() in _PLACEHOLDER_COMPANIES:
+            company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, job_url)
+        hint_company_usable = bool(hint_company) and hint_company.lower().strip() not in _PLACEHOLDER_COMPANIES
+        if (not company_name or company_name.lower() in {"target company", ""}) and hint_company_usable:
             print(f"[Auto Tailor] Using digest hint company: '{hint_company}'")
             company_name = hint_company
         if not company_name:
@@ -2254,13 +2265,14 @@ async def async_tailor_pipeline(
         missing_skills = fit_analysis.match_analysis.missing_skills
         
         # Force compiling tailored LaTeX code
-        tailored_latex = tailor_latex_code(master_latex, job_title, jd_text, tailored_updates, missing_skills, custom_api_key, "", on_log=None)
+        tailored_latex = await asyncio.to_thread(tailor_latex_code, master_latex, job_title, jd_text, tailored_updates, missing_skills, custom_api_key, "", on_log=None)
 
         # Run Two-Phase Reviewer Agent (Structural Integrity + Truthfulness + Quality check)
-        review_res = review_tailored_resume(tailored_latex, resume_data, job_title, jd_text, custom_api_key, on_log=None)
+        review_res = await asyncio.to_thread(review_tailored_resume, tailored_latex, resume_data, job_title, jd_text, custom_api_key, on_log=None)
         if not review_res.satisfied:
             print(f"[Auto Tailor] Reviewer agent flagged quality/truthfulness issues: {review_res.feedback}. Running refinement...")
-            tailored_latex = tailor_latex_code(
+            tailored_latex = await asyncio.to_thread(
+                tailor_latex_code,
                 master_latex, job_title, jd_text, tailored_updates, missing_skills, custom_api_key,
                 f"REVIEWER AGENT FEEDBACK: {review_res.feedback}", on_log=None
             )
@@ -2348,8 +2360,8 @@ async def async_tailor_pipeline(
             # Re-parse the tailored resume contents to dictionary format
             from services.resume_parser import parse_resume
             # Tectonic compiled PDF output is at pdf_path
-            tailored_data = parse_resume(pdf_path).model_dump()
-            
+            tailored_data = (await asyncio.to_thread(parse_resume, pdf_path)).model_dump()
+
             # Compute new post-tailored score
             from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
             post_ats_res = compute_ats_score(tailored_data, jd_text)
@@ -2561,10 +2573,11 @@ async def user_settings(request: SettingsRequest, authorization: Optional[str] =
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
     token = authorization.split(" ")[1]
-    user = get_user_by_token(token)
+    user = await async_get_user_by_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
     update_user_api_key(user["id"], request.gemini_api_key)
+    invalidate_token_cache(token)
     return {"status": "success"}
 
 @app.get("/user/resume")
@@ -2580,7 +2593,7 @@ async def get_applications(authorization: Optional[str] = Header(None)):
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
-    return {"applications": list_applications(token)}
+    return {"applications": await asyncio.to_thread(list_applications, token)}
 
 class UpdateStatusRequest(BaseModel):
     job_url: str
@@ -2591,7 +2604,7 @@ async def update_status_endpoint(request: UpdateStatusRequest, authorization: Op
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
-    success = update_application_status(token, request.job_url, request.status)
+    success = await asyncio.to_thread(update_application_status, token, request.job_url, request.status)
     return {"status": "success" if success else "not_found"}
 
 class InterviewPrepRequest(BaseModel):
@@ -2643,7 +2656,7 @@ Do NOT add conversational intro/outro. Output ONLY the raw Markdown.
 
     try:
         from services.gemini_client import generate_content_with_fallback
-        result_text = generate_content_with_fallback(prompt)
+        result_text = await asyncio.to_thread(generate_content_with_fallback, prompt)
         return {"status": "success", "markdown": result_text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2684,7 +2697,7 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
 
     db_api_key = None
     if token:
-        user = get_user_by_token(token)
+        user = await async_get_user_by_token(token)
         if user:
             db_api_key = user.get("gemini_api_key")
     active_api_key = x_gemini_api_key or db_api_key
@@ -2793,7 +2806,7 @@ async def generate_outreach(request: GenerateOutreachRequest, authorization: Opt
         # Get API key
         db_api_key = None
         if token:
-            user = get_user_by_token(token)
+            user = await async_get_user_by_token(token)
             if user:
                 db_api_key = user.get("gemini_api_key")
         active_api_key = x_gemini_api_key or db_api_key
@@ -2831,7 +2844,8 @@ async def generate_outreach(request: GenerateOutreachRequest, authorization: Opt
             except Exception:
                 pass
 
-        outreach_msg = generate_outreach_message(
+        outreach_msg = await asyncio.to_thread(
+            generate_outreach_message,
             job_description=request.job_description,
             resume_data=session_resume_data,
             ats_analysis=ats_analysis,
@@ -2975,7 +2989,7 @@ async def user_logs_stream(request: Request):
     token = auth_header.replace("Bearer ", "").strip() if auth_header.startswith("Bearer ") else None
     if not token:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    user = get_user_by_token(token)
+    user = await async_get_user_by_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired session token")
 
