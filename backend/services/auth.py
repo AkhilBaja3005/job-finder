@@ -1,12 +1,19 @@
 import os
-import sqlite3
 import uuid
 import json
+import asyncio
 import urllib.request
 import urllib.parse
 from typing import Optional
 
 from utils.ssl_utils import SSL_CONTEXT
+from utils.ttl_cache import TTLCache
+
+# ── Token → user TTL cache ────────────────────────────────────────────────────
+# Avoids hitting Supabase on every authenticated request.
+# 120-second TTL is short enough to pick up role/setting changes quickly.
+_token_cache: TTLCache = TTLCache(ttl_seconds=120, max_size=2000)
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Supabase connection parameters
 def get_supabase_client():
@@ -41,6 +48,11 @@ def supabase_request(path: str, method: str = "GET", data: dict = None) -> list:
         print(f"Supabase request error on {method} {path}: {e}")
         return []
 
+async def async_supabase_request(path: str, method: str = "GET", data: dict = None) -> list:
+    """Non-blocking wrapper: runs supabase_request in a thread so it doesn't
+    block the asyncio event loop during I/O-heavy Supabase calls."""
+    return await asyncio.to_thread(supabase_request, path, method, data)
+
 def create_or_get_user(email: str, picture_url: Optional[str] = None) -> dict:
     encoded_email = urllib.parse.quote(email)
     users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
@@ -67,15 +79,39 @@ def create_session(user_id) -> str:
     return token
 
 def get_user_by_token(token: str) -> Optional[dict]:
+    # Fast path: cache hit avoids a Supabase round-trip (~100-300ms saved)
+    cached = _token_cache.get(token)
+    if cached is not None:
+        return cached
+
     encoded_token = urllib.parse.quote(token)
     sessions = supabase_request(f"sessions?token=eq.{encoded_token}&select=token,user_id,users(id,email,gemini_api_key,picture_url,cron_enabled,cron_role,cron_location,cron_time)", "GET")
     if sessions:
         user_info = sessions[0].get("users")
         if isinstance(user_info, list) and user_info:
-            return user_info[0]
+            result = user_info[0]
         elif isinstance(user_info, dict):
-            return user_info
+            result = user_info
+        else:
+            return None
+        _token_cache.set(token, result)
+        return result
     return None
+
+async def async_get_user_by_token(token: str) -> Optional[dict]:
+    """Non-blocking version of get_user_by_token for use in async handlers."""
+    # Cache hit is instant — no thread needed
+    cached = _token_cache.get(token)
+    if cached is not None:
+        return cached
+    return await asyncio.to_thread(get_user_by_token, token)
+
+def invalidate_token_cache(token: str):
+    """Call after updating user settings so the cache reflects changes immediately."""
+    _token_cache.set(token, None)  # set to None acts as a tombstone; next read will re-fetch
+    # Actually just delete — safest approach
+    with _token_cache._lock:
+        _token_cache._store.pop(token, None)
 
 def update_user_api_key(user_id, api_key: str):
     supabase_request(f"users?id=eq.{user_id}", "PATCH", {"gemini_api_key": api_key})

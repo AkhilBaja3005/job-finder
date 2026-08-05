@@ -1,6 +1,8 @@
 import os
+import asyncio
 import smtplib
 import requests
+import urllib.parse
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -241,6 +243,24 @@ def send_notification_email(
         return False
 
 
+async def async_send_notification_email(
+    to_email: str,
+    subject: str,
+    text_body: str,
+    html_body: Optional[str] = None,
+    attachment_path: Optional[str] = None,
+    attachment_name: Optional[str] = None,
+) -> bool:
+    """
+    Non-blocking wrapper around send_notification_email.
+    Runs the synchronous HTTP/SMTP calls in a thread executor so the asyncio
+    event loop is never blocked during email delivery (typically 300ms-2s).
+    """
+    return await asyncio.to_thread(
+        send_notification_email,
+        to_email, subject, text_body, html_body, attachment_path, attachment_name
+    )
+
 def build_digest_email_html(candidate_name: str, jobs: list, base_url: str, user_email: str) -> str:
     """
     Generates dynamic HTML body for Daily Job Digest emails.
@@ -258,7 +278,7 @@ def build_digest_email_html(candidate_name: str, jobs: list, base_url: str, user
         platform_color = "#EC4899" if is_reed else "#0A66C2" if is_linkedin else "#FF6F00"
         platform_bg = "#EC489915" if is_reed else "#0A66C215" if is_linkedin else "#FF6F0015"
         
-        tailor_url = f"{base_url}/email_action/tailor?job_url={requests.utils.quote(job_url)}&email={requests.utils.quote(user_email)}"
+        tailor_url = f"{base_url}/email_action/tailor?job_url={urllib.parse.quote(job_url, safe='')}&email={urllib.parse.quote(user_email, safe='')}"
         
         cards_html += f"""
         <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; box-sizing: border-box; overflow: hidden; margin-bottom: 12px;">

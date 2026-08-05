@@ -149,7 +149,7 @@ async def auto_clean_expired_files_loop():
         await auto_clean_expired_files(force_startup_purge=False)
 
 # Background Loop: Run matching job scanner once every 24 hours
-from services.email_service import send_notification_email
+from services.email_service import send_notification_email, async_send_notification_email
 from datetime import datetime as dt, time as dtime, timedelta, timezone
 
 async def hf_keep_alive_loop():
@@ -382,12 +382,13 @@ async def daily_match_mailer_loop():
                 # If local deployment, override recipient to developer email to prevent sending test emails to real users locally
                 target_email = "akhilkumarbaja@gmail.com" if _is_local_deployment() else email
 
-                # Send email
-                send_notification_email(
-                    to_email=target_email,
-                    subject="Daily Job Matching Digest",
-                    text_body=text_digest,
-                    html_body=html_digest
+                # Send email (non-blocking — runs in thread executor)
+                await asyncio.to_thread(
+                    send_notification_email,
+                    target_email,
+                    "Daily Job Matching Digest",
+                    text_digest,
+                    html_digest
                 )
                 
                 # Mark as successfully sent today
@@ -420,6 +421,21 @@ async def lifespan(app: FastAPI):
     mailer_task = asyncio.create_task(daily_match_mailer_loop())
     # Start Hugging Face anti-sleep self-ping loop
     keepalive_task = asyncio.create_task(hf_keep_alive_loop())
+
+    # Optional Sentry error monitoring — only active when SENTRY_DSN is set
+    try:
+        import sentry_sdk  # pyrefly: ignore [missing-import]
+        sentry_dsn = os.getenv("SENTRY_DSN", "")
+        if sentry_dsn:
+            sentry_sdk.init(
+                dsn=sentry_dsn,
+                traces_sample_rate=0.1,   # 10% of requests traced for performance
+                profiles_sample_rate=0.05,
+                environment=os.getenv("ENV", "production"),
+            )
+            print("[System Startup] 🔍 Sentry error monitoring active")
+    except ImportError:
+        pass
 
     # Check if local deployment and BACKEND_URL contains ngrok
     ngrok_proc = None
@@ -2105,7 +2121,7 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
     </div>
     """
     
-    success = send_notification_email(
+    success = await async_send_notification_email(
         to_email=email,
         subject="📬 Daily Job Matches Digest (Sample Preview)",
         text_body=text_body,
@@ -2116,6 +2132,44 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
         raise HTTPException(status_code=500, detail="Failed to send preview email. Verify SMTP settings.")
     return {"status": "success"}
 
+
+# ─── One-click email unsubscribe ──────────────────────────────────────────────
+import hmac
+import hashlib
+
+def _make_unsub_token(email: str) -> str:
+    """HMAC-SHA256 token so unsubscribe links can't be forged."""
+    secret = os.getenv("UNSUB_SECRET", os.getenv("SUPABASE_KEY", "default-secret"))
+    return hmac.new(secret.encode(), email.lower().encode(), hashlib.sha256).hexdigest()[:32]
+
+@app.get("/user/unsubscribe", response_class=HTMLResponse)
+async def unsubscribe_digest(email: str, token: str):
+    """
+    One-click unsubscribe link included in every digest email.
+    Verifies HMAC token then disables cron_enabled for the user.
+    """
+    expected = _make_unsub_token(email)
+    if not hmac.compare_digest(token, expected):
+        return HTMLResponse("<h3 style='font-family:Arial;color:#EF4444'>Invalid or expired unsubscribe link.</h3>", status_code=400)
+    try:
+        from services.auth import supabase_request
+        encoded_email = urllib.parse.quote(email)
+        users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
+        if not users:
+            return HTMLResponse("<h3 style='font-family:Arial'>Email not found.</h3>", status_code=404)
+        user_id = users[0]["id"]
+        supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_enabled": False})
+        return HTMLResponse("""
+        <div style='font-family:Arial,sans-serif;max-width:420px;margin:80px auto;text-align:center;padding:40px;border:1px solid #E2E8F0;border-radius:16px'>
+            <div style='font-size:3rem'>✅</div>
+            <h2 style='color:#0284C7;margin:16px 0 8px'>Unsubscribed</h2>
+            <p style='color:#64748B'>You won't receive daily job digest emails anymore.<br>
+            You can re-enable them anytime from the app settings.</p>
+        </div>""")
+    except Exception as e:
+        print(f"[Unsubscribe] Error: {e}")
+        return HTMLResponse("<h3 style='font-family:Arial;color:#EF4444'>Something went wrong. Please try again.</h3>", status_code=500)
+# ─────────────────────────────────────────────────────────────────────────────
 
 # pyrefly: ignore [missing-import]
 from fastapi import BackgroundTasks
@@ -2371,7 +2425,7 @@ async def async_tailor_pipeline(
         </div>
         """
         
-        send_notification_email(
+        await async_send_notification_email(
             to_email=email,
             subject=subject,
             text_body=text_body,
