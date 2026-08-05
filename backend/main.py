@@ -2365,31 +2365,15 @@ async def email_action_tailor(job_url: str, email: str, background_tasks: Backgr
         resume_data_str = resume_rows[0].get("resume_data")
         resume_data = json.loads(resume_data_str)
         
-        # Scrape job details to calculate pre-score quickly
-        scraped = await scrape_job_description(job_url)
-        job_title = scraped.get("title", "Target Role")
-        jd_text = scraped.get("description", "")
-        company_name = scraped.get("company")
-        if not company_name or company_name == "Target Company":
-            company_name = _extract_company_from_jd(jd_text, job_url)
-        if not company_name:
-            company_name = "Target Company"
-        
-        # Run ATS scoring
-        from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
-        ats_res = compute_ats_score(resume_data, jd_text)
-        role_fit = estimate_role_fit_score(resume_data, jd_text)
-        ats_score = compute_overall_score(ats_res.skills_score, ats_res.experience_score, role_fit)
-        
-        # Queue the heavy tailoring LLM call to run in a background thread immediately
-        background_tasks.add_task(async_tailor_pipeline, email, job_url, user_id, resume_data, ats_score)
+        # Queue the entire scraping, tailoring, review, compilation, and email delivery to run in background
+        background_tasks.add_task(async_tailor_pipeline, email, job_url, user_id, resume_data, 0)
         
         return HTMLResponse(f"""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #0284C7; border-radius: 12px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
             <div style="font-size: 3rem; margin-bottom: 12px;">📄</div>
             <h2 style="color: #0284C7; margin: 0 0 10px;">Tailoring In Progress...</h2>
             <p style="color: #4B5563; font-size: 0.95rem; line-height: 1.6;">
-                We are tailoring your resume for <strong>{job_title}</strong> at <strong>{company_name}</strong> in the background.
+                We are tailoring your resume for the job in the background.
                 We will email the compiled PDF directly to <strong>{email}</strong> once completed.
             </p>
             <p style="font-size: 0.8rem; color: #9CA3AF; margin-top: 20px;">You can close this tab now.</p>
