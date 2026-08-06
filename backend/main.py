@@ -36,6 +36,7 @@ from pypdf import PdfReader
 import time
 import hashlib
 import re as _re
+from zoneinfo import ZoneInfo
 
 
 from services.resume_parser import parse_resume
@@ -191,14 +192,17 @@ async def daily_match_mailer_loop():
     # format: { (user_id, date_string): True }
     last_sent_cache = {}
     
+    # Define IST Timezone explicitly
+    ist_tz = ZoneInfo("Asia/Kolkata")
+    
     while True:
         try:
             print("[Daily Mailer] Scanning active users for subscription digests...")
             from services.auth import supabase_request
             active_users = supabase_request("users?cron_enabled=eq.true", "GET")
             
-            # Get current local datetime (server time, assumed to match user local timezone configuration or UTC)
-            now = dt.now()
+            # Get current IST datetime explicitly
+            now = dt.now(ist_tz)
             today_str = now.strftime("%Y-%m-%d")
             
             for user in active_users:
@@ -211,15 +215,15 @@ async def daily_match_mailer_loop():
                 if last_sent_cache.get((user_id, today_str)):
                     continue
                 
-                # Parse user's target time (default to 6:00 PM if not set)
+                # Parse user's target time (default to 6:00 PM IST if not set)
                 time_str = user.get("cron_time") or "18:00:00"
                 try:
                     target_h, target_m = map(int, time_str.split(":")[:2])
                 except Exception:
                     target_h, target_m = 18, 0
                 
-                # Check if current time has crossed the target send time
-                target_dt = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0)
+                # Check if current IST time has crossed the target send time
+                target_dt = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0, tzinfo=ist_tz)
                 # Run catch-up scan on first loop run or if target time is reached
                 if now < target_dt and last_sent_cache.get((user_id, "checked_today")):
                     continue
@@ -244,10 +248,10 @@ async def daily_match_mailer_loop():
                 keywords_arg = pref_role.strip() if (pref_role and pref_role.strip()) else None
                 pref_loc = user.get("cron_location") or "Remote"
                 
-                print(f"[Daily Mailer] Send time reached ({time_str}) for user {email}. Scraping role '{keywords_arg or 'AI-auto-generated'}' in '{pref_loc}'...")
+                print(f"[Daily Mailer] Send time reached ({time_str} IST) for user {email}. Scraping role '{keywords_arg or 'AI-auto-generated'}' in '{pref_loc}'...")
                 if _is_local_deployment():
                     if email != "akhilkumarbaja@gmail.com":
-                        print(f"Local Deployment detected, Skipping sending emails for dialy digest to user {email} and continuing")
+                        print(f"Local Deployment detected, Skipping sending emails for daily digest to user {email} and continuing")
                         continue
                 
                 # Execute job search over last 24h
@@ -399,14 +403,13 @@ async def daily_match_mailer_loop():
             # Clean up old dates in cache to prevent memory leaks
             if len(last_sent_cache) > 200:
                 # Retain only current date records
-                last_sent_cache = {k: v for k, v in last_sent_cache.items() if k[1] == today_str}
+                last_sent_cache = {k: v for k, v in last_sent_cache.items() if isinstance(k, tuple) and len(k) > 1 and k[1] == today_str}
                 
         except Exception as e:
             print(f"[Daily Mailer ERROR] Exception: {e}")
         
         # Check every 60 seconds for scheduled time match sweeps
         await asyncio.sleep(60)
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Cap maximum background threads — bumped to 6 for 2-vCPU/16GB HF tier
