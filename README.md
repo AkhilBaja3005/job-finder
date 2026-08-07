@@ -6,6 +6,7 @@ colorTo: indigo
 sdk: docker
 app_port: 8000
 pinned: true
+header: mini
 ---
 
 # AI Job Finder Agent
