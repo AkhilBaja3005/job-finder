@@ -531,6 +531,18 @@ async def bypass_ngrok_browser_warning(request: Request, call_next):
     response.headers["ngrok-skip-browser-warning"] = "true"
     return response
 
+@app.get("/healthz")
+async def health_check():
+    """
+    Lightweight ping endpoint for container health check & HF warm-up verification.
+    """
+    import time
+    return {
+        "status": "ok",
+        "service": "job-finder-api",
+        "timestamp": time.time()
+    }
+
 import threading
 
 # Maps any token (real user token, guest UUID, or "guest") to resume state.
