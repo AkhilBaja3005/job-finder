@@ -1,6 +1,7 @@
 node_modules/
 dist/
 venv/
+backend/venv/
 .env
 uvicorn.log
 output/
@@ -10,9 +11,6 @@ uploads/
 __pycache__/
 user_data/
 backend/tectonic
-backend/tectonic.tar.gzuser_data/
+backend/tectonic.tar.gz
 backend/user_data/
-output/
-uploads/
 bandit_report.txt
-
