@@ -116,10 +116,10 @@ async def auto_clean_expired_files(force_startup_purge: bool = False):
                 except Exception as ex:
                     print(f"[Auto Clean Output] Failed to delete {file_path}: {ex}")
         
-        # 2. Clean uploads folder (keep fallback resume.cls)
+        # 2. Clean uploads folder (keep fallback resume.cls & user master LaTeX files)
         if os.path.exists(UPLOAD_DIR):
             for filename in os.listdir(UPLOAD_DIR):
-                if filename == "resume.cls":
+                if filename == "resume.cls" or filename.endswith("_master.tex"):
                     continue
                 file_path = os.path.join(UPLOAD_DIR, filename)
                 try:
@@ -187,19 +187,8 @@ async def hf_keep_alive_loop():
         await asyncio.sleep(14400) # Ping every 4 hours (14,400 seconds)
 
 async def daily_match_mailer_loop():
-    # Startup settle logic: Wait 5 minutes before first background mailer scan
-    # so Uvicorn can serve web traffic instantly with zero CPU contention.
-
-    if _is_local_deployment():
-        print("[Daily Mailer] Local deployment detected. Waiting 10 seconds before first cron check loop...")
-        await asyncio.sleep(10)
-    else:
-        print("[Daily Mailer] Production deployment detected. Waiting 5 minutes before first cron check loop...")
-        await asyncio.sleep(300)
-    
-    # Store last sent date for users to avoid duplicate notifications on same day
-    # format: { (user_id, date_string): True }
-    last_sent_cache = {}
+    # Short initial pause after server start before running first cron check loop
+    await asyncio.sleep(15)
     
     # Define IST Timezone explicitly
     ist_tz = ZoneInfo("Asia/Kolkata")
@@ -220,8 +209,9 @@ async def daily_match_mailer_loop():
                 if not email or not user_id:
                     continue
                 
-                # Check if we already sent today's email
-                if last_sent_cache.get((user_id, today_str)):
+                # Check if email was already sent today (persisted in Supabase)
+                last_sent_date = user.get("cron_last_sent_date")
+                if last_sent_date == today_str:
                     continue
                 
                 # Parse user's target time (default to 6:00 PM IST if not set)
@@ -233,10 +223,8 @@ async def daily_match_mailer_loop():
                 
                 # Check if current IST time has crossed the target send time
                 target_dt = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0, tzinfo=ist_tz)
-                # Run catch-up scan on first loop run or if target time is reached
-                if now < target_dt and last_sent_cache.get((user_id, "checked_today")):
+                if now < target_dt:
                     continue
-                last_sent_cache[(user_id, "checked_today")] = True
                 
                 # Fetch user's master resume data
                 resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
@@ -258,10 +246,6 @@ async def daily_match_mailer_loop():
                 pref_loc = user.get("cron_location") or "Remote"
                 
                 print(f"[Daily Mailer] Send time reached ({time_str} IST) for user {email}. Scraping role '{keywords_arg or 'AI-auto-generated'}' in '{pref_loc}'...")
-                if _is_local_deployment():
-                    if email != "akhilkumarbaja@gmail.com":
-                        print(f"Local Deployment detected, Skipping sending emails for daily digest to user {email} and continuing")
-                        continue
                 
                 # Execute job search over last 24h
                 scraped_jobs = []
@@ -280,8 +264,8 @@ async def daily_match_mailer_loop():
 
                 if not scraped_jobs:
                     print(f"[Daily Mailer] No recent jobs found matching {pref_role} for user: {email}")
-                    # Still mark as checked today so we don't spam checking every minute
-                    last_sent_cache[(user_id, today_str)] = True
+                    # Persist today's date in Supabase so we don't re-scan every minute today
+                    supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_last_sent_date": today_str})
                     continue
                 
                 # Sort jobs descending by overall match score
@@ -406,13 +390,9 @@ async def daily_match_mailer_loop():
                     html_digest
                 )
                 
-                # Mark as successfully sent today
-                last_sent_cache[(user_id, today_str)] = True
-                
-            # Clean up old dates in cache to prevent memory leaks
-            if len(last_sent_cache) > 200:
-                # Retain only current date records
-                last_sent_cache = {k: v for k, v in last_sent_cache.items() if isinstance(k, tuple) and len(k) > 1 and k[1] == today_str}
+                # Persist today's date in Supabase table so sent status survives restarts
+                supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_last_sent_date": today_str})
+                print(f"[Daily Mailer] Successfully sent daily digest email to {email} and marked cron_last_sent_date={today_str}")
                 
         except Exception as e:
             print(f"[Daily Mailer ERROR] Exception: {e}")
