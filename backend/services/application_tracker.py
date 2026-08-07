@@ -92,6 +92,8 @@ def record_application(token: Optional[str], entry: dict) -> None:
             supa_payload["recruiter_profile_url"] = record.get("recruiter_profile_url")
         if record.get("overleaf_url"):
             supa_payload["overleaf_url"] = record.get("overleaf_url")
+        if record.get("pdf_url"):
+            supa_payload["pdf_url"] = record.get("pdf_url")
 
         result = supabase_request("applications", "POST", supa_payload)
         if result:
