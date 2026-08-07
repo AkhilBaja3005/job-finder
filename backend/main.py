@@ -65,12 +65,21 @@ from utils.ttl_cache import TTLCache
 # --- Background Task to Clean Files Older Than 1 Hour (Runs every 30 mins) ---
 from contextlib import asynccontextmanager
 
-# Use absolute paths to prevent working directory shifts on Render container startup
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+# Use absolute paths to prevent working directory shifts on Render / Hugging Face container startup.
+# Hugging Face Spaces persistent storage is mounted at /data when enabled.
+# If /data exists, route user data, uploads, and output PDF stores there so they survive container restarts.
+HF_DATA_DIR = "/data"
+if os.path.exists(HF_DATA_DIR) and os.access(HF_DATA_DIR, os.W_OK):
+    BASE_STORAGE_DIR = HF_DATA_DIR
+    print(f"[System Startup] 💾 Hugging Face Persistent Storage detected & mounted at {HF_DATA_DIR}")
+else:
+    BASE_STORAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+UPLOAD_DIR = os.path.join(BASE_STORAGE_DIR, "uploads")
+OUTPUT_DIR = os.path.join(BASE_STORAGE_DIR, "output")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MAX_RESUME_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB — generous for a resume PDF/DOCX/TEX
 default_cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
 target_cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
