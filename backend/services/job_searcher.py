@@ -732,18 +732,22 @@ async def find_matching_jobs(
         async def _score_and_stream(job, log_queue_stream):
             def _ui_logger(msg):
                 log_queue_stream.append(json.dumps({"type": "log", "message": msg}) + " " * 2048 + "\n")
-            if browser is not None:
-                res = await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
-            else:
-                # pyrefly: ignore [missing-import]
-                from playwright.async_api import async_playwright
-                async with async_playwright() as p:
-                    b = await p.chromium.launch(headless=True)
-                    try:
-                        res = await _score_job_with_real_jd(job, resume_data, b, semaphore, on_log=_ui_logger)
-                    finally:
-                        await b.close()
-            return res
+            try:
+                if browser is not None:
+                    res = await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
+                else:
+                    # pyrefly: ignore [missing-import]
+                    from playwright.async_api import async_playwright
+                    async with async_playwright() as p:
+                        b = await p.chromium.launch(headless=True)
+                        try:
+                            res = await _score_job_with_real_jd(job, resume_data, b, semaphore, on_log=_ui_logger)
+                        finally:
+                            await b.close()
+                return res
+            except Exception as e:
+                print(f"[Job Searcher] Error scoring job '{job.title}': {e}")
+                return None
 
         log_queue_stream = []
         tasks = [asyncio.create_task(_score_and_stream(job, log_queue_stream)) for job in jd_scored_batch]
