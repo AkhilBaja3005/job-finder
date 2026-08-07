@@ -14,4 +14,5 @@ backend/tectonic.tar.gzuser_data/
 backend/user_data/
 output/
 uploads/
+bandit_report.txt
 

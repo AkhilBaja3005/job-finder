@@ -3176,8 +3176,11 @@ if not os.path.exists(frontend_dist):
 if os.path.exists(frontend_dist):
     # Serve hashed assets (/assets/*.js, *.css) with long-lived immutable cache headers.
     # Vite produces content-hashed filenames so stale content is never served.
+    # pyrefly: ignore [missing-import]
     from starlette.staticfiles import StaticFiles as _SF
+    # pyrefly: ignore [missing-import]
     from starlette.responses import Response as _R
+    # pyrefly: ignore [missing-import]
     from starlette.types import ASGIApp, Scope, Receive, Send
 
     class CachedStaticFiles(_SF):

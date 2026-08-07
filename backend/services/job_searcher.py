@@ -678,6 +678,7 @@ async def find_matching_jobs(
 
     # Execute search queries sequentially across queries, but fetch platforms in parallel per query
     raw_jobs = []
+    indeed_jobs_for_est = []
     for query in queries:
         yield_msg = f"🌐 Fetching listings from {platform_label} ({timeframe}) for '{query}'..."
         log_ist(yield_msg)
@@ -697,6 +698,7 @@ async def find_matching_jobs(
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(ind_jobs)
+        indeed_jobs_for_est.extend(ind_jobs)
         
         res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed & {len(reed_jobs)} Reed.co.uk postings for '{query}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{query}'"
         log_ist(res_msg)

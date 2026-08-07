@@ -42,14 +42,17 @@ Python, PyTorch, TensorFlow, Playwright, FastAPI, Docker, LaTeX, PostgreSQL, Sup
 def _get_process_tree_ram_mb() -> float:
     """Uses macOS native `ps` tool to measure memory RSS (MB) of Python process + child workers."""
     try:
-        pid = os.getpid()
-        cmd = f"pgrep -P {pid}; echo {pid}"
-        out = subprocess.check_output(cmd, shell=True, text=True).strip()
-        pids = [p for p in out.splitlines() if p.strip().isdigit()]
-        if not pids:
-            return 0.0
-        ps_cmd = f"ps -o rss= -p {','.join(pids)}"
-        rss_out = subprocess.check_output(ps_cmd, shell=True, text=True).strip()
+        pid = str(os.getpid())
+        # Find child PIDs using pgrep
+        pids = [pid]
+        try:
+            pgrep_out = subprocess.check_output(["pgrep", "-P", pid], text=True).strip()
+            pids.extend([p for p in pgrep_out.splitlines() if p.strip().isdigit()])
+        except Exception:
+            pass
+
+        ps_cmd = ["ps", "-o", "rss=", "-p", ",".join(pids)]
+        rss_out = subprocess.check_output(ps_cmd, text=True).strip()
         total_kb = sum(int(k.strip()) for k in rss_out.splitlines() if k.strip().isdigit())
         return total_kb / 1024.0
     except Exception:

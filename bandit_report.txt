@@ -1,4 +1,4 @@
-Run started:2026-08-07 06:39:19.921531+00:00
+Run started:2026-08-07 06:45:41.077705+00:00
 
 Test results:
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -229,26 +229,6 @@ Test results:
 1061	
 
 --------------------------------------------------
->> Issue: [B324:hashlib] Use of weak MD5 hash for security. Consider usedforsecurity=False
-   Severity: High   Confidence: High
-   CWE: CWE-327 (https://cwe.mitre.org/data/definitions/327.html)
-   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html
-   Location: backend/main.py:1141:10
-1140	    key_src = f"{token or 'guest'}:{job_title}:{jd_text}"
-1141	    key = hashlib.md5(key_src.encode("utf-8")).hexdigest()
-1142	    return _analysis_cache.get(key)
-
---------------------------------------------------
->> Issue: [B324:hashlib] Use of weak MD5 hash for security. Consider usedforsecurity=False
-   Severity: High   Confidence: High
-   CWE: CWE-327 (https://cwe.mitre.org/data/definitions/327.html)
-   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html
-   Location: backend/main.py:1148:10
-1147	    key_src = f"{token or 'guest'}:{job_title}:{jd_text}"
-1148	    key = hashlib.md5(key_src.encode("utf-8")).hexdigest()
-1149	    _analysis_cache.set(key, analysis)
-
---------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
    Severity: Low   Confidence: High
    CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
@@ -260,120 +240,91 @@ Test results:
 1296	
 
 --------------------------------------------------
->> Issue: [B324:hashlib] Use of weak MD5 hash for security. Consider usedforsecurity=False
-   Severity: High   Confidence: High
-   CWE: CWE-327 (https://cwe.mitre.org/data/definitions/327.html)
-   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html
-   Location: backend/main.py:1338:35
-1337	                import hashlib
-1338	                prev_review_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
-1339	                
-
---------------------------------------------------
->> Issue: [B324:hashlib] Use of weak MD5 hash for security. Consider usedforsecurity=False
-   Severity: High   Confidence: High
-   CWE: CWE-327 (https://cwe.mitre.org/data/definitions/327.html)
-   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html
-   Location: backend/main.py:1387:36
-1386	                                
-1387	                        curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
-1388	                        if curr_hash == prev_review_hash:
-
---------------------------------------------------
->> Issue: [B324:hashlib] Use of weak MD5 hash for security. Consider usedforsecurity=False
-   Severity: High   Confidence: High
-   CWE: CWE-327 (https://cwe.mitre.org/data/definitions/327.html)
-   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html
-   Location: backend/main.py:1443:34
-1442	                import hashlib
-1443	                prev_latex_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
-1444	    
-
---------------------------------------------------
->> Issue: [B324:hashlib] Use of weak MD5 hash for security. Consider usedforsecurity=False
-   Severity: High   Confidence: High
-   CWE: CWE-327 (https://cwe.mitre.org/data/definitions/327.html)
-   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b324_hashlib.html
-   Location: backend/main.py:1462:32
-1461	                    
-1462	                    curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
-1463	                    if curr_hash == prev_latex_hash:
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
+   Location: backend/main.py:1302:16
+1301	                    recruiter_name = rec_info.get("recruiter_name")
+1302	                except Exception:
+1303	                    pass
+1304	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
    Severity: Low   Confidence: High
    CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
    More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
-   Location: backend/main.py:1509:16
-1508	                    recruiter_profile_url = rec_info.get("recruiter_profile_url")
-1509	                except Exception:
-1510	                    pass
-1511	
+   Location: backend/main.py:1516:16
+1515	                    recruiter_profile_url = rec_info.get("recruiter_profile_url")
+1516	                except Exception:
+1517	                    pass
+1518	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
    Severity: Low   Confidence: High
    CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
    More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
-   Location: backend/main.py:2186:4
-2185	            candidate_name = rdata.get("name", "").strip() or "Candidate"
-2186	    except Exception:
-2187	        pass
-2188	
+   Location: backend/main.py:2193:4
+2192	            candidate_name = rdata.get("name", "").strip() or "Candidate"
+2193	    except Exception:
+2194	        pass
+2195	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
    Severity: Low   Confidence: High
    CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
    More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
-   Location: backend/main.py:2587:12
-2586	                recruiter_profile_url = rec_info.get("recruiter_profile_url")
-2587	            except Exception:
-2588	                pass
-2589	
+   Location: backend/main.py:2594:12
+2593	                recruiter_profile_url = rec_info.get("recruiter_profile_url")
+2594	            except Exception:
+2595	                pass
+2596	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
    Severity: Low   Confidence: High
    CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
    More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
-   Location: backend/main.py:2776:8
-2775	            jd_text = scraped.get("description", "")
-2776	        except Exception:
-2777	            pass
-2778	
+   Location: backend/main.py:2783:8
+2782	            jd_text = scraped.get("description", "")
+2783	        except Exception:
+2784	            pass
+2785	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
    Severity: Low   Confidence: High
    CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
    More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
-   Location: backend/main.py:2891:24
-2890	                                _job_search_cache.set(cache_key, all_jobs)
-2891	                        except Exception:
-2892	                            pass
-2893	                        await q.put(chunk)
+   Location: backend/main.py:2898:24
+2897	                                _job_search_cache.set(cache_key, all_jobs)
+2898	                        except Exception:
+2899	                            pass
+2900	                        await q.put(chunk)
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
    Severity: Low   Confidence: High
    CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
    More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b110_try_except_pass.html
-   Location: backend/main.py:2987:12
-2986	                LLMClientLogQueue.put(msg_json)
-2987	            except Exception:
-2988	                pass
-2989	
+   Location: backend/main.py:2994:12
+2993	                LLMClientLogQueue.put(msg_json)
+2994	            except Exception:
+2995	                pass
+2996	
 
 --------------------------------------------------
 >> Issue: [B104:hardcoded_bind_all_interfaces] Possible binding to all interfaces.
    Severity: Medium   Confidence: Medium
    CWE: CWE-605 (https://cwe.mitre.org/data/definitions/605.html)
    More Info: https://bandit.readthedocs.io/en/1.9.4/plugins/b104_hardcoded_bind_all_interfaces.html
-   Location: backend/main.py:3212:13
-3211	        "main:app",
-3212	        host="0.0.0.0",
-3213	        port=port,
+   Location: backend/main.py:3219:13
+3218	        "main:app",
+3219	        host="0.0.0.0",
+3220	        port=port,
 
 --------------------------------------------------
 >> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
@@ -2054,19 +2005,19 @@ Test results:
 --------------------------------------------------
 
 Code scanned:
-	Total lines of code: 8102
+	Total lines of code: 8113
 	Total lines skipped (#nosec): 0
 	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
 
 Run metrics:
 	Total issues (by severity):
 		Undefined: 0
-		Low: 168
+		Low: 169
 		Medium: 23
-		High: 8
+		High: 2
 	Total issues (by confidence):
 		Undefined: 0
 		Low: 0
 		Medium: 3
-		High: 196
+		High: 191
 Files skipped (0):
