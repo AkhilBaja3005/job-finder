@@ -756,10 +756,16 @@ def set_session_data(token: Optional[str], data: dict, path: str):
             except Exception as ex:
                 print(f"Failed to save user resume to Supabase: {ex}")
 
-# Load stored resume state if exists at startup (initialized to the guest session)
-if os.path.exists(RESUME_STATE_FILE):
+# Per-session/guest state file helper
+def _get_guest_state_file(token: Optional[str]) -> str:
+    key = _safe_key(token)
+    return os.path.join(OUTPUT_DIR, f"resume_state_{key}.json")
+
+# Load stored guest resume state if exists at startup for default guest
+default_guest_state_file = _get_guest_state_file("guest")
+if os.path.exists(default_guest_state_file):
     try:
-        with open(RESUME_STATE_FILE, "r") as f:
+        with open(default_guest_state_file, "r") as f:
             state = json.load(f)
             set_session_data("guest", state.get("data", {}), state.get("path", ""))
             print("Loaded persisted resume state successfully into guest session.")
@@ -780,7 +786,7 @@ else:
             print(f"Found uploaded resume at startup: {file_path}. Auto-parsing...")
             structured_data = parse_resume(file_path)
             set_session_data("guest", structured_data.model_dump(), file_path)
-            with open(RESUME_STATE_FILE, "w") as f:
+            with open(default_guest_state_file, "w") as f:
                 json.dump({"data": structured_data.model_dump(), "path": file_path}, f, indent=2)
             print("Successfully parsed and saved resume state at startup.")
         except Exception as e:
@@ -863,10 +869,13 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
         # Save to session-scoped cache
         set_session_data(token, data, path)
         
-        # Save default guest state to local file for persistence compatibility
-        if not token or token == "guest":
-            with open(RESUME_STATE_FILE, "w") as f:
+        # Save session-scoped state to local file for persistence compatibility
+        guest_file = _get_guest_state_file(token)
+        try:
+            with open(guest_file, "w") as f:
                 json.dump({"data": data, "path": path}, f, indent=2)
+        except Exception as file_err:
+            print(f"[upload_resume] Warning: Could not save guest state file {guest_file}: {file_err}")
         
         return {"message": "Resume uploaded and parsed successfully", "data": data}
     except HTTPException:
