@@ -1510,12 +1510,41 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     pass
 
             overleaf_url = None
+            pdf_url = None
             if analysis.latex_code:
                 try:
                     candidate_name = session_resume_data.get("name", "") if isinstance(session_resume_data, dict) else ""
                     overleaf_url = await asyncio.to_thread(upload_zip_to_tmpfiles, analysis.latex_code, candidate_name, job_title, company_name)
                 except Exception as ov_err:
                     print(f"[analyze_job] Failed to generate Overleaf URL: {ov_err}")
+
+                # Compile LaTeX to PDF and store persistent copy for Application History viewing/downloading
+                try:
+                    tex_path, temp_pdf_path = _user_output_paths(token)
+                    with open(tex_path, "w", encoding="utf-8") as f:
+                        f.write(analysis.latex_code)
+                    
+                    # Ensure resume.cls is available in OUTPUT_DIR
+                    cls_src = os.path.join(UPLOAD_DIR, "resume.cls")
+                    if not os.path.exists(cls_src):
+                        cls_src = os.path.join(BASE_DIR, "assets", "resume.cls")
+                    shutil.copy2(cls_src, os.path.join(OUTPUT_DIR, "resume.cls"))
+
+                    comp_res = await asyncio.to_thread(
+                        subprocess.run,
+                        ["tectonic", tex_path, "--outdir", OUTPUT_DIR],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
+                    )
+                    if comp_res.returncode == 0 and os.path.exists(temp_pdf_path):
+                        safe_key = _safe_key(token)
+                        persistent_filename = f"tailored_{safe_key}_{int(time.time())}.pdf"
+                        persistent_pdf_path = os.path.join(OUTPUT_DIR, persistent_filename)
+                        shutil.copy2(temp_pdf_path, persistent_pdf_path)
+                        pdf_url = f"/download_application_pdf/{persistent_filename}"
+                except Exception as pdf_compile_err:
+                    print(f"[analyze_job] Failed to compile persistent PDF copy: {pdf_compile_err}")
 
             try:
                 await asyncio.to_thread(record_application, token, {
@@ -1526,7 +1555,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     "status": "tailored",
                     "recruiter_name": recruiter_name,
                     "recruiter_profile_url": recruiter_profile_url,
-                    "overleaf_url": overleaf_url
+                    "overleaf_url": overleaf_url,
+                    "pdf_url": pdf_url
                 })
             except Exception as hist_err:
                 print(f"[analyze_job] Failed to record application history: {hist_err}")
