@@ -560,9 +560,8 @@ async def health_check():
             text=True
         ).strip()
         commit_time = subprocess.check_output(
-            ["git", "log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M:%S GMT"],
+            ["git", "log", "-1", "--format=%cd", "--date=iso-strict"],
             cwd=BASE_DIR,
-            env={**os.environ, "TZ": "GMT"},
             stderr=subprocess.DEVNULL,
             text=True
         ).strip()

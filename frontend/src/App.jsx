@@ -285,7 +285,18 @@ function App() {
           const data = await res.json();
           setBackendHealth('healthy');
           if (data.commit_sha) setCommitSha(data.commit_sha.substring(0, 7));
-          if (data.commit_time) setCommitTime(data.commit_time);
+          if (data.commit_time) {
+            try {
+              const d = new Date(data.commit_time);
+              setCommitTime(d.toLocaleString([], {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false, timeZoneName: 'short'
+              }));
+            } catch {
+              setCommitTime(data.commit_time);
+            }
+          }
         } else {
           setBackendHealth('warming');
         }
