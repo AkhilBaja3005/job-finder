@@ -2100,6 +2100,30 @@ function App() {
                                     🍃 Overleaf
                                   </button>
                                 )}
+                                {entry.pdf_url && (
+                                  <a
+                                    href={`${API_BASE}${entry.pdf_url}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      padding: '5px 11px',
+                                      borderRadius: '6px',
+                                      fontWeight: 700,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      textDecoration: 'none',
+                                      background: 'rgba(56, 189, 248, 0.15)',
+                                      color: 'var(--accent-secondary)',
+                                      border: '1px solid rgba(56, 189, 248, 0.35)',
+                                      boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)'
+                                    }}
+                                    title="View & Download compiled PDF resume"
+                                  >
+                                    📄 View & Download PDF
+                                  </a>
+                                )}
                                 {entry.job_url && (
                                   <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', fontWeight: 600, textDecoration: 'none' }}>View Post →</a>
                                 )}

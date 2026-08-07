@@ -1542,6 +1542,22 @@ async def download_latex(request: LatexDownloadRequest, authorization: Optional[
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/download_application_pdf/{filename}")
+async def download_application_pdf(filename: str):
+    """
+    Serves persistent compiled PDFs stored in OUTPUT_DIR.
+    Sets Content-Disposition to inline so browsers render a built-in PDF viewer with download controls.
+    """
+    safe_filename = os.path.basename(filename)
+    pdf_path = os.path.join(OUTPUT_DIR, safe_filename)
+    if not os.path.exists(pdf_path):
+        raise HTTPException(status_code=404, detail="PDF file not found")
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename={safe_filename}"}
+    )
+
 class CoverLetterDownloadRequest(BaseModel):
     cover_letter: str
 
@@ -2407,6 +2423,16 @@ async def async_tailor_pipeline(
         candidate_name = resume_data.get("name", "Candidate")
         overleaf_url = upload_zip_to_tmpfiles(tailored_latex, candidate_name, job_title, company_name)
         
+        # Save a persistent PDF copy in OUTPUT_DIR so user can view/download directly from Manage Applications
+        pdf_filename = f"tailored_{user_id}_{int(dt.now(timezone.utc).timestamp())}.pdf"
+        persistent_pdf_path = os.path.join(OUTPUT_DIR, pdf_filename)
+        try:
+            shutil.copy2(pdf_path, persistent_pdf_path)
+            pdf_url = f"/download_application_pdf/{pdf_filename}"
+        except Exception as pdf_copy_err:
+            print(f"[Auto Tailor] Could not save persistent PDF copy: {pdf_copy_err}")
+            pdf_url = None
+
         # Notify user with PDF Attachment
         subject = f"📄 Resume Tailored Completed: {job_title} at {company_name}"
         
@@ -2503,8 +2529,11 @@ async def async_tailor_pipeline(
             supa_entry["recruiter_profile_url"] = recruiter_profile_url
         if overleaf_url:
             supa_entry["overleaf_url"] = overleaf_url
+        if pdf_url:
+            supa_entry["pdf_url"] = pdf_url
 
         record_id = supabase_request("applications", "POST", supa_entry)
+
     except Exception as e:
         traceback.print_exc()
 
@@ -3086,7 +3115,7 @@ if os.path.exists(frontend_dist):
     @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
     async def serve_frontend(rest_of_path: str):
         # Ignore API endpoints and action handlers so they pass through to regular routes
-        if any(api in rest_of_path for api in ("admin/", "user/", "auth/", "email_action", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
+        if any(api in rest_of_path for api in ("admin/", "user/", "auth/", "email_action", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "download_application_pdf", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
             raise HTTPException(status_code=404, detail="Not Found")
         
         if rest_of_path == "favicon.svg":
