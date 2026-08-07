@@ -1611,7 +1611,11 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
             raise HTTPException(status_code=500, detail=f"LaTeX compilation failed: {result.stderr}")
             
         print("Compilation successful!")
-        return FileResponse(pdf_path, media_type="application/pdf", filename="resume.pdf")
+        return FileResponse(
+            pdf_path,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "inline; filename=resume.pdf"}
+        )
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
