@@ -20,6 +20,7 @@ _shared_browser = None
 # when several run concurrently against the shared browser.
 CONTEXT_POOL_SIZE = 2
 _context_pool = None  # asyncio.Queue[BrowserContext] once init_shared_browser() runs
+_scrape_counter = 0    # Track total scrapes to periodically refresh contexts and release RAM
 _STEALTH_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 _STEALTH_INIT_SCRIPT = """
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -577,11 +578,15 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
             "html": ""
         }
     finally:
+        global _scrape_counter
+        _scrape_counter += 1
+
         if page is not None:
             try: await page.close()
             except Exception: pass
         if context is not None:
-            if from_pool and _context_pool is not None:
+            # Every 25 scrapes, destroy the context instead of returning it to pool to flush Chromium memory
+            if from_pool and _context_pool is not None and (_scrape_counter % 25 != 0):
                 try:
                     await context.clear_cookies()
                     _context_pool.put_nowait(context)
@@ -591,6 +596,14 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
             else:
                 try: await context.close()
                 except Exception: pass
+                # Replenish context pool if we destroyed a pooled context
+                if from_pool and _context_pool is not None and _shared_browser:
+                    try:
+                        new_ctx = await _create_stealth_context(_shared_browser)
+                        _context_pool.put_nowait(new_ctx)
+                        print("[Scraper] 🧹 Memory cleanup: Recycled Chromium browser context after 25 operations")
+                    except Exception: pass
+
         if own_browser is not None:
             try: await own_browser.close()
             except Exception: pass
