@@ -19,6 +19,7 @@ from services.scraper import scrape_job_description
 from services.recruiter_extractor import extract_recruiter
 from utils.ssl_utils import SSL_CONTEXT
 from utils.ttl_cache import TTLCache
+from utils.location_resolver import get_indeed_domain_for_location, resolve_location_country
 from services.log_queue import LLMClientLogQueue, log_ist
 
 # ─── System Caps & TTL Cache ─────────────────────────────────────────────
@@ -140,8 +141,16 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
 
 REED_API_KEY = os.getenv("REED_API_KEY")
 
-def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "48h") -> List[JobSearchResult]:
-    """Queries official Reed.co.uk API for live UK job postings filtered by timeframe."""
+def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "24h") -> List[JobSearchResult]:
+    """
+    Search Reed.co.uk API for UK job listings.
+    Gates execution: skips network calls if location is outside UK (GB).
+    """
+    country_code = resolve_location_country(location)
+    if country_code != "GB":
+        log_ist(f"[Job Searcher] Skipping Reed.co.uk search for non-UK location: '{location}' (Country={country_code})")
+        return []
+
     if not REED_API_KEY:
         print("[Job Searcher] REED_API_KEY not configured. Skipping Reed search.")
         return []
@@ -283,6 +292,9 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
     encoded_keyword = urllib.parse.quote(keyword)
     encoded_location = urllib.parse.quote(location)
     
+    # Resolve regional Indeed domain based on target location (e.g. Hyderabad -> in.indeed.com)
+    indeed_domain, country_code = get_indeed_domain_for_location(location)
+
     # Map timeframe to Indeed fromage parameter (days)
     fromage_map = {
         "24h": "1",
@@ -291,14 +303,14 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
         "1m": "30"
     }
     fromage = fromage_map.get(timeframe, "2")
-    url = f"https://www.indeed.com/jobs?q={encoded_keyword}&l={encoded_location}&fromage={fromage}"
+    url = f"https://{indeed_domain}/jobs?q={encoded_keyword}&l={encoded_location}&fromage={fromage}"
     
-    log_ist(f"[Job Searcher] Fetching Indeed: {url}")
+    log_ist(f"[Job Searcher] Fetching Indeed ({indeed_domain}, Country={country_code}): {url}")
     results = []
 
     # Fast path: Parse Indeed RSS XML feed directly via urllib (bypasses Cloudflare & Playwright)
     try:
-        rss_url = f"https://www.indeed.com/rss?q={urllib.parse.quote(keyword)}&l={urllib.parse.quote(location)}"
+        rss_url = f"https://{indeed_domain}/rss?q={urllib.parse.quote(keyword)}&l={urllib.parse.quote(location)}"
         req = urllib.request.Request(
             rss_url,
             headers={
@@ -421,7 +433,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
             company = company_elem.get_text(strip=True) if company_elem else "Unknown Company"
             loc = location_elem.get_text(strip=True) if location_elem else location
             jk = link_elem.get("data-jk", "")
-            href = f"https://www.indeed.com/viewjob?jk={jk}" if jk else "https://www.indeed.com"
+            href = f"https://{indeed_domain}/viewjob?jk={jk}" if jk else f"https://{indeed_domain}"
             date_str = date_elem.get_text(strip=True) if date_elem else "2 days ago"
             
             results.append(JobSearchResult(
@@ -660,12 +672,13 @@ async def find_matching_jobs(
         log_ist(msg2)
         yield json.dumps({"type": "log", "message": msg2}) + " " * 2048 + "\n"
 
-    raw_jobs = []
-    indeed_jobs_for_est = []  # Store Indeed jobs for EST section
+    # Determine target country for clean user status logs
+    target_country = resolve_location_country(location)
+    platform_label = "LinkedIn, Indeed & Reed.co.uk" if target_country == "GB" else "LinkedIn & Indeed"
 
     # Execute search queries sequentially (1 query at a time) to guarantee 0% network timeout on cloud containers
     for query in queries:
-        yield_msg = f"🌐 Fetching listings from LinkedIn & Reed.co.uk ({timeframe}) for '{query}'..."
+        yield_msg = f"🌐 Fetching listings from {platform_label} ({timeframe}) for '{query}'..."
         log_ist(yield_msg)
         yield json.dumps({"type": "log", "message": yield_msg}) + " " * 2048 + "\n"
         
@@ -674,7 +687,8 @@ async def find_matching_jobs(
         yield json.dumps({"type": "log", "message": f"✓ Fetched {len(li_jobs)} LinkedIn listings for '{query}'"}) + " " * 2048 + "\n"
         
         reed_jobs = await asyncio.to_thread(search_reed_jobs, query, location, timeframe)
-        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(reed_jobs)} Reed.co.uk listings for '{query}'"}) + " " * 2048 + "\n"
+        if target_country == "GB":
+            yield json.dumps({"type": "log", "message": f"✓ Fetched {len(reed_jobs)} Reed.co.uk listings for '{query}'"}) + " " * 2048 + "\n"
         
         ind_jobs = await search_indeed_jobs(query, location, timeframe)
         
@@ -682,7 +696,7 @@ async def find_matching_jobs(
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(ind_jobs)
         
-        res_msg = f"✓ Found {len(li_jobs)} LinkedIn & {len(reed_jobs)} Reed.co.uk postings for '{query}'"
+        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed & {len(reed_jobs)} Reed.co.uk postings for '{query}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{query}'"
         log_ist(res_msg)
         yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 
