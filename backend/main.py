@@ -101,7 +101,7 @@ async def auto_clean_expired_files(force_startup_purge: bool = False):
         # 1. Clean output folder
         if os.path.exists(OUTPUT_DIR):
             for filename in os.listdir(OUTPUT_DIR):
-                if filename.startswith("resume_state") or filename.startswith("application_history_"):
+                if filename.startswith("resume_state") or filename.startswith("application_history_") or filename.startswith("tailored_"):
                     continue
                 file_path = os.path.join(OUTPUT_DIR, filename)
                 try:
@@ -1713,8 +1713,8 @@ async def clear_cache(authorization: Optional[str] = Header(None)):
         if os.path.exists(OUTPUT_DIR):
             for filename in os.listdir(OUTPUT_DIR):
                 file_path = os.path.join(OUTPUT_DIR, filename)
-                # Keep resume_state_* and application_history_* persistent storage files
-                if filename.startswith("resume_state") or filename.startswith("application_history_"):
+                # Keep resume_state_*, application_history_*, and tailored_*.pdf persistent storage files
+                if filename.startswith("resume_state") or filename.startswith("application_history_") or filename.startswith("tailored_"):
                     continue
                 try:
                     if os.path.isfile(file_path) or os.path.islink(file_path):
