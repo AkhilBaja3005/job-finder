@@ -544,11 +544,33 @@ async def bypass_ngrok_browser_warning(request: Request, call_next):
 async def health_check():
     """
     Lightweight ping endpoint for container health check & HF warm-up verification.
+    Returns status, service timestamp, and running git commit SHA.
     """
     import time
+    import subprocess
+    commit_sha = "unknown"
+    commit_time = ""
+    try:
+        commit_sha = subprocess.check_output(
+            ["git", "rev-parse", "--short=7", "HEAD"],
+            cwd=BASE_DIR,
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+        commit_time = subprocess.check_output(
+            ["git", "log", "-1", "--format=%cd", "--date=relative"],
+            cwd=BASE_DIR,
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+    except Exception:
+        commit_sha = os.getenv("SPACE_SHA", "latest")[:7]
+
     return {
         "status": "ok",
         "service": "job-finder-api",
+        "commit_sha": commit_sha,
+        "commit_time": commit_time,
         "timestamp": time.time()
     }
 

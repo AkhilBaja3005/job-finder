@@ -126,6 +126,8 @@ function App() {
   const [toast, setToast] = useState(null); // { message, type: 'success'|'error'|'info' }
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [backendHealth, setBackendHealth] = useState('checking'); // 'healthy' | 'warming' | 'checking'
+  const [commitSha, setCommitSha] = useState('');
+  const [commitTime, setCommitTime] = useState('');
 
   const [discoveredJobs, setDiscoveredJobs] = useState(() => {
     try {
@@ -280,7 +282,10 @@ function App() {
       try {
         const res = await fetch(`${API_BASE}/healthz`, { cache: 'no-store' });
         if (res.ok) {
+          const data = await res.json();
           setBackendHealth('healthy');
+          if (data.commit_sha) setCommitSha(data.commit_sha.substring(0, 7));
+          if (data.commit_time) setCommitTime(data.commit_time);
         } else {
           setBackendHealth('warming');
         }
@@ -1333,7 +1338,12 @@ function App() {
             background: backendHealth === 'healthy' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.15)',
             border: `1px solid ${backendHealth === 'healthy' ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.3)'}`,
             color: backendHealth === 'healthy' ? 'var(--accent-green)' : 'var(--accent-amber)',
-          }} title={backendHealth === 'healthy' ? 'Hugging Face Space active & responsive' : 'Hugging Face container warming up...'}>
+            cursor: 'default'
+          }} title={
+            backendHealth === 'healthy'
+              ? `HF Space Active • Build Commit: ${commitSha || 'latest'}${commitTime ? ` (${commitTime})` : ''}`
+              : 'Hugging Face container warming up...'
+          }>
             <span style={{
               width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
               background: backendHealth === 'healthy' ? 'var(--accent-green)' : 'var(--accent-amber)',
