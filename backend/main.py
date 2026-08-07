@@ -1138,14 +1138,14 @@ def get_cached_analysis(token: str, job_title: str, jd_text: str) -> Optional[di
     if not jd_text:
         return None
     key_src = f"{token or 'guest'}:{job_title}:{jd_text}"
-    key = hashlib.md5(key_src.encode("utf-8")).hexdigest()
+    key = hashlib.md5(key_src.encode("utf-8"), usedforsecurity=False).hexdigest()
     return _analysis_cache.get(key)
 
 def set_cached_analysis(token: str, job_title: str, jd_text: str, analysis: dict):
     if not jd_text:
         return
     key_src = f"{token or 'guest'}:{job_title}:{jd_text}"
-    key = hashlib.md5(key_src.encode("utf-8")).hexdigest()
+    key = hashlib.md5(key_src.encode("utf-8"), usedforsecurity=False).hexdigest()
     _analysis_cache.set(key, analysis)
 
 class RunContext:
@@ -1294,12 +1294,19 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 except Exception:
                     pass
 
+            recruiter_name = None
+            if request.job_url:
+                try:
+                    rec_info = await extract_recruiter(request.job_url, None)
+                    recruiter_name = rec_info.get("recruiter_name")
+                except Exception:
+                    pass
+
             t0 = time.time()
             # Run fit analysis in a background task so we can drain log messages concurrently
             import asyncio
             fit_task = asyncio.create_task(
-                analyze_job_fit(session_resume_data, job_title, jd_text, master_latex if not request.skip_tailoring else None, active_api_key, on_log=log_callback)
-                # analyze_job_fit(session_resume_data, job_title, jd_text, master_latex if not request.skip_tailoring else None, active_api_key, on_log=None)
+                analyze_job_fit(session_resume_data, job_title, jd_text, master_latex if not request.skip_tailoring else None, recruiter_name, active_api_key, on_log=log_callback)
             )
 
             # Poll and yield log queue events in real-time while the LLM call is running
@@ -1335,7 +1342,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 # --- Recruiter reviewer loop (up to 3 attempts) ---
                 reviewer_attempts = 0
                 import hashlib
-                prev_review_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
+                prev_review_hash = hashlib.md5(analysis.latex_code.encode("utf-8"), usedforsecurity=False).hexdigest()
                 
                 last_rejection_feedback = ""
                 review = None
@@ -1384,7 +1391,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         for event in _drain_remaining_logs():
                             yield event
                                 
-                        curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
+                        curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8"), usedforsecurity=False).hexdigest()
                         if curr_hash == prev_review_hash:
                             yield json.dumps({"type": "log", "message": "⚠️ AI reviewer feedback generated identical LaTeX output. Breaking reviewer loop."}) + "\n"
                             stalled_on_identical_output = True
@@ -1440,7 +1447,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 # LLM condensation as last resort only
                 retry_count = 0
                 import hashlib
-                prev_latex_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
+                prev_latex_hash = hashlib.md5(analysis.latex_code.encode("utf-8"), usedforsecurity=False).hexdigest()
     
                 while pages > 1 and retry_count < 2:
                     yield json.dumps({"type": "log", "message": f"⚠️ Spilled onto page 2. Triggering AI condensation (Attempt {retry_count + 1})..."}) + "\n"
@@ -1459,7 +1466,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
                     analysis.latex_code = await tailor_task
                     
-                    curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8")).hexdigest()
+                    curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8"), usedforsecurity=False).hexdigest()
                     if curr_hash == prev_latex_hash:
                         yield json.dumps({"type": "log", "message": "⚠️ AI tailorer returned identical code. Escaping retry loop."}) + "\n"
                         break

@@ -677,6 +677,7 @@ async def find_matching_jobs(
     platform_label = "LinkedIn, Indeed & Reed.co.uk" if target_country == "GB" else "LinkedIn & Indeed"
 
     # Execute search queries sequentially across queries, but fetch platforms in parallel per query
+    raw_jobs = []
     for query in queries:
         yield_msg = f"🌐 Fetching listings from {platform_label} ({timeframe}) for '{query}'..."
         log_ist(yield_msg)

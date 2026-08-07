@@ -288,6 +288,7 @@ async def analyze_job_fit(
     job_title: str,
     job_description: str,
     master_latex: Optional[str] = None,
+    recruiter_name: Optional[str] = None,
     custom_api_key: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
 ) -> AnalysisResponse:
@@ -367,11 +368,13 @@ Write a tailored cover letter and resume section updates for this candidate.
 
 CANDIDATE: {json.dumps(lean_resume, indent=2)}
 TARGET ROLE: {job_title}
+RECRUITER/HIRING MANAGER NAME: {recruiter_name or 'Not specified'}
 MISSING SKILLS TO ADDRESS: {', '.join(missing_skills_list[:8])}
 JD EXCERPT: {jd_truncated[:1200]}
 
 RULES:
 - Cover letter: under 300 words, specific to this JD.
+- SALUTATION: If RECRUITER/HIRING MANAGER NAME is provided and valid (e.g. "John Doe"), start the cover letter addressing them directly (e.g. "Dear John Doe," or "Dear Mr./Ms. Doe,"). If not specified or unknown, default to "Dear Hiring Manager,".
 - WRITING STYLE CONSTRAINTS:
   1. STRICTLY NO EM-DASHES (--) OR HYPHENS AS SENTENCE BREAKS. Use commas, periods, or split sentences.
   2. STRICTLY NO CLICHES or generic filler phrases. Cut statements like: "I am passionate about", "I believe I would be a great fit", "leverage my skills", "hit the ground running", "drive results", or "synergies".
