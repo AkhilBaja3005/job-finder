@@ -36,7 +36,13 @@ async function* streamNdjson(response) {
 
   try {
     while (true) {
-      const { value, done } = await reader.read();
+      // Race stream read against a 30-second stall timeout
+      const readPromise = reader.read();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Stream stalled: No response chunk received for 30s')), 30000)
+      );
+
+      const { value, done } = await Promise.race([readPromise, timeoutPromise]);
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
@@ -52,10 +58,6 @@ async function* streamNdjson(response) {
       }
     }
   } finally {
-    // If the consumer stops iterating early (e.g. `return` inside a
-    // `for await` loop), the JS runtime calls this generator's .return(),
-    // running this block — release the underlying stream lock so the
-    // connection can be cleanly torn down instead of left dangling.
     reader.cancel().catch(() => { });
   }
 }
@@ -123,6 +125,7 @@ function App() {
   const [coverLetterCopied, setCoverLetterCopied] = useState(false);
   const [toast, setToast] = useState(null); // { message, type: 'success'|'error'|'info' }
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [backendHealth, setBackendHealth] = useState('checking'); // 'healthy' | 'warming' | 'checking'
 
   const [discoveredJobs, setDiscoveredJobs] = useState(() => {
     try {
@@ -269,6 +272,27 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, resumeData, jobUrl, jobTitle, jobDescription]);
+
+  // Backend health & warm-up monitoring loop (verifies HF container readiness)
+  useEffect(() => {
+    let checkTimer;
+    const checkHealth = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/healthz`, { cache: 'no-store' });
+        if (res.ok) {
+          setBackendHealth('healthy');
+        } else {
+          setBackendHealth('warming');
+        }
+      } catch (e) {
+        setBackendHealth('warming');
+      }
+    };
+
+    checkHealth();
+    checkTimer = setInterval(checkHealth, 25000);
+    return () => clearInterval(checkTimer);
+  }, []);
 
   // Save active dashboardMode to sessionStorage
   useEffect(() => {
@@ -1302,6 +1326,23 @@ function App() {
           Resume Tailor Suite
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* Hugging Face / Backend Health Badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '4px 10px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: 600,
+            background: backendHealth === 'healthy' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.15)',
+            border: `1px solid ${backendHealth === 'healthy' ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.3)'}`,
+            color: backendHealth === 'healthy' ? 'var(--accent-green)' : 'var(--accent-amber)',
+          }} title={backendHealth === 'healthy' ? 'Hugging Face Space active & responsive' : 'Hugging Face container warming up...'}>
+            <span style={{
+              width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
+              background: backendHealth === 'healthy' ? 'var(--accent-green)' : 'var(--accent-amber)',
+              boxShadow: backendHealth === 'healthy' ? '0 0 8px rgba(16,185,129,0.6)' : '0 0 8px rgba(245,158,11,0.6)',
+              animation: backendHealth === 'healthy' ? 'none' : 'pulseGlow 1.5s infinite'
+            }} />
+            {backendHealth === 'healthy' ? 'HF Space Active' : 'HF Warming Up...'}
+          </div>
+
           {statusMessage && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: '7px',
