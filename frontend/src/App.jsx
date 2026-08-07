@@ -1341,7 +1341,7 @@ function App() {
             cursor: 'default'
           }} title={
             backendHealth === 'healthy'
-              ? `HF Space Active • Build Commit: ${commitSha || 'latest'}${commitTime ? ` (${commitTime})` : ''}`
+              ? `HF Space Active • Commit SHA: ${commitSha || 'latest'}${commitTime ? ` • commit time: ${commitTime}` : ''}`
               : 'Hugging Face container warming up...'
           }>
             <span style={{

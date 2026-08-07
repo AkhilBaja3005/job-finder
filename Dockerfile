@@ -51,8 +51,9 @@ RUN playwright install-deps chromium
 # Copy frontend built assets
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Copy backend codebase
+# Copy backend codebase and git metadata for commit SHA resolution
 COPY backend/ ./backend/
+COPY .git ./.git
 
 # Pre-warm Tectonic's font cache: the first real compile after a cold start
 # downloads fonts from the internet (5-15s on HF's network). Running one

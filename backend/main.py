@@ -550,6 +550,8 @@ async def health_check():
     import subprocess
     commit_sha = "unknown"
     commit_time = ""
+    
+    # 1. Try local git subprocess (works in local dev environments)
     try:
         commit_sha = subprocess.check_output(
             ["git", "rev-parse", "--short=7", "HEAD"],
@@ -558,13 +560,21 @@ async def health_check():
             text=True
         ).strip()
         commit_time = subprocess.check_output(
-            ["git", "log", "-1", "--format=%cd", "--date=relative"],
+            ["git", "log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M:%S GMT"],
             cwd=BASE_DIR,
+            env={**os.environ, "TZ": "GMT"},
             stderr=subprocess.DEVNULL,
             text=True
         ).strip()
     except Exception:
-        commit_sha = os.getenv("SPACE_SHA", "latest")[:7]
+        pass
+
+    # 2. Fallback to container environment variables (Hugging Face / Docker environment)
+    if not commit_sha or commit_sha == "unknown":
+        raw_sha = os.getenv("GIT_SHA") or os.getenv("SPACE_SHA") or os.getenv("COMMIT_SHA") or "latest"
+        commit_sha = raw_sha[:7]
+    if not commit_time:
+        commit_time = os.getenv("BUILD_DATE", "")
 
     return {
         "status": "ok",
