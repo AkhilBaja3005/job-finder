@@ -676,21 +676,22 @@ async def find_matching_jobs(
     target_country = resolve_location_country(location)
     platform_label = "LinkedIn, Indeed & Reed.co.uk" if target_country == "GB" else "LinkedIn & Indeed"
 
-    # Execute search queries sequentially (1 query at a time) to guarantee 0% network timeout on cloud containers
+    # Execute search queries sequentially across queries, but fetch platforms in parallel per query
     for query in queries:
         yield_msg = f"🌐 Fetching listings from {platform_label} ({timeframe}) for '{query}'..."
         log_ist(yield_msg)
         yield json.dumps({"type": "log", "message": yield_msg}) + " " * 2048 + "\n"
         
-        # Execute jobs fetching
-        li_jobs = await asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
-        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(li_jobs)} LinkedIn listings for '{query}'"}) + " " * 2048 + "\n"
+        # Parallel platform fetching per query for faster response
+        li_task = asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
+        reed_task = asyncio.to_thread(search_reed_jobs, query, location, timeframe)
+        ind_task = search_indeed_jobs(query, location, timeframe)
+
+        li_jobs, reed_jobs, ind_jobs = await asyncio.gather(li_task, reed_task, ind_task)
         
-        reed_jobs = await asyncio.to_thread(search_reed_jobs, query, location, timeframe)
+        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(li_jobs)} LinkedIn listings for '{query}'"}) + " " * 2048 + "\n"
         if target_country == "GB":
             yield json.dumps({"type": "log", "message": f"✓ Fetched {len(reed_jobs)} Reed.co.uk listings for '{query}'"}) + " " * 2048 + "\n"
-        
-        ind_jobs = await search_indeed_jobs(query, location, timeframe)
         
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
