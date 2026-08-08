@@ -1147,6 +1147,92 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
     # /search_matching_jobs, it had no rate limit at all.
     _check_rate_limit(http_request, "analyze_job", max_requests=10, window_seconds=300)
     token = None
+async def _send_website_tailoring_email(token: Optional[str], session_resume_data: dict, dumped_analysis: dict, job_title: str, company_name: str, job_url: Optional[str], overleaf_url: Optional[str], persistent_pdf_path: str):
+    """Helper to check user preference and dispatch website tailoring emails with PDF attachment."""
+    if not token or not persistent_pdf_path or not os.path.exists(persistent_pdf_path):
+        return
+    try:
+        user_obj = await async_get_user_by_token(token)
+        should_email = False
+        if user_obj:
+            should_email = user_obj.get("send_tailored_email", False)
+
+        print(f"[analyze_job] Tailored email check: user={user_obj.get('email') if user_obj else None}, should_email={should_email}")
+
+        if should_email and user_obj and user_obj.get("email"):
+            dest_email = user_obj["email"]
+            print(f"[analyze_job] Dispatching tailored PDF email to {dest_email}...")
+            cand_name = session_resume_data.get("name", "").strip() or "Candidate" if isinstance(session_resume_data, dict) else "Candidate"
+            ats_score_val = dumped_analysis.get("match_analysis", {}).get("overall_score")
+            ats_display = f"{ats_score_val}% Match" if ats_score_val is not None else "Tailored"
+            
+            email_subj = f"📄 [Website Tailoring] Resume Tailored: {job_title} at {company_name}"
+            email_text = (
+                f"Hello {cand_name},\n\n"
+                f"Your website resume tailoring for '{job_title}' at '{company_name}' has completed successfully!\n\n"
+                f"We have attached your compiled PDF resume directly to this email.\n\n"
+                f"View the job listing and apply here:\n{job_url or ''}\n\n"
+                f"Want to edit or customize it online? Open it in Overleaf:\n{overleaf_url or ''}\n\n"
+                f"Best of luck with your application!"
+            )
+            email_html = f"""
+            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <span style="font-size: 3rem;">📄</span>
+                    <span style="display: inline-block; background-color: #0284C7; color: #FFFFFF; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Website Tailoring</span>
+                    <h2 style="color: #0284C7; margin: 6px 0 5px; font-weight: 800; font-size: 1.6rem;">Tailoring Completed!</h2>
+                    <p style="color: #64748B; font-size: 0.9rem; margin: 0;">For your application at <strong>{company_name}</strong></p>
+                </div>
+                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem; width: 100px;">Target Role:</td>
+                            <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{job_title}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Company:</td>
+                            <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{company_name}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Mode:</td>
+                            <td style="padding: 6px 0; color: #0284C7; font-size: 0.9rem; font-weight: 600;">Website Interactive Tailoring</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">ATS Score:</td>
+                            <td style="padding: 6px 0; color: #0284C7; font-size: 0.95rem;">{ats_display}</td>
+                        </tr>
+                    </table>
+                </div>
+                <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin: 0 0 20px;">
+                    Hello {cand_name}, your website resume tailoring has finished successfully. Your experience bullet points and technical keywords have been optimized, and your compiled PDF resume is attached directly to this email.
+                </p>
+                <div style="text-align: center; margin: 30px 0 20px;">
+                    {"<a href='" + job_url + "' target='_blank' style='display: inline-block; background-color: #10B981; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; margin-bottom: 12px;'>🚀 View Job & Apply</a><br/>" if job_url else ""}
+                    {"<a href='" + overleaf_url + "' target='_blank' style='display: inline-block; background-color: #0284C7; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;'>🍃 Open & Edit in Overleaf</a>" if overleaf_url else ""}
+                </div>
+                <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
+                <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
+                    Sent automatically by your Resume Tailor Assistant (Website Tailoring Mode).
+                </p>
+            </div>
+            """
+            from services.email_service import async_send_notification_email
+            email_sent = await async_send_notification_email(
+                to_email=dest_email,
+                subject=email_subj,
+                text_body=email_text,
+                html_body=email_html,
+                attachment_path=persistent_pdf_path,
+                attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
+            )
+            print(f"[analyze_job] Tailored PDF email delivery result: {email_sent}")
+    except Exception as email_err:
+        print(f"[analyze_job] Failed sending tailored email: {email_err}")
+
+
+@app.post("/analyze_job")
+async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+    token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
 
@@ -1166,10 +1252,6 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 cached = dict(cached)
                 cached["latex_code"] = ""
             elif not request.skip_tailoring:
-                # A cache hit on the full-tailoring path is a completed tailoring
-                # result exactly like the live path's final yield below — record it
-                # the same way, or repeat visits to an already-cached job silently
-                # never show up in history.
                 try:
                     entry_company = await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
                     await asyncio.to_thread(record_application, token, {
@@ -1179,8 +1261,14 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         "score": cached.get("match_analysis", {}).get("overall_score"),
                         "status": "tailored",
                     })
+                    # Dispatch email on cache hit if PDF exists
+                    safe_key = _safe_key(token)
+                    _, user_out_dir = _get_user_storage_dirs(safe_key)
+                    tex_path, temp_pdf_path = _user_output_paths(token)
+                    cached_pdf = temp_pdf_path if os.path.exists(temp_pdf_path) else tex_path.replace(".tex", ".pdf")
+                    await _send_website_tailoring_email(token, session_resume_data, cached, request.job_title, entry_company, request.job_url, None, cached_pdf)
                 except Exception as hist_err:
-                    print(f"[analyze_job] Failed to record application history (cache hit): {hist_err}")
+                    print(f"[analyze_job] Failed to record application history / email on cache hit: {hist_err}")
             async def cached_event_generator():
                 yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
                 company_name = await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
@@ -1527,81 +1615,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                             shutil.copy2(compiled_pdf, persistent_pdf_path)
                             pdf_url = f"/download_application_pdf/{safe_key}/{persistent_filename}"
 
-                            # Check if user enabled emailing tailored resumes (default False)
-                            user_obj = await async_get_user_by_token(token)
-                            should_email = False
-                            if user_obj:
-                                should_email = user_obj.get("send_tailored_email", False)
-
-                            print(f"[analyze_job] Tailored email check: user_obj={user_obj.get('email') if user_obj else None}, should_email={should_email}")
-
-                            if should_email and user_obj and user_obj.get("email"):
-                                dest_email = user_obj["email"]
-                                print(f"[analyze_job] Dispatching tailored PDF email to {dest_email}...")
-                                cand_name = session_resume_data.get("name", "").strip() or "Candidate"
-                                ats_score_val = dumped.get("match_analysis", {}).get("overall_score")
-                                ats_display = f"{ats_score_val}% Match" if ats_score_val is not None else "Tailored"
-                                
-                                email_subj = f"📄 [Website Tailoring] Resume Tailored: {job_title} at {company_name}"
-                                email_text = (
-                                    f"Hello {cand_name},\n\n"
-                                    f"Your website resume tailoring for '{job_title}' at '{company_name}' has completed successfully!\n\n"
-                                    f"We have attached your compiled PDF resume directly to this email.\n\n"
-                                    f"View the job listing and apply here:\n{request.job_url or ''}\n\n"
-                                    f"Want to edit or customize it online? Open it in Overleaf:\n{overleaf_url or ''}\n\n"
-                                    f"Best of luck with your application!"
-                                )
-                                email_html = f"""
-                                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
-                                    <div style="text-align: center; margin-bottom: 24px;">
-                                        <span style="font-size: 3rem;">📄</span>
-                                        <span style="display: inline-block; background-color: #0284C7; color: #FFFFFF; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Website Tailoring</span>
-                                        <h2 style="color: #0284C7; margin: 6px 0 5px; font-weight: 800; font-size: 1.6rem;">Tailoring Completed!</h2>
-                                        <p style="color: #64748B; font-size: 0.9rem; margin: 0;">For your application at <strong>{company_name}</strong></p>
-                                    </div>
-                                    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-                                        <table style="width: 100%; border-collapse: collapse;">
-                                            <tr>
-                                                <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem; width: 100px;">Target Role:</td>
-                                                <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{job_title}</td>
-                                            </tr>
-                                            <tr>
-                                                <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Company:</td>
-                                                <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{company_name}</td>
-                                            </tr>
-                                            <tr>
-                                                <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Mode:</td>
-                                                <td style="padding: 6px 0; color: #0284C7; font-size: 0.9rem; font-weight: 600;">Website Interactive Tailoring</td>
-                                            </tr>
-                                            <tr>
-                                                <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">ATS Score:</td>
-                                                <td style="padding: 6px 0; color: #0284C7; font-size: 0.95rem;">{ats_display}</td>
-                                            </tr>
-                                        </table>
-                                    </div>
-                                    <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin: 0 0 20px;">
-                                        Hello {cand_name}, your website resume tailoring has finished successfully. Your experience bullet points and technical keywords have been optimized, and your compiled PDF resume is attached directly to this email.
-                                    </p>
-                                    <div style="text-align: center; margin: 30px 0 20px;">
-                                        {"<a href='" + request.job_url + "' target='_blank' style='display: inline-block; background-color: #10B981; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; margin-bottom: 12px;'>🚀 View Job & Apply</a><br/>" if request.job_url else ""}
-                                        {"<a href='" + overleaf_url + "' target='_blank' style='display: inline-block; background-color: #0284C7; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;'>🍃 Open & Edit in Overleaf</a>" if overleaf_url else ""}
-                                    </div>
-                                    <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
-                                    <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
-                                        Sent automatically by your Resume Tailor Assistant (Website Tailoring Mode).
-                                    </p>
-                                </div>
-                                """
-                                from services.email_service import async_send_notification_email
-                                email_sent = await async_send_notification_email(
-                                    to_email=dest_email,
-                                    subject=email_subj,
-                                    text_body=email_text,
-                                    html_body=email_html,
-                                    attachment_path=persistent_pdf_path,
-                                    attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
-                                )
-                                print(f"[analyze_job] Tailored PDF email delivery result: {email_sent}")
+                            await _send_website_tailoring_email(token, session_resume_data, dumped, job_title, company_name, request.job_url, overleaf_url, persistent_pdf_path)
                 except Exception as pdf_compile_err:
                     print(f"[analyze_job] Failed to compile persistent PDF copy: {pdf_compile_err}")
 
