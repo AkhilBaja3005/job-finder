@@ -110,4 +110,21 @@ def parse_resume(file_path: str) -> StructuredResume:
     if not parsed_data.get("achievements"):
         parsed_data["achievements"] = []
 
+    # Post-process experience and project descriptions to ensure clean string representations
+    for item in parsed_data.get("experience", []):
+        if "description" in item and isinstance(item["description"], list):
+            cleaned_bullets = []
+            for b in item["description"]:
+                if isinstance(b, str):
+                    cleaned_bullets.append(b.strip())
+            item["description"] = cleaned_bullets
+
+    for proj in parsed_data.get("projects", []):
+        if "description" in proj and isinstance(proj["description"], list):
+            cleaned_bullets = []
+            for b in proj["description"]:
+                if isinstance(b, str):
+                    cleaned_bullets.append(b.strip())
+            proj["description"] = cleaned_bullets
+
     return StructuredResume(**parsed_data)

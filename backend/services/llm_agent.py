@@ -208,7 +208,7 @@ RULE 2 — GPA / CPI / GRADES (ZERO TOLERANCE):
 RULE 3 — SECTION & CONTENT COMPLETENESS:
   • Preserve EVERY school, job, and project. Do NOT delete, rename, or merge any.
   • Preserve the EXACT bullet count per job and per project. Do NOT add or remove bullets.
-  • SUB-PROJECT HEADERS: If a bullet starts with a project/tool name followed by a colon or parenthetical (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), render it as a bold sub-header `\item \textbf{Quartz (...):}` with child items nested in a sub-`\begin{itemize}` block, OR prefix child bullets with the bold project header `\item \textbf{Quartz}: Developed a cross-language...`. Never leave sub-project names as plain empty bullet items.
+  • SUB-PROJECT HEADERS: If a bullet starts with a project/tool name followed by a colon or parenthetical (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), render it as a bold sub-header '\\item \\textbf{{Quartz (...):}}' with child items nested in a sub-'\\begin{{itemize}}' block, OR prefix child bullets with the bold project header '\\item \\textbf{{Quartz}}: Developed a cross-language...'. Never leave sub-project names as plain empty bullet items.
 
 RULE 4 — ONE-PAGE BUDGET & SUMMARY PLACEMENT (CRITICAL):
   • The Professional Summary section MUST be placed at the absolute top of the document, directly below the name and contact details header.
