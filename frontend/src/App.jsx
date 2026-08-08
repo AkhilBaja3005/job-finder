@@ -1660,7 +1660,7 @@ function App() {
                       style={{ padding: '8px 12px', fontSize: '0.76rem', width: '100%', marginTop: '6px', border: '1px dashed var(--accent-primary)' }}
                       onClick={async () => {
                         setLoading(true);
-                        setStatusMessage('Sending preview matches digest to inbox...');
+                        setStatusMessage('Scraping 24h job matches & sending daily digest now...');
                         try {
                           const res = await fetch(`${API_BASE}/user/test_email`, {
                             method: 'POST',
@@ -1670,20 +1670,19 @@ function App() {
                             }
                           });
                           if (res.ok) {
-                            // showToast('✉️ Sample matches digest sent to your inbox!', 'success');
-                            setStatusMessage('Preview matches digest sent successfully!');
+                            setStatusMessage('Daily matches digest sent successfully!');
                           } else {
                             const err = await res.json();
-                            // showToast(`Failed: ${err.detail}`, 'error');
+                            setStatusMessage(`Failed to send digest: ${err.detail || 'Error'}`);
                           }
                         } catch (err) {
-                          // showToast(`Error: ${err.message}`, 'error');
+                          setStatusMessage(`Error sending digest: ${err.message}`);
                         } finally {
                           setLoading(false);
                         }
                       }}
                     >
-                      ✉️ Send Test Matches Digest
+                      📬 Send Daily Digest Now
                     </button>
                   </div>
                 )}

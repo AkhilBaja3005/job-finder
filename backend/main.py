@@ -186,219 +186,190 @@ async def hf_keep_alive_loop():
             print(f"[Keep Alive Warning] Self-ping attempt: {e}")
         await asyncio.sleep(14400) # Ping every 4 hours (14,400 seconds)
 
-async def daily_match_mailer_loop():
-    # Short initial pause after server start before running first cron check loop
-    await asyncio.sleep(15)
-    
-    # Define IST Timezone explicitly
+async def process_and_send_user_digest(user: dict, bypass_time_check: bool = False) -> bool:
+    """Scrapes 24h job listings for user and delivers custom daily matches digest email."""
+    from services.auth import supabase_request
+    from zoneinfo import ZoneInfo
     ist_tz = ZoneInfo("Asia/Kolkata")
-    
+    now = dt.now(ist_tz)
+    today_str = now.strftime("%Y-%m-%d")
+
+    user_id = user.get("id")
+    email = user.get("email")
+    if not email or not user_id:
+        return False
+
+    if not bypass_time_check:
+        last_sent_date = user.get("cron_last_sent_date")
+        if last_sent_date == today_str:
+            return False
+
+        time_str = user.get("cron_time") or "18:00:00"
+        try:
+            target_h, target_m = map(int, time_str.split(":")[:2])
+        except Exception:
+            target_h, target_m = 18, 0
+
+        target_dt = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0, tzinfo=ist_tz)
+        if now < target_dt:
+            return False
+
+    # Fetch user's master resume data
+    resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+    if not resume_rows:
+        print(f"[Daily Mailer] No resume context found for user {email}")
+        return False
+
+    resume_data_str = resume_rows[0].get("resume_data")
+    if not resume_data_str:
+        return False
+    try:
+        resume_data = json.loads(resume_data_str)
+    except Exception:
+        return False
+
+    pref_role = user.get("cron_role")
+    keywords_arg = pref_role.strip() if (pref_role and pref_role.strip()) else None
+    pref_loc = user.get("cron_location") or "Remote"
+
+    print(f"[Daily Mailer] Generating digest for {email} (Role: '{keywords_arg or 'AI-auto-generated'}', Location: '{pref_loc}')...")
+
+    scraped_jobs = []
+    async for chunk in find_matching_jobs(
+        resume_data=resume_data,
+        location=pref_loc,
+        keywords=keywords_arg,
+        timeframe="24h"
+    ):
+        try:
+            parsed = json.loads(chunk.strip())
+            if parsed.get("type") == "result":
+                scraped_jobs = parsed.get("jobs", [])
+        except Exception:
+            pass
+
+    if not scraped_jobs:
+        print(f"[Daily Mailer] No recent 24h jobs found matching {pref_role} for user: {email}")
+        if not bypass_time_check:
+            supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_last_sent_date": today_str})
+        return False
+
+    scraped_jobs.sort(key=lambda j: j.get("score", 0), reverse=True)
+    candidate_name = resume_data.get("name", "").strip() or "Candidate"
+
+    text_digest = f"Hi {candidate_name},\n\nHere are your top matching roles from the past 24 hours:\n\n"
+    html_digest = f"""
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03); box-sizing: border-box;">
+        <div style="text-align: center; margin-bottom: 24px;">
+            <span style="font-size: 3rem;">📬</span>
+            <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem; font-family: 'Segoe UI', Arial, sans-serif;">Daily Job Matches Digest</h2>
+            <p style="color: #334155; font-size: 0.98rem; font-weight: 600; margin: 8px 0 4px; font-family: 'Segoe UI', Arial, sans-serif;">Hi {candidate_name},</p>
+            <p style="color: #64748B; font-size: 0.9rem; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">Here are your top matching roles from the past 24 hours:</p>
+        </div>
+        <div style="width: 100%;">
+    """
+
+    for idx, job in enumerate(scraped_jobs[:20]):
+        title = job.get("title", "Target Role")
+        company = job.get("company", "Target Company")
+        score = job.get("score", 60)
+        url = job.get("url", "")
+        recruiter_name = job.get("recruiter_name")
+        recruiter_profile_url = job.get("recruiter_profile_url")
+        recruiter_str = f"\n   Recruiter: {recruiter_name}" if recruiter_name else ""
+        platform = job.get("platform") or ("LinkedIn" if "linkedin.com" in url else "Indeed" if "indeed.com" in url else "Web")
+
+        base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+        tailor_url = (
+            f"{base_url}/email_action/tailor"
+            f"?job_url={urllib.parse.quote(url, safe='')}"
+            f"&email={urllib.parse.quote(email)}"
+            f"&title={urllib.parse.quote(title, safe='')}"
+            f"&company={urllib.parse.quote(company, safe='')}"
+        )
+
+        text_digest += f"{idx+1}. {title} at {company} ({platform})\n   Match Score: {score}%{recruiter_str}\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
+
+        score_color = "#10B981" if score >= 85 else "#F59E0B" if score >= 70 else "#64748B"
+        platform_color = "#0A66C2" if platform.lower() == "linkedin" else "#2164F3" if platform.lower() == "indeed" else "#EC4899" if platform.lower() == "reed" else "#64748B"
+
+        recruiter_html = ""
+        if recruiter_name:
+            if recruiter_profile_url:
+                recruiter_html = f'<span style="font-size: 0.76rem; color: #0284C7; display: block; margin-top: 3px;">👤 Recruiter: <a href="{recruiter_profile_url}" target="_blank" style="color: #0284C7; text-decoration: underline;">{recruiter_name}</a></span>'
+            else:
+                recruiter_html = f'<span style="font-size: 0.76rem; color: #64748B; display: block; margin-top: 3px;">👤 Recruiter: {recruiter_name}</span>'
+
+        html_digest += f"""
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; box-sizing: border-box; overflow: hidden; margin-bottom: 12px;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td>
+                        <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">{title}</h3>
+                        <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">
+                            {company} &bull; <span style="color: {platform_color}; font-weight: 700; background-color: {platform_color}15; padding: 2px 6px; border-radius: 4px;">{platform}</span>
+                        </p>
+                        {recruiter_html}
+                    </td>
+                    <td style="text-align: right; vertical-align: top; width: 90px;">
+                        <span style="display: inline-block; background-color: {score_color}15; color: {score_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">{score}% match</span>
+                    </td>
+                </tr>
+            </table>
+            
+            <table style="width: 100%; border-collapse: collapse; margin-top: 14px;">
+                <tr>
+                    <td style="width: 50%; padding-right: 5px;">
+                        <a href="{url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">View Listing</a>
+                    </td>
+                    <td style="width: 50%; padding-left: 5px;">
+                        <a href="{tailor_url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">⚡ Auto-Tailor</a>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        """
+
+    base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+    unsub_url = f"{base_url}/email_action/unsubscribe?email={urllib.parse.quote(email)}"
+
+    html_digest += f"""
+        </div>
+        <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
+        <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">
+            Manage your subscription settings inside the app or <a href="{unsub_url}" target="_blank" style="color: #0284C7; text-decoration: underline;">unsubscribe instantly</a>.
+        </p>
+    </div>
+    """
+
+    target_email = "akhilkumarbaja@gmail.com" if _is_local_deployment() else email
+
+    sent = await async_send_notification_email(
+        to_email=target_email,
+        subject="📬 Daily Job Matches Digest",
+        text_body=text_digest,
+        html_body=html_digest
+    )
+
+    if sent and not bypass_time_check:
+        supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_last_sent_date": today_str})
+        print(f"[Daily Mailer] Successfully sent daily digest email to {email} and marked cron_last_sent_date={today_str}")
+
+    return sent
+
+
+async def daily_match_mailer_loop():
+    await asyncio.sleep(15)
     while True:
         try:
-            print("[Daily Mailer] Scanning active users for subscription digests...")
             from services.auth import supabase_request
             active_users = supabase_request("users?cron_enabled=eq.true", "GET")
-            
-            # Get current IST datetime explicitly
-            now = dt.now(ist_tz)
-            today_str = now.strftime("%Y-%m-%d")
-            
             for user in active_users:
-                user_id = user.get("id")
-                email = user.get("email")
-                if not email or not user_id:
-                    continue
-                
-                # Check if email was already sent today (persisted in Supabase)
-                last_sent_date = user.get("cron_last_sent_date")
-                if last_sent_date == today_str:
-                    continue
-                
-                # Parse user's target time (default to 6:00 PM IST if not set)
-                time_str = user.get("cron_time") or "18:00:00"
-                try:
-                    target_h, target_m = map(int, time_str.split(":")[:2])
-                except Exception:
-                    target_h, target_m = 18, 0
-                
-                # Check if current IST time has crossed the target send time
-                target_dt = now.replace(hour=target_h, minute=target_m, second=0, microsecond=0, tzinfo=ist_tz)
-                if now < target_dt:
-                    continue
-                
-                # Fetch user's master resume data
-                resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
-                if not resume_rows:
-                    continue
-                
-                resume_data_str = resume_rows[0].get("resume_data")
-                if not resume_data_str:
-                    continue
-                try:
-                    resume_data = json.loads(resume_data_str)
-                except Exception:
-                    continue
-                
-                # Retrieve query parameters: use customized preference or let AI extract smart job queries from resume
-                pref_role = user.get("cron_role")
-                # If user hasn't explicitly configured a cron_role, pass None so find_matching_jobs uses AI query generation
-                keywords_arg = pref_role.strip() if (pref_role and pref_role.strip()) else None
-                pref_loc = user.get("cron_location") or "Remote"
-                
-                print(f"[Daily Mailer] Send time reached ({time_str} IST) for user {email}. Scraping role '{keywords_arg or 'AI-auto-generated'}' in '{pref_loc}'...")
-                
-                # Execute job search over last 24h
-                scraped_jobs = []
-                async for chunk in find_matching_jobs(
-                    resume_data=resume_data,
-                    location=pref_loc,
-                    keywords=keywords_arg,
-                    timeframe="24h"
-                ):
-                    try:
-                        parsed = json.loads(chunk.strip())
-                        if parsed.get("type") == "result":
-                            scraped_jobs = parsed.get("jobs", [])
-                    except Exception:
-                        pass
-
-                if not scraped_jobs:
-                    print(f"[Daily Mailer] No recent jobs found matching {pref_role} for user: {email}")
-                    # Persist today's date in Supabase so we don't re-scan every minute today
-                    supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_last_sent_date": today_str})
-                    continue
-                
-                # Sort jobs descending by overall match score
-                scraped_jobs.sort(key=lambda j: j.get("score", 0), reverse=True)
-                
-                # Extract candidate full name for personalized greeting
-                candidate_name = resume_data.get("name", "").strip() or "Candidate"
-
-                # Format text digest
-                text_digest = f"Hi {candidate_name},\n\nHere are your top matching roles from the past 24 hours:\n\n"
-                html_digest = f"""
-                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03); box-sizing: border-box;">
-                    <div style="text-align: center; margin-bottom: 24px;">
-                        <span style="font-size: 3rem;">📬</span>
-                        <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem; font-family: 'Segoe UI', Arial, sans-serif;">Daily Job Matches Digest</h2>
-                        <p style="color: #334155; font-size: 0.98rem; font-weight: 600; margin: 8px 0 4px; font-family: 'Segoe UI', Arial, sans-serif;">Hi {candidate_name},</p>
-                        <p style="color: #64748B; font-size: 0.9rem; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">Here are your top matching roles from the past 24 hours:</p>
-                    </div>
-                    
-                    <div style="width: 100%;">
-                """
-                
-                for idx, job in enumerate(scraped_jobs[:20]): # top 20 matches per digest
-                    title = job.get("title", "Target Role")
-                    company = job.get("company", "Target Company")
-                    score = job.get("score", 60)
-                    url = job.get("url", "")
-                    
-                    # Extract recruiter / HR details if available
-                    recruiter_name = job.get("recruiter_name")
-                    recruiter_profile_url = job.get("recruiter_profile_url")
-                    recruiter_str = f"\n   Recruiter: {recruiter_name}" if recruiter_name else ""
-                    
-                    # Detect source platform from job object or URL
-                    platform = job.get("platform") or ("LinkedIn" if "linkedin.com" in url else "Indeed" if "indeed.com" in url else "Web")
-                    
-                    # Dynamic domain resolution: use BACKEND_URL environment variable if set (ideal for Render),
-                    # fallback to localhost if missing.
-                    base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
-                    tailor_url = (
-                        f"{base_url}/email_action/tailor"
-                        f"?job_url={urllib.parse.quote(url, safe='')}"
-                        f"&email={urllib.parse.quote(email)}"
-                        f"&title={urllib.parse.quote(title, safe='')}"
-                        f"&company={urllib.parse.quote(company, safe='')}"
-                    )
-                    
-                    text_digest += f"{idx+1}. {title} at {company} ({platform})\n   Match Score: {score}%{recruiter_str}\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
-                    
-                    # Score color helper
-                    score_color = "#10B981" if score >= 85 else "#F59E0B" if score >= 70 else "#64748B"
-                    platform_color = "#0A66C2" if platform.lower() == "linkedin" else "#2164F3" if platform.lower() == "indeed" else "#64748B"
-                    
-                    recruiter_html = ""
-                    if recruiter_name:
-                        if recruiter_profile_url:
-                            recruiter_html = f"""
-                            <div style="margin-top: 6px; font-size: 0.8rem; color: #0284C7; font-family: 'Segoe UI', Arial, sans-serif;">
-                                👤 <strong>Recruiter / Hiring Manager:</strong> 
-                                <a href="{recruiter_profile_url}" target="_blank" style="color: #0284C7; text-decoration: underline; font-weight: 600;">{recruiter_name}</a>
-                            </div>
-                            """
-                        else:
-                            recruiter_html = f"""
-                            <div style="margin-top: 6px; font-size: 0.8rem; color: #475569; font-family: 'Segoe UI', Arial, sans-serif;">
-                                👤 <strong>Recruiter / Hiring Manager:</strong> {recruiter_name}
-                            </div>
-                            """
-
-                    html_digest += f"""
-                    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; margin-bottom: 12px; box-sizing: border-box; overflow: hidden;">
-                        <table style="width: 100%; border-collapse: collapse;">
-                            <tr>
-                                <td>
-                                    <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">{title}</h3>
-                                    <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">
-                                        {company} &bull; <span style="color: {platform_color}; font-weight: 600;">{platform}</span>
-                                    </p>
-                                    {recruiter_html}
-                                </td>
-                                <td style="text-align: right; vertical-align: top; width: 90px;">
-                                    <span style="display: inline-block; background-color: {score_color}15; color: {score_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">{score}% match</span>
-                                </td>
-                            </tr>
-                        </table>
-                        
-                        <table style="width: 100%; border-collapse: collapse; margin-top: 14px;">
-                            <tr>
-                                <td style="width: 50%; padding-right: 5px;">
-                                    <a href="{url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">View Listing</a>
-                                </td>
-                                <td style="width: 50%; padding-left: 5px;">
-                                    <a href="{tailor_url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">⚡ Auto-Tailor</a>
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-                    """
-                
-                # Unsubscribe link setup
-                base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
-                unsub_url = f"{base_url}/email_action/unsubscribe?email={urllib.parse.quote(email)}"
-                
-                html_digest += f"""
-                    </div>
-                    <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
-                    <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">
-                        Manage your subscription settings inside the app or <a href="{unsub_url}" target="_blank" style="color: #0284C7; text-decoration: underline;">unsubscribe instantly</a>.
-                    </p>
-                </div>
-                """
-                
-                # If local deployment, override recipient to developer email to prevent sending test emails to real users locally
-                target_email = "akhilkumarbaja@gmail.com" if _is_local_deployment() else email
-
-                # Send email (non-blocking — runs in thread executor)
-                await asyncio.to_thread(
-                    send_notification_email,
-                    target_email,
-                    "Daily Job Matching Digest",
-                    text_digest,
-                    html_digest
-                )
-                
-                # Persist today's date in Supabase table so sent status survives restarts
-                supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_last_sent_date": today_str})
-                print(f"[Daily Mailer] Successfully sent daily digest email to {email} and marked cron_last_sent_date={today_str}")
-                
+                await process_and_send_user_digest(user, bypass_time_check=False)
         except Exception as e:
             print(f"[Daily Mailer ERROR] Exception: {e}")
-        
-        # Check every 60 seconds for scheduled time match sweeps
         await asyncio.sleep(60)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Cap maximum background threads — bumped to 6 for 2-vCPU/16GB HF tier
@@ -2234,86 +2205,11 @@ async def user_test_email(request: Request, authorization: Optional[str] = Heade
     if not email:
         raise HTTPException(status_code=400, detail="User email not found.")
 
-    # Dynamically extract base_url from active HTTP request domain headers or BACKEND_URL environment variable
-    backend_env = os.getenv("BACKEND_URL")
-    if backend_env:
-        base_url = backend_env
+    # Trigger instant real digest scan and delivery, bypassing cron time & daily sent checks
+    sent = await process_and_send_user_digest(user, bypass_time_check=True)
+    if sent:
+        return {"status": "success", "message": f"Daily job digest generated and sent to {email}"}
     else:
-        # Fallback to current request domain scheme & host headers dynamically
-        base_url = f"{request.url.scheme}://{request.url.netloc}"
-
-    # Fetch candidate full name
-    candidate_name = "Candidate"
-    try:
-        resume_str = user.get("resume_data")
-        if resume_str:
-            rdata = json.loads(resume_str)
-            candidate_name = rdata.get("name", "").strip() or "Candidate"
-    except Exception:
-        pass
-
-    # Format a beautiful test matching digest email
-    text_body = (
-        f"Hi {candidate_name},\n\n"
-        "Here are your top matching roles from the past 24 hours:\n\n"
-        "1. Solution Analyst - Business Intelligence at Uline\n   Match Score: 82%\n"
-        "   View Job: https://www.linkedin.com/jobs/view/solution-analyst-business-intelligence-at-uline-4409263656\n"
-        "   Auto-Tailor: " + base_url + "/email_action/tailor?job_url=https://www.linkedin.com/jobs/view/solution-analyst-business-intelligence-at-uline-4409263656&email=" + email + "\n"
-    )
-    
-    tailor_url = f"{base_url}/email_action/tailor?job_url=https://www.linkedin.com/jobs/view/solution-analyst-business-intelligence-at-uline-4409263656&email={urllib.parse.quote(email)}"
-    
-    html_body = f"""
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03); box-sizing: border-box;">
-        <div style="text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 3rem;">📬</span>
-            <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem; font-family: 'Segoe UI', Arial, sans-serif;">Daily Job Matches Digest</h2>
-            <p style="color: #334155; font-size: 0.98rem; font-weight: 600; margin: 8px 0 4px; font-family: 'Segoe UI', Arial, sans-serif;">Hi {candidate_name},</p>
-            <p style="color: #64748B; font-size: 0.9rem; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">Here are your top matching roles from the past 24 hours:</p>
-        </div>
-        
-        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; box-sizing: border-box; overflow: hidden; margin-bottom: 12px;">
-            <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                    <td>
-                        <h3 style="margin: 0 0 4px 0; color: #1E293B; font-size: 1.05rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif;">Data Scientist - AI & Analytics</h3>
-                        <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500; font-family: 'Segoe UI', Arial, sans-serif;">
-                            Deloitte &bull; <span style="color: #EC4899; font-weight: 700; background-color: #EC489915; padding: 2px 6px; border-radius: 4px;">Reed.co.uk</span>
-                        </p>
-                    </td>
-                    <td style="text-align: right; vertical-align: top; width: 90px;">
-                        <span style="display: inline-block; background-color: #10B98115; color: #10B981; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">82% match</span>
-                    </td>
-                </tr>
-            </table>
-            
-            <table style="width: 100%; border-collapse: collapse; margin-top: 14px;">
-                <tr>
-                    <td style="width: 50%; padding-right: 5px;">
-                        <a href="https://www.linkedin.com/jobs/view/solution-analyst-business-intelligence-at-uline-4409263656" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">View Listing</a>
-                    </td>
-                    <td style="width: 50%; padding-left: 5px;">
-                        <a href="{tailor_url}" target="_blank" style="display: block; box-sizing: border-box; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">⚡ Auto-Tailor</a>
-                    </td>
-                </tr>
-            </table>
-        </div>
-        
-        <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
-        <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0; font-family: 'Segoe UI', Arial, sans-serif;">
-            This is a sample digest preview.
-        </p>
-    </div>
-    """
-    
-    success = await async_send_notification_email(
-        to_email=email,
-        subject="📬 Daily Job Matches Digest (Sample Preview)",
-        text_body=text_body,
-        html_body=html_body
-    )
-    
-    if not success:
         raise HTTPException(status_code=500, detail="Failed to send preview email. Verify SMTP settings.")
     return {"status": "success"}
 
