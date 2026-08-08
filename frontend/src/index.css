@@ -847,103 +847,128 @@ textarea:focus-visible {
   box-shadow: 0 4px 20px rgba(56,189,248,0.1);
 }
 
-/* ─── Mobile Responsiveness ──────────────────────────────── */
+/* ─── Mobile Responsiveness & Touch Optimization ─────────── */
 @media (max-width: 768px) {
   .app-container {
-    padding: 16px 12px;
+    padding: 12px 10px 80px 10px; /* Space for bottom mobile nav if needed */
   }
 
   header.app-header {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 12px 16px;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    margin-bottom: 16px;
   }
 
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-    gap: 18px;
-  }
-
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .workspace-panel {
-    height: 400px;
+  header.app-header > div {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 10px !important;
   }
 
   h1.title {
-    font-size: 1.35rem;
+    font-size: 1.3rem;
+    justify-content: center;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr !important;
+    gap: 14px;
+  }
+
+  .workspace-panel {
+    height: 350px !important;
+  }
+
+  .card {
+    padding: 16px 14px !important;
+    border-radius: 14px !important;
   }
 
   .log-terminal-body {
-    max-height: 150px !important;
+    max-height: 160px !important;
+    font-size: 0.72rem !important;
   }
 
-  /* Optimization #4: Improved mobile touch targets */
   .btn {
-    min-height: 44px;
-    padding: 10px 16px;
+    min-height: 46px !important;
+    padding: 12px 16px !important;
+    font-size: 0.88rem !important;
+    width: 100%;
   }
 
-  /* Mode switcher buttons - increase padding for better touch targets */
-  .mode-switcher button {
-    padding: 10px 14px;
-    min-height: 40px;
+  .mode-btn {
+    min-height: 44px !important;
+    font-size: 0.8rem !important;
+    padding: 8px 4px !important;
   }
 
-  /* Add vertical margin between form groups on mobile */
   .form-group {
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
 
-  /* Increase job card click area */
+  input, select, textarea {
+    min-height: 46px !important;
+    padding: 12px 14px !important;
+    font-size: 0.9rem !important;
+    border-radius: 8px !important;
+  }
+
   .job-card {
-    padding: 16px 14px;
-    min-height: 60px;
-  }
-}
-
-@media (max-width: 640px) {
-  /* Optimization #1: Progressive disclosure - hide skill tags on mobile */
-  .job-card .skill-tags {
-    display: none;
+    padding: 14px 12px !important;
+    min-height: 54px;
   }
 
-  .job-card.expanded .skill-tags {
-    display: flex;
+  /* Modals on mobile: full screen sheet style */
+  .modal-overlay {
+    padding: 8px !important;
+    align-items: flex-end !important;
+  }
+
+  .modal-content, [role="dialog"] {
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    max-height: 92vh !important;
+    overflow-y: auto !important;
+    padding: 18px 14px !important;
   }
 }
 
 @media (max-width: 480px) {
   .app-container {
-    padding: 10px 8px;
+    padding: 8px 6px 80px 6px;
+  }
+
+  h1.title {
+    font-size: 1.15rem;
   }
 
   .card {
-    padding: 18px 14px;
+    padding: 14px 10px !important;
   }
 
   .btn {
-    font-size: 0.82rem;
-    padding: 10px 16px;
-    min-height: 44px;
+    font-size: 0.82rem !important;
+    padding: 10px 14px !important;
+    min-height: 44px !important;
   }
 
   h2 {
-    font-size: 1rem;
+    font-size: 0.98rem !important;
   }
 
-  /* Optimization #4: Additional mobile spacing improvements */
-  .form-group {
-    margin-bottom: 8px;
-  }
-
-  input,
-  select,
-  textarea {
-    min-height: 44px;
-    padding: 10px 12px;
+  /* Mobile compact score grid */
+  .score-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
   }
 }

@@ -1850,6 +1850,60 @@ function App() {
               </button>
             </div>
 
+            {/* Mobile Bottom Sticky Navigation Bar */}
+            <div className="mobile-bottom-nav" style={{
+              display: 'none',
+              position: 'fixed',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: '62px',
+              backgroundColor: '#0b0f19',
+              borderTop: '1px solid rgba(255,255,255,0.1)',
+              zIndex: 9999,
+              justifyContent: 'space-around',
+              alignItems: 'center',
+              padding: '0 8px',
+              backdropFilter: 'blur(16px)',
+              boxShadow: '0 -4px 20px rgba(0,0,0,0.5)'
+            }}>
+              <button
+                onClick={() => { setDashboardMode('tailor'); setIsDiscoveryView(false); }}
+                style={{
+                  flex: 1, background: 'none', border: 'none', color: dashboardMode === 'tailor' ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                }}
+              >
+                <span style={{ fontSize: '1.2rem' }}>🎯</span>
+                Tailor
+              </button>
+              <button
+                onClick={() => { setDashboardMode('discover'); setIsDiscoveryView(true); }}
+                style={{
+                  flex: 1, background: 'none', border: 'none', color: dashboardMode === 'discover' ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                }}
+              >
+                <span style={{ fontSize: '1.2rem' }}>🔍</span>
+                Discover
+              </button>
+              <button
+                onClick={() => { setDashboardMode('history'); setIsDiscoveryView(false); handleFetchHistory(); }}
+                style={{
+                  flex: 1, background: 'none', border: 'none', color: dashboardMode === 'history' ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                }}
+              >
+                <span style={{ fontSize: '1.2rem' }}>📂</span>
+                History
+              </button>
+            </div>
+            <style>{`
+              @media (max-width: 768px) {
+                .mobile-bottom-nav { display: flex !important; }
+              }
+            `}</style>
+
             {dashboardMode === 'tailor' && (
               <Suspense fallback={<div style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>Loading...</div>}>
                 <TailorMode
