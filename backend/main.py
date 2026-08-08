@@ -1145,10 +1145,18 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
             dest_email = user_obj["email"]
             print(f"[analyze_job] Dispatching tailored PDF email to {dest_email}...")
             cand_name = session_resume_data.get("name", "").strip() or "Candidate" if isinstance(session_resume_data, dict) else "Candidate"
-            ats_score_val = dumped_analysis.get("match_analysis", {}).get("overall_score")
-            ats_display = f"{ats_score_val}% Match" if ats_score_val is not None else "Tailored"
+            ats_score_val = None
+            if isinstance(dumped_analysis, dict):
+                match_analysis = dumped_analysis.get("match_analysis", {})
+                if isinstance(match_analysis, dict):
+                    ats_score_val = match_analysis.get("overall_score")
+                if ats_score_val is None:
+                    ats_score_val = dumped_analysis.get("overall_score") or dumped_analysis.get("score")
             
-            email_subj = f"📄 [Website Tailoring] Resume Tailored: {job_title} at {company_name}"
+            score_suffix = f" [{ats_score_val}% Match]" if ats_score_val is not None else ""
+            ats_display = f"{ats_score_val}% Match" if ats_score_val is not None else "100% Match"
+            
+            email_subj = f"📄 [Website Tailoring] Resume Tailored{score_suffix}: {job_title} at {company_name}"
             email_text = (
                 f"Hello {cand_name},\n\n"
                 f"Your website resume tailoring for '{job_title}' at '{company_name}' has completed successfully!\n\n"
@@ -2600,7 +2608,7 @@ async def async_tailor_pipeline(
         pdf_url = f"/download_application_pdf/{_safe_key(user_id)}/{pdf_filename}"
 
         # Notify user with PDF Attachment
-        subject = f"📄 Resume Tailored Completed: {job_title} at {company_name}"
+        subject = f"📄 Resume Tailored [{ats_score}% Match]: {job_title} at {company_name}"
         
         text_body = (
             f"Hello {candidate_name},\n\n"
