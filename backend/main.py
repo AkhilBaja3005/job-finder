@@ -1538,71 +1538,71 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                             if should_email and user_obj and user_obj.get("email"):
                                 dest_email = user_obj["email"]
                                 print(f"[analyze_job] Dispatching tailored PDF email to {dest_email}...")
-                            cand_name = session_resume_data.get("name", "").strip() or "Candidate"
-                            ats_score_val = dumped.get("match_analysis", {}).get("overall_score")
-                            ats_display = f"{ats_score_val}% Match" if ats_score_val is not None else "Tailored"
-                            
-                            email_subj = f"📄 [Website Tailoring] Resume Tailored: {job_title} at {company_name}"
-                            email_text = (
-                                f"Hello {cand_name},\n\n"
-                                f"Your website resume tailoring for '{job_title}' at '{company_name}' has completed successfully!\n\n"
-                                f"We have attached your compiled PDF resume directly to this email.\n\n"
-                                f"View the job listing and apply here:\n{request.job_url or ''}\n\n"
-                                f"Want to edit or customize it online? Open it in Overleaf:\n{overleaf_url or ''}\n\n"
-                                f"Best of luck with your application!"
-                            )
-                            email_html = f"""
-                            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
-                                <div style="text-align: center; margin-bottom: 24px;">
-                                    <span style="font-size: 3rem;">📄</span>
-                                    <span style="display: inline-block; background-color: #0284C7; color: #FFFFFF; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Website Tailoring</span>
-                                    <h2 style="color: #0284C7; margin: 6px 0 5px; font-weight: 800; font-size: 1.6rem;">Tailoring Completed!</h2>
-                                    <p style="color: #64748B; font-size: 0.9rem; margin: 0;">For your application at <strong>{company_name}</strong></p>
-                                </div>
-                                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-                                    <table style="width: 100%; border-collapse: collapse;">
-                                        <tr>
-                                            <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem; width: 100px;">Target Role:</td>
-                                            <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{job_title}</td>
-                                        </tr>
-                                        <tr>
-                                            <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Company:</td>
-                                            <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{company_name}</td>
-                                        </tr>
-                                        <tr>
-                                            <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Mode:</td>
-                                            <td style="padding: 6px 0; color: #0284C7; font-size: 0.9rem; font-weight: 600;">Website Interactive Tailoring</td>
-                                        </tr>
-                                        <tr>
-                                            <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">ATS Score:</td>
-                                            <td style="padding: 6px 0; color: #0284C7; font-size: 0.95rem;">{ats_display}</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                                <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin: 0 0 20px;">
-                                    Hello {cand_name}, your website resume tailoring has finished successfully. Your experience bullet points and technical keywords have been optimized, and your compiled PDF resume is attached directly to this email.
-                                </p>
-                                <div style="text-align: center; margin: 30px 0 20px;">
-                                    {"<a href='" + request.job_url + "' target='_blank' style='display: inline-block; background-color: #10B981; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; margin-bottom: 12px;'>🚀 View Job & Apply</a><br/>" if request.job_url else ""}
-                                    {"<a href='" + overleaf_url + "' target='_blank' style='display: inline-block; background-color: #0284C7; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;'>🍃 Open & Edit in Overleaf</a>" if overleaf_url else ""}
-                                </div>
-                                <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
-                                <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
-                                    Sent automatically by your Resume Tailor Assistant (Website Tailoring Mode).
-                                </p>
-                            </div>
-                            """
-                            from services.email_service import async_send_notification_email
-                            asyncio.create_task(
-                                async_send_notification_email(
-                                    to_email=dest_email,
-                                    subject=email_subj,
-                                    text_body=email_text,
-                                    html_body=email_html,
-                                    attachment_path=persistent_pdf_path,
-                                    attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
+                                cand_name = session_resume_data.get("name", "").strip() or "Candidate"
+                                ats_score_val = dumped.get("match_analysis", {}).get("overall_score")
+                                ats_display = f"{ats_score_val}% Match" if ats_score_val is not None else "Tailored"
+                                
+                                email_subj = f"📄 [Website Tailoring] Resume Tailored: {job_title} at {company_name}"
+                                email_text = (
+                                    f"Hello {cand_name},\n\n"
+                                    f"Your website resume tailoring for '{job_title}' at '{company_name}' has completed successfully!\n\n"
+                                    f"We have attached your compiled PDF resume directly to this email.\n\n"
+                                    f"View the job listing and apply here:\n{request.job_url or ''}\n\n"
+                                    f"Want to edit or customize it online? Open it in Overleaf:\n{overleaf_url or ''}\n\n"
+                                    f"Best of luck with your application!"
                                 )
-                            )
+                                email_html = f"""
+                                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
+                                    <div style="text-align: center; margin-bottom: 24px;">
+                                        <span style="font-size: 3rem;">📄</span>
+                                        <span style="display: inline-block; background-color: #0284C7; color: #FFFFFF; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Website Tailoring</span>
+                                        <h2 style="color: #0284C7; margin: 6px 0 5px; font-weight: 800; font-size: 1.6rem;">Tailoring Completed!</h2>
+                                        <p style="color: #64748B; font-size: 0.9rem; margin: 0;">For your application at <strong>{company_name}</strong></p>
+                                    </div>
+                                    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+                                        <table style="width: 100%; border-collapse: collapse;">
+                                            <tr>
+                                                <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem; width: 100px;">Target Role:</td>
+                                                <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{job_title}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Company:</td>
+                                                <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{company_name}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Mode:</td>
+                                                <td style="padding: 6px 0; color: #0284C7; font-size: 0.9rem; font-weight: 600;">Website Interactive Tailoring</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">ATS Score:</td>
+                                                <td style="padding: 6px 0; color: #0284C7; font-size: 0.95rem;">{ats_display}</td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                    <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin: 0 0 20px;">
+                                        Hello {cand_name}, your website resume tailoring has finished successfully. Your experience bullet points and technical keywords have been optimized, and your compiled PDF resume is attached directly to this email.
+                                    </p>
+                                    <div style="text-align: center; margin: 30px 0 20px;">
+                                        {"<a href='" + request.job_url + "' target='_blank' style='display: inline-block; background-color: #10B981; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; margin-bottom: 12px;'>🚀 View Job & Apply</a><br/>" if request.job_url else ""}
+                                        {"<a href='" + overleaf_url + "' target='_blank' style='display: inline-block; background-color: #0284C7; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem;'>🍃 Open & Edit in Overleaf</a>" if overleaf_url else ""}
+                                    </div>
+                                    <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
+                                    <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
+                                        Sent automatically by your Resume Tailor Assistant (Website Tailoring Mode).
+                                    </p>
+                                </div>
+                                """
+                                from services.email_service import async_send_notification_email
+                                asyncio.create_task(
+                                    async_send_notification_email(
+                                        to_email=dest_email,
+                                        subject=email_subj,
+                                        text_body=email_text,
+                                        html_body=email_html,
+                                        attachment_path=persistent_pdf_path,
+                                        attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
+                                    )
+                                )
                 except Exception as pdf_compile_err:
                     print(f"[analyze_job] Failed to compile persistent PDF copy: {pdf_compile_err}")
 
