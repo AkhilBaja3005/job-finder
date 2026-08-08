@@ -2155,29 +2155,78 @@ function App() {
                                   </button>
                                 )}
                                 {entry.pdf_url && (
-                                  <a
-                                    href={`${API_BASE}${entry.pdf_url}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    style={{
-                                      fontSize: '0.72rem',
-                                      padding: '5px 11px',
-                                      borderRadius: '6px',
-                                      fontWeight: 700,
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '5px',
-                                      textDecoration: 'none',
-                                      background: 'rgba(56, 189, 248, 0.15)',
-                                      color: 'var(--accent-secondary)',
-                                      border: '1px solid rgba(56, 189, 248, 0.35)',
-                                      boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)'
-                                    }}
-                                    title="View & Download compiled PDF resume"
-                                  >
-                                    📄 View & Download PDF
-                                  </a>
-                                )}
+                                   <>
+                                     <a
+                                       href={`${API_BASE}${entry.pdf_url}`}
+                                       target="_blank"
+                                       rel="noreferrer"
+                                       style={{
+                                         fontSize: '0.72rem',
+                                         padding: '5px 11px',
+                                         borderRadius: '6px',
+                                         fontWeight: 700,
+                                         display: 'inline-flex',
+                                         alignItems: 'center',
+                                         gap: '5px',
+                                         textDecoration: 'none',
+                                         background: 'rgba(56, 189, 248, 0.15)',
+                                         color: 'var(--accent-secondary)',
+                                         border: '1px solid rgba(56, 189, 248, 0.35)',
+                                         boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)'
+                                       }}
+                                       title="View & Download compiled PDF resume"
+                                     >
+                                       📄 View & Download PDF
+                                     </a>
+                                     <button
+                                       className="btn btn-secondary"
+                                       style={{
+                                         fontSize: '0.72rem',
+                                         padding: '5px 11px',
+                                         borderRadius: '6px',
+                                         fontWeight: 700,
+                                         display: 'inline-flex',
+                                         alignItems: 'center',
+                                         gap: '5px',
+                                         background: 'rgba(16, 185, 129, 0.12)',
+                                         color: '#10b981',
+                                         border: '1px solid rgba(16, 185, 129, 0.3)',
+                                         cursor: 'pointer'
+                                       }}
+                                       onClick={async (e) => {
+                                         e.stopPropagation();
+                                         setStatusMessage('Sending compiled PDF resume to your email...');
+                                         try {
+                                           const res = await fetch(`${API_BASE}/send_application_pdf_email`, {
+                                             method: 'POST',
+                                             headers: {
+                                               'Content-Type': 'application/json',
+                                               'Authorization': `Bearer ${getAuthHeader()}`
+                                             },
+                                             body: JSON.stringify({
+                                               pdf_url: entry.pdf_url,
+                                               job_title: entry.job_title,
+                                               company: entry.company,
+                                               overleaf_url: entry.overleaf_url,
+                                               job_url: entry.job_url
+                                             })
+                                           });
+                                           const data = await res.json();
+                                           if (res.ok) {
+                                             setStatusMessage(`📧 ${data.message || 'Email sent successfully!'}`);
+                                           } else {
+                                             setStatusMessage(`❌ ${data.detail || 'Failed to send email'}`);
+                                           }
+                                         } catch (err) {
+                                           setStatusMessage(`❌ Error: ${err.message}`);
+                                         }
+                                       }}
+                                       title="Send compiled PDF resume to your email"
+                                     >
+                                       📧 Send Email
+                                     </button>
+                                   </>
+                                 )}
                                 {entry.job_url && (
                                   <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', fontWeight: 600, textDecoration: 'none' }}>View Post →</a>
                                 )}
