@@ -1531,11 +1531,11 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         shutil.copy2(temp_pdf_path, persistent_pdf_path)
                         pdf_url = f"/download_application_pdf/{persistent_filename}"
 
-                        # Check if user enabled emailing tailored resumes
+                        # Check if user enabled emailing tailored resumes (default False)
                         user_obj = await async_get_user_by_token(token)
-                        should_email = True
+                        should_email = False
                         if user_obj:
-                            should_email = user_obj.get("send_tailored_email", True)
+                            should_email = user_obj.get("send_tailored_email", False)
 
                         if should_email and user_obj and user_obj.get("email"):
                             dest_email = user_obj["email"]
@@ -1543,11 +1543,11 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                             ats_score_val = dumped.get("match_analysis", {}).get("overall_score")
                             ats_display = f"{ats_score_val}% Match" if ats_score_val is not None else "Tailored"
                             
-                            email_subj = f"📄 Resume Tailoring Completed: {job_title} at {company_name}"
+                            email_subj = f"📄 [Website Tailoring] Resume Tailored: {job_title} at {company_name}"
                             email_text = (
                                 f"Hello {cand_name},\n\n"
-                                f"Your tailored resume for '{job_title}' at '{company_name}' has been compiled successfully!\n\n"
-                                f"We have attached the PDF directly to this email.\n\n"
+                                f"Your website resume tailoring for '{job_title}' at '{company_name}' has completed successfully!\n\n"
+                                f"We have attached your compiled PDF resume directly to this email.\n\n"
                                 f"View the job listing and apply here:\n{request.job_url or ''}\n\n"
                                 f"Want to edit or customize it online? Open it in Overleaf:\n{overleaf_url or ''}\n\n"
                                 f"Best of luck with your application!"
@@ -1556,7 +1556,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                             <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
                                 <div style="text-align: center; margin-bottom: 24px;">
                                     <span style="font-size: 3rem;">📄</span>
-                                    <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.6rem;">Tailoring Completed!</h2>
+                                    <span style="display: inline-block; background-color: #0284C7; color: #FFFFFF; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Website Tailoring</span>
+                                    <h2 style="color: #0284C7; margin: 6px 0 5px; font-weight: 800; font-size: 1.6rem;">Tailoring Completed!</h2>
                                     <p style="color: #64748B; font-size: 0.9rem; margin: 0;">For your application at <strong>{company_name}</strong></p>
                                 </div>
                                 <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
@@ -1570,13 +1571,17 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                                             <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{company_name}</td>
                                         </tr>
                                         <tr>
+                                            <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Mode:</td>
+                                            <td style="padding: 6px 0; color: #0284C7; font-size: 0.9rem; font-weight: 600;">Website Interactive Tailoring</td>
+                                        </tr>
+                                        <tr>
                                             <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">ATS Score:</td>
                                             <td style="padding: 6px 0; color: #0284C7; font-size: 0.95rem;">{ats_display}</td>
                                         </tr>
                                     </table>
                                 </div>
                                 <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin: 0 0 20px;">
-                                    Hello {cand_name}, your experience bullet points and technical keywords have been tailored to match the target job description. The compiled PDF is attached directly to this email.
+                                    Hello {cand_name}, your website resume tailoring has finished successfully. Your experience bullet points and technical keywords have been optimized, and your compiled PDF resume is attached directly to this email.
                                 </p>
                                 <div style="text-align: center; margin: 30px 0 20px;">
                                     {"<a href='" + request.job_url + "' target='_blank' style='display: inline-block; background-color: #10B981; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; margin-bottom: 12px;'>🚀 View Job & Apply</a><br/>" if request.job_url else ""}
@@ -1584,7 +1589,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                                 </div>
                                 <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
                                 <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
-                                    Sent automatically by your Resume Tailor Assistant.
+                                    Sent automatically by your Resume Tailor Assistant (Website Tailoring Mode).
                                 </p>
                             </div>
                             """

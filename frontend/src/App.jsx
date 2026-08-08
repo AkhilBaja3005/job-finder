@@ -180,7 +180,7 @@ function App() {
 
   // Cron Job Match Mailer Subscription states
   const [cronEnabled, setCronEnabled] = useState(false);
-  const [sendTailoredEmail, setSendTailoredEmail] = useState(true);
+  const [sendTailoredEmail, setSendTailoredEmail] = useState(false);
   const [mailerExpanded, setMailerExpanded] = useState(false);
   const [cronRole, setCronRole] = useState('');
   const [cronLocation, setCronLocation] = useState('Remote');
@@ -370,7 +370,7 @@ function App() {
             setGeminiApiKey(data.gemini_api_key);
           }
           setCronEnabled(!!data.cron_enabled);
-          setSendTailoredEmail(data.send_tailored_email !== undefined ? !!data.send_tailored_email : true);
+          setSendTailoredEmail(data.send_tailored_email !== undefined ? !!data.send_tailored_email : false);
           setCronRole(data.cron_role || '');
           setCronLocation(data.cron_location || 'Remote');
           if (data.cron_time) {
