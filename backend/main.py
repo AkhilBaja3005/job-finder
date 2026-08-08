@@ -98,35 +98,47 @@ async def auto_clean_expired_files(force_startup_purge: bool = False):
         mode = "STARTUP INSTANT PURGE" if force_startup_purge else "CRON AUTO CLEAN"
         print(f"[Auto Clean] Running {mode} task...")
         
-        # 1. Clean output folder (walk files recursively in root & user subdirectories)
+        # 1. Clean misaligned legacy flat files directly in OUTPUT_DIR (files not inside a user subfolder)
         if os.path.exists(OUTPUT_DIR):
-            for root, dirs, files in os.walk(OUTPUT_DIR):
-                for filename in files:
-                    if filename.startswith("resume_state") or filename.startswith("application_history_") or filename.startswith("tailored_"):
-                        continue
-                    file_path = os.path.join(root, filename)
+            for item in os.listdir(OUTPUT_DIR):
+                file_path = os.path.join(OUTPUT_DIR, item)
+                if os.path.isfile(file_path):
                     try:
-                        mtime = os.path.getmtime(file_path)
-                        if force_startup_purge or mtime < cutoff:
-                            os.unlink(file_path)
-                            print(f"[Auto Clean Output] Deleted file: {file_path} (Modified {now - mtime:.1f}s ago)")
+                        os.unlink(file_path)
+                        print(f"[Auto Clean Legacy Output] Deleted misaligned top-level file: {item}")
                     except Exception as ex:
-                        print(f"[Auto Clean Output] Failed to delete {file_path}: {ex}")
-        
-        # 2. Clean uploads folder (keep fallback resume.cls & user master LaTeX files)
+                        print(f"[Auto Clean Legacy Output] Failed deleting {item}: {ex}")
+
+        # 2. Clean misaligned legacy flat files directly in UPLOAD_DIR (except resume.cls)
         if os.path.exists(UPLOAD_DIR):
-            for root, dirs, files in os.walk(UPLOAD_DIR):
-                for filename in files:
-                    if filename == "resume.cls" or filename.endswith("_master.tex"):
-                        continue
-                    file_path = os.path.join(root, filename)
+            for item in os.listdir(UPLOAD_DIR):
+                if item == "resume.cls":
+                    continue
+                file_path = os.path.join(UPLOAD_DIR, item)
+                if os.path.isfile(file_path):
                     try:
-                        mtime = os.path.getmtime(file_path)
-                        if force_startup_purge or mtime < cutoff:
-                            os.unlink(file_path)
-                            print(f"[Auto Clean Uploads] Deleted file: {file_path} (Modified {now - mtime:.1f}s ago)")
+                        os.unlink(file_path)
+                        print(f"[Auto Clean Legacy Uploads] Deleted misaligned top-level file: {item}")
                     except Exception as ex:
-                        print(f"[Auto Clean Uploads] Failed to delete {file_path}: {ex}")
+                        print(f"[Auto Clean Legacy Uploads] Failed deleting {item}: {ex}")
+
+        # 3. Clean temporary files inside user subdirectories older than cutoff
+        for base_dir, label in [(OUTPUT_DIR, "Output"), (UPLOAD_DIR, "Uploads")]:
+            if os.path.exists(base_dir):
+                for root, dirs, files in os.walk(base_dir):
+                    if root == base_dir:
+                        continue # Skip top-level (already processed above)
+                    for filename in files:
+                        if filename == "resume.cls" or filename.endswith("_master.tex"):
+                            continue
+                        file_path = os.path.join(root, filename)
+                        try:
+                            mtime = os.path.getmtime(file_path)
+                            if force_startup_purge or mtime < cutoff:
+                                os.unlink(file_path)
+                                print(f"[Auto Clean {label}] Deleted temporary file: {file_path} (Modified {now - mtime:.1f}s ago)")
+                        except Exception as ex:
+                            print(f"[Auto Clean {label}] Failed deleting {file_path}: {ex}")
         
         # 3. Clean local user_data folder of browser state directories
         user_data_path = os.path.join(BASE_DIR, "user_data")
@@ -716,7 +728,8 @@ def set_session_data(token: Optional[str], data: dict, path: str):
 # Per-session/guest state file helper
 def _get_guest_state_file(token: Optional[str]) -> str:
     key = _safe_key(token)
-    return os.path.join(OUTPUT_DIR, f"resume_state_{key}.json")
+    _, user_out_dir = _get_user_storage_dirs(key)
+    return os.path.join(user_out_dir, f"resume_state_{key}.json")
 
 # Load stored guest resume state if exists at startup for default guest
 default_guest_state_file = _get_guest_state_file("guest")
