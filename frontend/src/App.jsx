@@ -180,6 +180,7 @@ function App() {
 
   // Cron Job Match Mailer Subscription states
   const [cronEnabled, setCronEnabled] = useState(false);
+  const [sendTailoredEmail, setSendTailoredEmail] = useState(true);
   const [mailerExpanded, setMailerExpanded] = useState(false);
   const [cronRole, setCronRole] = useState('');
   const [cronLocation, setCronLocation] = useState('Remote');
@@ -369,6 +370,7 @@ function App() {
             setGeminiApiKey(data.gemini_api_key);
           }
           setCronEnabled(!!data.cron_enabled);
+          setSendTailoredEmail(data.send_tailored_email !== undefined ? !!data.send_tailored_email : true);
           setCronRole(data.cron_role || '');
           setCronLocation(data.cron_location || 'Remote');
           if (data.cron_time) {
@@ -520,7 +522,7 @@ function App() {
     }
   };
 
-  const saveSubscriptionToCloud = async (enabled, role, location, time) => {
+  const saveSubscriptionToCloud = async (enabled, role, location, time, tailoredEmail = sendTailoredEmail) => {
     if (!authToken) return;
     setLoading(true);
     setStatusMessage('Updating job matching subscription preferences...');
@@ -535,7 +537,8 @@ function App() {
           cron_enabled: enabled,
           cron_role: role || null,
           cron_location: location || 'Remote',
-          cron_time: time ? `${time}:00` : '18:00:00'
+          cron_time: time ? `${time}:00` : '18:00:00',
+          send_tailored_email: tailoredEmail
         })
       });
       if (res.ok) {
@@ -1555,7 +1558,7 @@ function App() {
                         onChange={(e) => {
                           const val = e.target.checked;
                           setCronEnabled(val);
-                          saveSubscriptionToCloud(val, cronRole, cronLocation);
+                          saveSubscriptionToCloud(val, cronRole, cronLocation, cronTime, sendTailoredEmail);
                         }}
                         style={{ opacity: 0, width: 0, height: 0 }}
                       />
@@ -1616,10 +1619,41 @@ function App() {
                         onChange={(e) => {
                           const val = e.target.value;
                           setCronTime(val);
-                          saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation, val);
+                          saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation, val, sendTailoredEmail);
                         }}
                         style={{ fontSize: '0.8rem', padding: '8px 12px' }}
                       />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', marginTop: '4px' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.78rem', color: '#fff' }}>📧 Email Tailored PDF Resumes</div>
+                        <div style={{ fontSize: '0.70rem', color: 'var(--text-muted)', marginTop: '1px' }}>Automatically email PDF attachment when tailoring via website.</div>
+                      </div>
+                      <label
+                        className="toggle-switch"
+                        style={{ position: 'relative', display: 'inline-block', width: '36px', height: '20px', flexShrink: 0 }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={sendTailoredEmail}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setSendTailoredEmail(val);
+                            saveSubscriptionToCloud(cronEnabled, cronRole, cronLocation, cronTime, val);
+                          }}
+                          style={{ opacity: 0, width: 0, height: 0 }}
+                        />
+                        <span style={{
+                          position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                          backgroundColor: sendTailoredEmail ? 'var(--accent-primary)' : 'rgba(255,255,255,0.1)',
+                          transition: '.3s', borderRadius: '34px'
+                        }}>
+                          <span style={{
+                            position: 'absolute', height: '14px', width: '14px', left: sendTailoredEmail ? '18px' : '3px', bottom: '3px',
+                            backgroundColor: 'white', transition: '.3s', borderRadius: '50%'
+                          }} />
+                        </span>
+                      </label>
                     </div>
                     <button
                       className="btn btn-secondary"
