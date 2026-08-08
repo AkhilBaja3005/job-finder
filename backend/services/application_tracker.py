@@ -19,7 +19,11 @@ from typing import Optional
 from services.auth import supabase_request, get_user_by_token
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+HF_DATA_DIR = "/data"
+if os.path.exists(HF_DATA_DIR) and os.access(HF_DATA_DIR, os.W_OK):
+    OUTPUT_DIR = os.path.join(HF_DATA_DIR, "output")
+else:
+    OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
 # Cap on entries kept in the local JSON fallback file, so a long-running guest
 # session can't grow this file without bound.
@@ -34,13 +38,21 @@ def _safe_key(token: Optional[str]) -> str:
 
 
 def _local_history_path(token: Optional[str]) -> str:
-    return os.path.join(OUTPUT_DIR, f"application_history_{_safe_key(token)}.json")
+    key = _safe_key(token)
+    user_out_dir = os.path.join(OUTPUT_DIR, key)
+    os.makedirs(user_out_dir, exist_ok=True)
+    return os.path.join(user_out_dir, f"application_history_{key}.json")
 
 
 def _read_local_history(token: Optional[str]) -> list[dict]:
     path = _local_history_path(token)
     if not os.path.exists(path):
-        return []
+        # Fallback check flat OUTPUT_DIR for backward compatibility
+        flat_path = os.path.join(OUTPUT_DIR, f"application_history_{_safe_key(token)}.json")
+        if os.path.exists(flat_path):
+            path = flat_path
+        else:
+            return []
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -53,7 +65,7 @@ def _read_local_history(token: Optional[str]) -> list[dict]:
 def _write_local_history(token: Optional[str], entries: list[dict]) -> None:
     path = _local_history_path(token)
     try:
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(entries[-MAX_LOCAL_HISTORY_ENTRIES:], f, indent=2)
     except Exception as e:

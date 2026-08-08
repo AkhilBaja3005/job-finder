@@ -98,41 +98,35 @@ async def auto_clean_expired_files(force_startup_purge: bool = False):
         mode = "STARTUP INSTANT PURGE" if force_startup_purge else "CRON AUTO CLEAN"
         print(f"[Auto Clean] Running {mode} task...")
         
-        # 1. Clean output folder
+        # 1. Clean output folder (walk files recursively in root & user subdirectories)
         if os.path.exists(OUTPUT_DIR):
-            for filename in os.listdir(OUTPUT_DIR):
-                if filename.startswith("resume_state") or filename.startswith("application_history_") or filename.startswith("tailored_"):
-                    continue
-                file_path = os.path.join(OUTPUT_DIR, filename)
-                try:
-                    mtime = os.path.getmtime(file_path)
-                    if force_startup_purge or mtime < cutoff:
-                        if os.path.isfile(file_path) or os.path.islink(file_path):
+            for root, dirs, files in os.walk(OUTPUT_DIR):
+                for filename in files:
+                    if filename.startswith("resume_state") or filename.startswith("application_history_") or filename.startswith("tailored_"):
+                        continue
+                    file_path = os.path.join(root, filename)
+                    try:
+                        mtime = os.path.getmtime(file_path)
+                        if force_startup_purge or mtime < cutoff:
                             os.unlink(file_path)
-                            print(f"[Auto Clean Output] Deleted file: {filename} (Modified {now - mtime:.1f}s ago)")
-                        elif os.path.isdir(file_path):
-                            shutil.rmtree(file_path)
-                            print(f"[Auto Clean Output] Deleted directory: {filename}")
-                except Exception as ex:
-                    print(f"[Auto Clean Output] Failed to delete {file_path}: {ex}")
+                            print(f"[Auto Clean Output] Deleted file: {file_path} (Modified {now - mtime:.1f}s ago)")
+                    except Exception as ex:
+                        print(f"[Auto Clean Output] Failed to delete {file_path}: {ex}")
         
         # 2. Clean uploads folder (keep fallback resume.cls & user master LaTeX files)
         if os.path.exists(UPLOAD_DIR):
-            for filename in os.listdir(UPLOAD_DIR):
-                if filename == "resume.cls" or filename.endswith("_master.tex"):
-                    continue
-                file_path = os.path.join(UPLOAD_DIR, filename)
-                try:
-                    mtime = os.path.getmtime(file_path)
-                    if force_startup_purge or mtime < cutoff:
-                        if os.path.isfile(file_path) or os.path.islink(file_path):
+            for root, dirs, files in os.walk(UPLOAD_DIR):
+                for filename in files:
+                    if filename == "resume.cls" or filename.endswith("_master.tex"):
+                        continue
+                    file_path = os.path.join(root, filename)
+                    try:
+                        mtime = os.path.getmtime(file_path)
+                        if force_startup_purge or mtime < cutoff:
                             os.unlink(file_path)
-                            print(f"[Auto Clean Uploads] Deleted file: {filename} (Modified {now - mtime:.1f}s ago)")
-                        elif os.path.isdir(file_path):
-                            shutil.rmtree(file_path)
-                            print(f"[Auto Clean Uploads] Deleted directory: {filename}")
-                except Exception as ex:
-                    print(f"[Auto Clean Uploads] Failed to delete {file_path}: {ex}")
+                            print(f"[Auto Clean Uploads] Deleted file: {file_path} (Modified {now - mtime:.1f}s ago)")
+                    except Exception as ex:
+                        print(f"[Auto Clean Uploads] Failed to delete {file_path}: {ex}")
         
         # 3. Clean local user_data folder of browser state directories
         user_data_path = os.path.join(BASE_DIR, "user_data")
@@ -569,15 +563,27 @@ def _is_local_deployment() -> bool:
     return "localhost" in frontend_url or "127.0.0.1" in frontend_url
 
 
+def _get_user_storage_dirs(user_id_or_key: Optional[str] = None) -> tuple[str, str]:
+    """
+    Returns user-scoped (uploads_dir, output_dir) subdirectories under persistent storage:
+      /data/uploads/<user_key>/
+      /data/output/<user_key>/
+    Ensures directories exist automatically.
+    """
+    key = _safe_key(str(user_id_or_key) if user_id_or_key else "guest")
+    user_upload_dir = os.path.join(UPLOAD_DIR, key)
+    user_output_dir = os.path.join(OUTPUT_DIR, key)
+    os.makedirs(user_upload_dir, exist_ok=True)
+    os.makedirs(user_output_dir, exist_ok=True)
+    return user_upload_dir, user_output_dir
+
+
 def _user_output_paths(token: Optional[str]) -> tuple[str, str]:
-    """FIX #2: Return per-user tex/pdf output paths instead of the single global
-    'tailored_resume.tex' / 'tailored_resume.pdf' filenames. Using fixed global
-    filenames meant concurrent users could overwrite each other's compiled resume,
-    and in the worst case /apply could submit one user's resume to another
-    user's job application."""
+    """Return per-user tex/pdf output paths inside the user's dedicated output subdirectory."""
     key = _safe_key(token)
-    tex_path = os.path.join(OUTPUT_DIR, f"tailored_resume_{key}.tex")
-    pdf_path = os.path.join(OUTPUT_DIR, f"tailored_resume_{key}.pdf")
+    _, user_out_dir = _get_user_storage_dirs(key)
+    tex_path = os.path.join(user_out_dir, f"tailored_resume_{key}.tex")
+    pdf_path = os.path.join(user_out_dir, f"tailored_resume_{key}.pdf")
     return tex_path, pdf_path
 
 
@@ -658,7 +664,8 @@ def get_session_data(token: Optional[str]) -> dict:
                     path = ""
                     master_latex = res[0].get("master_latex", "")
                     if master_latex:
-                        path = os.path.join(UPLOAD_DIR, f"{user_id}_master.tex")
+                        user_up_dir, _ = _get_user_storage_dirs(user_id)
+                        path = os.path.join(user_up_dir, f"{user_id}_master.tex")
                         with open(path, "w", encoding="utf-8") as f:
                             f.write(master_latex)
                     with _store_lock:
@@ -784,13 +791,10 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
         safe_filename = _re.sub(r'[^A-Za-z0-9._-]', '_', raw_filename).lstrip('.')
         if not safe_filename:
             safe_filename = f"resume_upload_{uuid.uuid4().hex[:8]}"
-        file_path = os.path.join(UPLOAD_DIR, safe_filename)
+        user_up_dir, _ = _get_user_storage_dirs(token or "guest")
+        file_path = os.path.join(user_up_dir, safe_filename)
 
-        # Stream-copy in chunks rather than shutil.copyfileobj's unbounded read,
-        # so an oversized upload is rejected (and its partial file removed)
-        # instead of being fully written to disk first — there was previously
-        # no cap at all, so a multi-GB upload would happily write to disk and
-        # tie up parse_resume() before anyone noticed.
+        # Stream-copy in chunks rather than shutil.copyfileobj's unbounded read
         total_written = 0
         with open(file_path, "wb") as buffer:
             while chunk := await file.read(1024 * 1024):
@@ -809,7 +813,7 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
         # If uploaded file is a PDF/DOCX, generate and save a canonical .tex version
         # so master_latex always has the correct \name and \address blocks
         if not file_path.endswith(".tex"):
-            canonical_tex_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4().hex}_master.tex")
+            canonical_tex_path = os.path.join(user_up_dir, f"{uuid.uuid4().hex}_master.tex")
             canonical_tex = generate_latex_from_json(data)
             with open(canonical_tex_path, "w", encoding="utf-8") as f:
                 f.write(canonical_tex)
@@ -1482,25 +1486,25 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     with open(tex_path, "w", encoding="utf-8") as f:
                         f.write(analysis.latex_code)
                     
-                    # Ensure resume.cls is available in OUTPUT_DIR
+                    safe_key = _safe_key(token)
+                    _, user_out_dir = _get_user_storage_dirs(safe_key)
                     cls_src = os.path.join(UPLOAD_DIR, "resume.cls")
                     if not os.path.exists(cls_src):
                         cls_src = os.path.join(BASE_DIR, "assets", "resume.cls")
-                    shutil.copy2(cls_src, os.path.join(OUTPUT_DIR, "resume.cls"))
+                    shutil.copy2(cls_src, os.path.join(user_out_dir, "resume.cls"))
 
                     comp_res = await asyncio.to_thread(
                         subprocess.run,
-                        ["tectonic", tex_path, "--outdir", OUTPUT_DIR],
+                        ["tectonic", tex_path, "--outdir", user_out_dir],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         text=True
                     )
                     if comp_res.returncode == 0 and os.path.exists(temp_pdf_path):
-                        safe_key = _safe_key(token)
                         persistent_filename = f"tailored_{safe_key}_{int(time.time())}.pdf"
-                        persistent_pdf_path = os.path.join(OUTPUT_DIR, persistent_filename)
+                        persistent_pdf_path = os.path.join(user_out_dir, persistent_filename)
                         shutil.copy2(temp_pdf_path, persistent_pdf_path)
-                        pdf_url = f"/download_application_pdf/{persistent_filename}"
+                        pdf_url = f"/download_application_pdf/{safe_key}/{persistent_filename}"
 
                         # Check if user enabled emailing tailored resumes (default False)
                         user_obj = await async_get_user_by_token(token)
@@ -1644,20 +1648,30 @@ async def download_latex(request: LatexDownloadRequest, authorization: Optional[
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/download_application_pdf/{filename}")
-async def download_application_pdf(filename: str):
+@app.get("/download_application_pdf/{filepath:path}")
+async def download_application_pdf(filepath: str):
     """
-    Serves persistent compiled PDFs stored in OUTPUT_DIR.
+    Serves persistent compiled PDFs stored in OUTPUT_DIR (including user subfolders).
     Sets Content-Disposition to inline so browsers render a built-in PDF viewer with download controls.
     """
-    safe_filename = os.path.basename(filename)
-    pdf_path = os.path.join(OUTPUT_DIR, safe_filename)
-    if not os.path.exists(pdf_path):
-        raise HTTPException(status_code=404, detail="PDF file not found")
+    # Prevent path traversal outside OUTPUT_DIR
+    clean_rel = os.path.normpath(filepath).lstrip("/")
+    pdf_path = os.path.abspath(os.path.join(OUTPUT_DIR, clean_rel))
+    out_dir_abs = os.path.abspath(OUTPUT_DIR)
+
+    if not pdf_path.startswith(out_dir_abs) or not os.path.exists(pdf_path):
+        # Fallback check for flat filename in OUTPUT_DIR
+        flat_path = os.path.join(OUTPUT_DIR, os.path.basename(filepath))
+        if os.path.exists(flat_path):
+            pdf_path = flat_path
+        else:
+            raise HTTPException(status_code=404, detail="PDF file not found")
+
+    filename = os.path.basename(pdf_path)
     return FileResponse(
         pdf_path,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename={safe_filename}"}
+        headers={"Content-Disposition": f"inline; filename={filename}"}
     )
 
 class CoverLetterDownloadRequest(BaseModel):
@@ -2403,8 +2417,10 @@ async def async_tailor_pipeline(
                         break
 
         # Compile final PDF using Tectonic with optimal spacing
-        tex_path = os.path.join(OUTPUT_DIR, f"tailored_{user_id}_{int(time.time())}.tex")
-        pdf_path = tex_path.replace(".tex", ".pdf")
+        _, user_out_dir = _get_user_storage_dirs(user_id)
+        pdf_filename = f"tailored_{user_id}_{int(dt.now(timezone.utc).timestamp())}.pdf"
+        tex_path = os.path.join(user_out_dir, f"tailored_{user_id}_{int(time.time())}.tex")
+        pdf_path = os.path.join(user_out_dir, pdf_filename)
         
         # Write the tailored LaTeX code
         fixed_code = apply_latex_hotfix(tailored_latex, optimal_scale, optimal_linespread, master_latex)
@@ -2416,12 +2432,12 @@ async def async_tailor_pipeline(
         cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
         if not os.path.exists(cls_source):
             cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
-        shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
+        shutil.copy2(cls_source, os.path.join(user_out_dir, "resume.cls"))
             
         print("Compiling tailored LaTeX background task using Tectonic...")
         result = await asyncio.to_thread(
             subprocess.run,
-            ["tectonic", tex_path, "--outdir", OUTPUT_DIR],
+            ["tectonic", tex_path, "--outdir", user_out_dir],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -2459,15 +2475,8 @@ async def async_tailor_pipeline(
         candidate_name = resume_data.get("name", "Candidate")
         overleaf_url = upload_zip_to_tmpfiles(tailored_latex, candidate_name, job_title, company_name)
         
-        # Save a persistent PDF copy in OUTPUT_DIR so user can view/download directly from Manage Applications
-        pdf_filename = f"tailored_{user_id}_{int(dt.now(timezone.utc).timestamp())}.pdf"
-        persistent_pdf_path = os.path.join(OUTPUT_DIR, pdf_filename)
-        try:
-            shutil.copy2(pdf_path, persistent_pdf_path)
-            pdf_url = f"/download_application_pdf/{pdf_filename}"
-        except Exception as pdf_copy_err:
-            print(f"[Auto Tailor] Could not save persistent PDF copy: {pdf_copy_err}")
-            pdf_url = None
+        # Save a persistent PDF URL under user parent subdirectory
+        pdf_url = f"/download_application_pdf/{_safe_key(user_id)}/{pdf_filename}"
 
         # Notify user with PDF Attachment
         subject = f"📄 Resume Tailored Completed: {job_title} at {company_name}"
