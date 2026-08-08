@@ -208,15 +208,11 @@ RULE 2 — GPA / CPI / GRADES (ZERO TOLERANCE):
 RULE 3 — SECTION & CONTENT COMPLETENESS & NESTED ITEMIZE FOR SUB-PROJECTS:
   • Preserve EVERY school, job, and project. Do NOT delete, rename, or merge any.
   • ABSOLUTE CRITICAL FOR SUB-PROJECTS (e.g. Quartz, DMAP, Argus): When a company experience entry has sub-projects/modules (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), NEVER duplicate the parent title on multiple \\item bullets!
-  • You MUST render sub-projects using a nested itemize structure:
+  • You MUST render sub-projects using a nested itemize structure with dot bullets (e.g. \\begin{{itemize}}[label=\\textbullet]):
     \\item \\textbf{{Quartz (Context-as-a-Service \\& LLM Engineering):}}
     \\begin{{itemize}}
         \\item Developed a cross-language dependency extraction tool...
         \\item Orchestrated the integration of Jedi, ccls, and Doxygen...
-    \\end{{itemize}}
-    \\item \\textbf{{DMAP (Data Harvesting):}}
-    \\begin{{itemize}}
-        \\item Re-architected token distribution...
     \\end{{itemize}}
   • NEVER output repeated standalone \\item bullets with duplicate sub-project title prefixes.
 
@@ -228,6 +224,7 @@ RULE 4 — ONE-PAGE BUDGET & SUMMARY PLACEMENT (CRITICAL):
 
 RULE 5 — LATEX STRUCTURE:
   • Preserve \\documentclass, all \\usepackage lines, geometry, and custom macros (\\mybar, etc.).
+  • BULLET SYMBOLS: Second-level (nested) itemize bullets MUST render as solid dots (\\textbullet) rather than en-dashes (--). Keep \\renewcommand{{\\labelitemii}}{{\\textbullet}} in preamble or use [label=\\textbullet].
   • Keep the exact tabular layout in Technical Skills if present.
   • Do NOT add \\linespread, \\pagestyle, or spacing overrides — these are injected by the compiler.
   • Keep the Professional Summary block at the top, followed by other sections as ordered in the master template.

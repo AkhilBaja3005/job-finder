@@ -125,8 +125,12 @@ def apply_latex_hotfix(
     else:
         fixed = fixed.replace("\\begin{document}", spacing_overrides + "\\begin{document}", 1)
 
-    # ── Compress itemize / list environment padding ──────────────────────────
-    fixed = fixed.replace("\\begin{itemize}", "\\begin{itemize}\\setlength{\\itemsep}{-1pt}\\setlength{\\parsep}{0pt}\\setlength{\\topsep}{0pt}")
+    # ── Compress itemize / list environment padding & force second-level bullets to dots (not dashes) ──
+    fixed = fixed.replace("\\begin{itemize}", "\\begin{itemize}\\setlength{\\itemsep}{-1.5pt}\\setlength{\\parsep}{0pt}\\setlength{\\topsep}{0pt}")
+
+    # Ensure nested sub-bullets render as solid dots (\textbullet) instead of en-dashes (--)
+    if "\\renewcommand{\\labelitemii}" not in fixed:
+        fixed = fixed.replace("\\begin{document}", "\\renewcommand{\\labelitemii}{\\textbullet}\n\\begin{document}", 1)
 
     # ── Replace outdated times package with modern lmodern (ensures full bold weight rendering)
     fixed = fixed.replace("\\usepackage{times}", "\\usepackage{lmodern}")
