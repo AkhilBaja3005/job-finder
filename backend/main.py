@@ -541,10 +541,10 @@ RESUME_STATE_FILE = os.path.join(OUTPUT_DIR, "resume_state.json")
 from services.auth import update_user_resume_data
 
 
-def _safe_key(token: Optional[str]) -> str:
+def _safe_key(token: Optional[Union[str, int]]) -> str:
     """FIX #2 helper: turn a token (or 'guest') into a filesystem/cache-safe key
     with no path separators, so it can be used to build per-user file paths."""
-    key = token or "guest"
+    key = str(token) if token is not None else "guest"
     key = _re.sub(r'[^a-zA-Z0-9_-]', '', key)[:40]
     return key or "guest"
 
