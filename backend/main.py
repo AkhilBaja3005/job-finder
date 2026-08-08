@@ -1593,16 +1593,15 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                                 </div>
                                 """
                                 from services.email_service import async_send_notification_email
-                                asyncio.create_task(
-                                    async_send_notification_email(
-                                        to_email=dest_email,
-                                        subject=email_subj,
-                                        text_body=email_text,
-                                        html_body=email_html,
-                                        attachment_path=persistent_pdf_path,
-                                        attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
-                                    )
+                                email_sent = await async_send_notification_email(
+                                    to_email=dest_email,
+                                    subject=email_subj,
+                                    text_body=email_text,
+                                    html_body=email_html,
+                                    attachment_path=persistent_pdf_path,
+                                    attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
                                 )
+                                print(f"[analyze_job] Tailored PDF email delivery result: {email_sent}")
                 except Exception as pdf_compile_err:
                     print(f"[analyze_job] Failed to compile persistent PDF copy: {pdf_compile_err}")
 
