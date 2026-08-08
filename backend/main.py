@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Union, Dict, Any
 # pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 load_dotenv()
