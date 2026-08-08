@@ -1,0 +1,19 @@
+{
+  "short_name": "ResumeTailor",
+  "name": "Resume Tailor Suite - AI Resume & ATS Matcher",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0A0D14",
+  "theme_color": "#0A0D14",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/",
+  "description": "Tailor your LaTeX resumes, calculate ATS compatibility scores, and generate tailored cover letters in real time."
+}

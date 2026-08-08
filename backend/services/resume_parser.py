@@ -77,6 +77,7 @@ def parse_resume(file_path: str) -> StructuredResume:
     2. Extract ALL URLs from the resume into the `links` array. This MUST include LinkedIn URLs (e.g. https://linkedin.com/in/username), GitHub URLs, portfolios, etc. Do NOT leave `links` empty if URLs are present.
     3. For each Education entry, extract the GPA, CPI, percentage, or grade score into the `gpa` field (e.g. "CPI: 8.04", "94.2%"). Do NOT omit this even if it appears on the same line as the degree.
     4. Extract the phone number exactly as it appears.
+    5. WORK EXPERIENCE BULLETS: If a work experience bullet represents a sub-project or category title (e.g., "Quartz (Context-as-a-Service & LLM Engineering):"), do NOT leave it as a standalone bullet if its child bullets follow it. Combine or prefix sub-bullets cleanly so sub-project names remain attached as section headers to their bullet accomplishments!
 
     Raw Resume Text:
     ---
