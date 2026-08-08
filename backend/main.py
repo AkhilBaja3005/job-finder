@@ -1129,7 +1129,9 @@ class RunContext:
 
 async def _send_website_tailoring_email(token: Optional[str], session_resume_data: dict, dumped_analysis: dict, job_title: str, company_name: str, job_url: Optional[str], overleaf_url: Optional[str], persistent_pdf_path: str):
     """Helper to check user preference and dispatch website tailoring emails with PDF attachment."""
+    print(f"[analyze_job] _send_website_tailoring_email called. token={bool(token)}, pdf_path={persistent_pdf_path}, exists={os.path.exists(persistent_pdf_path) if persistent_pdf_path else False}")
     if not token or not persistent_pdf_path or not os.path.exists(persistent_pdf_path):
+        print(f"[analyze_job] Skipping website tailoring email: token or persistent_pdf_path invalid.")
         return
     try:
         user_obj = await async_get_user_by_token(token)
