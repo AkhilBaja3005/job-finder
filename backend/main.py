@@ -1513,20 +1513,31 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         stderr=subprocess.PIPE,
                         text=True
                     )
-                    if comp_res.returncode == 0 and os.path.exists(temp_pdf_path):
-                        persistent_filename = f"tailored_{safe_key}_{int(time.time())}.pdf"
-                        persistent_pdf_path = os.path.join(user_out_dir, persistent_filename)
-                        shutil.copy2(temp_pdf_path, persistent_pdf_path)
-                        pdf_url = f"/download_application_pdf/{safe_key}/{persistent_filename}"
+                    print(f"[analyze_job] Tectonic compilation returncode={comp_res.returncode}. temp_pdf_path={temp_pdf_path} exists={os.path.exists(temp_pdf_path)}")
+                    if comp_res.returncode == 0:
+                        if os.path.exists(temp_pdf_path):
+                            compiled_pdf = temp_pdf_path
+                        else:
+                            # Fallback if tectonic generated expected filename
+                            compiled_pdf = tex_path.replace(".tex", ".pdf")
 
-                        # Check if user enabled emailing tailored resumes (default False)
-                        user_obj = await async_get_user_by_token(token)
-                        should_email = False
-                        if user_obj:
-                            should_email = user_obj.get("send_tailored_email", False)
+                        if os.path.exists(compiled_pdf):
+                            persistent_filename = f"tailored_{safe_key}_{int(time.time())}.pdf"
+                            persistent_pdf_path = os.path.join(user_out_dir, persistent_filename)
+                            shutil.copy2(compiled_pdf, persistent_pdf_path)
+                            pdf_url = f"/download_application_pdf/{safe_key}/{persistent_filename}"
 
-                        if should_email and user_obj and user_obj.get("email"):
-                            dest_email = user_obj["email"]
+                            # Check if user enabled emailing tailored resumes (default False)
+                            user_obj = await async_get_user_by_token(token)
+                            should_email = False
+                            if user_obj:
+                                should_email = user_obj.get("send_tailored_email", False)
+
+                            print(f"[analyze_job] Tailored email check: user_obj={user_obj.get('email') if user_obj else None}, should_email={should_email}")
+
+                            if should_email and user_obj and user_obj.get("email"):
+                                dest_email = user_obj["email"]
+                                print(f"[analyze_job] Dispatching tailored PDF email to {dest_email}...")
                             cand_name = session_resume_data.get("name", "").strip() or "Candidate"
                             ats_score_val = dumped.get("match_analysis", {}).get("overall_score")
                             ats_display = f"{ats_score_val}% Match" if ats_score_val is not None else "Tailored"
