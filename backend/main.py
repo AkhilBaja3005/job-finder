@@ -2193,7 +2193,7 @@ class SubscriptionRequest(BaseModel):
     cron_role: Optional[str] = None
     cron_location: Optional[str] = "Remote"
     cron_time: Optional[str] = "18:00:00"
-    send_tailored_email: Optional[bool] = True
+    send_tailored_email: Optional[bool] = False
 
 @app.post("/user/subscription")
 async def user_subscription(request: SubscriptionRequest, authorization: Optional[str] = Header(None)):
