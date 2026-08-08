@@ -2231,6 +2231,7 @@ class SendApplicationPdfEmailRequest(BaseModel):
     pdf_url: str
     job_title: Optional[str] = "Target Role"
     company: Optional[str] = "Company"
+    score: Optional[int] = None
     overleaf_url: Optional[str] = None
     job_url: Optional[str] = None
 
@@ -2258,16 +2259,18 @@ async def send_application_pdf_email(request: SendApplicationPdfEmailRequest, au
 
     session = get_session_data(token)
     session_resume_data = session.get("data", {})
-    dumped_analysis = {"match_analysis": {"overall_score": 100}}
 
     from services.email_service import async_send_notification_email
     dest_email = user["email"]
     cand_name = session_resume_data.get("name", "").strip() or "Candidate" if isinstance(session_resume_data, dict) else "Candidate"
     
-    email_subj = f"📄 [Resume Delivery] Tailored Resume: {request.job_title} at {request.company}"
+    score_suffix = f" [{request.score}% Match]" if request.score is not None else ""
+    ats_display = f"{request.score}% Match" if request.score is not None else "Tailored"
+
+    email_subj = f"📄 [Resume Delivery] Tailored Resume{score_suffix}: {request.job_title} at {request.company}"
     email_text = (
         f"Hello {cand_name},\n\n"
-        f"Here is your requested tailored resume PDF for '{request.job_title}' at '{request.company}'!\n\n"
+        f"Here is your requested tailored resume PDF for '{request.job_title}' at '{request.company}' (ATS Score: {ats_display})!\n\n"
         f"We have attached your compiled PDF resume directly to this email.\n\n"
         f"View the job listing and apply here:\n{request.job_url or ''}\n\n"
         f"Want to edit or customize it online? Open it in Overleaf:\n{request.overleaf_url or ''}\n\n"
@@ -2291,10 +2294,14 @@ async def send_application_pdf_email(request: SendApplicationPdfEmailRequest, au
                     <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Company:</td>
                     <td style="padding: 6px 0; color: #1E293B; font-size: 0.9rem; font-weight: 600;">{request.company}</td>
                 </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">ATS Score:</td>
+                    <td style="padding: 6px 0; color: #0284C7; font-size: 0.95rem; font-weight: 700;">{ats_display}</td>
+                </tr>
             </table>
         </div>
         <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin: 0 0 20px;">
-            Hello {cand_name}, your compiled PDF resume is attached directly to this email.
+            Hello {cand_name}, your compiled PDF resume (ATS Match Score: <strong>{ats_display}</strong>) is attached directly to this email.
         </p>
         <div style="text-align: center; margin: 30px 0 20px;">
             {"<a href='" + request.job_url + "' target='_blank' style='display: inline-block; background-color: #10B981; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; margin-bottom: 12px;'>🚀 View Job & Apply</a><br/>" if request.job_url else ""}

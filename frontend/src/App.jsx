@@ -2207,6 +2207,7 @@ function App() {
                                                pdf_url: entry.pdf_url,
                                                job_title: entry.job_title,
                                                company: entry.company,
+                                               score: entry.score,
                                                overleaf_url: entry.overleaf_url,
                                                job_url: entry.job_url
                                              })
