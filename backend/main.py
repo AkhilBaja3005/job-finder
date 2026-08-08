@@ -1139,14 +1139,6 @@ class RunContext:
     def get_summary(self) -> str:
         return f"Trace {self.run_id} finished in {time.time() - self.start:.2f}s across {len(self.steps)} steps."
 
-@app.post("/analyze_job")
-async def analyze_job(request: JobAnalysisRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
-    # This is the single most expensive endpoint in the app — multiple LLM
-    # calls, an optional Playwright scrape, a Tectonic LaTeX compile, and up
-    # to 3 recruiter-review retry rounds — yet unlike /scrape_job, /apply, and
-    # /search_matching_jobs, it had no rate limit at all.
-    _check_rate_limit(http_request, "analyze_job", max_requests=10, window_seconds=300)
-    token = None
 async def _send_website_tailoring_email(token: Optional[str], session_resume_data: dict, dumped_analysis: dict, job_title: str, company_name: str, job_url: Optional[str], overleaf_url: Optional[str], persistent_pdf_path: str):
     """Helper to check user preference and dispatch website tailoring emails with PDF attachment."""
     if not token or not persistent_pdf_path or not os.path.exists(persistent_pdf_path):
@@ -1231,7 +1223,9 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
 
 
 @app.post("/analyze_job")
-async def analyze_job(request: JobAnalysisRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+async def analyze_job(request: JobAnalysisRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+    # Rate limit check for analyze_job
+    _check_rate_limit(http_request, "analyze_job", max_requests=10, window_seconds=300)
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
