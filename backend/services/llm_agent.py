@@ -205,10 +205,20 @@ RULE 2 — GPA / CPI / GRADES (ZERO TOLERANCE):
   • Example: {{\\textit{{B.Tech in Engineering Science}}}} \\hfill {{\\em CPI: 8.04}} \\\\
   • If you omit this, the output is REJECTED.
 
-RULE 3 — SECTION & CONTENT COMPLETENESS:
+RULE 3 — SECTION & CONTENT COMPLETENESS & NESTED ITEMIZE FOR SUB-PROJECTS:
   • Preserve EVERY school, job, and project. Do NOT delete, rename, or merge any.
-  • Preserve the EXACT bullet count per job and per project. Do NOT add or remove bullets.
-  • SUB-PROJECT HEADERS: If a bullet starts with a project/tool name followed by a colon or parenthetical (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), render it as a bold sub-header '\\item \\textbf{{Quartz (...):}}' with child items nested in a sub-'\\begin{{itemize}}' block, OR prefix child bullets with the bold project header '\\item \\textbf{{Quartz}}: Developed a cross-language...'. Never leave sub-project names as plain empty bullet items.
+  • ABSOLUTE CRITICAL FOR SUB-PROJECTS (e.g. Quartz, DMAP, Argus): When a company experience entry has sub-projects/modules (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), NEVER duplicate the parent title on multiple \\item bullets!
+  • You MUST render sub-projects using a nested itemize structure:
+    \\item \\textbf{{Quartz (Context-as-a-Service \\& LLM Engineering):}}
+    \\begin{{itemize}}
+        \\item Developed a cross-language dependency extraction tool...
+        \\item Orchestrated the integration of Jedi, ccls, and Doxygen...
+    \\end{{itemize}}
+    \\item \\textbf{{DMAP (Data Harvesting):}}
+    \\begin{{itemize}}
+        \\item Re-architected token distribution...
+    \\end{{itemize}}
+  • NEVER output repeated standalone \\item bullets with duplicate sub-project title prefixes.
 
 RULE 4 — ONE-PAGE BUDGET & SUMMARY PLACEMENT (CRITICAL):
   • The Professional Summary section MUST be placed at the absolute top of the document, directly below the name and contact details header.
