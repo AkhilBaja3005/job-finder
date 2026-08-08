@@ -65,13 +65,13 @@ def create_or_get_user(email: str, picture_url: Optional[str] = None) -> dict:
                 return updated[0]
         return user
         
-    payload = {"email": email}
+    payload = {"email": email, "send_tailored_email": True}
     if picture_url:
         payload["picture_url"] = picture_url
     new_users = supabase_request("users", "POST", payload)
     if new_users:
         return new_users[0]
-    return {"id": None, "email": email, "gemini_api_key": None, "picture_url": picture_url}
+    return {"id": None, "email": email, "gemini_api_key": None, "picture_url": picture_url, "send_tailored_email": True}
 
 def create_session(user_id) -> str:
     token = str(uuid.uuid4())

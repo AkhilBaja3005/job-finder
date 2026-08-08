@@ -370,7 +370,7 @@ function App() {
             setGeminiApiKey(data.gemini_api_key);
           }
           setCronEnabled(!!data.cron_enabled);
-          setSendTailoredEmail(data.send_tailored_email !== undefined ? !!data.send_tailored_email : false);
+          setSendTailoredEmail(data.send_tailored_email !== undefined ? !!data.send_tailored_email : true);
           setCronRole(data.cron_role || '');
           setCronLocation(data.cron_location || 'Remote');
           if (data.cron_time) {
