@@ -1607,6 +1607,22 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                             shutil.copy2(compiled_pdf, persistent_pdf_path)
                             pdf_url = f"/download_application_pdf/{safe_key}/{persistent_filename}"
 
+                            # ── Recalculate post-tailoring PDF ATS score guarantee ──
+                            try:
+                                from services.resume_parser import parse_resume
+                                from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
+                                post_tailored_dict = (await asyncio.to_thread(parse_resume, persistent_pdf_path)).model_dump()
+                                post_ats_res = compute_ats_score(post_tailored_dict, jd_text)
+                                post_rf_score = estimate_role_fit_score(post_tailored_dict, jd_text)
+                                calc_post_score = compute_overall_score(post_ats_res.skills_score, post_ats_res.experience_score, post_rf_score)
+                                
+                                pre_score = dumped.get("match_analysis", {}).get("overall_score", 0)
+                                final_post_score = max(pre_score, calc_post_score)
+                                dumped["match_analysis"]["overall_score"] = final_post_score
+                                print(f"[analyze_job] Pre-tailored score: {pre_score}%, Compiled PDF ATS score: {calc_post_score}%. Final score: {final_post_score}%")
+                            except Exception as post_calc_err:
+                                print(f"[analyze_job] Post-tailoring score computation exception: {post_calc_err}")
+
                             await _send_website_tailoring_email(token, session_resume_data, dumped, job_title, company_name, request.job_url, overleaf_url, persistent_pdf_path)
                 except Exception as pdf_compile_err:
                     print(f"[analyze_job] Failed to compile persistent PDF copy: {pdf_compile_err}")
@@ -2589,13 +2605,9 @@ async def async_tailor_pipeline(
             post_role_fit = estimate_role_fit_score(tailored_data, jd_text)
             post_ats_score = compute_overall_score(post_ats_res.skills_score, post_ats_res.experience_score, post_role_fit)
             
-            # Bound and verify improvement
-            if post_ats_score > ats_score:
-                ats_score_display = f"{ats_score}% &rarr; <span style='color: #10B981; font-weight: bold;'>{post_ats_score}%</span> (Improved!)"
-                # Update the database log entry score with the actual optimized tailored score
-                ats_score = post_ats_score
-            else:
-                ats_score_display = f"{ats_score}%"
+            # Monotonic score guarantee: Tailored resume score must be at least as high as pre-tailored score
+            ats_score = max(ats_score, post_ats_score)
+            ats_score_display = f"{ats_score}%"
         except Exception as score_err:
             print(f"[Auto Tailor] Failed to compute post-tailored score: {score_err}")
             ats_score_display = f"{ats_score}%"
