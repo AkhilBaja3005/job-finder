@@ -125,6 +125,9 @@ def apply_latex_hotfix(
     else:
         fixed = fixed.replace("\\begin{document}", spacing_overrides + "\\begin{document}", 1)
 
+    # ── Remove empty itemize blocks that cause LaTeX 'missing \item' errors ──
+    fixed = re.sub(r'\\begin\{itemize\}(\\setlength\{[^}]*\})*\s*\\end\{itemize\}', '', fixed)
+
     # ── Compress itemize / list environment padding & force second-level bullets to dots (not dashes) ──
     fixed = fixed.replace("\\begin{itemize}", "\\begin{itemize}\\setlength{\\itemsep}{-1.5pt}\\setlength{\\parsep}{0pt}\\setlength{\\topsep}{0pt}")
 
@@ -140,10 +143,12 @@ def apply_latex_hotfix(
     # Escape % only when NOT already preceded by \
     fixed = re.sub(r'(?<!\\)%', r'\\%', fixed)
     fixed = re.sub(r'(?<!\\)_', r'\\_', fixed)
+    fixed = re.sub(r'(?<!\\)#', r'\\#', fixed)
     # Undo double-escapes that arise from the above
     fixed = fixed.replace('\\\\&', '\\&')
     fixed = fixed.replace('\\\\%', '\\%')
     fixed = fixed.replace('\\\\_', '\\_')
+    fixed = fixed.replace('\\\\#', '\\#')
 
     # ── Remove stray \\ before \begin{itemize} (causes big gaps) ────────────
     fixed = re.sub(
@@ -284,13 +289,15 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
                     nonlocal current_parent_header, sub_bullets
                     if current_parent_header:
                         clean_hdr = current_parent_header.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_")
-                        latex.append(f"    \\item \\textbf{{{clean_hdr}}}")
                         if sub_bullets:
+                            latex.append(f"    \\item \\textbf{{{clean_hdr}}}")
                             latex.append("    \\begin{itemize}\\setlength{\\itemsep}{0em}")
                             for sb in sub_bullets:
                                 clean_sb = sb.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_")
                                 latex.append(f"        \\item {clean_sb}")
                             latex.append("    \\end{itemize}")
+                        else:
+                            latex.append(f"    \\item \\textbf{{{clean_hdr}}}")
                         current_parent_header = None
                         sub_bullets = []
 
@@ -328,12 +335,13 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
         for proj in proj_list:
             title   = proj.get("title", "")
             bullets = proj.get("description", [])
-            latex.append(f"{{\\bf {title}}} \\\\")
-            for b in bullets:
-                cb = b.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_")
-                latex.append(f"- {cb} \\\\")
-        if latex[-1].endswith(" \\\\"):
-            latex[-1] = latex[-1][:-3]
+            latex.append(f"{{\\bf {title}}}")
+            if bullets:
+                latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.15em} \\setlength{\\parsep}{0em}")
+                for b in bullets:
+                    cb = b.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_").replace("#", "\\#")
+                    latex.append(f"    \\item {cb}")
+                latex.append("\\end{itemize}")
         latex.append("\\end{rSection}")
 
     # Achievements
