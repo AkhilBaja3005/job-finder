@@ -2095,19 +2095,46 @@ function App() {
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Min Score:</span>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Min Score %:</span>
                         <input
-                          type="range"
+                          type="number"
                           min="0"
-                          max="95"
-                          step="5"
-                          value={minHistoryScore}
-                          onChange={(e) => setMinHistoryScore(Number(e.target.value))}
-                          style={{ width: '70px', height: '4px', cursor: 'pointer' }}
+                          max="100"
+                          placeholder="e.g. 70"
+                          value={minHistoryScore === 0 ? '' : minHistoryScore}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? 0 : Math.max(0, Math.min(100, Number(e.target.value)));
+                            setMinHistoryScore(val);
+                          }}
+                          style={{
+                            width: '58px',
+                            fontSize: '0.72rem',
+                            padding: '2px 6px',
+                            borderRadius: '6px',
+                            background: '#0F172A',
+                            color: minHistoryScore > 0 ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                            border: minHistoryScore > 0 ? '1px solid var(--accent-cyan)' : '1px solid rgba(255,255,255,0.15)',
+                            textAlign: 'center',
+                            fontWeight: 700,
+                            outline: 'none'
+                          }}
                         />
-                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: minHistoryScore > 0 ? 'var(--accent-cyan)' : 'var(--text-muted)', minWidth: '32px' }}>
-                          {minHistoryScore > 0 ? `≥${minHistoryScore}%` : 'Off'}
-                        </span>
+                        {minHistoryScore > 0 && (
+                          <button
+                            onClick={() => setMinHistoryScore(0)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--text-muted)',
+                              fontSize: '0.75rem',
+                              cursor: 'pointer',
+                              padding: '0 2px'
+                            }}
+                            title="Clear score filter"
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
