@@ -277,9 +277,47 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
             latex.append(f"{{\\bf {company} \\mybar \\textnormal{{{role}}}}} \\hfill {{\\em {dates}}}")
             if bullets:
                 latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.15em} \\setlength{\\parsep}{0em}")
+                current_parent_header = None
+                sub_bullets = []
+
+                def flush_parent():
+                    nonlocal current_parent_header, sub_bullets
+                    if current_parent_header:
+                        clean_hdr = current_parent_header.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_")
+                        latex.append(f"    \\item \\textbf{{{clean_hdr}}}")
+                        if sub_bullets:
+                            latex.append("    \\begin{itemize}\\setlength{\\itemsep}{0em}")
+                            for sb in sub_bullets:
+                                clean_sb = sb.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_")
+                                latex.append(f"        \\item {clean_sb}")
+                            latex.append("    \\end{itemize}")
+                        current_parent_header = None
+                        sub_bullets = []
+
                 for b in bullets:
-                    cb = b.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_")
-                    latex.append(f"    \\item {cb}")
+                    # Check if bullet starts with a sub-project header e.g. "Quartz (Context...): bullet..." or "Quartz (...):"
+                    if ":" in b and not b.lower().startswith(("http", "https", "e.g.", "note:", "result:")):
+                        header_part, text_part = b.split(":", 1)
+                        header_part = header_part.strip() + ":"
+                        text_part = text_part.strip()
+
+                        # If same sub-project header or new sub-project header
+                        if current_parent_header and current_parent_header == header_part:
+                            if text_part:
+                                sub_bullets.append(text_part)
+                        else:
+                            flush_parent()
+                            current_parent_header = header_part
+                            if text_part:
+                                sub_bullets.append(text_part)
+                    else:
+                        if current_parent_header:
+                            sub_bullets.append(b.strip())
+                        else:
+                            cb = b.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_")
+                            latex.append(f"    \\item {cb}")
+                
+                flush_parent()
                 latex.append("\\end{itemize}")
         latex.append("\\end{rSection}")
 
