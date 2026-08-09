@@ -188,6 +188,7 @@ function App() {
 
   const [historyFilter, setHistoryFilter] = useState('all'); // 'all' | 'tailored' | 'applied'
   const [historySortOrder, setHistorySortOrder] = useState('newest'); // 'newest' | 'oldest'
+  const [minHistoryScore, setMinHistoryScore] = useState(0); // Custom match percentage filter
   const scrapedJobDescriptionRef = useRef('');
   const analysisPanelRef = useRef(null);
   const [outreachAnchorTop, setOutreachAnchorTop] = useState(0);
@@ -2054,8 +2055,8 @@ function App() {
                   })()}
 
                   {/* Filter / Sort Control Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 2px', flexWrap: 'wrap', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 2px', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Filter:</span>
                       <button
                         onClick={() => setHistoryFilter('all')}
@@ -2092,27 +2093,49 @@ function App() {
                       </button>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Sort Date:</span>
-                      <select
-                        value={historySortOrder}
-                        onChange={(e) => setHistorySortOrder(e.target.value)}
-                        style={{
-                          fontSize: '0.68rem', padding: '3px 8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: '#0F172A', color: 'var(--accent-secondary)', border: '1px solid rgba(56, 189, 248, 0.3)', outline: 'none'
-                        }}
-                      >
-                        <option value="newest">📅 Newest First</option>
-                        <option value="oldest">📅 Oldest First</option>
-                      </select>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Min Score:</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="95"
+                          step="5"
+                          value={minHistoryScore}
+                          onChange={(e) => setMinHistoryScore(Number(e.target.value))}
+                          style={{ width: '70px', height: '4px', cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: minHistoryScore > 0 ? 'var(--accent-cyan)' : 'var(--text-muted)', minWidth: '32px' }}>
+                          {minHistoryScore > 0 ? `≥${minHistoryScore}%` : 'Off'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Sort Date:</span>
+                        <select
+                          value={historySortOrder}
+                          onChange={(e) => setHistorySortOrder(e.target.value)}
+                          style={{
+                            fontSize: '0.68rem', padding: '3px 8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
+                            background: '#0F172A', color: 'var(--accent-secondary)', border: '1px solid rgba(56, 189, 248, 0.3)', outline: 'none'
+                          }}
+                        >
+                          <option value="newest">📅 Newest First</option>
+                          <option value="oldest">📅 Oldest First</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {applicationHistory
                       .filter(entry => {
-                        if (historyFilter === 'tailored') return entry.status !== 'applied';
-                        if (historyFilter === 'applied') return entry.status === 'applied';
+                        if (historyFilter === 'tailored' && entry.status === 'applied') return false;
+                        if (historyFilter === 'applied' && entry.status !== 'applied') return false;
+                        if (minHistoryScore > 0) {
+                          const itemScore = typeof entry.score === 'number' ? entry.score : 0;
+                          if (itemScore < minHistoryScore) return false;
+                        }
                         return true;
                       })
                       .sort((a, b) => {
@@ -2123,11 +2146,38 @@ function App() {
                       .map((entry, idx) => {
                       const statusColor = entry.status === 'applied' ? 'var(--accent-green)' : 'var(--accent-cyan)';
                       const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
+
+                      // Determine platform source from job_url
+                      let platformBadge = null;
+                      const urlLower = (entry.job_url || '').toLowerCase();
+                      if (urlLower.includes('linkedin.com')) {
+                        platformBadge = { name: 'LinkedIn', color: '#0A66C2', icon: '💼' };
+                      } else if (urlLower.includes('indeed.com')) {
+                        platformBadge = { name: 'Indeed', color: '#2557A7', icon: '🔍' };
+                      } else if (urlLower.includes('glassdoor.com')) {
+                        platformBadge = { name: 'Glassdoor', color: '#00A264', icon: '🏢' };
+                      } else if (urlLower.includes('ziprecruiter.com')) {
+                        platformBadge = { name: 'ZipRecruiter', color: '#5B2C6F', icon: '⚡' };
+                      } else if (entry.job_url) {
+                        platformBadge = { name: 'Direct Web', color: '#64748B', icon: '🌐' };
+                      }
+
                       return (
                         <div key={idx} className="card" style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>{entry.job_title || 'Untitled Role'}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>{entry.job_title || 'Untitled Role'}</div>
+                                {platformBadge && (
+                                  <span style={{
+                                    fontSize: '0.66rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
+                                    backgroundColor: `${platformBadge.color}22`, color: platformBadge.color,
+                                    border: `1px solid ${platformBadge.color}44`, display: 'inline-flex', alignItems: 'center', gap: '3px'
+                                  }}>
+                                    <span>{platformBadge.icon}</span> {platformBadge.name}
+                                  </span>
+                                )}
+                              </div>
                               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
                               {entry.recruiter_name && (
                                 <div style={{ fontSize: '0.75rem', color: 'var(--accent-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -2207,6 +2257,29 @@ function App() {
                                   >
                                     🍃 Overleaf
                                   </button>
+                                )}
+                                {entry.job_url && (
+                                  <a
+                                    href={entry.job_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      padding: '5px 11px',
+                                      borderRadius: '6px',
+                                      fontWeight: 600,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      textDecoration: 'none',
+                                      background: 'rgba(255, 255, 255, 0.05)',
+                                      color: '#e2e8f0',
+                                      border: '1px solid rgba(255, 255, 255, 0.12)'
+                                    }}
+                                    title="Open original job posting"
+                                  >
+                                    🔗 Job Link
+                                  </a>
                                 )}
                                 {entry.pdf_url && (
                                    <>
