@@ -238,7 +238,15 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
         try:
             parsed = json.loads(chunk.strip())
             if parsed.get("type") == "result":
-                scraped_jobs = parsed.get("jobs", [])
+                # Final complete batch
+                batch = parsed.get("jobs", [])
+                if batch:
+                    scraped_jobs = batch
+            elif parsed.get("type") == "partial_result" and parsed.get("job"):
+                # Collect streaming job matches
+                job_item = parsed.get("job")
+                if not any(j.get("url") == job_item.get("url") for j in scraped_jobs):
+                    scraped_jobs.append(job_item)
         except Exception:
             pass
 
@@ -248,7 +256,8 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
             supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_last_sent_date": today_str})
         return False
 
-    scraped_jobs.sort(key=lambda j: j.get("score", 0), reverse=True)
+    # Sort accurate (JD-scored) jobs first, then descending by ATS match score
+    scraped_jobs.sort(key=lambda j: (j.get("estimated", False), -j.get("score", 0)))
     candidate_name = resume_data.get("name", "").strip() or "Candidate"
 
     text_digest = f"Hi {candidate_name},\n\nHere are your top matching roles from the past 24 hours:\n\n"
@@ -267,6 +276,7 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
         title = job.get("title", "Target Role")
         company = job.get("company", "Target Company")
         score = job.get("score", 60)
+        is_estimated = job.get("estimated", False)
         url = job.get("url", "")
         recruiter_name = job.get("recruiter_name")
         recruiter_profile_url = job.get("recruiter_profile_url")
@@ -282,7 +292,8 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
             f"&company={urllib.parse.quote(company, safe='')}"
         )
 
-        text_digest += f"{idx+1}. {title} at {company} ({platform})\n   Match Score: {score}%{recruiter_str}\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
+        score_label = f"{score}% match (Est.)" if is_estimated else f"{score}% match"
+        text_digest += f"{idx+1}. {title} at {company} ({platform})\n   Match Score: {score_label}{recruiter_str}\n   View Job: {url}\n   Auto-Tailor & Apply: {tailor_url}\n\n"
 
         score_color = "#10B981" if score >= 85 else "#F59E0B" if score >= 70 else "#64748B"
         platform_color = "#0A66C2" if platform.lower() == "linkedin" else "#2164F3" if platform.lower() == "indeed" else "#EC4899" if platform.lower() == "reed" else "#64748B"
@@ -293,6 +304,9 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
                 recruiter_html = f'<span style="font-size: 0.76rem; color: #0284C7; display: block; margin-top: 3px;">👤 Recruiter: <a href="{recruiter_profile_url}" target="_blank" style="color: #0284C7; text-decoration: underline;">{recruiter_name}</a></span>'
             else:
                 recruiter_html = f'<span style="font-size: 0.76rem; color: #64748B; display: block; margin-top: 3px;">👤 Recruiter: {recruiter_name}</span>'
+
+        badge_text = f"{score}% match" + (" (Est.)" if is_estimated else " (Exact ATS)")
+        badge_title = "Estimated match based on title skill heuristic" if is_estimated else "Exact ATS match calculated against full job description"
 
         html_digest += f"""
         <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; box-sizing: border-box; overflow: hidden; margin-bottom: 12px;">
@@ -305,8 +319,8 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
                         </p>
                         {recruiter_html}
                     </td>
-                    <td style="text-align: right; vertical-align: top; width: 90px;">
-                        <span style="display: inline-block; background-color: {score_color}15; color: {score_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">{score}% match</span>
+                    <td style="text-align: right; vertical-align: top; width: 120px;">
+                        <span title="{badge_title}" style="display: inline-block; background-color: {score_color}15; color: {score_color}; padding: 4px 8px; border-radius: 6px; font-size: 0.76rem; font-weight: 700; font-family: 'Segoe UI', Arial, sans-serif; white-space: nowrap;">{badge_text}</span>
                     </td>
                 </tr>
             </table>
