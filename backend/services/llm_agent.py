@@ -222,12 +222,19 @@ RULE 4 — ONE-PAGE BUDGET & SUMMARY PLACEMENT (CRITICAL):
   • Write concise bullets: each bullet MUST occupy between 70% and 150% of one line. A bullet that wraps to a second line is ONLY acceptable if the second line is at least 5 words long (no widow words). Rewrite any bullet that would leave only 1–4 words dangling on a second line.
   • Do NOT add extra \\vspace or \\newline commands.
 
-RULE 5 — LATEX STRUCTURE:
+RULE 5 — LATEX STRUCTURE & SECTION SEQUENCE:
   • Preserve \\documentclass, all \\usepackage lines, geometry, and custom macros (\\mybar, etc.).
   • BULLET SYMBOLS: Second-level (nested) itemize bullets MUST render as solid dots (\\textbullet) rather than en-dashes (--). Keep \\renewcommand{{\\labelitemii}}{{\\textbullet}} in preamble or use [label=\\textbullet].
   • Keep the exact tabular layout in Technical Skills if present.
   • Do NOT add \\linespread, \\pagestyle, or spacing overrides — these are injected by the compiler.
-  • Keep the Professional Summary block at the top, followed by other sections as ordered in the master template.
+  • ABSOLUTE CRITICAL SECTION SEQUENCE: You MUST render sections in this exact order:
+    1. Professional Summary
+    2. Work Experience
+    3. Technical Skills
+    4. Education
+    5. Projects
+    6. Achievements & Leadership (if present)
+  • NEVER alter this section sequence under any circumstances.
 
 RULE 6 — ATS KEYWORD INTEGRATION:
   • Inject relevant missing keywords into Technical Skills and bullets naturally.

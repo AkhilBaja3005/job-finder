@@ -215,12 +215,12 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
     address_line = " \\mybar ".join(contact_parts)
 
     latex = []
-    latex.append("\\documentclass{resume}")
+    latex.append("\\documentclass[12pt]{resume}")
     latex.append("\\usepackage[T1]{fontenc}")
     latex.append("\\newcommand\\mybar{\\kern1pt\\rule[-\\dp\\strutbox]{.8pt}{\\baselineskip}\\kern1pt}")
-    latex.append("\\usepackage[left=0.40in,top=0.3in,right=0.40in,bottom=0.2in]{geometry}")
+    latex.append("\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{geometry}")
     latex.append("\\usepackage{fontawesome}")
-    latex.append("\\usepackage{times}")
+    latex.append("\\usepackage{lmodern}")
     latex.append("\\usepackage[hidelinks]{hyperref}")
 
     if master_latex:
