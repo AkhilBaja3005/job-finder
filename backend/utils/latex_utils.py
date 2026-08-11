@@ -131,8 +131,10 @@ def apply_latex_hotfix(
     # ── Compress itemize / list environment padding & force second-level bullets to dots (not dashes) ──
     fixed = fixed.replace("\\begin{itemize}", "\\begin{itemize}\\setlength{\\itemsep}{-1.5pt}\\setlength{\\parsep}{0pt}\\setlength{\\topsep}{0pt}")
 
-    # Ensure nested sub-bullets render as solid dots (\textbullet) instead of en-dashes (--)
-    if "\\renewcommand{\\labelitemii}" not in fixed:
+    # Ensure itemize bullets render as solid dots (\textbullet) across all levels
+    if "\\renewcommand{\\labelitemi}" not in fixed:
+        fixed = fixed.replace("\\begin{document}", "\\renewcommand{\\labelitemi}{\\textbullet}\n\\renewcommand{\\labelitemii}{\\textbullet}\n\\begin{document}", 1)
+    elif "\\renewcommand{\\labelitemii}" not in fixed:
         fixed = fixed.replace("\\begin{document}", "\\renewcommand{\\labelitemii}{\\textbullet}\n\\begin{document}", 1)
 
     # ── Replace outdated times package with modern lmodern (ensures full bold weight rendering)
