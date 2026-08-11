@@ -216,10 +216,10 @@ RULE 3 — SECTION & CONTENT COMPLETENESS & NESTED ITEMIZE FOR SUB-PROJECTS:
     \\end{{itemize}}
   • NEVER output repeated standalone \\item bullets with duplicate sub-project title prefixes.
 
-RULE 4 — ONE-PAGE BUDGET & SUMMARY PLACEMENT (CRITICAL):
-  • The Professional Summary section MUST be placed at the absolute top of the document, directly below the name and contact details header.
+RULE 4 — ONE-PAGE BUDGET & PLAYBOOK POSITIONING (CRITICAL):
+  • Professional Summary MUST be placed at the top (below header), kept to 2-3 lines visually, avoiding weak phrases like "Strong foundation in...". Position primarily as: AI/ML Engineer with 3+ years experience across Qualcomm + Axis Bank, specialized in Production GenAI, LLM Context Engineering, Software Systems, and ML.
   • The entire tailored resume MUST fit on exactly ONE page.
-  • Write concise bullets: each bullet MUST occupy between 70% and 150% of one line. A bullet that wraps to a second line is ONLY acceptable if the second line is at least 5 words long (no widow words). Rewrite any bullet that would leave only 1–4 words dangling on a second line.
+  • Write concise bullets using the Playbook formula: Action + Technology + Problem + Measurable Metric. Each bullet MUST occupy between 70% and 150% of one line.
   • Do NOT add extra \\vspace or \\newline commands.
 
 RULE 5 — LATEX STRUCTURE & SECTION SEQUENCE:
@@ -236,8 +236,9 @@ RULE 5 — LATEX STRUCTURE & SECTION SEQUENCE:
     6. Achievements & Leadership (if present)
   • NEVER alter this section sequence under any circumstances.
 
-RULE 6 — ATS KEYWORD INTEGRATION:
+RULE 6 — ATS KEYWORD INTEGRATION & INLINE AWARDS:
   • Inject relevant missing keywords into Technical Skills and bullets naturally.
+  • Keep awards inline with accomplishments (e.g., \\textbf{{Qualcomm Certificate of Recognition}} and \\textbf{{BIU Star Award}}) — NEVER create a separate Awards section.
   • Bold key metrics AND important tool names using \\textbf{{}} — e.g. \\textbf{{50\\%}}, \\textbf{{PySpark}}, \\textbf{{3x}}. Apply \\textbf to at least 2 items per bullet section.
   • ABSOLUTE CRITICAL: NEVER use markdown asterisks for bold (**word** or __word__). You MUST use ONLY LaTeX \\textbf{{word}}. If you write ** anywhere in the output it will BREAK the PDF compilation.
   • Translate JD phrases into natural accomplishments — NEVER copy-paste verbatim.
