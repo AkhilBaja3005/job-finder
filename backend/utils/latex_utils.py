@@ -238,36 +238,11 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
 
     latex.append("\\begin{document}")
 
-    # Education
-    edu_list = data.get("education", [])
-    if edu_list:
-        latex.append("\\begin{rSection}{Education}")
-        for edu in edu_list:
-            school = edu.get("institution") or edu.get("school") or ""
-            degree = edu.get("degree", "")
-            field  = edu.get("field_of_study", "")
-            if field:
-                degree = f"{degree} in {field}"
-            dates  = edu.get("graduation_date") or edu.get("dates") or ""
-            gpa    = edu.get("gpa", "") or edu.get("cpi", "")
-            if gpa and not gpa.lower().startswith(("cpi", "gpa", "grade", "percentage", "cgpa")):
-                gpa = f"CPI: {gpa}"
-            latex.append(f"{{\\bf {school}}} \\hfill {{\\em {dates}}} \\\\")
-            if gpa:
-                latex.append(f"{{\\textit{{{degree}}}}} \\hfill {{\\em {gpa}}} \\\\")
-            else:
-                latex.append(f"{{\\textit{{{degree}}}}} \\\\")
-        if latex[-1].endswith(" \\\\"):
-            latex[-1] = latex[-1][:-3]
-        latex.append("\\end{rSection}")
-
-    # Technical Skills
-    skills = data.get("skills", [])
-    if skills:
-        latex.append("\\begin{rSection}{Technical Skills}")
-        latex.append("\\begin{tabular}{ @{} p{0.97\\textwidth} }")
-        latex.append(", ".join(skills))
-        latex.append("\\end{tabular}")
+    # Professional Summary
+    summary = data.get("summary", "")
+    if summary:
+        latex.append("\\begin{rSection}{Professional Summary}")
+        latex.append(summary.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_"))
         latex.append("\\end{rSection}")
 
     # Work Experience
@@ -279,11 +254,11 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
             role    = exp.get("role", "")
             start   = exp.get("start_date", "")
             end     = exp.get("end_date", "")
-            dates   = f"{start} - {end}" if start and end else (start or end or exp.get("dates", ""))
+            dates   = f"{start} -- {end}" if start and end else (start or end or exp.get("dates", ""))
             bullets = exp.get("description", [])
             latex.append(f"{{\\bf {company} \\mybar \\textnormal{{{role}}}}} \\hfill {{\\em {dates}}}")
             if bullets:
-                latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.15em} \\setlength{\\parsep}{0em}")
+                latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.20em} \\setlength{\\parsep}{0em}")
                 current_parent_header = None
                 sub_bullets = []
 
@@ -330,6 +305,39 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
                 latex.append("\\end{itemize}")
         latex.append("\\end{rSection}")
 
+    # Technical Skills
+    skills = data.get("skills", [])
+    if skills:
+        latex.append("\\begin{rSection}{Technical Skills}")
+        if isinstance(skills, list):
+            latex.append(", ".join(skills))
+        else:
+            latex.append(str(skills))
+        latex.append("\\end{rSection}")
+
+    # Education
+    edu_list = data.get("education", [])
+    if edu_list:
+        latex.append("\\begin{rSection}{Education}")
+        for edu in edu_list:
+            school = edu.get("institution") or edu.get("school") or ""
+            degree = edu.get("degree", "")
+            field  = edu.get("field_of_study", "")
+            if field and field.lower() not in degree.lower():
+                degree = f"{degree} in {field}"
+            dates  = edu.get("graduation_date") or edu.get("dates") or ""
+            gpa    = edu.get("gpa", "") or edu.get("cpi", "")
+            if gpa and not gpa.lower().startswith(("cpi", "gpa", "grade", "percentage", "cgpa")):
+                gpa = f"CPI: {gpa}"
+            latex.append(f"{{\\bf {school}}} \\hfill {{\\em {dates}}} \\\\")
+            if gpa:
+                latex.append(f"{{\\textit{{{degree}}}}} \\hfill {{\\em {gpa}}} \\\\")
+            else:
+                latex.append(f"{{\\textit{{{degree}}}}} \\\\")
+        if latex[-1].endswith(" \\\\"):
+            latex[-1] = latex[-1][:-3]
+        latex.append("\\end{rSection}")
+
     # Projects
     proj_list = data.get("projects", [])
     if proj_list:
@@ -339,14 +347,14 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
             bullets = proj.get("description", [])
             latex.append(f"{{\\bf {title}}}")
             if bullets:
-                latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.15em} \\setlength{\\parsep}{0em}")
+                latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.25em} \\setlength{\\parsep}{0em}")
                 for b in bullets:
                     cb = b.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_").replace("#", "\\#")
                     latex.append(f"    \\item {cb}")
                 latex.append("\\end{itemize}")
         latex.append("\\end{rSection}")
 
-    # Achievements
+    # Achievements & Leadership
     ach = data.get("achievements", [])
     if ach:
         latex.append("\\begin{rSection}{Achievements \\& Leadership}")
