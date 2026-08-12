@@ -179,7 +179,7 @@
 
       const inputs = scope.querySelectorAll(
         "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='file'])," +
-        "textarea, select"
+        "textarea, select, [contenteditable='true']"
       );
 
       let filledCount = 0;
@@ -190,21 +190,22 @@
         const nameAttr    = (inp.name || "").toLowerCase();
         const placeholder = (inp.placeholder || "").toLowerCase();
         const ariaLabel   = (inp.getAttribute("aria-label") || "").toLowerCase();
+        const dataAutomationId = (inp.getAttribute("data-automation-id") || "").toLowerCase();
         const type        = (inp.type || "").toLowerCase();
-        const labelText   = (inp.closest("div,li,fieldset")?.innerText || "").slice(0, 120).toLowerCase();
-        const key         = `${id} ${nameAttr} ${placeholder} ${ariaLabel} ${labelText} ${type}`;
+        const labelText   = (inp.closest("div,li,fieldset,tr,td,.form-group,.fb-form-element")?.innerText || "").slice(0, 150).toLowerCase();
+        const key         = `${id} ${nameAttr} ${placeholder} ${ariaLabel} ${dataAutomationId} ${labelText} ${type}`;
 
         let val = null;
 
-        if (/first.?name|given.?name|firstname|fname/.test(key)) val = firstName;
-        else if (/last.?name|family.?name|lastname|lname|surname/.test(key)) val = lastName;
-        else if (/email|e-mail/.test(key) || type === "email") val = email;
-        else if (/phone|mobile|cell|tel/.test(key) || type === "tel") val = phone;
+        if (/first.?name|given.?name|firstname|fname|legalname--first/.test(key)) val = firstName;
+        else if (/last.?name|family.?name|lastname|lname|surname|legalname--last/.test(key)) val = lastName;
+        else if (/email|e-mail|emailaddress/.test(key) || type === "email") val = email;
+        else if (/phone|mobile|cell|tel|phonenumber/.test(key) || type === "tel") val = phone;
         else if (/linkedin/.test(key)) val = linkedin;
         else if (/github/.test(key)) val = github;
-        else if (/summary|cover.?letter|about you/.test(key)) val = summary;
-        else if (/authorized|work in the us|work authorization/.test(key)) val = eeo.workAuth || "No";
-        else if (/sponsor|visa/.test(key)) val = eeo.sponsorship || "No";
+        else if (/summary|cover.?letter|about you|additional info/.test(key)) val = summary;
+        else if (/authorized|work in the us|work authorization|legally authorized/.test(key)) val = eeo.workAuth || "No";
+        else if (/sponsor|visa|require.*sponsorship/.test(key)) val = eeo.sponsorship || "No";
 
         if (!val) continue;
 

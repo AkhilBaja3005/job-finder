@@ -26,11 +26,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Fetch user details from backend using Sync Key
   function fetchUserInfo(syncKey) {
-    if (!syncKey || syncKey.trim().length !== 6) {
+    if (!syncKey || !syncKey.trim()) {
       if (userInfoCard) userInfoCard.style.display = "none";
       return;
     }
-    const cleanKey = syncKey.trim().toUpperCase();
+    const cleanKey = syncKey.trim();
     fetch("http://127.0.0.1:8000/user/me", {
       headers: { "Authorization": `Bearer ${cleanKey}` }
     })
