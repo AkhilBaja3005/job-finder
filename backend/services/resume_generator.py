@@ -235,13 +235,24 @@ RESUME_HTML_TEMPLATE = """
             {% for edu in resume.education %}
                 <div class="edu-entry">
                     <div class="edu-header">
-                        <span class="edu-inst">{{ edu.institution }}</span>
-                        <span class="edu-date">{{ edu.graduation_date }}</span>
+                        <span class="edu-inst">{{ edu.institution }}{% if edu.location %} &bull; {{ edu.location }}{% endif %}</span>
+                        <span class="edu-date">{{ edu.graduation_date or edu.dates }}</span>
                     </div>
                     <div class="edu-degree">
-                        <span>{{ edu.degree }} in {{ edu.field_of_study }}</span>
-                        {% if edu.gpa %}<span>GPA: {{ edu.gpa }}</span>{% endif %}
+                        <span>
+                            {% if edu.degree and edu.field_of_study %}
+                                {{ edu.degree }} in {{ edu.field_of_study }}
+                            {% else %}
+                                {{ edu.degree or edu.field_of_study }}
+                            {% endif %}
+                        </span>
+                        {% if edu.gpa or edu.cpi %}<span>CPI/GPA: {{ edu.gpa or edu.cpi }}</span>{% endif %}
                     </div>
+                    {% if edu.highlights %}
+                    <div style="font-size: 9.2pt; color: #333; margin-top: 1px;">
+                        {% for h in edu.highlights %}<div>&bull; {{ h }}</div>{% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
             {% endfor %}
         </section>
