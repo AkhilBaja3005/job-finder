@@ -318,10 +318,10 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
         latex.append("\\begin{rSection}{Technical Skills}")
         latex.append("\\begin{tabular}{ @{} p{0.97\\textwidth} }")
         if isinstance(skills, list):
-            formatted_skills = [_format_bullet_bolding(s, skills_list) for s in skills]
-            latex.append(", ".join(formatted_skills))
+            # Render plain text skills without extra individual bolding
+            latex.append(", ".join([s.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_") for s in skills]))
         else:
-            latex.append(_format_bullet_bolding(str(skills), skills_list))
+            latex.append(str(skills).replace("&", "\\&").replace("%", "\\%").replace("_", "\\_"))
         latex.append("\\end{tabular}")
         latex.append("\\end{rSection}")
 
@@ -348,34 +348,36 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
             latex[-1] = latex[-1][:-3]
         latex.append("\\end{rSection}")
 
-    # Projects
+    # Projects (Formatted as direct single-line items with \\ like user master resume)
     proj_list = data.get("projects", [])
     if proj_list:
         latex.append("\\begin{rSection}{Projects}")
-        for proj in proj_list:
+        for i, proj in enumerate(proj_list):
             title   = proj.get("title", "")
             bullets = proj.get("description", [])
             latex.append(f"{{\\bf {title}}}")
             if bullets:
-                latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.25em} \\setlength{\\parsep}{0em}")
-                for b in bullets:
-                    latex.append(f"    \\item {_format_bullet_bolding(b, skills_list)}")
-                latex.append("\\end{itemize}")
+                for j, b in enumerate(bullets):
+                    formatted_b = _format_bullet_bolding(b, skills_list)
+                    # Render as hyphenated one-liner text lines ending with \\
+                    prefix = "- " if not formatted_b.strip().startswith("-") else ""
+                    latex.append(f"{prefix}{formatted_b} \\\\")
+            if i < len(proj_list) - 1 and latex[-1].endswith(" \\\\"):
+                pass
+        if latex[-1].endswith(" \\\\"):
+            latex[-1] = latex[-1][:-3]
         latex.append("\\end{rSection}")
 
-    # Achievements & Certifications / Recognition
+    # Achievements & Leadership (Rendered as clean single section or inline highlights)
     ach = data.get("achievements", [])
     if ach:
-        # Title adapts cleanly if certifications/awards are present
-        section_title = "Certifications \\& Recognition" if len(ach) <= 2 else "Achievements \\& Leadership"
-        latex.append(f"\\begin{{rSection}}{{{section_title}}}")
+        latex.append("\\begin{rSection}{Achievements \\& Leadership}")
         if len(ach) == 1:
-            # Single-line clean presentation without bullet bloat if only 1 item exists
-            latex.append(_format_bullet_bolding(ach[0]))
+            latex.append(_format_bullet_bolding(ach[0], skills_list))
         else:
-            latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.2em} \\setlength{\\parsep}{0em}")
+            latex.append("\\begin{itemize}\\setlength{\\itemsep}{-1pt}\\setlength{\\parsep}{0pt}\\setlength{\\topsep}{0pt}\\setlength{\\itemsep}{-0.2em} \\setlength{\\parsep}{0em}")
             for item in ach:
-                latex.append(f"    \\item {_format_bullet_bolding(item)}")
+                latex.append(f"    \\item {_format_bullet_bolding(item, skills_list)}")
             latex.append("\\end{itemize}")
         latex.append("\\end{rSection}")
 
