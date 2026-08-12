@@ -3315,9 +3315,6 @@ function App() {
                                       </button>
                                     </>
                                   )}
-                                  {entry.job_url && (
-                                    <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', fontWeight: 600, textDecoration: 'none' }}>View Post →</a>
-                                  )}
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>
                                   <button
