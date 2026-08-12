@@ -134,6 +134,18 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                     from services.log_queue import log_ist
                     log_ist(f"[Scraper] Reed Details API fallback to Playwright browser ({reed_err})")
 
+    # ── Normalise LinkedIn search-results URLs ─────────────────────────────
+    # URLs like /jobs/search-results/?currentJobId=4441065098&...
+    # are just the search page with a highlighted job — rewrite to canonical
+    # /jobs/view/{id} so the guest-API fast path below can handle it.
+    if "linkedin.com" in url and "currentJobId=" in url:
+        cj_match = re.search(r'currentJobId=(\d+)', url)
+        if cj_match:
+            job_id = cj_match.group(1)
+            url = f"https://www.linkedin.com/jobs/view/{job_id}/"
+            if on_log:
+                on_log(f"[Scraper] Rewrote LinkedIn search URL → /jobs/view/{job_id}/")
+
     # Fast path for LinkedIn URLs via public guest jobs-posting API.
     # LinkedIn blocks Playwright on GCP/datacenter IPs, but this public API endpoint
     # works with plain HTTP requests from any IP — no browser needed.

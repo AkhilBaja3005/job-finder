@@ -1134,6 +1134,17 @@ function App() {
 
   const handleUrlBlur = async () => {
     if (!jobUrl || !jobUrl.startsWith('http')) return;
+
+    // Normalise LinkedIn search-results URLs → canonical /jobs/view/{id}
+    let cleanUrl = jobUrl;
+    if (cleanUrl.includes('linkedin.com') && cleanUrl.includes('currentJobId=')) {
+      const match = cleanUrl.match(/currentJobId=(\d+)/);
+      if (match) {
+        cleanUrl = `https://www.linkedin.com/jobs/view/${match[1]}/`;
+        setJobUrl(cleanUrl);
+      }
+    }
+
     setUrlScraping(true);
     setUrlScrapeError('');
     setStatusMessage('Scraping job description automatically...');
@@ -1141,7 +1152,7 @@ function App() {
       const res = await fetch(`${API_BASE}/scrape_job`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: jobUrl })
+        body: JSON.stringify({ url: cleanUrl })
       });
       const data = await res.json();
       if (res.ok && data.status === 'success') {
