@@ -15,7 +15,7 @@ from urllib.error import URLError
 import uuid
 import queue
 # pyrefly: ignore [missing-import]
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request, Depends
 # pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
 # pyrefly: ignore [missing-import]
@@ -56,7 +56,8 @@ from services.auth import (
     invalidate_token_cache,
     update_user_api_key,
     get_google_auth_url,
-    exchange_google_code_for_email
+    exchange_google_code_for_email,
+    get_optional_token
 )
 from services.log_queue import LLMClientLogQueue
 from utils.latex_utils import extract_latex_command, apply_latex_hotfix, generate_latex_from_json
@@ -500,6 +501,7 @@ async def bypass_ngrok_browser_warning(request: Request, call_next):
     return response
 
 @app.get("/healthz")
+@app.get("/health")
 async def health_check():
     """
     Lightweight ping endpoint for container health check & HF warm-up verification.
@@ -1930,6 +1932,49 @@ def update_task_status(task_id: str, status: str, message: str):
             "timestamp": now
         }
 
+class FieldSolveRequest(BaseModel):
+    question: str
+    context: str
+    resume_data: Optional[dict] = None
+    api_key: Optional[str] = None
+
+@app.get("/user/sync_code")
+async def get_sync_code(token: Optional[str] = Depends(get_optional_token)):
+    """
+    Returns user's permanent 6-digit alphanumeric extension sync key.
+    """
+    from services.auth import generate_user_sync_code
+    user = await async_get_user_by_token(token)
+    if not user or not user.get("id"):
+        # For guest or fallback, return a deterministic 6-character code
+        guest_key = (token or "guest")[:6].upper()
+        return {"sync_code": guest_key}
+    
+    code = await asyncio.to_thread(generate_user_sync_code, user["id"])
+    return {"sync_code": code, "email": user.get("email")}
+
+@app.post("/user/solve_field")
+async def solve_application_field(
+    request: FieldSolveRequest,
+    token: Optional[str] = Depends(get_optional_token)
+):
+    """
+    Endpoint for Chrome extension to solve custom application questions or dropdowns using AI.
+    """
+    from services.autofill_agent import get_answer_from_llm
+    
+    session_data, _ = get_session_data(token)
+    resume = request.resume_data or session_data or {}
+    
+    answer = await asyncio.to_thread(
+        get_answer_from_llm,
+        request.question,
+        request.context,
+        resume,
+        request.api_key
+    )
+    return {"answer": answer}
+
 @app.post("/apply")
 async def apply(request: ApplyRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
     _check_rate_limit(http_request, "apply", max_requests=5, window_seconds=300)
@@ -2285,6 +2330,10 @@ async def user_me(authorization: Optional[str] = Header(None)):
     user = await async_get_user_by_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
+    if not user.get("sync_code") and user.get("id"):
+        from services.auth import generate_user_sync_code
+        sync_code = await asyncio.to_thread(generate_user_sync_code, user["id"])
+        user["sync_code"] = sync_code
     return user
 
 class SubscriptionRequest(BaseModel):
@@ -3586,7 +3635,7 @@ if os.path.exists(frontend_dist):
     @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
     async def serve_frontend(rest_of_path: str):
         # Ignore API endpoints and action handlers so they pass through to regular routes
-        if any(api in rest_of_path for api in ("admin/", "user/", "auth/", "email_action", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "download_application_pdf", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
+        if rest_of_path in ("health", "healthz") or any(api in rest_of_path for api in ("admin/", "user/", "auth/", "email_action", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "download_application_pdf", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
             raise HTTPException(status_code=404, detail="Not Found")
         
         if rest_of_path == "favicon.svg":
