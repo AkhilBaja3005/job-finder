@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Job Finder AutoFill - Instant Application Assistant",
-  "version": "1.0.0",
-  "description": "Auto-fill job applications instantly across Greenhouse, Lever, Workday, Indeed, and LinkedIn with AI precision.",
+  "version": "1.1.0",
+  "description": "Auto-fill and batch apply across Greenhouse, Lever, Workday, Indeed, and LinkedIn Easy Apply with AI precision.",
   "permissions": [
     "activeTab",
     "storage",

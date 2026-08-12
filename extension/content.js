@@ -1,12 +1,21 @@
-// content.js - Job Finder AutoFill Content Script
+// content.js - Job Finder AutoFill Content Script (v1.1.0)
 
 (function () {
-  console.log("[JobFinder AutoFill] Extension script injected.");
+  console.log("[JobFinder AutoFill] Content script injected.");
 
-  // ── React-safe value setter ──────────────────────────────────────────────
-  // LinkedIn, Workday, and Greenhouse all use React synthetic events.
-  // Simply setting .value = x won't trigger React's onChange.
-  // We must use the native input value descriptor to force React to notice.
+  let isAutoRunning = false;
+  let appliedCount = 0;
+  let skippedCount = 0;
+
+  // Log message helper to record execution steps
+  function logMsg(msg) {
+    console.log('[JobFinder AutoFill]', msg);
+    try {
+      chrome.runtime.sendMessage({ type: 'LOG_EVENT', message: msg });
+    } catch (e) {}
+  }
+
+  // React-safe native value setter for form inputs
   function setNativeValue(el, value) {
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
     const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value");
@@ -24,8 +33,9 @@
     el.dispatchEvent(new KeyboardEvent("keypress", { bubbles: true }));
   }
 
-  // ── Select-option filler (handles dropdowns) ────────────────────────────
+  // Select option value setter
   function setSelectValue(el, value) {
+    if (!value) return;
     const lv = value.toLowerCase();
     let matched = null;
     for (const opt of el.options) {
@@ -41,35 +51,84 @@
     }
   }
 
-  // ── Field matching ───────────────────────────────────────────────────────
-  function matchKey(el) {
-    const id          = (el.id          || "").toLowerCase();
-    const name        = (el.name        || "").toLowerCase();
-    const placeholder = (el.placeholder || "").toLowerCase();
-    const ariaLabel   = (el.getAttribute("aria-label") || "").toLowerCase();
-    const type        = (el.type        || "").toLowerCase();
-
-    // Grab nearest visible label
-    let labelText = "";
-    if (el.id) {
-      const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-      if (lbl) labelText = lbl.innerText.toLowerCase();
+  // Convert base64 resume string to native JS File object for automated upload
+  function base64ToFile(base64String, filename, mimeType) {
+    try {
+      const base64Data = base64String.includes(',') ? base64String.split(',')[1] : base64String;
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return new File([bytes], filename, { type: mimeType });
+    } catch (error) {
+      logMsg(`❌ Error converting base64 to file: ${error.message}`);
+      return null;
     }
-    if (!labelText) {
-      const parent = el.closest("div,li,fieldset");
-      if (parent) labelText = parent.innerText.slice(0, 120).toLowerCase();
-    }
-
-    return `${id} ${name} ${placeholder} ${ariaLabel} ${labelText} ${type}`;
   }
 
-  // ── Core auto-fill logic ─────────────────────────────────────────────────
+  // Attach resume file into file inputs using DataTransfer API
+  async function fillFileInput(fileInput, file) {
+    try {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      fileInput.files = dataTransfer.files;
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      logMsg(`✅ Auto-attached resume: ${file.name}`);
+      return true;
+    } catch (error) {
+      logMsg(`❌ Error attaching file: ${error.message}`);
+      return false;
+    }
+  }
+
+  // Detect LinkedIn Daily Limit Notice
+  function checkDailyLimit() {
+    const limitPatterns = [
+      "You've reached today's Easy Apply limit",
+      "reached today's Easy Apply limit",
+      "Great effort applying today",
+      "continue applying tomorrow",
+      "exceeded the daily application limit"
+    ];
+    const bodyText = document.body.innerText || '';
+    for (const pattern of limitPatterns) {
+      if (bodyText.toLowerCase().includes(pattern.toLowerCase())) {
+        logMsg("🚫 LINKEDIN DAILY LIMIT REACHED!");
+        alert("🚫 LinkedIn Daily Easy Apply limit reached (~50-100/day). Pausing batch loop.");
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Discard application modal if stuck or error occurs
+  async function discardApplication() {
+    logMsg("🔍 Cleaning up/discarding modal...");
+    const closeButtons = document.querySelectorAll('button[aria-label*="Dismiss"], button[aria-label*="Close"], button.artdeco-modal__dismiss');
+    for (let btn of closeButtons) {
+      if (btn.offsetParent) {
+        btn.click();
+        await new Promise(r => setTimeout(r, 600));
+        const discardConfirm = Array.from(document.querySelectorAll('button')).find(b =>
+          b.offsetParent && ['discard', 'cancel', 'annuler'].some(t => b.textContent.trim().toLowerCase().includes(t))
+        );
+        if (discardConfirm) {
+          discardConfirm.click();
+          await new Promise(r => setTimeout(r, 800));
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Single-page auto fill trigger logic
   async function autoFillJobForm() {
     chrome.storage.local.get(["userToken", "resumeData", "eeoProfile"], async (storage) => {
       let resume = storage.resumeData || {};
       const token = storage.userToken || "guest";
 
-      // Fetch live profile from backend if no local resume
       if (!resume || !resume.name) {
         try {
           const resp = await fetch("http://127.0.0.1:8000/user/me", {
@@ -83,13 +142,11 @@
             }
           }
         } catch (err) {
-          console.log("[JobFinder AutoFill] Backend fetch notice:", err.message);
+          logMsg(`Backend resume fetch notice: ${err.message}`);
         }
       }
 
       const eeo = storage.eeoProfile || {};
-
-      // ── Parse profile values ──────────────────────────────────────────
       const fullName  = resume.name  || "";
       const nameParts = fullName.trim().split(/\s+/);
       const firstName = nameParts[0] || "";
@@ -100,72 +157,57 @@
       const linkedin  = (resume.links || []).find(l => l.includes("linkedin.com")) || "";
       const github    = (resume.links || []).find(l => l.includes("github.com"))   || "";
 
-      const workAuth    = eeo.workAuth    || "No";
-      const sponsorship = eeo.sponsorship || "No";
-      const gender      = eeo.gender      || "";
-      const disability  = eeo.disability  || "";
-
-      // ── Determine scope: LinkedIn Easy Apply modal or full page ───────
       const modal = document.querySelector(
         ".jobs-easy-apply-modal, .artdeco-modal, [data-test-modal], " +
         "[role='dialog'], .application-container, .ia-BasePage"
       );
       const scope = modal || document;
 
+      // Handle file attachments if base64 pdf is stored
+      if (resume.pdf_base64) {
+        const fileInputs = scope.querySelectorAll("input[type='file']");
+        const pdfFile = base64ToFile(resume.pdf_base64, `${firstName || 'Resume'}_CV.pdf`, "application/pdf");
+        if (pdfFile) {
+          for (const fi of fileInputs) {
+            if (!fi.getAttribute("data-jf-filled")) {
+              await fillFileInput(fi, pdfFile);
+              fi.setAttribute("data-jf-filled", "true");
+            }
+          }
+        }
+      }
+
       const inputs = scope.querySelectorAll(
-        "input:not([type='hidden']):not([type='submit']):not([type='button'])," +
+        "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='file'])," +
         "textarea, select"
       );
 
       let filledCount = 0;
-
       for (const inp of inputs) {
-        // Skip hidden, already filled, or disabled fields
-        if (!inp.offsetParent) continue;
-        if (inp.getAttribute("data-jf-filled")) continue;
-        if (inp.disabled || inp.readOnly) continue;
+        if (!inp.offsetParent || inp.getAttribute("data-jf-filled") || inp.disabled || inp.readOnly) continue;
 
-        const key = matchKey(inp);
+        const id          = (inp.id || "").toLowerCase();
+        const nameAttr    = (inp.name || "").toLowerCase();
+        const placeholder = (inp.placeholder || "").toLowerCase();
+        const ariaLabel   = (inp.getAttribute("aria-label") || "").toLowerCase();
+        const type        = (inp.type || "").toLowerCase();
+        const labelText   = (inp.closest("div,li,fieldset")?.innerText || "").slice(0, 120).toLowerCase();
+        const key         = `${id} ${nameAttr} ${placeholder} ${ariaLabel} ${labelText} ${type}`;
 
         let val = null;
 
-        // ── Name matching ───────────────────────────────────────────────
-        if (/first.?name|given.?name|firstname|fname/.test(key)) {
-          val = firstName;
-        } else if (/last.?name|family.?name|lastname|lname|surname/.test(key)) {
-          val = lastName;
-        } else if (/\bname\b/.test(key) && !/company|school|institution|degree/.test(key) && !firstName && !lastName) {
-          val = fullName;
-        } else if (/\bname\b/.test(key) && !/company|school|institution|degree/.test(key) && inp.tagName !== "SELECT") {
-          // full name field if only one name input
-          if (!/first|last|given|family/.test(key)) val = fullName;
-        }
-
-        // ── Contact ─────────────────────────────────────────────────────
-        else if (/email|e-mail/.test(key) || inp.type === "email") { val = email; }
-        else if (/phone|mobile|cell|tel/.test(key)  || inp.type === "tel")   { val = phone; }
-        else if (/linkedin/.test(key))  { val = linkedin; }
-        else if (/github/.test(key))    { val = github; }
-
-        // ── Cover letter / Summary ───────────────────────────────────────
-        else if (/summary|cover.?letter|about you|additional info|message|introduce/.test(key)) {
-          val = summary;
-        }
-
-        // ── EEO dropdowns ────────────────────────────────────────────────
-        else if (/authorized|legally authorized|work in the us|us work|work authorization|right to work/.test(key)) {
-          val = workAuth;
-        } else if (/sponsor|visa|require.*(sponsor|visa)/.test(key)) {
-          val = sponsorship;
-        } else if (/\bgender\b|sex\b/.test(key)) {
-          val = gender;
-        } else if (/disability|disabled/.test(key)) {
-          val = disability;
-        }
+        if (/first.?name|given.?name|firstname|fname/.test(key)) val = firstName;
+        else if (/last.?name|family.?name|lastname|lname|surname/.test(key)) val = lastName;
+        else if (/email|e-mail/.test(key) || type === "email") val = email;
+        else if (/phone|mobile|cell|tel/.test(key) || type === "tel") val = phone;
+        else if (/linkedin/.test(key)) val = linkedin;
+        else if (/github/.test(key)) val = github;
+        else if (/summary|cover.?letter|about you/.test(key)) val = summary;
+        else if (/authorized|work in the us|work authorization/.test(key)) val = eeo.workAuth || "No";
+        else if (/sponsor|visa/.test(key)) val = eeo.sponsorship || "No";
 
         if (!val) continue;
 
-        // ── Fill the field ───────────────────────────────────────────────
         try {
           if (inp.tagName === "SELECT") {
             setSelectValue(inp, val);
@@ -175,72 +217,16 @@
           }
           inp.setAttribute("data-jf-filled", "true");
           inp.style.outline = "2px solid #38bdf8";
-          inp.style.outlineOffset = "1px";
           filledCount++;
-        } catch (e) {
-          console.log("[JobFinder AutoFill] Field fill error:", e);
-        }
+        } catch (e) {}
       }
 
-      // ── Also handle LinkedIn-specific radio/checkbox EEO fields ────────
-      // LinkedIn renders Yes/No EEO as <button role="radio"> pairs
-      if (modal) {
-        fillLinkedInRadioButtons(modal, { workAuth, sponsorship, gender, disability });
-      }
-
-      console.log(`[JobFinder AutoFill] Filled ${filledCount} fields on ${window.location.hostname}.`);
+      logMsg(`⚡ Filled ${filledCount} fields.`);
       showToast(`⚡ Filled ${filledCount} field${filledCount !== 1 ? "s" : ""}!`);
     });
   }
 
-  // ── LinkedIn radio button / aria button EEO handler ─────────────────────
-  function fillLinkedInRadioButtons(scope, { workAuth, sponsorship, gender, disability }) {
-    const groups = scope.querySelectorAll("[data-test-form-element], .fb-form-element, fieldset, [role='radiogroup']");
-    groups.forEach(group => {
-      const labelEl = group.querySelector("label, legend, [data-test-form-element-label], h3");
-      if (!labelEl) return;
-      const label = labelEl.innerText.toLowerCase();
-
-      let targetAnswer = null;
-      if (/authorized|legally authorized|right to work/.test(label)) targetAnswer = workAuth;
-      else if (/sponsor|visa/.test(label)) targetAnswer = sponsorship;
-      else if (/gender|sex/.test(label)) targetAnswer = gender;
-      else if (/disability/.test(label)) targetAnswer = disability;
-
-      if (!targetAnswer) return;
-
-      // Try <select> first
-      const sel = group.querySelector("select");
-      if (sel) { setSelectValue(sel, targetAnswer); return; }
-
-      // Try radio inputs
-      const radios = group.querySelectorAll("input[type='radio']");
-      for (const radio of radios) {
-        if (radio.getAttribute("data-jf-filled")) continue;
-        const rl = (radio.value + " " + (radio.nextElementSibling?.innerText || "")).toLowerCase();
-        if (rl.includes(targetAnswer.toLowerCase()) || targetAnswer.toLowerCase().includes(rl.trim())) {
-          radio.checked = true;
-          radio.dispatchEvent(new Event("change", { bubbles: true }));
-          radio.setAttribute("data-jf-filled", "true");
-          break;
-        }
-      }
-
-      // Try aria role=radio buttons (LinkedIn style)
-      const ariaRadios = group.querySelectorAll("[role='radio']");
-      for (const btn of ariaRadios) {
-        if (btn.getAttribute("data-jf-filled")) continue;
-        const bl = btn.innerText.toLowerCase();
-        if (bl.includes(targetAnswer.toLowerCase()) || targetAnswer.toLowerCase().includes(bl.trim())) {
-          btn.click();
-          btn.setAttribute("data-jf-filled", "true");
-          break;
-        }
-      }
-    });
-  }
-
-  // ── Toast notification ───────────────────────────────────────────────────
+  // Toast feedback element
   function showToast(msg) {
     const existing = document.getElementById("jf-toast");
     if (existing) existing.remove();
@@ -252,8 +238,7 @@
       border: "1px solid rgba(56,189,248,0.4)", borderRadius: "10px",
       padding: "10px 18px", fontSize: "13px", fontWeight: "700",
       zIndex: "2147483647", boxShadow: "0 8px 30px rgba(0,0,0,0.4)",
-      fontFamily: "system-ui, sans-serif", backdropFilter: "blur(12px)",
-      transition: "opacity 0.4s ease"
+      fontFamily: "system-ui, sans-serif"
     });
     toast.textContent = msg;
     document.body.appendChild(toast);
@@ -261,10 +246,9 @@
     setTimeout(() => toast.remove(), 3000);
   }
 
-  // ── Floating badge ───────────────────────────────────────────────────────
+  // Floating Auto-Fill badge button
   function createFloatingBadge() {
     if (document.getElementById("jf-autofill-badge")) return;
-
     const badge = document.createElement("div");
     badge.id = "jf-autofill-badge";
     Object.assign(badge.style, {
@@ -272,57 +256,114 @@
       background: "rgba(15,23,42,0.9)", color: "#38bdf8",
       border: "1px solid rgba(56,189,248,0.3)", borderRadius: "12px",
       padding: "8px 14px", fontSize: "13px", fontWeight: "700",
-      zIndex: "2147483646", boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-      display: "flex", alignItems: "center", gap: "8px",
-      cursor: "pointer", fontFamily: "system-ui, sans-serif",
-      backdropFilter: "blur(12px)", userSelect: "none",
-      transition: "transform 0.15s ease, box-shadow 0.15s ease"
+      zIndex: "2147483646", cursor: "pointer", fontFamily: "system-ui, sans-serif",
+      userSelect: "none"
     });
     badge.innerHTML = `<span>⚡</span><span>Auto-Fill</span>`;
-    badge.title = "Click to auto-fill this job application";
-
-    badge.addEventListener("mouseenter", () => {
-      badge.style.transform = "translateY(-2px)";
-      badge.style.boxShadow = "0 12px 32px rgba(56,189,248,0.2)";
-    });
-    badge.addEventListener("mouseleave", () => {
-      badge.style.transform = "";
-      badge.style.boxShadow = "0 8px 24px rgba(0,0,0,0.4)";
-    });
     badge.addEventListener("click", autoFillJobForm);
     document.body.appendChild(badge);
   }
 
-  // ── Message listener from popup ──────────────────────────────────────────
+  // Message listener from popup/background
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "TRIGGER_AUTOFILL") {
       autoFillJobForm();
       sendResponse({ status: "started" });
     }
+    if (request.action === "TOGGLE_BATCH_AUTO") {
+      isAutoRunning = request.state;
+      logMsg(isAutoRunning ? "▶️ Batch Auto-Apply STARTED" : "⏸️ Batch Auto-Apply STOPPED");
+      if (isAutoRunning) runBatchAutoApplyLoop();
+    }
     return true;
   });
 
-  // ── Sync login token from website if on localhost ────────────────────────
-  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-    const token = localStorage.getItem("auth_token");
-    if (token) {
-      chrome.storage.local.set({ userToken: token }, () => {
-        console.log("[JobFinder AutoFill] Synced auth token to extension.");
-      });
+  // Batch Auto Apply Loop for LinkedIn
+  async function runBatchAutoApplyLoop() {
+    if (!window.location.href.includes("linkedin.com")) {
+      logMsg("⚠️ Batch loop only active on LinkedIn jobs pages.");
+      return;
     }
+    logMsg("🚀 Starting LinkedIn Easy Apply Batch Loop...");
+
+    chrome.storage.local.get(["appliedCount", "skippedCount", "blacklistKeywords"], async (items) => {
+      appliedCount = items.appliedCount || 0;
+      skippedCount = items.skippedCount || 0;
+      const blacklist = (items.blacklistKeywords || "").split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+      while (isAutoRunning) {
+        if (checkDailyLimit()) {
+          isAutoRunning = false;
+          chrome.storage.local.set({ isAutoRunning: false });
+          break;
+        }
+
+        const jobCards = document.querySelectorAll('li[data-occludable-job-id], .jobs-search-results__list-item');
+        if (jobCards.length === 0) {
+          logMsg("No job listings found on page. Waiting 4s...");
+          await new Promise(r => setTimeout(r, 4000));
+          continue;
+        }
+
+        logMsg(`Found ${jobCards.length} job cards on current page.`);
+
+        for (let i = 0; i < jobCards.length; i++) {
+          if (!isAutoRunning) break;
+          const card = jobCards[i];
+          const title = (card.querySelector('.job-card-list__title, .artdeco-entity-lockup__title')?.innerText || "").toLowerCase();
+
+          if (blacklist.some(word => title.includes(word))) {
+            logMsg(`Skipping blacklisted job: "${title.slice(0, 30)}..."`);
+            skippedCount++;
+            chrome.storage.local.set({ skippedCount });
+            continue;
+          }
+
+          const link = card.querySelector('a');
+          if (link) {
+            link.click();
+            await new Promise(r => setTimeout(r, 1200));
+          }
+
+          const easyApplyBtn = document.querySelector('button.jobs-apply-button[aria-label*="Easy"]');
+          if (!easyApplyBtn) {
+            logMsg("Not Easy Apply, skipping...");
+            skippedCount++;
+            chrome.storage.local.set({ skippedCount });
+            continue;
+          }
+
+          easyApplyBtn.click();
+          await new Promise(r => setTimeout(r, 1500));
+
+          await autoFillJobForm();
+          await new Promise(r => setTimeout(r, 1500));
+
+          // Step through form buttons
+          let submitBtn = document.querySelector('button[aria-label*="Submit application"]');
+          if (submitBtn) {
+            submitBtn.click();
+            logMsg("✅ Application submitted successfully!");
+            appliedCount++;
+            chrome.storage.local.set({ appliedCount });
+            await new Promise(r => setTimeout(r, 2000));
+          } else {
+            await discardApplication();
+            skippedCount++;
+            chrome.storage.local.set({ skippedCount });
+          }
+        }
+
+        logMsg("Finished processing current visible list.");
+        break;
+      }
+    });
   }
 
-  // ── Init badge ───────────────────────────────────────────────────────────
+  // Init badge
   if (document.readyState === "complete" || document.readyState === "interactive") {
     createFloatingBadge();
   } else {
     window.addEventListener("DOMContentLoaded", createFloatingBadge);
   }
-
-  // ── LinkedIn: re-inject badge when Easy Apply modal opens ───────────────
-  const observer = new MutationObserver(() => {
-    createFloatingBadge();
-  });
-  observer.observe(document.body, { childList: true, subtree: false });
-
 })();

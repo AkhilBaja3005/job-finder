@@ -2,18 +2,17 @@
 
 const BACKEND_URL = "http://127.0.0.1:8000";
 
-// Listen for messages from content scripts or popup
+// Handle messages from popup or content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "GET_BACKEND_HEALTH") {
     fetch(`${BACKEND_URL}/healthz`)
       .then((res) => res.json())
       .then((data) => sendResponse({ success: true, data }))
       .catch((err) => sendResponse({ success: false, error: err.message }));
-    return true; // Keep channel open for async response
+    return true;
   }
 
   if (request.action === "PARSE_PAGE_QUESTION") {
-    // Send field context & question to local backend for AI answer resolution
     chrome.storage.local.get(["userToken", "resumeData", "customApiKey"], (items) => {
       fetch(`${BACKEND_URL}/user/solve_field`, {
         method: "POST",
@@ -33,5 +32,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         .catch((err) => sendResponse({ success: false, error: err.message }));
     });
     return true;
+  }
+
+  // Relay logs or state updates from content.js to popup or storage
+  if (request.type === "LOG_EVENT") {
+    chrome.storage.local.get(["appLogs"], (items) => {
+      const logs = items.appLogs || [];
+      logs.push(`[${new Date().toLocaleTimeString()}] ${request.message}`);
+      if (logs.length > 50) logs.shift();
+      chrome.storage.local.set({ appLogs: logs });
+    });
   }
 });
