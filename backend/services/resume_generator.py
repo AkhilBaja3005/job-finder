@@ -212,16 +212,12 @@ RESUME_HTML_TEMPLATE = """
             <h2>Projects</h2>
             {% for proj in resume.projects %}
                 {% if proj.get('title') %}
-                <div class="project-entry">
-                    <div class="project-title">{{ proj.title }}</div>
-                    {% if proj.get('description') %}
-                        {% if proj.description is string %}
-                            <div class="project-desc">&ndash; {{ proj.description | safe }}</div>
-                        {% else %}
-                            {% for bullet in proj.description %}
-                                <div class="project-desc">&ndash; {{ bullet | safe }}</div>
-                            {% endfor %}
-                        {% endif %}
+                <div class="project-entry" style="margin-bottom: 3px; font-size: 9.9pt; text-align: justify; line-height: 1.22;">
+                    <strong>{{ proj.title }}</strong> &ndash;
+                    {% if proj.description is string %}
+                        {{ proj.description | safe }}
+                    {% else %}
+                        {{ proj.description | join(' ') | safe }}
                     {% endif %}
                 </div>
                 {% endif %}

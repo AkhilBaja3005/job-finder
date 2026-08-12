@@ -20,9 +20,12 @@ class WorkExperience(BaseModel):
 class Education(BaseModel):
     institution: str
     degree: str
-    field_of_study: str
-    graduation_date: str
+    field_of_study: Optional[str] = Field(default="")
+    start_date: Optional[str] = Field(default="", description="Start date e.g. 'Sept 2026' or 'Aug 2019'")
+    graduation_date: str = Field(description="Graduation or end date / range e.g. 'Sept 2027', 'May 2023', or 'Sept 2026 – Sept 2027'")
+    location: Optional[str] = Field(default="", description="City/Country e.g. 'London, UK'")
     gpa: Optional[str] = Field(default=None, description="GPA, CPI, percentage, or grade score e.g. 'CPI: 8.04' or '94.2%'")
+    highlights: List[str] = Field(default_factory=list, description="Leadership roles, coordinator roles, or bullet highlights under education")
 
 class Project(BaseModel):
     title: str
@@ -75,7 +78,11 @@ def parse_resume(file_path: str) -> StructuredResume:
     CRITICAL RULES:
     1. Clean up any spacing or kerning anomalies in the candidate's name (e.g. "P A L L A V I" → "PALLAVI").
     2. Extract ALL URLs from the resume into the `links` array. This MUST include LinkedIn URLs (e.g. https://linkedin.com/in/username), GitHub URLs, portfolios, etc. Do NOT leave `links` empty if URLs are present.
-    3. For each Education entry, extract the GPA, CPI, percentage, or grade score into the `gpa` field (e.g. "CPI: 8.04", "94.2%"). Do NOT omit this even if it appears on the same line as the degree.
+    3. For each Education entry, extract:
+       - Full start date AND graduation date (e.g. "Sept 2026 – Sept 2027", "Aug 2019 – May 2023"). Do NOT drop the start/end dates.
+       - City/Country location if listed (e.g. "London, UK").
+       - GPA, CPI, percentage, or grade score into the `gpa` field (e.g. "CPI: 8.04", "94.2%").
+       - Leadership/extracurricular/coordinator bullets into `highlights` (e.g. "Internship and Placement Cell Coordinator — Managed corporate outreach...").
     4. Extract the phone number exactly as it appears.
     5. WORK EXPERIENCE BULLETS & SUB-PROJECTS: If a work experience entry contains sub-project headers (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), do NOT duplicate the sub-project title prefix on every child bullet point! Keep the sub-project header distinct or keep individual accomplishment bullets clean.
 
