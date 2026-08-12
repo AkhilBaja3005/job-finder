@@ -191,7 +191,7 @@ function App() {
   // Cron Job Match Mailer Subscription states
   const [cronEnabled, setCronEnabled] = useState(false);
   const [sendTailoredEmail, setSendTailoredEmail] = useState(false);
-  const [mailerExpanded, setMailerExpanded] = useState(false);
+  const [mailerExpanded, setMailerExpanded] = useState(true);
   const [cronRole, setCronRole] = useState('');
   const [cronLocation, setCronLocation] = useState('Remote');
   const [cronTime, setCronTime] = useState('18:00');
@@ -1757,10 +1757,8 @@ function App() {
           <div className="card" style={{
             display: 'flex',
             flexDirection: 'column',
-            gap: '24px',
-            padding: '32px',
-            height: '660px',
-            overflowY: 'auto'
+            gap: '20px',
+            padding: '32px'
           }}>
             <div>
               <h2 style={{ marginBottom: '4px' }}>Setup & Configuration</h2>
@@ -1828,17 +1826,50 @@ function App() {
               </label>
             </div>
 
+            {/* Chrome Extension Pairing Key Card */}
+            <div style={{
+              background: 'rgba(56, 189, 248, 0.05)',
+              borderRadius: '12px',
+              padding: '14px 16px',
+              border: '1px solid rgba(56, 189, 248, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  ⚡ Chrome Extension Sync Key
+                </div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Enter this 6-digit key in the Chrome Extension to pair your account instantly.
+                </div>
+              </div>
+              <div style={{
+                fontSize: '1.1rem',
+                fontWeight: 800,
+                color: '#38bdf8',
+                background: 'rgba(56, 189, 248, 0.12)',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
+                padding: '6px 14px',
+                borderRadius: '8px',
+                letterSpacing: '2px',
+                fontFamily: 'monospace'
+              }}>
+                {(user && user.sync_code) ? user.sync_code : 'GUEST1'}
+              </div>
+            </div>
+
             {/* Daily Cron Match Mailer Subscription settings */}
-            {user && (
-              <div style={{ border: '1px solid rgba(56, 189, 248, 0.1)', borderRadius: '12px', overflow: 'hidden', background: 'rgba(56, 189, 248, 0.03)' }}>
+            <div style={{ border: '1px solid rgba(56, 189, 248, 0.1)', borderRadius: '12px', overflow: 'hidden', background: 'rgba(56, 189, 248, 0.03)' }}>
                 {/* Collapsible header */}
                 <div
                   onClick={() => setMailerExpanded(prev => !prev)}
-                  style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  style={{ padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', gap: '12px' }}
                 >
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#fff' }}>📬 Daily Job Match Mailer</div>
-                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>Get daily lists matching your resume automatically.</div>
+                  <div style={{ flexGrow: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.94rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>📬 Daily Job Match Mailer</div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '3px', lineHeight: '1.4' }}>Get daily lists matching your resume automatically.</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                     {/* Enable toggle — stop propagation so clicking it doesn't collapse */}
@@ -1982,31 +2013,30 @@ function App() {
                   </div>
                 )}
               </div>
-            )}
 
             {statusMessage && (
               <div style={{
                 fontSize: '0.82rem',
                 color: statusMessage.includes('❌') ? 'var(--accent-red)' : statusMessage.includes('✅') ? 'var(--accent-green)' : 'var(--accent-primary)',
                 textAlign: 'center',
-                padding: '4px',
+                padding: '4px 0 0',
                 fontWeight: 600
               }}>
                 {statusMessage}
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
               <button
                 className="btn btn-secondary"
-                style={{ padding: '14px', flex: 1, fontSize: '0.95rem', borderColor: 'var(--accent-red)', color: 'var(--accent-red)' }}
+                style={{ padding: '12px 14px', flex: 1, fontSize: '0.88rem', borderColor: 'var(--accent-red)', color: 'var(--accent-red)' }}
                 onClick={handleClearCache}
               >
                 🧹 Clear Caches & Data
               </button>
               <button
                 className="btn"
-                style={{ padding: '14px', flex: 2, fontSize: '0.95rem' }}
+                style={{ padding: '12px 14px', flex: 2, fontSize: '0.88rem' }}
                 onClick={() => setConfigStepActive(false)}
               >
                 Continue to Dashboard →
@@ -2018,9 +2048,9 @@ function App() {
             <div className="card" style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: '16px',
-              height: '660px',
-              overflowY: 'auto'
+              gap: '20px',
+              padding: '32px',
+              boxSizing: 'border-box'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
@@ -2840,7 +2870,7 @@ function App() {
                           <button
                             className="btn btn-primary"
                             style={{ padding: '8px 18px', fontSize: '0.82rem', fontWeight: 700 }}
-                            onClick={() => setViewMode('dashboard')}
+                            onClick={() => setConfigStepActive(false)}
                           >
                             Start Tailoring Jobs →
                           </button>
@@ -3279,9 +3309,6 @@ function App() {
                                         📧 Send Email
                                       </button>
                                     </>
-                                  )}
-                                  {entry.job_url && (
-                                    <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', fontWeight: 600, textDecoration: 'none' }}>View Post →</a>
                                   )}
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>

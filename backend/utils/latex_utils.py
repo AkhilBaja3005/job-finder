@@ -178,8 +178,16 @@ def apply_latex_hotfix(
     )
     if "\\usepackage{hyperref}" in fixed and "[hidelinks]" not in fixed:
         fixed = fixed.replace("\\usepackage{hyperref}", HYPERREF_PATCH, 1)
-    elif "\\usepackage[hidelinks]{hyperref}" in fixed:
-        fixed = fixed.replace("\\usepackage[hidelinks]{hyperref}", HYPERREF_PATCH, 1)
+    # ── Auto-bold Inline Awards, Honors & Certificates generically if LLM missed \textbf{} ──
+    award_patterns = [
+        r'(?<!\\textbf\{)([A-Z][A-Za-z0-9\s]{2,40}\s+Award\b)(?!\})',
+        r'(?<!\\textbf\{)([A-Z][A-Za-z0-9\s]{2,40}\s+Certificate\s+of\s+[A-Za-z0-9\s]+)(?!\})',
+        r'(?<!\\textbf\{)(Certificate\s+of\s+Recognition)(?!\})',
+        r'(?<!\\textbf\{)([A-Z][A-Za-z0-9\s]{2,40}\s+Honor\b)(?!\})',
+        r'(?<!\\textbf\{)([A-Z][A-Za-z0-9\s]{2,40}\s+Fellowship\b)(?!\})'
+    ]
+    for pat in award_patterns:
+        fixed = re.sub(pat, r'\\textbf{\1}', fixed)
 
     return fixed
 

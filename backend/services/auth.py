@@ -57,21 +57,26 @@ def create_or_get_user(email: str, picture_url: Optional[str] = None) -> dict:
     encoded_email = urllib.parse.quote(email)
     users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
     if users:
-        # If user exists but picture_url is updated/new, update it in Supabase
         user = users[0]
+        # Generate sync_code if user existed before sync_code column was added
+        if not user.get("sync_code"):
+            sync_code = generate_user_sync_code(user["id"])
+            user["sync_code"] = sync_code
         if picture_url and user.get("picture_url") != picture_url:
             updated = supabase_request(f"users?id=eq.{user['id']}", "PATCH", {"picture_url": picture_url})
             if updated:
                 return updated[0]
         return user
         
-    payload = {"email": email, "send_tailored_email": True}
+    # Generate unique 6-character alphanumeric sync code for new user
+    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    payload = {"email": email, "send_tailored_email": True, "sync_code": code}
     if picture_url:
         payload["picture_url"] = picture_url
     new_users = supabase_request("users", "POST", payload)
     if new_users:
         return new_users[0]
-    return {"id": None, "email": email, "gemini_api_key": None, "picture_url": picture_url, "send_tailored_email": True}
+    return {"id": None, "email": email, "gemini_api_key": None, "picture_url": picture_url, "send_tailored_email": True, "sync_code": code}
 
 def create_session(user_id) -> str:
     token = str(uuid.uuid4())
@@ -84,8 +89,17 @@ def get_user_by_token(token: str) -> Optional[dict]:
     if cached is not None:
         return cached
 
+    # 1. Check if token is a 6-digit Sync Code (e.g., A7X9K2)
+    clean_token = token.strip().upper()
+    if len(clean_token) == 6 and clean_token.isalnum():
+        users = supabase_request(f"users?sync_code=eq.{clean_token}&select=id,email,gemini_api_key,picture_url,cron_enabled,cron_role,cron_location,cron_time,send_tailored_email,sync_code", "GET")
+        if users:
+            result = users[0]
+            _token_cache.set(token, result)
+            return result
+
     encoded_token = urllib.parse.quote(token)
-    sessions = supabase_request(f"sessions?token=eq.{encoded_token}&select=token,user_id,users(id,email,gemini_api_key,picture_url,cron_enabled,cron_role,cron_location,cron_time,send_tailored_email)", "GET")
+    sessions = supabase_request(f"sessions?token=eq.{encoded_token}&select=token,user_id,users(id,email,gemini_api_key,picture_url,cron_enabled,cron_role,cron_location,cron_time,send_tailored_email,sync_code)", "GET")
     if sessions:
         user_info = sessions[0].get("users")
         if isinstance(user_info, list) and user_info:
@@ -97,6 +111,20 @@ def get_user_by_token(token: str) -> Optional[dict]:
         _token_cache.set(token, result)
         return result
     return None
+
+import random
+import string
+
+def generate_user_sync_code(user_id) -> str:
+    """Generates or fetches a permanent 6-character alphanumeric sync key for linking extension."""
+    users = supabase_request(f"users?id=eq.{user_id}&select=sync_code", "GET")
+    if users and users[0].get("sync_code"):
+        return users[0]["sync_code"]
+    
+    # Generate unique 6-character alphanumeric code
+    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    supabase_request(f"users?id=eq.{user_id}", "PATCH", {"sync_code": code})
+    return code
 
 async def async_get_user_by_token(token: str) -> Optional[dict]:
     """Non-blocking version of get_user_by_token for use in async handlers."""
@@ -167,3 +195,12 @@ def exchange_google_code_for_email(code: str) -> tuple[str, Optional[str]]:
         user_info = json.loads(response.read().decode("utf-8"))
         
     return user_info.get("email"), user_info.get("picture")
+
+
+def get_optional_token(authorization: Optional[str] = None) -> Optional[str]:
+    """FastAPI dependency to extract Bearer token from Header if present."""
+    if not authorization:
+        return None
+    if authorization.startswith("Bearer "):
+        return authorization.split("Bearer ")[1].strip()
+    return authorization.strip()
