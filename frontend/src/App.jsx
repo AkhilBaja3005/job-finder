@@ -1680,11 +1680,6 @@ function App() {
           {user && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '0.82rem', color: 'var(--accent-green)', fontWeight: 500 }}>{user.email}</span>
-              {user.sync_code && (
-                <span style={{ fontSize: '0.78rem', background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8', padding: '3px 8px', borderRadius: '12px', fontWeight: 700, letterSpacing: '1px' }} title="Extension Sync Key — enter this key in Chrome Extension">
-                  🔑 {user.sync_code}
-                </span>
-              )}
               <button className="btn btn-secondary" style={{ padding: '5px 11px', fontSize: '0.76rem' }} onClick={handleLogout}>
                 Sign out
               </button>
