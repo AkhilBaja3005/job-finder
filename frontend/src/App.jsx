@@ -2875,7 +2875,7 @@ function App() {
                           <button
                             className="btn btn-primary"
                             style={{ padding: '8px 18px', fontSize: '0.82rem', fontWeight: 700 }}
-                            onClick={() => setViewMode('dashboard')}
+                            onClick={() => setConfigStepActive(false)}
                           >
                             Start Tailoring Jobs →
                           </button>
