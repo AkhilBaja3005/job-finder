@@ -572,10 +572,12 @@ def generate_content_with_fallback(
     response_schema=None,
     custom_api_key: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
+    system_instruction: Optional[str] = None,
 ) -> str:
     """JSON / structured output generation via fallback list."""
+    full_prompt = f"SYSTEM INSTRUCTION: {system_instruction}\n\n{prompt}" if system_instruction else prompt
     return _generate_with_model_list(
-        prompt, JSON_FALLBACK_MODELS, response_schema, custom_api_key, on_log
+        full_prompt, JSON_FALLBACK_MODELS, response_schema, custom_api_key, on_log
     )
 
 

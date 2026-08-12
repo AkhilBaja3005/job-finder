@@ -6,7 +6,7 @@ Extracted from main.py for separation of concerns.
 
 import re
 import os
-from typing import Optional
+from typing import Optional, List
 
 
 UPLOAD_DIR = "./uploads"
@@ -95,7 +95,6 @@ def apply_latex_hotfix(
         fixed = re.sub(pattern, '', fixed)
 
     # ── Tighten geometry margins (force single-page fit) ─────────────────────
-    # Replace ANY \usepackage[...]{geometry} with our compact defaults.
     fixed = re.sub(
         r'\\usepackage\[[^\]]*\]\{geometry\}',
         r'\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.20in]{geometry}',
@@ -112,7 +111,6 @@ def apply_latex_hotfix(
         f"\\def\\addressskip{{\\vspace{{{as_}}}}}\n"
         f"\\def\\sectionskip{{\\vspace{{{ss}}}}}\n"
         f"\\def\\sectionlineskip{{\\vspace{{{sls}}}}}\n"
-        # Shrink the trailing gap after each job/project block
         "\\renewcommand{\\smallskip}{\\vspace{1.5pt}}\n"
     )
     if linespread != 1.0:
@@ -140,9 +138,12 @@ def apply_latex_hotfix(
     # ── Replace outdated times package with modern lmodern (ensures full bold weight rendering)
     fixed = fixed.replace("\\usepackage{times}", "\\usepackage{lmodern}")
 
+    # ── Inject \frenchspacing to ensure clean, consistent inter-sentence spacing
+    if "\\frenchspacing" not in fixed:
+        fixed = fixed.replace("\\begin{document}", "\\frenchspacing\n\\begin{document}", 1)
+
     # ── Escape unescaped special LaTeX chars ─────────────────────────────────
     fixed = re.sub(r'(?<!\\)&', r'\\&', fixed)
-    # Escape % only when NOT already preceded by \
     fixed = re.sub(r'(?<!\\)%', r'\\%', fixed)
     fixed = re.sub(r'(?<!\\)_', r'\\_', fixed)
     fixed = re.sub(r'(?<!\\)#', r'\\#', fixed)
@@ -181,6 +182,47 @@ def apply_latex_hotfix(
         fixed = fixed.replace("\\usepackage[hidelinks]{hyperref}", HYPERREF_PATCH, 1)
 
     return fixed
+
+
+def _format_bullet_bolding(text: str, dynamic_skills: Optional[List[str]] = None) -> str:
+    """Convert Markdown **bold**, short colon-prefix labels, metrics, and technical terms/skills into LaTeX \\textbf{}."""
+    if not text:
+        return ""
+    
+    t = text
+    # 1. Convert markdown bold **text** -> \textbf{text}
+    t = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', t)
+    
+    # 2. Bold short leading labels before a colon if not already bolded
+    if ":" in t and not t.lower().startswith(("http", "https", "e.g.", "note:", "result:")) and not t.startswith("\\textbf{"):
+        prefix, rest = t.split(":", 1)
+        if len(prefix.split()) <= 6:
+            t = f"\\textbf{{{prefix.strip()}:}} {rest.strip()}"
+
+    # Build dynamic tech keywords from candidate's skills + common domain frameworks
+    keywords_to_bold = set()
+    if dynamic_skills:
+        for s in dynamic_skills:
+            if len(s.strip()) > 1:
+                keywords_to_bold.add(s.strip())
+
+    # 3. Automatic Metric & Technology Bolding
+    parts = re.split(r'(\\textbf\{[^{}]*\})', t)
+    for i in range(len(parts)):
+        if not parts[i].startswith('\\textbf{'):
+            # Bold percentage metrics, currencies, scale numbers
+            parts[i] = re.sub(r'(?<!\w)(\d+(?:\.\d+)?%|\$[\d\.]+[MKB]?\+?|£[\d\.]+[MKB]?\+?|\b\d+(?:,\d{3})+\+?|\b\d+[MK]|\b\d+Cr\+?|\b\d+\+)(?!\w)', r'\\textbf{\1}', parts[i])
+            # Bold dynamic skills extracted from candidate profile
+            for kw in keywords_to_bold:
+                pattern = r'(?<!\w)(' + re.escape(kw) + r')(?!\w)'
+                parts[i] = re.sub(pattern, r'\\textbf{\1}', parts[i])
+    t = "".join(parts)
+
+    # 4. Clean LaTeX escape chars without destroying \textbf{}
+    t = re.sub(r'(?<!\\)&', r'\\&', t)
+    t = re.sub(r'(?<!\\)%', r'\\%', t)
+    t = re.sub(r'(?<!\\)_', r'\\_', t)
+    return t
 
 
 def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> str:
@@ -236,13 +278,19 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
         if address_line:
             latex.append(f"\\address{{{address_line}}}")
 
+    latex.append("\\frenchspacing")
     latex.append("\\begin{document}")
+
+    skills = data.get("skills", [])
+    skills_list = skills if isinstance(skills, list) else []
 
     # Professional Summary
     summary = data.get("summary", "")
     if summary:
         latex.append("\\begin{rSection}{Professional Summary}")
-        latex.append(summary.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_"))
+        latex.append("\\begin{tabular}{ @{} p{0.97\\textwidth} }")
+        latex.append(_format_bullet_bolding(summary, skills_list))
+        latex.append("\\end{tabular}")
         latex.append("\\end{rSection}")
 
     # Work Experience
@@ -259,60 +307,22 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
             latex.append(f"{{\\bf {company} \\mybar \\textnormal{{{role}}}}} \\hfill {{\\em {dates}}}")
             if bullets:
                 latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.20em} \\setlength{\\parsep}{0em}")
-                current_parent_header = None
-                sub_bullets = []
-
-                def flush_parent():
-                    nonlocal current_parent_header, sub_bullets
-                    if current_parent_header:
-                        clean_hdr = current_parent_header.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_")
-                        if sub_bullets:
-                            latex.append(f"    \\item \\textbf{{{clean_hdr}}}")
-                            latex.append("    \\begin{itemize}\\setlength{\\itemsep}{0em}")
-                            for sb in sub_bullets:
-                                clean_sb = sb.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_")
-                                latex.append(f"        \\item {clean_sb}")
-                            latex.append("    \\end{itemize}")
-                        else:
-                            latex.append(f"    \\item \\textbf{{{clean_hdr}}}")
-                        current_parent_header = None
-                        sub_bullets = []
-
                 for b in bullets:
-                    # Check if bullet starts with a sub-project header e.g. "Quartz (Context...): bullet..." or "Quartz (...):"
-                    if ":" in b and not b.lower().startswith(("http", "https", "e.g.", "note:", "result:")):
-                        header_part, text_part = b.split(":", 1)
-                        header_part = header_part.strip() + ":"
-                        text_part = text_part.strip()
-
-                        # If same sub-project header or new sub-project header
-                        if current_parent_header and current_parent_header == header_part:
-                            if text_part:
-                                sub_bullets.append(text_part)
-                        else:
-                            flush_parent()
-                            current_parent_header = header_part
-                            if text_part:
-                                sub_bullets.append(text_part)
-                    else:
-                        if current_parent_header:
-                            sub_bullets.append(b.strip())
-                        else:
-                            cb = b.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_")
-                            latex.append(f"    \\item {cb}")
-                
-                flush_parent()
+                    formatted_b = _format_bullet_bolding(b, skills_list)
+                    latex.append(f"    \\item {formatted_b}")
                 latex.append("\\end{itemize}")
         latex.append("\\end{rSection}")
 
     # Technical Skills
-    skills = data.get("skills", [])
     if skills:
         latex.append("\\begin{rSection}{Technical Skills}")
+        latex.append("\\begin{tabular}{ @{} p{0.97\\textwidth} }")
         if isinstance(skills, list):
-            latex.append(", ".join(skills))
+            formatted_skills = [_format_bullet_bolding(s, skills_list) for s in skills]
+            latex.append(", ".join(formatted_skills))
         else:
-            latex.append(str(skills))
+            latex.append(_format_bullet_bolding(str(skills), skills_list))
+        latex.append("\\end{tabular}")
         latex.append("\\end{rSection}")
 
     # Education
@@ -349,20 +359,24 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
             if bullets:
                 latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.25em} \\setlength{\\parsep}{0em}")
                 for b in bullets:
-                    cb = b.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_").replace("#", "\\#")
-                    latex.append(f"    \\item {cb}")
+                    latex.append(f"    \\item {_format_bullet_bolding(b, skills_list)}")
                 latex.append("\\end{itemize}")
         latex.append("\\end{rSection}")
 
-    # Achievements & Leadership
+    # Achievements & Certifications / Recognition
     ach = data.get("achievements", [])
     if ach:
-        latex.append("\\begin{rSection}{Achievements \\& Leadership}")
-        latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.2em} \\setlength{\\parsep}{0em}")
-        for item in ach:
-            ci = item.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_")
-            latex.append(f"    \\item {ci}")
-        latex.append("\\end{itemize}")
+        # Title adapts cleanly if certifications/awards are present
+        section_title = "Certifications \\& Recognition" if len(ach) <= 2 else "Achievements \\& Leadership"
+        latex.append(f"\\begin{{rSection}}{{{section_title}}}")
+        if len(ach) == 1:
+            # Single-line clean presentation without bullet bloat if only 1 item exists
+            latex.append(_format_bullet_bolding(ach[0]))
+        else:
+            latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.2em} \\setlength{\\parsep}{0em}")
+            for item in ach:
+                latex.append(f"    \\item {_format_bullet_bolding(item)}")
+            latex.append("\\end{itemize}")
         latex.append("\\end{rSection}")
 
     latex.append("\\end{document}")

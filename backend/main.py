@@ -834,7 +834,56 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
                 f.write(canonical_tex)
             # Use this as the master going forward
             path = canonical_tex_path
-        
+
+        # Compile baseline PDF immediately after upload so Before PDF is ready for first Auto-Apply
+        try:
+            import shutil as _shutil
+            _, user_out_dir = _get_user_storage_dirs(token or "guest")
+            cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
+            if not os.path.exists(cls_source):
+                cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
+            if os.path.exists(cls_source):
+                _shutil.copy2(cls_source, os.path.join(user_up_dir, "resume.cls"))
+                _shutil.copy2(cls_source, os.path.join(user_out_dir, "resume.cls"))
+
+            # Read canonical tex and apply full hotfix + page-fit pipeline
+            with open(path, "r", encoding="utf-8") as _f:
+                canonical_tex_content = _f.read()
+
+            pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex_content, 1.0, 1.0, None)
+            opt_scale = 1.0
+            opt_ls = 1.0
+            if pages > 1:
+                for ls in [0.95, 0.91, 0.88, 0.82, 0.78]:
+                    p, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex_content, 1.0, ls, None)
+                    if p == 1:
+                        opt_ls = ls
+                        pages = 1
+                        break
+            if pages > 1:
+                for scale in [0.85, 0.75, 0.65]:
+                    p, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex_content, scale, opt_ls, None)
+                    if p == 1:
+                        opt_scale = scale
+                        break
+
+            fixed_baseline_tex = apply_latex_hotfix(canonical_tex_content, opt_scale, opt_ls, None)
+            with open(path, "w", encoding="utf-8") as _f:
+                _f.write(fixed_baseline_tex)
+
+            await asyncio.to_thread(
+                subprocess.run,
+                ["tectonic", path, "--outdir", user_out_dir],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            print(f"[upload_resume] Baseline PDF compiled (scale={opt_scale}, ls={opt_ls}) for token={token or 'guest'}")
+        except Exception as baseline_err:
+            print(f"[upload_resume] Warning: Baseline PDF compilation failed: {baseline_err}")
+
+        # Compute standalone ATS score & Playbook suggestions for master resume
+        from services.ats_scorer import evaluate_master_resume
+        evaluation = evaluate_master_resume(data)
+
         # Save to session-scoped cache
         set_session_data(token, data, path)
         
@@ -842,11 +891,15 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
         guest_file = _get_guest_state_file(token)
         try:
             with open(guest_file, "w") as f:
-                json.dump({"data": data, "path": path}, f, indent=2)
+                json.dump({"data": data, "path": path, "evaluation": evaluation}, f, indent=2)
         except Exception as file_err:
             print(f"[upload_resume] Warning: Could not save guest state file {guest_file}: {file_err}")
         
-        return {"message": "Resume uploaded and parsed successfully", "data": data}
+        return {
+            "message": "Resume uploaded and parsed successfully",
+            "data": data,
+            "evaluation": evaluation
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -2855,7 +2908,222 @@ async def user_resume(authorization: Optional[str] = Header(None)):
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
     session = get_session_data(token)
-    return {"data": session.get("data"), "path": session.get("path")}
+    data = session.get("data")
+    eval_res = None
+    if data:
+        from services.ats_scorer import evaluate_master_resume
+        eval_res = evaluate_master_resume(data)
+    return {"data": data, "path": session.get("path"), "evaluation": eval_res}
+
+class GeneratePromptQueryRequest(BaseModel):
+    suggestion: str
+
+@app.post("/user/generate_prompt_query")
+async def generate_prompt_query(request: GeneratePromptQueryRequest, authorization: Optional[str] = Header(None)):
+    """
+    LLM endpoint that analyzes a recommendation suggestion and returns a highly specific,
+    tailored prompt question to ask the user (with custom realistic examples).
+    """
+    from services.gemini_client import generate_content_with_fallback
+    prompt = (
+        "Analyze the following resume enhancement recommendation:\n"
+        f"\"{request.suggestion}\"\n\n"
+        "Generate a clear, polite, and hyper-specific question to ask the candidate in a popup prompt. "
+        "Include realistic example inputs relevant to this exact request (e.g. specific phone/address format, "
+        "percentage growth, latency reduction, cost savings, dataset size, or team scale).\n\n"
+        "Return ONLY a JSON object with this key:\n"
+        "{\n"
+        "  \"prompt_text\": \"Question text with realistic examples here...\"\n"
+        "}"
+    )
+    try:
+        raw_res = await asyncio.to_thread(generate_content_with_fallback, prompt)
+        cleaned = raw_res.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+            cleaned = re.sub(r'\s*```$', '', cleaned)
+        data = json.loads(cleaned)
+        return {"status": "success", "prompt_text": data.get("prompt_text", "")}
+    except Exception as e:
+        # Fallback default prompt if LLM call fails
+        return {
+            "status": "success",
+            "prompt_text": f"This recommendation requests additional metrics or details:\n\n\"{request.suggestion}\"\n\nPlease enter the requested detail or metric:"
+        }
+
+class ApplySuggestionRequest(BaseModel):
+    suggestion: str
+    user_input: Optional[str] = None
+
+@app.post("/user/apply_suggestion")
+async def apply_suggestion(request: ApplySuggestionRequest, authorization: Optional[str] = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+    session = get_session_data(token)
+    data = session.get("data")
+    if not data:
+        raise HTTPException(status_code=400, detail="No master resume uploaded.")
+
+    from services.gemini_client import generate_content_with_fallback
+    user_context = f"\nUser provided metric / context: {request.user_input}\n" if request.user_input else ""
+    prompt = (
+        "Update the master resume JSON by integrating this specific recommendation:\n"
+        f"Recommendation: {request.suggestion}{user_context}\n\n"
+        "CRITICAL RULE: Do NOT hallucinate metrics, financial numbers, or percentages. "
+        "Use ONLY exact numbers provided by the user context above or refine the wording accurately.\n\n"
+        f"Master Resume JSON:\n{json.dumps(data, indent=2)}\n\n"
+        "Return ONLY the updated valid JSON object representing StructuredResume."
+    )
+    res_text = generate_content_with_fallback(prompt=prompt, system_instruction="Output ONLY raw JSON.")
+    try:
+        cleaned = res_text.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+            cleaned = re.sub(r'\s*```$', '', cleaned)
+        updated_data = json.loads(cleaned)
+        
+        # Compile before PDF if previous tex exists, and compile after PDF
+        user_up_dir, user_out_dir = _get_user_storage_dirs(token or "guest")
+        canonical_tex_path = os.path.join(user_up_dir, f"{uuid.uuid4().hex}_master.tex")
+        canonical_tex = generate_latex_from_json(updated_data)
+        with open(canonical_tex_path, "w", encoding="utf-8") as f:
+            f.write(canonical_tex)
+
+        # Ensure resume.cls is available in both user_up_dir and user_out_dir
+        import shutil
+        cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
+        if not os.path.exists(cls_source):
+            cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
+        if os.path.exists(cls_source):
+            shutil.copy2(cls_source, os.path.join(user_up_dir, "resume.cls"))
+            shutil.copy2(cls_source, os.path.join(user_out_dir, "resume.cls"))
+
+        # Compile After PDF with automatic 1-page fit check & mechanical shrink
+        after_pdf_filename = f"master_after_{uuid.uuid4().hex[:8]}.pdf"
+        after_pdf_path = os.path.join(user_out_dir, after_pdf_filename)
+
+        # Check page count and shrink linespread/geometry/scale if spilled (>1 page)
+        pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex, 1.0, 1.0, None)
+        optimal_scale = 1.0
+        optimal_linespread = 1.0
+        if pages > 1:
+            for ls in [0.95, 0.91, 0.88, 0.82, 0.78]:
+                p, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex, 1.0, ls, None)
+                if p == 1:
+                    pages = 1
+                    optimal_linespread = ls
+                    break
+
+        if pages > 1:
+            for scale in [0.85, 0.75, 0.65]:
+                p, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex, scale, optimal_linespread, None)
+                if p == 1:
+                    pages = 1
+                    optimal_scale = scale
+                    break
+
+        final_fixed_tex = apply_latex_hotfix(canonical_tex, optimal_scale, optimal_linespread, None)
+        with open(canonical_tex_path, "w", encoding="utf-8") as f:
+            f.write(final_fixed_tex)
+
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            ["tectonic", canonical_tex_path, "--outdir", user_out_dir],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        default_after_pdf = os.path.join(user_out_dir, os.path.basename(canonical_tex_path).replace(".tex", ".pdf"))
+        if os.path.exists(default_after_pdf):
+            os.replace(default_after_pdf, after_pdf_path)
+        elif os.path.exists(canonical_tex_path.replace(".tex", ".pdf")):
+            os.replace(canonical_tex_path.replace(".tex", ".pdf"), after_pdf_path)
+
+        after_pdf_url = f"/download_application_pdf/{_safe_key(token or 'guest')}/{after_pdf_filename}" if os.path.exists(after_pdf_path) else None
+
+        # Compile Before PDF from old session path if present
+        before_pdf_url = None
+        old_path = session.get("path")
+        if old_path and os.path.exists(old_path):
+            before_pdf_filename = f"master_before_{uuid.uuid4().hex[:8]}.pdf"
+            before_pdf_path = os.path.join(user_out_dir, before_pdf_filename)
+            await asyncio.to_thread(
+                subprocess.run,
+                ["tectonic", old_path, "--outdir", user_out_dir],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            default_before_pdf = os.path.join(user_out_dir, os.path.basename(old_path).replace(".tex", ".pdf"))
+            if os.path.exists(default_before_pdf):
+                os.replace(default_before_pdf, before_pdf_path)
+            elif os.path.exists(old_path.replace(".tex", ".pdf")):
+                os.replace(old_path.replace(".tex", ".pdf"), before_pdf_path)
+
+            if os.path.exists(before_pdf_path):
+                before_pdf_url = f"/download_application_pdf/{_safe_key(token or 'guest')}/{before_pdf_filename}"
+
+        set_session_data(token, updated_data, canonical_tex_path)
+        guest_file = _get_guest_state_file(token)
+        from services.ats_scorer import evaluate_master_resume
+        new_eval = evaluate_master_resume(updated_data)
+        try:
+            with open(guest_file, "w") as f:
+                json.dump({"data": updated_data, "path": canonical_tex_path, "evaluation": new_eval}, f, indent=2)
+        except Exception:
+            pass
+
+        return {
+            "status": "success",
+            "data": updated_data,
+            "evaluation": new_eval,
+            "latex": canonical_tex,
+            "before_pdf_url": before_pdf_url,
+            "after_pdf_url": after_pdf_url
+        }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to apply suggestion: {str(e)}")
+
+class UpdateMasterFromTailoredRequest(BaseModel):
+    latex_code: str
+
+@app.post("/user/update_master_from_tailored")
+async def update_master_from_tailored(request: UpdateMasterFromTailoredRequest, authorization: Optional[str] = Header(None)):
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        
+    session = get_session_data(token)
+    if not request.latex_code or not request.latex_code.strip():
+        raise HTTPException(status_code=400, detail="Invalid LaTeX content.")
+        
+    try:
+        from services.resume_parser import parse_resume
+        user_up_dir, _ = _get_user_storage_dirs(token or "guest")
+        temp_tex = os.path.join(user_up_dir, f"temp_promoted_{uuid.uuid4().hex[:8]}.tex")
+        with open(temp_tex, "w", encoding="utf-8") as f:
+            f.write(request.latex_code)
+            
+        # Parse LaTeX back into structured JSON data
+        structured = await asyncio.to_thread(parse_resume, temp_tex)
+        updated_data = structured.model_dump()
+        
+        canonical_tex_path = os.path.join(user_up_dir, f"{uuid.uuid4().hex}_master.tex")
+        with open(canonical_tex_path, "w", encoding="utf-8") as f:
+            f.write(request.latex_code)
+            
+        set_session_data(token, updated_data, canonical_tex_path)
+        guest_file = _get_guest_state_file(token)
+        from services.ats_scorer import evaluate_master_resume
+        new_eval = evaluate_master_resume(updated_data)
+        
+        try:
+            with open(guest_file, "w") as f:
+                json.dump({"data": updated_data, "path": canonical_tex_path, "evaluation": new_eval}, f, indent=2)
+        except Exception:
+            pass
+
+        return {"status": "success", "message": "Master resume updated from tailored version!", "data": updated_data, "evaluation": new_eval}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update master resume: {str(e)}")
 
 @app.get("/applications")
 async def get_applications(authorization: Optional[str] = Header(None)):

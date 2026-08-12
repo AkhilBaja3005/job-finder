@@ -20,8 +20,8 @@ window.fetch = async function (resource, config = {}) {
 
 const API_BASE = import.meta.env.VITE_API_BASE
   || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-      ? 'http://127.0.0.1:8000'
-      : window.location.origin);
+    ? 'http://127.0.0.1:8000'
+    : window.location.origin);
 
 // Reads a newline-delimited JSON (NDJSON) streaming response body and yields
 // each parsed event object as it arrives. Shared by every SSE/NDJSON endpoint
@@ -107,6 +107,7 @@ const getScoreColor = (score) => (score >= 80 ? '#10B981' : score >= 60 ? '#38BD
 
 function App() {
   const [resumeData, setResumeData] = useState(null);
+  const [resumeEvaluation, setResumeEvaluation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [jobUrl, setJobUrl] = useState('');
   const [jobTitle, setJobTitle] = useState('');
@@ -173,6 +174,15 @@ function App() {
   const [prepJobInfo, setPrepJobInfo] = useState({ jobTitle: '', company: '' });
 
   // Escape-to-close + focus trap/return for each modal (shared behavior)
+  const [applyingSugIdx, setApplyingSugIdx] = useState(null);
+  const [showAllSkills, setShowAllSkills] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewedResumeData, setReviewedResumeData] = useState(null);
+  const [previousResumeData, setPreviousResumeData] = useState(null);
+  const [reviewedLatex, setReviewedLatex] = useState('');
+  const [beforePdfUrl, setBeforePdfUrl] = useState(null);
+  const [afterPdfUrl, setAfterPdfUrl] = useState(null);
+  const [reviewModalTab, setReviewModalTab] = useState('diff'); // 'diff' | 'pdf' | 'latex'
   const closeKeyboardHelp = useCallback(() => setShowKeyboardHelp(false), []);
   const keyboardHelpModalRef = useModalA11y(showKeyboardHelp, closeKeyboardHelp);
   const closePrepModal = useCallback(() => setPrepModalOpen(false), []);
@@ -400,6 +410,9 @@ function App() {
           const body = await res.json();
           if (body.data && Object.keys(body.data).length > 0) {
             setResumeData(body.data);
+            if (body.evaluation) {
+              setResumeEvaluation(body.evaluation);
+            }
             setStatusMessage('Loaded persisted resume state.');
           }
         }
@@ -427,6 +440,7 @@ function App() {
       });
       if (res.ok) {
         setResumeData(null);
+        setResumeEvaluation(null);
         setAnalysisResult(null);
         setTailoredResumeData(null);
         setRejectionWarning(null);
@@ -583,7 +597,25 @@ function App() {
       const result = await response.json();
       if (response.ok) {
         setResumeData(result.data);
-        setStatusMessage('✅ Master resume uploaded and parsed successfully!');
+        setResumeEvaluation(result.evaluation || null);
+        // Fully clear all previous job analysis, tailoring cache, and modal states like a fresh first-time launch
+        setJobUrl('');
+        setJobTitle('');
+        setJobDescription('');
+        setCompany('');
+        setAnalysisResult(null);
+        setTailoredResumeData(null);
+        setRejectionWarning(null);
+        setKeepOriginalMode(false);
+        setStatusLogs([]);
+        setPreviousResumeData(null);
+        setReviewedResumeData(null);
+        setReviewedLatex('');
+        setBeforePdfUrl(null);
+        setAfterPdfUrl(null);
+        setShowReviewModal(false);
+        setCoverLetterCopied(false);
+        setStatusMessage('✅ Baseline PDF generated & master resume evaluated successfully!');
       } else {
         setStatusMessage(`❌ Error parsing resume: ${result.detail}`);
       }
@@ -901,7 +933,7 @@ function App() {
           };
           setTailoredResumeData(tailored);
           setStatusMessage('LaTeX tailored resume and metrics prepared successfully!');
-          
+
           // Save overleaf_url to history if returned in result
           if (result.overleaf_url) {
             fetch(`${API_BASE}/open_in_overleaf`, {
@@ -913,7 +945,7 @@ function App() {
                 job_title: jobTitle || '',
                 company: company || ''
               })
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
       }
@@ -1036,7 +1068,7 @@ function App() {
           setDiscoveredJobs((prev) => {
             if (prev.some((j) => j.url === event.job.url)) return prev;
             const updated = [...prev, event.job].sort((a, b) => (a.estimated === b.estimated ? b.score - a.score : a.estimated ? 1 : -1));
-            try { sessionStorage.setItem('discovered_jobs', JSON.stringify(updated)); } catch (e) {}
+            try { sessionStorage.setItem('discovered_jobs', JSON.stringify(updated)); } catch (e) { }
             return updated;
           });
         } else if (event.type === 'result') {
@@ -1341,6 +1373,251 @@ function App() {
         </div>
       )}
 
+      {/* Full-Screen Review Changes Modal after Auto-Apply */}
+      {showReviewModal && reviewedResumeData && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(9, 13, 26, 0.92)', backdropFilter: 'blur(12px)',
+          zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px'
+        }}>
+          <div className="card" style={{
+            maxWidth: '900px', width: '100%', maxHeight: '88vh', overflowY: 'auto',
+            border: '1px solid rgba(56, 189, 248, 0.4)', padding: '28px',
+            display: 'flex', flexDirection: 'column', gap: '20px', background: '#0F172A',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.8)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '1.25rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>✨ Master Resume Profile Updated</span>
+                </div>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                  The AI enhancement has been incorporated into your master profile. Review the exact additions highlighted in green below:
+                </div>
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '6px 14px', fontSize: '0.82rem' }}
+                onClick={() => setShowReviewModal(false)}
+              >
+                ✕ Close Review
+              </button>
+            </div>
+
+            {/* Toggle view tabs: PDF Side-by-Side Comparison vs Master Profile Diff vs LaTeX Source Code */}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+              <button
+                className="btn btn-secondary"
+                style={{
+                  padding: '6px 14px', fontSize: '0.8rem', fontWeight: 700,
+                  borderColor: reviewModalTab === 'pdf' ? '#10B981' : 'rgba(255,255,255,0.1)',
+                  color: reviewModalTab === 'pdf' ? '#10B981' : 'var(--text-muted)',
+                  background: reviewModalTab === 'pdf' ? 'rgba(16, 185, 129, 0.15)' : 'transparent'
+                }}
+                onClick={() => setReviewModalTab('pdf')}
+              >
+                📄 PDF Comparison (Before vs After)
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{
+                  padding: '6px 14px', fontSize: '0.8rem', fontWeight: 600,
+                  borderColor: reviewModalTab === 'diff' ? 'var(--accent-secondary)' : 'rgba(255,255,255,0.1)',
+                  color: reviewModalTab === 'diff' ? '#fff' : 'var(--text-muted)',
+                  background: reviewModalTab === 'diff' ? 'rgba(56, 189, 248, 0.15)' : 'transparent'
+                }}
+                onClick={() => setReviewModalTab('diff')}
+              >
+                📊 Structured Diff View
+              </button>
+              {reviewedLatex && (
+                <button
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '6px 14px', fontSize: '0.8rem', fontWeight: 600,
+                    borderColor: reviewModalTab === 'latex' ? 'var(--accent-secondary)' : 'rgba(255,255,255,0.1)',
+                    color: reviewModalTab === 'latex' ? '#fff' : 'var(--text-muted)',
+                    background: reviewModalTab === 'latex' ? 'rgba(56, 189, 248, 0.15)' : 'transparent'
+                  }}
+                  onClick={() => setReviewModalTab('latex')}
+                >
+                  📝 LaTeX Source Code
+                </button>
+              )}
+            </div>
+
+            {/* TAB 1: PDF BEFORE VS AFTER SIDE-BY-SIDE VIEW */}
+            {reviewModalTab === 'pdf' && (
+              <div style={{ display: 'grid', gridTemplateColumns: beforePdfUrl ? '1fr 1fr' : '1fr', gap: '16px', marginTop: '6px' }}>
+                {beforePdfUrl && (
+                  <div style={{ background: '#090D1A', padding: '12px', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#F87171', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>🔴 BEFORE (Previous Baseline PDF)</span>
+                      <a href={beforePdfUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', color: '#F87171', textDecoration: 'underline' }}>Open Full PDF ↗</a>
+                    </div>
+                    <iframe
+                      src={beforePdfUrl}
+                      title="Before Resume PDF"
+                      style={{ width: '100%', height: '480px', border: 'none', borderRadius: '6px', background: '#fff' }}
+                    />
+                  </div>
+                )}
+
+                <div style={{ background: '#090D1A', padding: '12px', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.4)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#34D399', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>🟢 AFTER (Updated Auto-Applied PDF)</span>
+                    {afterPdfUrl && <a href={afterPdfUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', color: '#34D399', textDecoration: 'underline' }}>Open Full PDF ↗</a>}
+                  </div>
+                  {afterPdfUrl ? (
+                    <iframe
+                      src={afterPdfUrl}
+                      title="After Resume PDF"
+                      style={{ width: '100%', height: '480px', border: 'none', borderRadius: '6px', background: '#fff' }}
+                    />
+                  ) : (
+                    <div style={{ height: '480px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                      ⏳ Compiling updated PDF...
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: LATEX CODE */}
+            {reviewModalTab === 'latex' && reviewedLatex && (
+              <div style={{ background: '#090D1A', padding: '16px', borderRadius: '10px', border: '1px solid rgba(56, 189, 248, 0.3)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent-secondary)' }}>UPDATED MASTER RESUME LATEX SOURCE</div>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(reviewedLatex);
+                      showToast('LaTeX code copied to clipboard!', 'success');
+                    }}
+                  >
+                    📋 Copy LaTeX Code
+                  </button>
+                </div>
+                <pre style={{
+                  fontFamily: 'Consolas, Monaco, "Andale Mono", monospace',
+                  fontSize: '0.78rem',
+                  color: '#E2E8F0',
+                  background: 'rgba(0,0,0,0.4)',
+                  padding: '14px',
+                  borderRadius: '8px',
+                  maxHeight: '440px',
+                  overflowY: 'auto',
+                  lineHeight: 1.45,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  margin: 0
+                }}>
+                  {reviewedLatex}
+                </pre>
+              </div>
+            )}
+
+            {/* TAB 3: STRUCTURED DIFF VIEW */}
+            {reviewModalTab === 'diff' && (
+              <>
+                {/* Professional Summary Diff View */}
+                {reviewedResumeData.summary && (
+                  <div style={{ background: 'var(--panel-bg)', padding: '16px', borderRadius: '10px', borderLeft: '4px solid var(--accent-cyan)' }}>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--accent-cyan)', marginBottom: '6px' }}>PROFESSIONAL SUMMARY</div>
+                    {previousResumeData && previousResumeData.summary && previousResumeData.summary.trim() !== reviewedResumeData.summary.trim() ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ fontSize: '0.8rem', color: '#F87171', background: 'rgba(239,68,68,0.12)', padding: '10px 12px', borderRadius: '6px', borderLeft: '3px solid #EF4444' }}>
+                          <span style={{ fontWeight: 800, marginRight: '6px' }}>- OLD:</span>
+                          <span style={{ textDecoration: 'line-through' }}>{previousResumeData.summary}</span>
+                        </div>
+                        <div style={{ fontSize: '0.82rem', color: '#34D399', background: 'rgba(16,185,129,0.12)', padding: '10px 12px', borderRadius: '6px', borderLeft: '3px solid #10B981', fontWeight: 600 }}>
+                          <span style={{ fontWeight: 800, marginRight: '6px' }}>+ NEW:</span>
+                          {reviewedResumeData.summary}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.84rem', color: 'var(--text-main)', fontStyle: 'italic', lineHeight: 1.55 }}>
+                        {reviewedResumeData.summary}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Skills Diff View */}
+                {reviewedResumeData.skills && (
+                  <div style={{ background: 'var(--panel-bg)', padding: '16px', borderRadius: '10px', borderLeft: '4px solid var(--accent-secondary)' }}>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--accent-secondary)', marginBottom: '8px' }}>SKILLS & FRAMEWORKS</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {(Array.isArray(reviewedResumeData.skills) ? reviewedResumeData.skills : [reviewedResumeData.skills]).map((s, i) => {
+                        const prevSkills = previousResumeData ? (Array.isArray(previousResumeData.skills) ? previousResumeData.skills.map(x => String(x).trim().toLowerCase()) : [String(previousResumeData.skills).trim().toLowerCase()]) : [];
+                        const isNewSkill = previousResumeData && !prevSkills.includes(String(s).trim().toLowerCase());
+                        return (
+                          <span key={i} style={{
+                            padding: '4px 10px', borderRadius: '6px',
+                            background: isNewSkill ? 'rgba(16,185,129,0.22)' : 'rgba(56, 189, 248, 0.1)',
+                            color: isNewSkill ? '#34D399' : 'var(--accent-secondary)',
+                            border: isNewSkill ? '1px solid #10B981' : '1px solid transparent',
+                            fontSize: '0.78rem', fontWeight: isNewSkill ? 700 : 600
+                          }}>
+                            {isNewSkill ? `+ ${s}` : s}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Work Experience Diff View */}
+                {reviewedResumeData.experience && reviewedResumeData.experience.length > 0 && (
+                  <div style={{ background: 'var(--panel-bg)', padding: '16px', borderRadius: '10px', borderLeft: '4px solid var(--accent-green)' }}>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--accent-green)', marginBottom: '10px' }}>WORK EXPERIENCE</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      {reviewedResumeData.experience.map((exp, i) => {
+                        const prevExp = previousResumeData && previousResumeData.experience ? previousResumeData.experience.find(e => e.role === exp.role || e.company === exp.company) : null;
+                        const prevBullets = prevExp ? (prevExp.description || []).map(b => String(b).trim()) : [];
+                        return (
+                          <div key={i} style={{ fontSize: '0.84rem' }}>
+                            <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.9rem' }}>{exp.role} <span style={{ color: 'var(--text-muted)' }}>@ {exp.company}</span></div>
+                            <ul style={{ margin: '6px 0 0 18px', padding: 0, color: 'var(--text-main)', fontSize: '0.81rem', lineHeight: 1.5, listStyleType: 'disc' }}>
+                              {(exp.description || []).map((b, bi) => {
+                                const isNewBullet = previousResumeData && !prevBullets.includes(String(b).trim());
+                                return (
+                                  <li key={bi} style={{
+                                    color: isNewBullet ? '#34D399' : 'var(--text-main)',
+                                    background: isNewBullet ? 'rgba(16,185,129,0.15)' : 'transparent',
+                                    borderLeft: isNewBullet ? '3px solid #10B981' : 'none',
+                                    padding: isNewBullet ? '6px 10px' : '0',
+                                    borderRadius: isNewBullet ? '4px' : '0',
+                                    margin: isNewBullet ? '6px 0' : '0'
+                                  }}>
+                                    {isNewBullet ? <strong>+ {b}</strong> : b}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+              <button
+                className="btn"
+                style={{ padding: '10px 24px', fontSize: '0.9rem', fontWeight: 700 }}
+                onClick={() => setShowReviewModal(false)}
+              >
+                ✓ Looks Good, Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="app-header">
         <h1 className="title">
           Resume Tailor Suite
@@ -1466,8 +1743,25 @@ function App() {
           </div>
         </div>
       ) : configStepActive ? (
-        <div className="setup-container" style={{ maxWidth: '580px', margin: '40px auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '32px' }}>
+        <div className="setup-container" style={{
+          maxWidth: resumeData && resumeEvaluation ? '1100px' : '580px',
+          margin: '40px auto',
+          display: resumeData && resumeEvaluation ? 'grid' : 'flex',
+          gridTemplateColumns: resumeData && resumeEvaluation ? '1fr 1fr' : undefined,
+          flexDirection: resumeData && resumeEvaluation ? undefined : 'column',
+          gap: '24px',
+          alignItems: 'stretch',
+          justifyContent: 'center'
+        }}>
+          {/* Left Panel: Configuration & Master Resume Upload */}
+          <div className="card" style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '24px',
+            padding: '32px',
+            height: '660px',
+            overflowY: 'auto'
+          }}>
             <div>
               <h2 style={{ marginBottom: '4px' }}>Setup & Configuration</h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.87rem' }}>Configure your AI key and upload your master resume to get started.</p>
@@ -1719,6 +2013,324 @@ function App() {
               </button>
             </div>
           </div>
+          {/* Right Panel: Standalone Master Resume ATS Evaluation & Suggestions Card */}
+          {resumeData && resumeEvaluation && (
+            <div className="card" style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              height: '660px',
+              overflowY: 'auto'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>📊 Master Resume ATS Health Score</span>
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Baseline evaluation calculated before job tailoring
+                  </div>
+                </div>
+                <div style={{
+                  padding: '6px 16px',
+                  borderRadius: '20px',
+                  fontWeight: 800,
+                  fontSize: '1.1rem',
+                  background: resumeEvaluation.ats_score >= 80 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                  color: resumeEvaluation.ats_score >= 80 ? '#10B981' : '#F59E0B',
+                  border: `1px solid ${resumeEvaluation.ats_score >= 80 ? '#10B981' : '#F59E0B'}`
+                }}>
+                  {resumeEvaluation.ats_score}% ATS
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', textAlign: 'center', margin: '4px 0' }}>
+                <div style={{ background: 'var(--panel-bg)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Found Skills</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent-secondary)' }}>{resumeEvaluation.skills_count} Core</div>
+                </div>
+                <div style={{ background: 'var(--panel-bg)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Quantified Bullets</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent-green)' }}>{resumeEvaluation.quantified_percentage}% ({resumeEvaluation.quantified_bullets}/{resumeEvaluation.total_bullets})</div>
+                </div>
+                <div style={{ background: 'var(--panel-bg)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Experience</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#fff' }}>{resumeEvaluation.candidate_years} Years</div>
+                </div>
+              </div>
+
+              {/* Detected Skills Chip Showcase */}
+              {resumeData && resumeData.skills && resumeData.skills.length > 0 && (
+                <div style={{
+                  background: 'rgba(0,0,0,0.2)',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  border: '1px solid rgba(255,255,255,0.06)'
+                }}>
+                  <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    🔍 Detected Skills Profile
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {(showAllSkills ? resumeData.skills : resumeData.skills.slice(0, 12)).map((skill, i) => {
+                      const skillPalette = [
+                        { bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.35)', color: '#34D399' },
+                        { bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.35)', color: '#38BDF8' },
+                        { bg: 'rgba(6,182,212,0.12)', border: 'rgba(6,182,212,0.35)', color: '#22D3EE' },
+                        { bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.35)', color: '#A78BFA' },
+                        { bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.35)', color: '#FCD34D' },
+                      ];
+                      const c = skillPalette[i % skillPalette.length];
+                      return (
+                        <span key={i} style={{
+                          padding: '4px 10px',
+                          borderRadius: '20px',
+                          fontSize: '0.76rem',
+                          fontWeight: 600,
+                          background: c.bg,
+                          border: `1px solid ${c.border}`,
+                          color: c.color,
+                          whiteSpace: 'nowrap'
+                        }}>{skill}</span>
+                      );
+                    })}
+                    {!showAllSkills && resumeData.skills.length > 12 && (
+                      <span
+                        onClick={() => setShowAllSkills(true)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '20px',
+                          fontSize: '0.76rem',
+                          fontWeight: 600,
+                          background: 'rgba(56,189,248,0.08)',
+                          border: '1px solid rgba(56,189,248,0.25)',
+                          color: 'var(--accent-secondary)',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}>+{resumeData.skills.length - 12} more ▾</span>
+                    )}
+                    {showAllSkills && (
+                      <span
+                        onClick={() => setShowAllSkills(false)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '20px',
+                          fontSize: '0.76rem',
+                          fontWeight: 600,
+                          background: 'rgba(255,255,255,0.05)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}>▴ collapse</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {resumeEvaluation.suggestions && resumeEvaluation.suggestions.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                    💡 Recommended Master Playbook Enhancements:
+                  </div>
+                  {resumeEvaluation.suggestions.map((sug, idx) => (
+                    <div key={idx} style={{
+                      fontSize: '0.8rem',
+                      color: 'var(--text-main)',
+                      padding: '12px 14px',
+                      background: 'var(--panel-bg)',
+                      borderRadius: '8px',
+                      borderLeft: '3px solid var(--accent-secondary)',
+                      lineHeight: 1.45,
+                      display: 'flex',
+                      justify: 'space-between',
+                      alignItems: 'center',
+                      gap: '12px'
+                    }}>
+                      <span style={{ flexGrow: 1 }}>{sug}</span>
+                      <button
+                        className="btn btn-secondary"
+                        disabled={loading || applyingSugIdx === idx}
+                        style={{
+                          padding: '5px 12px',
+                          fontSize: '0.76rem',
+                          fontWeight: 700,
+                          color: 'var(--accent-secondary)',
+                          borderColor: 'rgba(56, 189, 248, 0.3)',
+                          flexShrink: 0,
+                          whiteSpace: 'nowrap',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        onClick={async () => {
+                          let userInput = null;
+                          const needsUserInput = /phone|mobile|number|email|address|contact|location|linkedin|github|quantify|metric|impact|scale|volume|financial|dollars|\$/i.test(sug);
+                          if (needsUserInput) {
+                            setApplyingSugIdx(idx);
+                            setStatusMessage('🧠 Analyzing recommendation details...');
+                            try {
+                              const pRes = await fetch(`${API_BASE}/user/generate_prompt_query`, {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  'Authorization': `Bearer ${getAuthHeader()}`
+                                },
+                                body: JSON.stringify({ suggestion: sug })
+                              });
+                              const pData = await pRes.json();
+                              const promptText = pData.prompt_text || `This recommendation requests additional metrics or details:\n\n"${sug}"\n\nPlease enter the requested detail:`;
+                              userInput = window.prompt(promptText);
+                              if (userInput === null) {
+                                setApplyingSugIdx(null);
+                                setStatusMessage('');
+                                return; // User cancelled prompt
+                              }
+                            } catch (pErr) {
+                              userInput = window.prompt(`Please enter details for this recommendation:\n\n"${sug}"`);
+                              if (userInput === null) {
+                                setApplyingSugIdx(null);
+                                setStatusMessage('');
+                                return;
+                              }
+                            }
+                          } else {
+                            if (!window.confirm(`Incorporate this enhancement into your master resume?\n\n"${sug}"`)) return;
+                          }
+
+                          setPreviousResumeData(resumeData);
+                          setApplyingSugIdx(idx);
+                          setStatusMessage('⏳ Incorporating AI enhancement into master profile...');
+                          try {
+                            const res = await fetch(`${API_BASE}/user/apply_suggestion`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${getAuthHeader()}`
+                              },
+                              body: JSON.stringify({ suggestion: sug, user_input: userInput })
+                            });
+                            if (res.ok) {
+                              const body = await res.json();
+                              setResumeData(body.data);
+                              const remainingSugs = (resumeEvaluation.suggestions || [])
+                                .filter(s => s.trim().toLowerCase() !== sug.trim().toLowerCase());
+                              const updatedEvaluation = {
+                                ...body.evaluation,
+                                suggestions: remainingSugs
+                              };
+                              setResumeEvaluation(updatedEvaluation);
+                              setReviewedResumeData(body.data);
+                              setReviewedLatex(body.latex || '');
+                              setBeforePdfUrl(body.before_pdf_url ? `${API_BASE}${body.before_pdf_url}` : null);
+                              setAfterPdfUrl(body.after_pdf_url ? `${API_BASE}${body.after_pdf_url}` : null);
+                              setReviewModalTab(body.after_pdf_url ? 'pdf' : 'diff');
+                              setShowReviewModal(true);
+                              setStatusMessage('✨ Master resume profile updated successfully!');
+                            } else {
+                              throw new Error('Failed to update resume');
+                            }
+                          } catch (err) {
+                            setStatusMessage(`❌ Error applying suggestion: ${err.message}`);
+                          } finally {
+                            setApplyingSugIdx(null);
+                          }
+                        }}
+                      >
+                        {applyingSugIdx === idx ? '⏳ Applying…' : '✨ Auto-Apply'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(56, 189, 248, 0.08) 100%)',
+                  padding: '32px 28px',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  marginTop: '12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '28px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+                    <div style={{
+                      width: '62px', height: '62px', borderRadius: '50%',
+                      background: 'rgba(16, 185, 129, 0.22)', border: '2px solid #10B981',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '2rem', flexShrink: 0, boxShadow: '0 0 24px rgba(16, 185, 129, 0.25)'
+                    }}>
+                      🏆
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#34D399', letterSpacing: '-0.01em' }}>
+                        Master Playbook Optimization Complete!
+                      </div>
+                      <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.55 }}>
+                        Your baseline profile satisfies all elite ATS score criteria, metric density guidelines, and skill taxonomy rules.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Circular Achievement Trophy Badges */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                    <div style={{
+                      background: 'rgba(0,0,0,0.35)', padding: '26px 14px', borderRadius: '14px',
+                      border: '1px solid rgba(16, 185, 129, 0.3)', textAlign: 'center',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+                    }}>
+                      <div style={{
+                        width: '54px', height: '54px', borderRadius: '50%',
+                        background: 'rgba(16, 185, 129, 0.2)', border: '2px solid #10B981',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
+                      }}>
+                        🎯
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ATS Rating</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#34D399', marginTop: '4px' }}>{resumeEvaluation.ats_score}% Elite</div>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      background: 'rgba(0,0,0,0.35)', padding: '26px 14px', borderRadius: '14px',
+                      border: '1px solid rgba(56, 189, 248, 0.3)', textAlign: 'center',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+                    }}>
+                      <div style={{
+                        width: '54px', height: '54px', borderRadius: '50%',
+                        background: 'rgba(56, 189, 248, 0.2)', border: '2px solid var(--accent-secondary)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
+                      }}>
+                        ⚡
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Core Skills</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-secondary)', marginTop: '4px' }}>{resumeEvaluation.skills_count} Verified</div>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      background: 'rgba(0,0,0,0.35)', padding: '26px 14px', borderRadius: '14px',
+                      border: '1px solid rgba(6, 182, 212, 0.3)', textAlign: 'center',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+                    }}>
+                      <div style={{
+                        width: '54px', height: '54px', borderRadius: '50%',
+                        background: 'rgba(6, 182, 212, 0.2)', border: '2px solid var(--accent-cyan)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
+                      }}>
+                        📊
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Metrics Density</div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-cyan)', marginTop: '4px' }}>{resumeEvaluation.quantified_percentage}% ({resumeEvaluation.quantified_bullets}/{resumeEvaluation.total_bullets})</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="dashboard-grid">
@@ -1771,25 +2383,48 @@ function App() {
               </div>
             </div>
 
-            {/* Mode Switcher */}
-            <div style={{ display: 'flex', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', padding: '4px', border: '1px solid rgba(255,255,255,0.05)', marginTop: '4px' }}>
+            {/* Mode Switcher 2x2 Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', padding: '6px', border: '1px solid rgba(255,255,255,0.05)', marginTop: '4px' }}>
+              <button
+                className={`mode-btn ${dashboardMode === 'master' ? 'active' : ''}`}
+                style={{
+                  padding: '10px 12px',
+                  fontSize: '0.84rem',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  border: '1px solid ' + (dashboardMode === 'master' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.08)'),
+                  background: dashboardMode === 'master' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                  color: dashboardMode === 'master' ? '#fff' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+                onClick={() => {
+                  setDashboardMode('master');
+                  setIsDiscoveryView(false);
+                }}
+              >
+                📊 Master Profile
+              </button>
               <button
                 className={`mode-btn ${dashboardMode === 'tailor' ? 'active' : ''}`}
                 style={{
-                  flex: 1,
-                  padding: '10px 8px',
-                  fontSize: '0.82rem',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  border: 'none',
-                  background: dashboardMode === 'tailor' ? 'var(--accent-primary)' : 'transparent',
-                  color: '#fff',
+                  padding: '10px 12px',
+                  fontSize: '0.84rem',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  border: '1px solid ' + (dashboardMode === 'tailor' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.08)'),
+                  background: dashboardMode === 'tailor' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                  color: dashboardMode === 'tailor' ? '#fff' : 'var(--text-muted)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
-                  minHeight: '40px',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  gap: '6px'
                 }}
                 onClick={() => {
                   setDashboardMode('tailor');
@@ -1801,20 +2436,19 @@ function App() {
               <button
                 className={`mode-btn ${dashboardMode === 'discover' ? 'active' : ''}`}
                 style={{
-                  flex: 1,
-                  padding: '10px 8px',
-                  fontSize: '0.82rem',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  border: 'none',
-                  background: dashboardMode === 'discover' ? 'var(--accent-primary)' : 'transparent',
-                  color: '#fff',
+                  padding: '10px 12px',
+                  fontSize: '0.84rem',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  border: '1px solid ' + (dashboardMode === 'discover' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.08)'),
+                  background: dashboardMode === 'discover' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                  color: dashboardMode === 'discover' ? '#fff' : 'var(--text-muted)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
-                  minHeight: '40px',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  gap: '6px'
                 }}
                 onClick={() => {
                   setDashboardMode('discover');
@@ -1826,20 +2460,19 @@ function App() {
               <button
                 className={`mode-btn ${dashboardMode === 'history' ? 'active' : ''}`}
                 style={{
-                  flex: 1,
-                  padding: '10px 8px',
-                  fontSize: '0.82rem',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  border: 'none',
-                  background: dashboardMode === 'history' ? 'var(--accent-primary)' : 'transparent',
-                  color: '#fff',
+                  padding: '10px 12px',
+                  fontSize: '0.84rem',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  border: '1px solid ' + (dashboardMode === 'history' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.08)'),
+                  background: dashboardMode === 'history' ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                  color: dashboardMode === 'history' ? '#fff' : 'var(--text-muted)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
-                  minHeight: '40px',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  gap: '6px'
                 }}
                 onClick={() => {
                   setDashboardMode('history');
@@ -1996,8 +2629,273 @@ function App() {
               </Suspense>
             )}
 
+
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            {dashboardMode === 'history' ? (
+            {dashboardMode === 'master' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Standalone Master Resume ATS Evaluation & Suggestions Card */}
+                {resumeData && resumeEvaluation && (
+                  <div style={{
+                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    background: 'rgba(56, 189, 248, 0.04)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>📊 Master Resume ATS Health Score</span>
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          Baseline evaluation calculated before job tailoring
+                        </div>
+                      </div>
+                      <div style={{
+                        padding: '6px 16px',
+                        borderRadius: '20px',
+                        fontWeight: 800,
+                        fontSize: '1.1rem',
+                        background: resumeEvaluation.ats_score >= 80 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        color: resumeEvaluation.ats_score >= 80 ? '#10B981' : '#F59E0B',
+                        border: `1px solid ${resumeEvaluation.ats_score >= 80 ? '#10B981' : '#F59E0B'}`
+                      }}>
+                        {resumeEvaluation.ats_score}% ATS
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', textAlign: 'center', margin: '4px 0' }}>
+                      <div style={{ background: 'var(--panel-bg)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Found Skills</div>
+                        <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent-secondary)' }}>{resumeEvaluation.skills_count} Core</div>
+                      </div>
+                      <div style={{ background: 'var(--panel-bg)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Quantified Bullets</div>
+                        <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--accent-green)' }}>{resumeEvaluation.quantified_percentage}% ({resumeEvaluation.quantified_bullets}/{resumeEvaluation.total_bullets})</div>
+                      </div>
+                      <div style={{ background: 'var(--panel-bg)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Experience</div>
+                        <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#fff' }}>{resumeEvaluation.candidate_years} Years</div>
+                      </div>
+                    </div>
+
+                    {resumeEvaluation.suggestions && resumeEvaluation.suggestions.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                          💡 Recommended Master Playbook Enhancements:
+                        </div>
+                        {resumeEvaluation.suggestions.map((sug, idx) => (
+                          <div key={idx} style={{
+                            fontSize: '0.8rem',
+                            color: 'var(--text-main)',
+                            padding: '12px 14px',
+                            background: 'var(--panel-bg)',
+                            borderRadius: '8px',
+                            borderLeft: '3px solid var(--accent-secondary)',
+                            lineHeight: 1.45,
+                            display: 'flex',
+                            justify: 'space-between',
+                            alignItems: 'center',
+                            gap: '12px'
+                          }}>
+                            <span style={{ flexGrow: 1 }}>{sug}</span>
+                            <button
+                              className="btn btn-secondary"
+                              disabled={loading || applyingSugIdx === idx}
+                              style={{
+                                padding: '5px 12px',
+                                fontSize: '0.76rem',
+                                fontWeight: 700,
+                                color: 'var(--accent-secondary)',
+                                borderColor: 'rgba(56, 189, 248, 0.3)',
+                                flexShrink: 0,
+                                whiteSpace: 'nowrap',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              onClick={async () => {
+                                let userInput = null;
+                                const needsUserInput = /phone|mobile|number|email|address|contact|location|linkedin|github|quantify|metric|impact|scale|volume|financial|dollars|\$/i.test(sug);
+                                if (needsUserInput) {
+                                  setApplyingSugIdx(idx);
+                                  setStatusMessage('🧠 Analyzing recommendation details...');
+                                  try {
+                                    const pRes = await fetch(`${API_BASE}/user/generate_prompt_query`, {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${getAuthHeader()}`
+                                      },
+                                      body: JSON.stringify({ suggestion: sug })
+                                    });
+                                    const pData = await pRes.json();
+                                    const promptText = pData.prompt_text || `This recommendation requests additional metrics or details:\n\n"${sug}"\n\nPlease enter the requested detail:`;
+                                    userInput = window.prompt(promptText);
+                                    if (userInput === null) {
+                                      setApplyingSugIdx(null);
+                                      setStatusMessage('');
+                                      return; // User cancelled prompt
+                                    }
+                                  } catch (pErr) {
+                                    userInput = window.prompt(`Please enter details for this recommendation:\n\n"${sug}"`);
+                                    if (userInput === null) {
+                                      setApplyingSugIdx(null);
+                                      setStatusMessage('');
+                                      return;
+                                    }
+                                  }
+                                } else {
+                                  if (!window.confirm(`Incorporate this enhancement into your master resume?\n\n"${sug}"`)) return;
+                                }
+
+                                setPreviousResumeData(resumeData);
+                                setApplyingSugIdx(idx);
+                                setStatusMessage('⏳ Incorporating AI enhancement into master profile...');
+                                try {
+                                  const res = await fetch(`${API_BASE}/user/apply_suggestion`, {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${getAuthHeader()}`
+                                    },
+                                    body: JSON.stringify({ suggestion: sug, user_input: userInput })
+                                  });
+                                  if (res.ok) {
+                                    const body = await res.json();
+                                    setResumeData(body.data);
+                                    setReviewedResumeData(body.data);
+                                    setReviewedLatex(body.latex || '');
+                                    setBeforePdfUrl(body.before_pdf_url ? `${API_BASE}${body.before_pdf_url}` : null);
+                                    setAfterPdfUrl(body.after_pdf_url ? `${API_BASE}${body.after_pdf_url}` : null);
+                                    setReviewModalTab(body.after_pdf_url ? 'pdf' : 'diff');
+                                    const remainingSugs = (resumeEvaluation.suggestions || [])
+                                      .filter(s => s.trim().toLowerCase() !== sug.trim().toLowerCase());
+                                    const updatedEvaluation = {
+                                      ...body.evaluation,
+                                      suggestions: remainingSugs
+                                    };
+                                    setResumeEvaluation(updatedEvaluation);
+                                    setShowReviewModal(true);
+                                    setStatusMessage('✨ Master resume profile updated successfully!');
+                                  } else {
+                                    throw new Error('Failed to update resume');
+                                  }
+                                } catch (err) {
+                                  setStatusMessage(`❌ Error applying suggestion: ${err.message}`);
+                                } finally {
+                                  setApplyingSugIdx(null);
+                                }
+                              }}
+                            >
+                              {applyingSugIdx === idx ? '⏳ Applying…' : '✨ Auto-Apply'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{
+                        background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(56, 189, 248, 0.08) 100%)',
+                        padding: '18px 20px',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        marginTop: '10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '1.4rem' }}>🏆</span>
+                          <div>
+                            <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#34D399' }}>
+                              Master Playbook Optimization Complete!
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              Your baseline profile satisfies all elite ATS score criteria, metric density guidelines, and skill taxonomy rules.
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '4px' }}>
+                          <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid #10B981' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ATS Score</div>
+                            <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#34D399' }}>Elite Grade ({resumeEvaluation.ats_score}%)</div>
+                          </div>
+                          <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid var(--accent-secondary)' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Core Skills</div>
+                            <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--accent-secondary)' }}>{resumeEvaluation.skills_count} Verified</div>
+                          </div>
+                          <div style={{ background: 'rgba(0,0,0,0.3)', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid var(--accent-cyan)' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Quantified Bullets</div>
+                            <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>{resumeEvaluation.quantified_percentage}% ({resumeEvaluation.quantified_bullets}/{resumeEvaluation.total_bullets})</div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>🚀 Ready for instant 1-click tailoring against active job descriptions.</span>
+                          </div>
+                          <button
+                            className="btn btn-primary"
+                            style={{ padding: '8px 18px', fontSize: '0.82rem', fontWeight: 700 }}
+                            onClick={() => setViewMode('dashboard')}
+                          >
+                            Start Tailoring Jobs →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Render Full Master Resume Details in Dashboard */}
+                {resumeData && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '6px' }}>
+                    {resumeData.summary && (
+                      <div style={{ background: 'var(--panel-bg)', padding: '14px', borderRadius: '10px', borderLeft: '3px solid var(--accent-cyan)' }}>
+                        <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--accent-cyan)', marginBottom: '4px' }}>PROFESSIONAL SUMMARY</div>
+                        <div style={{ fontSize: '0.84rem', color: 'var(--text-main)', fontStyle: 'italic', lineHeight: 1.55 }}>
+                          {resumeData.summary}
+                        </div>
+                      </div>
+                    )}
+
+                    {resumeData.skills && (
+                      <div style={{ background: 'var(--panel-bg)', padding: '14px', borderRadius: '10px', borderLeft: '3px solid var(--accent-secondary)' }}>
+                        <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--accent-secondary)', marginBottom: '8px' }}>SKILLS & FRAMEWORKS</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {(Array.isArray(resumeData.skills) ? resumeData.skills : [resumeData.skills]).map((s, i) => (
+                            <span key={i} style={{ padding: '4px 9px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.1)', color: 'var(--accent-secondary)', fontSize: '0.76rem', fontWeight: 600 }}>
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {resumeData.experience && resumeData.experience.length > 0 && (
+                      <div style={{ background: 'var(--panel-bg)', padding: '14px', borderRadius: '10px', borderLeft: '3px solid var(--accent-green)' }}>
+                        <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--accent-green)', marginBottom: '10px' }}>WORK EXPERIENCE</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {resumeData.experience.map((exp, i) => (
+                            <div key={i} style={{ fontSize: '0.82rem' }}>
+                              <div style={{ fontWeight: 700, color: '#fff' }}>{exp.role} <span style={{ color: 'var(--text-muted)' }}>@ {exp.company}</span></div>
+                              <ul style={{ margin: '4px 0 0 18px', padding: 0, color: 'var(--text-main)', fontSize: '0.8rem', lineHeight: 1.45 }}>
+                                {(exp.description || []).map((b, bi) => (
+                                  <li key={bi}>{b}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : dashboardMode === 'history' ? (
               historyLoading ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--accent-primary)', fontWeight: '700' }}>
                   <svg style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', flexShrink: 0 }} viewBox="0 0 24 24" fill="none">
@@ -2171,312 +3069,312 @@ function App() {
                         return historySortOrder === 'newest' ? tsB - tsA : tsA - tsB;
                       })
                       .map((entry, idx) => {
-                      const statusColor = entry.status === 'applied' ? 'var(--accent-green)' : 'var(--accent-cyan)';
-                      const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
+                        const statusColor = entry.status === 'applied' ? 'var(--accent-green)' : 'var(--accent-cyan)';
+                        const date = entry.timestamp ? new Date(entry.timestamp * 1000).toLocaleString() : '';
 
-                      // Determine platform source from job_url
-                      let platformBadge = null;
-                      const urlLower = (entry.job_url || '').toLowerCase();
-                      if (urlLower.includes('linkedin.com')) {
-                        platformBadge = { name: 'LinkedIn', color: '#0A66C2', icon: '💼' };
-                      } else if (urlLower.includes('indeed.com')) {
-                        platformBadge = { name: 'Indeed', color: '#2557A7', icon: '🔍' };
-                      } else if (urlLower.includes('glassdoor.com')) {
-                        platformBadge = { name: 'Glassdoor', color: '#00A264', icon: '🏢' };
-                      } else if (urlLower.includes('ziprecruiter.com')) {
-                        platformBadge = { name: 'ZipRecruiter', color: '#5B2C6F', icon: '⚡' };
-                      } else if (entry.job_url) {
-                        platformBadge = { name: 'Direct Web', color: '#64748B', icon: '🌐' };
-                      }
+                        // Determine platform source from job_url
+                        let platformBadge = null;
+                        const urlLower = (entry.job_url || '').toLowerCase();
+                        if (urlLower.includes('linkedin.com')) {
+                          platformBadge = { name: 'LinkedIn', color: '#0A66C2', icon: '💼' };
+                        } else if (urlLower.includes('indeed.com')) {
+                          platformBadge = { name: 'Indeed', color: '#2557A7', icon: '🔍' };
+                        } else if (urlLower.includes('glassdoor.com')) {
+                          platformBadge = { name: 'Glassdoor', color: '#00A264', icon: '🏢' };
+                        } else if (urlLower.includes('ziprecruiter.com')) {
+                          platformBadge = { name: 'ZipRecruiter', color: '#5B2C6F', icon: '⚡' };
+                        } else if (entry.job_url) {
+                          platformBadge = { name: 'Direct Web', color: '#64748B', icon: '🌐' };
+                        }
 
-                      return (
-                        <div key={idx} className="card" style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>{entry.job_title || 'Untitled Role'}</div>
-                                {platformBadge && (
-                                  <span style={{
-                                    fontSize: '0.66rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
-                                    backgroundColor: `${platformBadge.color}22`, color: platformBadge.color,
-                                    border: `1px solid ${platformBadge.color}44`, display: 'inline-flex', alignItems: 'center', gap: '3px'
-                                  }}>
-                                    <span>{platformBadge.icon}</span> {platformBadge.name}
-                                  </span>
-                                )}
-                              </div>
-                              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
-                              {entry.recruiter_name && (
-                                <div style={{ fontSize: '0.75rem', color: 'var(--accent-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                  <span>👤 Recruiter:</span>
-                                  {entry.recruiter_profile_url ? (
-                                    <a href={entry.recruiter_profile_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-secondary)', fontWeight: 600, textDecoration: 'underline' }}>
-                                      {entry.recruiter_name}
-                                    </a>
-                                  ) : (
-                                    <span style={{ fontWeight: 600 }}>{entry.recruiter_name}</span>
+                        return (
+                          <div key={idx} className="card" style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fff' }}>{entry.job_title || 'Untitled Role'}</div>
+                                  {platformBadge && (
+                                    <span style={{
+                                      fontSize: '0.66rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
+                                      backgroundColor: `${platformBadge.color}22`, color: platformBadge.color,
+                                      border: `1px solid ${platformBadge.color}44`, display: 'inline-flex', alignItems: 'center', gap: '3px'
+                                    }}>
+                                      <span>{platformBadge.icon}</span> {platformBadge.name}
+                                    </span>
                                   )}
                                 </div>
-                              )}
-                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>{date}</div>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
-                              <select
-                                value={entry.status === 'applied' ? 'applied' : 'tailored'}
-                                onChange={async (e) => {
-                                  const newStatus = e.target.value;
-                                  // Update local UI immediately
-                                  setApplicationHistory(prev => prev.map(item => item.job_url === entry.job_url ? { ...item, status: newStatus } : item));
-                                  try {
-                                    await fetch(`${API_BASE}/update_application_status`, {
-                                      method: 'POST',
-                                      headers: {
-                                        'Content-Type': 'application/json',
-                                        'Authorization': `Bearer ${getAuthHeader()}`
-                                      },
-                                      body: JSON.stringify({
-                                        job_url: entry.job_url || '',
-                                        status: newStatus
-                                      })
-                                    });
-                                  } catch (err) {
-                                    console.error('Failed to update status', err);
-                                  }
-                                }}
-                                style={{
-                                  fontSize: '0.68rem', padding: '2px 6px', borderRadius: '6px',
-                                  background: `${statusColor}22`, color: statusColor, fontWeight: 700,
-                                  border: `1px solid ${statusColor}44`, cursor: 'pointer', outline: 'none'
-                                }}
-                              >
-                                <option value="tailored" style={{ background: '#0F172A', color: 'var(--accent-cyan)' }}>Tailored</option>
-                                <option value="applied" style={{ background: '#0F172A', color: 'var(--accent-green)' }}>Applied</option>
-                              </select>
-                              {typeof entry.score === 'number' && (
-                                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#fff' }}>{entry.score}% match</span>
-                              )}
-                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                {entry.overleaf_url ? (
-                                  <a
-                                    href={entry.overleaf_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="btn-overleaf"
-                                    style={{
-                                      fontSize: '0.72rem',
-                                      padding: '5px 11px',
-                                      borderRadius: '6px',
-                                      fontWeight: 600,
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '5px',
-                                      textDecoration: 'none',
-                                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)'
-                                    }}
-                                  >
-                                    🍃 Overleaf
-                                  </a>
-                                ) : (
-                                  <button
-                                    className="btn-overleaf"
-                                    style={{ fontSize: '0.72rem', padding: '5px 11px', borderRadius: '6px', opacity: 0.9, fontWeight: 600 }}
-                                    onClick={() => handleGenerateTailoredResume(false, entry.job_url, entry.job_title)}
-                                  >
-                                    🍃 Overleaf
-                                  </button>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
+                                {entry.recruiter_name && (
+                                  <div style={{ fontSize: '0.75rem', color: 'var(--accent-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <span>👤 Recruiter:</span>
+                                    {entry.recruiter_profile_url ? (
+                                      <a href={entry.recruiter_profile_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-secondary)', fontWeight: 600, textDecoration: 'underline' }}>
+                                        {entry.recruiter_name}
+                                      </a>
+                                    ) : (
+                                      <span style={{ fontWeight: 600 }}>{entry.recruiter_name}</span>
+                                    )}
+                                  </div>
                                 )}
-                                {entry.job_url && (
-                                  <a
-                                    href={entry.job_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    style={{
-                                      fontSize: '0.72rem',
-                                      padding: '5px 11px',
-                                      borderRadius: '6px',
-                                      fontWeight: 600,
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                      textDecoration: 'none',
-                                      background: 'rgba(255, 255, 255, 0.05)',
-                                      color: '#e2e8f0',
-                                      border: '1px solid rgba(255, 255, 255, 0.12)'
-                                    }}
-                                    title="Open original job posting"
-                                  >
-                                    🔗 Job Link
-                                  </a>
-                                )}
-                                {entry.pdf_url && (
-                                   <>
-                                     <a
-                                       href={`${API_BASE}${entry.pdf_url}`}
-                                       target="_blank"
-                                       rel="noreferrer"
-                                       style={{
-                                         fontSize: '0.72rem',
-                                         padding: '5px 11px',
-                                         borderRadius: '6px',
-                                         fontWeight: 700,
-                                         display: 'inline-flex',
-                                         alignItems: 'center',
-                                         gap: '5px',
-                                         textDecoration: 'none',
-                                         background: 'rgba(56, 189, 248, 0.15)',
-                                         color: 'var(--accent-secondary)',
-                                         border: '1px solid rgba(56, 189, 248, 0.35)',
-                                         boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)'
-                                       }}
-                                       title="View & Download compiled PDF resume"
-                                     >
-                                       📄 View & Download PDF
-                                     </a>
-                                     <button
-                                       className="btn btn-secondary"
-                                       style={{
-                                         fontSize: '0.72rem',
-                                         padding: '5px 11px',
-                                         borderRadius: '6px',
-                                         fontWeight: 700,
-                                         display: 'inline-flex',
-                                         alignItems: 'center',
-                                         gap: '5px',
-                                         background: 'rgba(16, 185, 129, 0.12)',
-                                         color: '#10b981',
-                                         border: '1px solid rgba(16, 185, 129, 0.3)',
-                                         cursor: 'pointer'
-                                       }}
-                                       onClick={async (e) => {
-                                         e.stopPropagation();
-                                         setStatusMessage('Sending compiled PDF resume to your email...');
-                                         try {
-                                           const res = await fetch(`${API_BASE}/send_application_pdf_email`, {
-                                             method: 'POST',
-                                             headers: {
-                                               'Content-Type': 'application/json',
-                                               'Authorization': `Bearer ${getAuthHeader()}`
-                                             },
-                                             body: JSON.stringify({
-                                               pdf_url: entry.pdf_url,
-                                               job_title: entry.job_title,
-                                               company: entry.company,
-                                               score: entry.score,
-                                               overleaf_url: entry.overleaf_url,
-                                               job_url: entry.job_url
-                                             })
-                                           });
-                                           const data = await res.json();
-                                           if (res.ok) {
-                                             setStatusMessage(`📧 ${data.message || 'Email sent successfully!'}`);
-                                           } else {
-                                             setStatusMessage(`❌ ${data.detail || 'Failed to send email'}`);
-                                           }
-                                         } catch (err) {
-                                           setStatusMessage(`❌ Error: ${err.message}`);
-                                         }
-                                       }}
-                                       title="Send compiled PDF resume to your email"
-                                     >
-                                       📧 Send Email
-                                     </button>
-                                   </>
-                                 )}
-                                {entry.job_url && (
-                                  <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', fontWeight: 600, textDecoration: 'none' }}>View Post →</a>
-                                )}
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>{date}</div>
                               </div>
-                              <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>
-                                <button
-                                  className="btn btn-secondary"
-                                  style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', whiteSpace: 'nowrap' }}
-                                  onClick={async () => {
-                                    setLoading(true);
-                                    setStatusMessage('Preparing personalized interview pack...');
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                                <select
+                                  value={entry.status === 'applied' ? 'applied' : 'tailored'}
+                                  onChange={async (e) => {
+                                    const newStatus = e.target.value;
+                                    // Update local UI immediately
+                                    setApplicationHistory(prev => prev.map(item => item.job_url === entry.job_url ? { ...item, status: newStatus } : item));
                                     try {
-                                      const res = await fetch(`${API_BASE}/generate_interview_prep`, {
+                                      await fetch(`${API_BASE}/update_application_status`, {
                                         method: 'POST',
                                         headers: {
                                           'Content-Type': 'application/json',
                                           'Authorization': `Bearer ${getAuthHeader()}`
                                         },
                                         body: JSON.stringify({
-                                          job_title: entry.job_title || 'Target Role',
-                                          company: entry.company || 'Target Company',
-                                          job_url: entry.job_url || null
-                                        })
-                                      });
-                                      if (res.ok) {
-                                        const data = await res.json();
-                                        setPrepJobInfo({ jobTitle: entry.job_title || 'Target Role', company: entry.company || 'Target Company' });
-                                        setPrepMarkdown(data.markdown);
-                                        setPrepModalOpen(true);
-                                        setStatusMessage('Interview preparation pack generated!');
-                                      } else {
-                                        const err = await res.json();
-                                        // showToast(`Error: ${err.detail}`, 'error');
-                                      }
-                                    } catch (e) {
-                                      // showToast(`Error: ${e.message}`, 'error');
-                                    } finally {
-                                      setLoading(false);
-                                    }
-                                  }}
-                                >
-                                  🎤 Interview Prep
-                                </button>
-                                <button
-                                  className="btn btn-secondary"
-                                  style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', borderColor: 'var(--accent-primary)', color: '#fff', whiteSpace: 'nowrap' }}
-                                  onClick={async () => {
-                                    setLoading(true);
-                                    setStatusMessage('Generating outreach message...');
-                                    try {
-                                      const headers = {
-                                        'Content-Type': 'application/json',
-                                        'Authorization': `Bearer ${getAuthHeader()}`
-                                      };
-                                      if (geminiApiKey) {
-                                        headers['X-Gemini-API-Key'] = geminiApiKey;
-                                      }
-                                      const res = await fetch(`${API_BASE}/generate_outreach`, {
-                                        method: 'POST',
-                                        headers: headers,
-                                        body: JSON.stringify({
                                           job_url: entry.job_url || '',
-                                          job_description: '', // Scraper extracts JD automatically if empty
-                                          job_title: entry.job_title || 'Target Role',
-                                          company_name: entry.company || 'Target Company',
-                                          recruiter_name: null,
-                                          platform: entry.job_url?.includes('linkedin') ? 'linkedin' : entry.job_url?.includes('indeed') ? 'indeed' : 'unknown'
+                                          status: newStatus
                                         })
                                       });
-                                      if (res.ok) {
-                                        const data = await res.json();
-                                        setOutreachRecruiterInfo(data.recruiter_info);
-                                        setOutreachData(data.message);
-                                        setOutreachModalOpen(true);
-                                        setStatusMessage('Outreach message generated!');
-                                        // showToast('Outreach message ready!', 'success');
-                                      } else {
-                                        const err = await res.json();
-                                        // showToast(`Error: ${err.detail}`, 'error');
-                                      }
-                                    } catch (e) {
-                                      // showToast(`Error: ${e.message}`, 'error');
-                                    } finally {
-                                      setLoading(false);
+                                    } catch (err) {
+                                      console.error('Failed to update status', err);
                                     }
                                   }}
+                                  style={{
+                                    fontSize: '0.68rem', padding: '2px 6px', borderRadius: '6px',
+                                    background: `${statusColor}22`, color: statusColor, fontWeight: 700,
+                                    border: `1px solid ${statusColor}44`, cursor: 'pointer', outline: 'none'
+                                  }}
                                 >
-                                  ✉️ Outreach
-                                </button>
+                                  <option value="tailored" style={{ background: '#0F172A', color: 'var(--accent-cyan)' }}>Tailored</option>
+                                  <option value="applied" style={{ background: '#0F172A', color: 'var(--accent-green)' }}>Applied</option>
+                                </select>
+                                {typeof entry.score === 'number' && (
+                                  <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#fff' }}>{entry.score}% match</span>
+                                )}
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                  {entry.overleaf_url ? (
+                                    <a
+                                      href={entry.overleaf_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="btn-overleaf"
+                                      style={{
+                                        fontSize: '0.72rem',
+                                        padding: '5px 11px',
+                                        borderRadius: '6px',
+                                        fontWeight: 600,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        textDecoration: 'none',
+                                        boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)'
+                                      }}
+                                    >
+                                      🍃 Overleaf
+                                    </a>
+                                  ) : (
+                                    <button
+                                      className="btn-overleaf"
+                                      style={{ fontSize: '0.72rem', padding: '5px 11px', borderRadius: '6px', opacity: 0.9, fontWeight: 600 }}
+                                      onClick={() => handleGenerateTailoredResume(false, entry.job_url, entry.job_title)}
+                                    >
+                                      🍃 Overleaf
+                                    </button>
+                                  )}
+                                  {entry.job_url && (
+                                    <a
+                                      href={entry.job_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={{
+                                        fontSize: '0.72rem',
+                                        padding: '5px 11px',
+                                        borderRadius: '6px',
+                                        fontWeight: 600,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        textDecoration: 'none',
+                                        background: 'rgba(255, 255, 255, 0.05)',
+                                        color: '#e2e8f0',
+                                        border: '1px solid rgba(255, 255, 255, 0.12)'
+                                      }}
+                                      title="Open original job posting"
+                                    >
+                                      🔗 Job Link
+                                    </a>
+                                  )}
+                                  {entry.pdf_url && (
+                                    <>
+                                      <a
+                                        href={`${API_BASE}${entry.pdf_url}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        style={{
+                                          fontSize: '0.72rem',
+                                          padding: '5px 11px',
+                                          borderRadius: '6px',
+                                          fontWeight: 700,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '5px',
+                                          textDecoration: 'none',
+                                          background: 'rgba(56, 189, 248, 0.15)',
+                                          color: 'var(--accent-secondary)',
+                                          border: '1px solid rgba(56, 189, 248, 0.35)',
+                                          boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)'
+                                        }}
+                                        title="View & Download compiled PDF resume"
+                                      >
+                                        📄 View & Download PDF
+                                      </a>
+                                      <button
+                                        className="btn btn-secondary"
+                                        style={{
+                                          fontSize: '0.72rem',
+                                          padding: '5px 11px',
+                                          borderRadius: '6px',
+                                          fontWeight: 700,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '5px',
+                                          background: 'rgba(16, 185, 129, 0.12)',
+                                          color: '#10b981',
+                                          border: '1px solid rgba(16, 185, 129, 0.3)',
+                                          cursor: 'pointer'
+                                        }}
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          setStatusMessage('Sending compiled PDF resume to your email...');
+                                          try {
+                                            const res = await fetch(`${API_BASE}/send_application_pdf_email`, {
+                                              method: 'POST',
+                                              headers: {
+                                                'Content-Type': 'application/json',
+                                                'Authorization': `Bearer ${getAuthHeader()}`
+                                              },
+                                              body: JSON.stringify({
+                                                pdf_url: entry.pdf_url,
+                                                job_title: entry.job_title,
+                                                company: entry.company,
+                                                score: entry.score,
+                                                overleaf_url: entry.overleaf_url,
+                                                job_url: entry.job_url
+                                              })
+                                            });
+                                            const data = await res.json();
+                                            if (res.ok) {
+                                              setStatusMessage(`📧 ${data.message || 'Email sent successfully!'}`);
+                                            } else {
+                                              setStatusMessage(`❌ ${data.detail || 'Failed to send email'}`);
+                                            }
+                                          } catch (err) {
+                                            setStatusMessage(`❌ Error: ${err.message}`);
+                                          }
+                                        }}
+                                        title="Send compiled PDF resume to your email"
+                                      >
+                                        📧 Send Email
+                                      </button>
+                                    </>
+                                  )}
+                                  {entry.job_url && (
+                                    <a href={entry.job_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.72rem', color: 'var(--accent-primary)', fontWeight: 600, textDecoration: 'none' }}>View Post →</a>
+                                  )}
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>
+                                  <button
+                                    className="btn btn-secondary"
+                                    style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', whiteSpace: 'nowrap' }}
+                                    onClick={async () => {
+                                      setLoading(true);
+                                      setStatusMessage('Preparing personalized interview pack...');
+                                      try {
+                                        const res = await fetch(`${API_BASE}/generate_interview_prep`, {
+                                          method: 'POST',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${getAuthHeader()}`
+                                          },
+                                          body: JSON.stringify({
+                                            job_title: entry.job_title || 'Target Role',
+                                            company: entry.company || 'Target Company',
+                                            job_url: entry.job_url || null
+                                          })
+                                        });
+                                        if (res.ok) {
+                                          const data = await res.json();
+                                          setPrepJobInfo({ jobTitle: entry.job_title || 'Target Role', company: entry.company || 'Target Company' });
+                                          setPrepMarkdown(data.markdown);
+                                          setPrepModalOpen(true);
+                                          setStatusMessage('Interview preparation pack generated!');
+                                        } else {
+                                          const err = await res.json();
+                                          // showToast(`Error: ${err.detail}`, 'error');
+                                        }
+                                      } catch (e) {
+                                        // showToast(`Error: ${e.message}`, 'error');
+                                      } finally {
+                                        setLoading(false);
+                                      }
+                                    }}
+                                  >
+                                    🎤 Interview Prep
+                                  </button>
+                                  <button
+                                    className="btn btn-secondary"
+                                    style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', borderColor: 'var(--accent-primary)', color: '#fff', whiteSpace: 'nowrap' }}
+                                    onClick={async () => {
+                                      setLoading(true);
+                                      setStatusMessage('Generating outreach message...');
+                                      try {
+                                        const headers = {
+                                          'Content-Type': 'application/json',
+                                          'Authorization': `Bearer ${getAuthHeader()}`
+                                        };
+                                        if (geminiApiKey) {
+                                          headers['X-Gemini-API-Key'] = geminiApiKey;
+                                        }
+                                        const res = await fetch(`${API_BASE}/generate_outreach`, {
+                                          method: 'POST',
+                                          headers: headers,
+                                          body: JSON.stringify({
+                                            job_url: entry.job_url || '',
+                                            job_description: '', // Scraper extracts JD automatically if empty
+                                            job_title: entry.job_title || 'Target Role',
+                                            company_name: entry.company || 'Target Company',
+                                            recruiter_name: null,
+                                            platform: entry.job_url?.includes('linkedin') ? 'linkedin' : entry.job_url?.includes('indeed') ? 'indeed' : 'unknown'
+                                          })
+                                        });
+                                        if (res.ok) {
+                                          const data = await res.json();
+                                          setOutreachRecruiterInfo(data.recruiter_info);
+                                          setOutreachData(data.message);
+                                          setOutreachModalOpen(true);
+                                          setStatusMessage('Outreach message generated!');
+                                          // showToast('Outreach message ready!', 'success');
+                                        } else {
+                                          const err = await res.json();
+                                          // showToast(`Error: ${err.detail}`, 'error');
+                                        }
+                                      } catch (e) {
+                                        // showToast(`Error: ${e.message}`, 'error');
+                                      } finally {
+                                        setLoading(false);
+                                      }
+                                    }}
+                                  >
+                                    ✉️ Outreach
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
                   </div>
                 </div>
               )
@@ -3190,6 +4088,53 @@ function App() {
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z" /></svg>
                           Open in Overleaf
                         </button>
+                        {analysisResult && analysisResult.pdf_url && (
+                          <a
+                            href={`${API_BASE}${analysisResult.pdf_url}`}
+                            download
+                            className="btn btn-secondary"
+                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px', textDecoration: 'none' }}
+                          >
+                            ⬇️ Download PDF
+                          </a>
+                        )}
+                        {analysisResult && analysisResult.latex_code && (
+                          <button
+                            className="btn btn-secondary"
+                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px', color: 'var(--accent-green)', borderColor: 'rgba(16,185,129,0.3)' }}
+                            disabled={loading}
+                            onClick={async () => {
+                              if (!window.confirm("Set this tailored resume as your new Master Resume profile?")) return;
+                              setLoading(true);
+                              setStatusMessage('Promoting tailored resume to Master Resume profile...');
+                              try {
+                                const res = await fetch(`${API_BASE}/user/update_master_from_tailored`, {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${getAuthHeader()}`
+                                  },
+                                  body: JSON.stringify({ latex_code: analysisResult.latex_code })
+                                });
+                                if (res.ok) {
+                                  const body = await res.json();
+                                  setResumeData(body.data);
+                                  setResumeEvaluation(body.evaluation);
+                                  setStatusMessage('📌 Master Resume updated from tailored version!');
+                                } else {
+                                  throw new Error('Failed to promote resume');
+                                }
+                              } catch (err) {
+                                setStatusMessage(`Error updating master: ${err.message}`);
+                              } finally {
+                                setLoading(false);
+                              }
+                            }}
+                            title="Promote this tailored version as your new Master Resume baseline"
+                          >
+                            📌 Set as Master
+                          </button>
+                        )}
                       </div>
 
                       {activeTab === 'preview' ? (

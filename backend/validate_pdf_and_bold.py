@@ -8,11 +8,13 @@ import time
 backend_dir = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, backend_dir)
 
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 load_dotenv()
 
 from utils.latex_utils import apply_latex_hotfix
 from services.llm_agent import tailor_latex_code
+# pyrefly: ignore [missing-import]
 import fitz  # PyMuPDF
 
 def validate_resume_tailoring():

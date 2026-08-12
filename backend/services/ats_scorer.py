@@ -14,6 +14,7 @@ Features:
 
 import re
 import datetime
+import json
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict, Set, Optional
 
@@ -646,3 +647,94 @@ def estimate_role_fit_score(resume_data: dict, jd_text: str) -> int:
     base = 90 - (tier_gap * 15)
     domain_adjustment = round((overlap_ratio - 0.5) * 30)
     return max(0, min(100, base + domain_adjustment))
+
+
+def evaluate_master_resume(resume_data: dict) -> dict:
+    """
+    Evaluates master resume health standalone upon upload before tailoring against a specific job.
+    Checks Playbook compliance, quantification density, skill taxonomy coverage, and timeline integrity.
+    """
+    suggestions = []
+    
+    # 1. Experience Timeline & Metrics Check
+    cand_years, avg_tenure, weighted_segments = calculate_flattened_experience(resume_data)
+    
+    exp_list = resume_data.get("experience", [])
+    total_bullets = 0
+    quantified_bullets = 0
+    
+    for exp in exp_list:
+        bullets = exp.get("description", [])
+        total_bullets += len(bullets)
+        for b in bullets:
+            if re.search(r'\b\d+(?:\.\d+)?%|\b\$\d+|\b£\d+|\bINR\s*\d+|\b\d+\+|\b\d+x\b', b, re.IGNORECASE):
+                quantified_bullets += 1
+                
+    quant_ratio = (quantified_bullets / total_bullets) if total_bullets > 0 else 0
+    quant_score = min(100, int(quant_ratio * 120))
+    
+    if quant_ratio < 0.5:
+        suggestions.append("📊 Quantify more achievements: Only " + str(round(quant_ratio*100)) + "% of bullet points contain measurable metrics (e.g. %, £/$, latency cut, user count). Aim for 60%+.")
+        
+    # 2. Skill Taxonomy Audit
+    skills_list = resume_data.get("skills", [])
+    skills_text = " ".join(skills_list) if isinstance(skills_list, list) else str(skills_list)
+    found_skills = _extract_taxonomy_skills(skills_text)
+    
+    tech_score = min(100, max(40, len(found_skills) * 8))
+    if len(found_skills) < 8:
+        suggestions.append("💡 Expand Technical Skills: Found " + str(len(found_skills)) + " core ATS taxonomy keywords. Consider adding specific frameworks (e.g. PySpark, Docker, Azure OpenAI, XGBoost).")
+
+    # 3. Summary & Positioning Check
+    summary = resume_data.get("summary", "")
+    summary_words = len(summary.split())
+    if not summary:
+        suggestions.append("📝 Add a Professional Summary: Standout positioning (AI/ML Engineer, 3+ years experience, key differentiators) increases initial recruiter scan conversion.")
+    elif summary_words < 15 or summary_words > 70:
+        suggestions.append("🎯 Optimize Summary Length: Summary is " + str(summary_words) + " words. Master Playbook recommends 2–3 visual lines (~25–50 words).")
+
+    if re.search(r'strong foundation in|passionate about|seeking an entry', summary, re.IGNORECASE):
+        suggestions.append("⚠️ Avoid weak positioning: Replace phrases like 'strong foundation in' with experienced phrasing e.g. 'AI/ML Engineer with 3+ years experience...'.")
+
+    # 4. Overall Baseline ATS Score Calculation
+    base_ats_score = round(0.40 * tech_score + 0.35 * (90 if cand_years >= 2 else 70) + 0.25 * quant_score)
+    base_ats_score = max(55, min(95, base_ats_score))
+
+    # 5. Gemini AI Executive Qualitative Audit (Domain-Agnostic & Adaptive)
+    ai_suggestions = []
+    try:
+        from services.gemini_client import generate_content_with_fallback
+        prompt = (
+            "You are an Executive Recruiter and ATS Specialist auditing a candidate's master resume profile.\n"
+            "Dynamically infer the candidate's target field/domain (e.g., Software/AI, Data Science, Product Management, Finance, Marketing, Engineering, Healthcare, etc.) from their experience and skills.\n\n"
+            f"Candidate Master Resume JSON:\n{json.dumps(resume_data, indent=2)}\n\n"
+            "Task:\n"
+            "Identify 1-2 sharp, highly actionable, role-appropriate suggestions to enhance this profile's ATS strength, domain clarity, or executive impact.\n"
+            "Do NOT repeat basic metric checks (e.g. counting % signs). Focus on domain-specific impact wording, key technical/tool specificity, or positioning clarity.\n"
+            "Return ONLY a valid JSON array of 1-2 string suggestions."
+        )
+        res_text = generate_content_with_fallback(
+            prompt=prompt,
+            system_instruction="You are an expert ATS & Executive Resume Auditor. Output ONLY a valid JSON array of 1-2 string suggestions."
+        )
+        if res_text:
+            cleaned = res_text.strip()
+            if cleaned.startswith("```"):
+                cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+                cleaned = re.sub(r'\s*```$', '', cleaned)
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, list):
+                ai_suggestions = [str(x) for x in parsed if isinstance(x, str)]
+    except Exception as e:
+        print(f"[evaluate_master_resume] Gemini note: {e}")
+
+    combined_sugs = suggestions + ai_suggestions
+    return {
+        "ats_score": base_ats_score,
+        "skills_count": len(found_skills),
+        "total_bullets": total_bullets,
+        "quantified_bullets": quantified_bullets,
+        "quantified_percentage": round(quant_ratio * 100),
+        "candidate_years": round(cand_years, 1),
+        "suggestions": combined_sugs[:2]
+    }
