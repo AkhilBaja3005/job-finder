@@ -222,10 +222,11 @@ RULE 4 — ONE-PAGE BUDGET & PLAYBOOK POSITIONING (CRITICAL):
   • Write concise bullets using the Playbook formula: Action + Technology + Problem + Measurable Metric. Each bullet MUST occupy between 70% and 150% of one line.
   • Do NOT add extra \\vspace or \\newline commands.
 
-RULE 5 — LATEX STRUCTURE & SECTION SEQUENCE:
+RULE 5 — LATEX STRUCTURE, SECTION SEQUENCE & TECHNICAL SKILLS CATEGORIZATION:
   • Preserve \\documentclass, all \\usepackage lines, geometry, and custom macros (\\mybar, etc.).
   • BULLET SYMBOLS: Second-level (nested) itemize bullets MUST render as solid dots (\\textbullet) rather than en-dashes (--). Keep \\renewcommand{{\\labelitemii}}{{\\textbullet}} in preamble or use [label=\\textbullet].
-  • Keep the exact tabular layout in Technical Skills if present.
+  • DYNAMIC SKILLS CATEGORIZATION (ZERO OVERLAP): When formatting Technical Skills, group skills into 3-5 distinct, non-overlapping functional categories tailored to the target role (e.g. for AI/ML: Languages, AI/ML & GenAI, Data & Platforms, Software & Infrastructure; for Data Analyst: Languages, Analytics & BI, Databases, Tools; for DevOps: Languages, Cloud & CI/CD, Containerization, Infrastructure). Ensure EVERY skill is placed in EXACTLY ONE category with ZERO overlap across categories.
+  • Keep the tabular/category layout in Technical Skills clean and readable.
   • Do NOT add \\linespread, \\pagestyle, or spacing overrides — these are injected by the compiler.
   • ABSOLUTE CRITICAL SECTION SEQUENCE: You MUST render sections in this exact order:
     1. Professional Summary
