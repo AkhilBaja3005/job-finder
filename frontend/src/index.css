@@ -96,9 +96,9 @@ body::before {
 
 /* ─── Layout ─────────────────────────────────────────────── */
 .app-container {
-  max-width: 1360px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 30px 20px;
+  padding: 30px 24px;
   animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -138,6 +138,7 @@ h1.title {
   padding: 28px;
   box-shadow: var(--glass-shadow);
   transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 0;
 }
 
 .card:hover {
@@ -273,8 +274,10 @@ input:focus, textarea:focus, select:focus {
 /* ─── Dashboard grid ─────────────────────────────────────── */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 370px 1fr;
-  gap: 28px;
+  grid-template-columns: 340px 1fr;
+  gap: 24px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 @media (max-width: 1024px) {
@@ -725,9 +728,11 @@ input:focus, textarea:focus, select:focus {
   color: #E2E8F0;
   max-height: 200px;
   overflow-y: auto;
+  overflow-x: auto;
   display: flex;
   flex-direction: column;
   gap: 5px;
+  min-width: 0;
 }
 
 .log-entry {
@@ -735,6 +740,7 @@ input:focus, textarea:focus, select:focus {
   gap: 10px;
   align-items: flex-start;
   line-height: 1.4;
+  min-width: 0;
 }
 
 .log-entry-ts {
@@ -747,6 +753,9 @@ input:focus, textarea:focus, select:focus {
 
 .log-entry-msg {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* Color-coded log levels */
