@@ -40,7 +40,7 @@
       // If local resume data is missing, fetch user profile dynamically from backend API
       if (!resume || !resume.name) {
         try {
-          const resp = await fetch("http://127.0.0.1:8000/user/profile", {
+          const resp = await fetch("http://127.0.0.1:8000/user/me", {
             headers: { "Authorization": `Bearer ${token}` }
           });
           if (resp.ok) {
@@ -56,13 +56,13 @@
       }
 
       const eeo = storage.eeoProfile || {};
-      const name = resume.name || "Baja Akhil";
-      const firstName = name.split(" ")[0] || "Akhil";
-      const lastName = name.split(" ").slice(1).join(" ") || "Baja";
-      const email = resume.email || "akhilbaja.work@gmail.com";
-      const phone = resume.phone || "+91 9948083135";
+      const name = resume.name || "";
+      const firstName = name.split(" ")[0] || "";
+      const lastName = name.split(" ").slice(1).join(" ") || "";
+      const email = resume.email || "";
+      const phone = resume.phone || "";
       const summary = resume.summary || "";
-      const linkedin = (resume.links || []).find((l) => l.includes("linkedin.com")) || "https://www.linkedin.com/in/akhilbaja";
+      const linkedin = (resume.links || []).find((l) => l.includes("linkedin.com")) || "";
       const github = (resume.links || []).find((l) => l.includes("github.com")) || "";
 
       for (const inp of inputs) {
