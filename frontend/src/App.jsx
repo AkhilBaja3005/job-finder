@@ -191,7 +191,7 @@ function App() {
   // Cron Job Match Mailer Subscription states
   const [cronEnabled, setCronEnabled] = useState(false);
   const [sendTailoredEmail, setSendTailoredEmail] = useState(false);
-  const [mailerExpanded, setMailerExpanded] = useState(true);
+  const [mailerExpanded, setMailerExpanded] = useState(false);
   const [cronRole, setCronRole] = useState('');
   const [cronLocation, setCronLocation] = useState('Remote');
   const [cronTime, setCronTime] = useState('18:00');
