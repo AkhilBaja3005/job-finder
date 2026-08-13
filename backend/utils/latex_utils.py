@@ -102,9 +102,19 @@ def apply_latex_hotfix(
     )
 
     # ── Ensure font matches master \usepackage{times} ──────────────────────
-    fixed = re.sub(r'\\usepackage\{(lmodern|helvet|palatino|charter|bookman|courier)\}', '', fixed)
+    # Also strip fontawesome — in Tectonic it resets the full font context to
+    # Latin Modern, wiping Times Roman and all bold variants (confirmed by
+    # PDF font audit: NimbusRomNo9L-Medi vanishes, LMRoman17-Regular appears).
+    fixed = re.sub(r'\\usepackage\{(lmodern|helvet|palatino|charter|bookman|courier|fontawesome|fontawesome5)\}', '', fixed)
     if "\\usepackage{times}" not in fixed:
         fixed = fixed.replace("\\usepackage[T1]{fontenc}", "\\usepackage[T1]{fontenc}\n\\usepackage{times}")
+    # Replace fontawesome icon commands that remain after stripping the package
+    fixed = re.sub(r'\\faEnvelope\{([^}]*)\}', r'\1', fixed)
+    fixed = re.sub(r'\\faPhone\{([^}]*)\}', r'\1', fixed)
+    fixed = re.sub(r'\\faLinkedinSquare\{([^}]*)\}', r'\1', fixed)
+    fixed = re.sub(r'\\faGithub\{([^}]*)\}', r'\1', fixed)
+    fixed = re.sub(r'\\faGlobe\{([^}]*)\}', r'\1', fixed)
+    fixed = re.sub(r'\\fa[A-Za-z]+\{([^}]*)\}', r'\1', fixed)  # catch-all for any remaining \faXxx{} icons
 
     # ── Inject \frenchspacing to ensure clean, consistent inter-sentence spacing
     if "\\frenchspacing" not in fixed:
@@ -242,15 +252,15 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
 
     contact_parts = []
     if email:
-        contact_parts.append(f"\\faEnvelope{{ {email} }}")
+        contact_parts.append(email)
     if phone:
-        contact_parts.append(f"\\faPhone{{ {phone} }}")
+        contact_parts.append(phone)
     if linkedin:
-        li_user = linkedin.split("/")[-1] or linkedin
-        contact_parts.append(f"\\href{{{linkedin}}}{{\\faLinkedinSquare{{ {li_user} }}}}")
+        li_user = linkedin.split("/in/")[-1].rstrip("/") if "/in/" in linkedin else linkedin
+        contact_parts.append(f"\\href{{{linkedin}}}{{linkedin.com/in/{li_user}}}")
     if github:
-        gh_user = github.split("/")[-1] or github
-        contact_parts.append(f"\\href{{{github}}}{{\\faGithub{{ {gh_user} }}}}")
+        gh_user = github.split("github.com/")[-1].rstrip("/") if "github.com" in github else github
+        contact_parts.append(f"\\href{{{github}}}{{github.com/{gh_user}}}")
 
     address_line = " \\mybar ".join(contact_parts)
 
@@ -258,7 +268,8 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
     latex.append("\\documentclass[12pt]{resume}")
     latex.append("\\usepackage[T1]{fontenc}")
     latex.append("\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{geometry}")
-    latex.append("\\usepackage{fontawesome}")
+    # NOTE: fontawesome is intentionally omitted — it resets the Tectonic font
+    # context to Latin Modern, wiping Times New Roman and all bold variants.
     latex.append("\\usepackage{times}")
     latex.append("\\usepackage{hyperref}")
     latex.append("\\newcommand\\mybar{\\kern1pt\\rule[-\\dp\\strutbox]{.8pt}{\\baselineskip}\\kern1pt}")
