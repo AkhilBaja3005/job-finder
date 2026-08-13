@@ -1811,7 +1811,7 @@ function App() {
               <div className="section-label">Master Resume</div>
               <label style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-                padding: '28px 20px', borderRadius: '12px', cursor: 'pointer',
+                padding: '24px 20px', borderRadius: '12px', cursor: 'pointer',
                 border: resumeData ? '1.5px solid rgba(16,185,129,0.4)' : '1.5px dashed var(--border-color)',
                 background: resumeData ? 'rgba(16,185,129,0.04)' : 'var(--panel-bg)',
                 transition: 'all 0.25s ease'
@@ -1819,15 +1819,15 @@ function App() {
                 <input type="file" accept=".pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
                 {resumeData ? (
                   <>
-                    <div style={{ fontSize: '1.6rem' }}>✅</div>
+                    <div style={{ fontSize: '1.5rem' }}>✅</div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 700, color: 'var(--accent-green)', fontSize: '0.92rem' }}>{resumeData.name}</div>
-                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>Click to replace</div>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>Click to replace master resume</div>
                     </div>
                   </>
                 ) : (
                   <>
-                    <div style={{ fontSize: '1.6rem' }}>📄</div>
+                    <div style={{ fontSize: '1.5rem' }}>📄</div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Drop your resume here or click to browse</div>
                       <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>PDF or DOCX — this becomes your master profile</div>
@@ -1835,6 +1835,69 @@ function App() {
                   </>
                 )}
               </label>
+
+              {resumeData && (
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                  <button
+                    className="btn-overleaf"
+                    disabled={loading}
+                    style={{ flex: 1, padding: '8px 12px', fontSize: '0.78rem', justifyContent: 'center' }}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setLoading(true);
+                      setStatusMessage('Preparing Master Resume LaTeX for Overleaf…');
+                      try {
+                        const res = await fetch(`${API_BASE}/open_original_in_overleaf`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            resume_data: resumeData,
+                            job_title: 'Master Resume',
+                            company: '',
+                          }),
+                        });
+                        if (!res.ok) throw new Error('Overleaf export failed');
+                        const data = await res.json();
+                        if (data.url) {
+                          window.open(data.url, '_blank');
+                          setStatusMessage('✅ Master Resume opened in Overleaf!');
+                        }
+                      } catch (err) {
+                        setStatusMessage(`Failed to open in Overleaf: ${err.message}`);
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                  >
+                    🍃 Open Master in Overleaf
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={loading}
+                    style={{ padding: '8px 12px', fontSize: '0.78rem' }}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (parsedPdfUrl) {
+                        window.open(parsedPdfUrl, '_blank');
+                      } else {
+                        setStatusMessage('Downloading master compiled PDF...');
+                        try {
+                          const res = await fetch(`${API_BASE}/download_application_pdf/master/original.pdf`);
+                          if (res.ok) {
+                            window.open(`${API_BASE}/download_application_pdf/master/original.pdf`, '_blank');
+                          } else {
+                            setStatusMessage('Master PDF compilation ready after tailoring.');
+                          }
+                        } catch (err) {
+                          setStatusMessage('Master PDF ready after tailoring.');
+                        }
+                      }
+                    }}
+                  >
+                    📄 View PDF
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Chrome Extension Pairing Key Card */}
