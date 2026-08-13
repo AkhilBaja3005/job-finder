@@ -270,11 +270,15 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
     latex = []
     latex.append("\\documentclass[12pt]{resume}")
     latex.append("\\usepackage[T1]{fontenc}")
-    latex.append("\\newcommand\\mybar{\\kern1pt\\rule[-\\dp\\strutbox]{.8pt}{\\baselineskip}\\kern1pt}")
     latex.append("\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{geometry}")
     latex.append("\\usepackage{fontawesome}")
-    latex.append("\\usepackage{lmodern}")
-    latex.append("\\usepackage[hidelinks]{hyperref}")
+    latex.append("\\usepackage{times}")
+    latex.append("\\usepackage{hyperref}")
+    latex.append("\\newcommand\\mybar{\\kern1pt\\rule[-\\dp\\strutbox]{.8pt}{\\baselineskip}\\kern1pt}")
+    latex.append("\\hypersetup{\n    colorlinks=false,\n    pdfborder={0 0 0}\n}")
+    latex.append("\\renewcommand{\\labelitemi}{$\\bullet$}")
+    latex.append("\\renewcommand{\\labelitemii}{$\\bullet$}")
+    latex.append("\\frenchspacing")
 
     if master_latex:
         name_block    = extract_latex_command(master_latex, "\\name")
@@ -289,7 +293,6 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
         if address_line:
             latex.append(f"\\address{{{address_line}}}")
 
-    latex.append("\\frenchspacing")
     latex.append("\\begin{document}")
 
     skills = data.get("skills", [])
@@ -298,15 +301,15 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
     # Professional Summary
     summary = data.get("summary", "")
     if summary:
+        latex.append("\\vspace{-0.2em}")
         latex.append("\\begin{rSection}{Professional Summary}")
-        latex.append("\\begin{tabular}{ @{} p{0.97\\textwidth} }")
         latex.append(_format_bullet_bolding(summary, skills_list))
-        latex.append("\\end{tabular}")
         latex.append("\\end{rSection}")
 
     # Work Experience
     exp_list = data.get("experience", [])
     if exp_list:
+        latex.append("\\vspace{-0.3em}")
         latex.append("\\begin{rSection}{Work Experience}")
         for exp in exp_list:
             company = exp.get("company", "")
@@ -317,7 +320,10 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
             bullets = exp.get("description", [])
             latex.append(f"{{\\bf {company} \\mybar \\textnormal{{{role}}}}} \\hfill {{\\em {dates}}}")
             if bullets:
-                latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.20em} \\setlength{\\parsep}{0em}")
+                latex.append("\\vspace{-0.35em}")
+                latex.append("\\begin{itemize}")
+                latex.append("    \\setlength{\\itemsep}{-0.20em}")
+                latex.append("    \\setlength{\\parsep}{0em}")
                 for b in bullets:
                     formatted_b = _format_bullet_bolding(b, skills_list)
                     latex.append(f"    \\item {formatted_b}")
@@ -326,24 +332,49 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
 
     # Technical Skills
     if skills:
+        latex.append("\\vspace{-0.3em}")
         latex.append("\\begin{rSection}{Technical Skills}")
-        latex.append("\\begin{tabular}{ @{} p{0.97\\textwidth} }")
+        latex.append("\\vspace{-0.1em}")
         if isinstance(skills, list):
-            # Render plain text skills without extra individual bolding
-            latex.append(", ".join([s.replace("&", "\\&").replace("%", "\\%").replace("_", "\\_") for s in skills]))
+            cats = {
+                "Languages": [],
+                "AI/ML & GenAI": [],
+                "Data & Platforms": [],
+                "Software & Infrastructure": []
+            }
+            for s in skills:
+                s_clean = s.strip()
+                if s_clean in ["Python", "SQL", "C++", "Java", "C", "R", "Go", "TypeScript", "JavaScript", "Rust"]:
+                    cats["Languages"].append(s_clean)
+                elif any(k in s_clean for k in ["AI", "ML", "GenAI", "LLM", "RAG", "Machine Learning", "Deep Learning", "Anomaly", "XGBoost", "Naive Bayes", "Vision", "U-Net", "DenseNet"]):
+                    cats["AI/ML & GenAI"].append(s_clean)
+                elif any(k in s_clean for k in ["PySpark", "Azure", "Cloudera", "PostgreSQL", "SAS", "SQL", "Database", "Spark", "Hive"]):
+                    cats["Data & Platforms"].append(s_clean)
+                else:
+                    cats["Software & Infrastructure"].append(s_clean)
+            skills = {k: v for k, v in cats.items() if v}
+
+        if isinstance(skills, dict):
+            for cat, s_list in skills.items():
+                cat_name = cat.replace("&", "\\&").replace("%", "\\%")
+                s_str = ", ".join(s_list) if isinstance(s_list, list) else str(s_list)
+                latex.append(f"\\textbf{{{cat_name}:}} {s_str} \\\\")
+            if latex[-1].endswith(" \\\\"):
+                latex[-1] = latex[-1][:-3]
         else:
             latex.append(str(skills).replace("&", "\\&").replace("%", "\\%").replace("_", "\\_"))
-        latex.append("\\end{tabular}")
         latex.append("\\end{rSection}")
 
     # Education
     edu_list = data.get("education", [])
     if edu_list:
+        latex.append("\\vspace{-0.3em}")
         latex.append("\\begin{rSection}{Education}")
         for edu in edu_list:
             school = edu.get("institution") or edu.get("school") or ""
             degree = edu.get("degree", "")
             field  = edu.get("field_of_study", "")
+            loc    = edu.get("location", "")
             if field and field.lower() not in degree.lower():
                 degree = f"{degree} in {field}"
             start  = edu.get("start_date", "")
@@ -357,7 +388,9 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
                 gpa = f"CPI: {gpa}"
             highlights = edu.get("highlights", [])
             latex.append(f"{{\\bf {school}}} \\hfill {{\\em {dates}}} \\\\")
-            if gpa:
+            if loc:
+                latex.append(f"{{\\textit{{{degree}}}}} \\hfill {{\\em {loc}}} \\\\")
+            elif gpa:
                 latex.append(f"{{\\textit{{{degree}}}}} \\hfill {{\\em {gpa}}} \\\\")
             else:
                 latex.append(f"{{\\textit{{{degree}}}}} \\\\")

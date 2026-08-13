@@ -6,7 +6,7 @@ from docx import Document
 import json
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Union
 
 from services.gemini_client import generate_content_with_fallback
 
@@ -37,7 +37,7 @@ class StructuredResume(BaseModel):
     phone: str
     links: List[str]
     summary: str
-    skills: List[str]
+    skills: Union[Dict[str, List[str]], List[str]]
     experience: List[WorkExperience]
     education: List[Education]
     projects: List[Project] = Field(default_factory=list)
@@ -78,13 +78,14 @@ def parse_resume(file_path: str) -> StructuredResume:
     CRITICAL RULES:
     1. Clean up any spacing or kerning anomalies in the candidate's name (e.g. "P A L L A V I" → "PALLAVI").
     2. Extract ALL URLs from the resume into the `links` array. This MUST include LinkedIn URLs (e.g. https://linkedin.com/in/username), GitHub URLs, portfolios, etc. Do NOT leave `links` empty if URLs are present.
-    3. For each Education entry, extract:
+    3. TECHNICAL SKILLS CATEGORIZATION (CRITICAL): Group technical skills into 3-5 distinct, non-overlapping category key-value pairs inside `skills` (e.g. {"Languages": ["Python", "SQL", "C++", "Java"], "AI/ML & GenAI": ["Generative AI", "LLMs", "RAG", "Machine Learning"], "Data & Platforms": ["PySpark", "Azure OpenAI", "PostgreSQL"], "Software & Infrastructure": ["Docker", "Jenkins", "Git"]}). Ensure ZERO duplicate skills across categories!
+    4. For each Education entry, extract:
        - Full start date AND graduation date (e.g. "Sept 2026 – Sept 2027", "Aug 2019 – May 2023"). Do NOT drop the start/end dates.
        - City/Country location if listed (e.g. "London, UK").
        - GPA, CPI, percentage, or grade score into the `gpa` field (e.g. "CPI: 8.04", "94.2%").
        - Leadership/extracurricular/coordinator bullets into `highlights` (e.g. "Internship and Placement Cell Coordinator — Managed corporate outreach...").
-    4. Extract the phone number exactly as it appears.
-    5. WORK EXPERIENCE BULLETS & SUB-PROJECTS: If a work experience entry contains sub-project headers (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), do NOT duplicate the sub-project title prefix on every child bullet point! Keep the sub-project header distinct or keep individual accomplishment bullets clean.
+    5. Extract the phone number exactly as it appears.
+    6. WORK EXPERIENCE BULLETS & SUB-PROJECTS: If a work experience entry contains sub-project headers (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), do NOT duplicate the sub-project title prefix on every child bullet point! Keep the sub-project header distinct or keep individual accomplishment bullets clean.
 
     Raw Resume Text:
     ---
@@ -107,7 +108,7 @@ def parse_resume(file_path: str) -> StructuredResume:
     if not parsed_data.get("summary"):
         parsed_data["summary"] = ""
     if not parsed_data.get("skills"):
-        parsed_data["skills"] = []
+        parsed_data["skills"] = {}
     if not parsed_data.get("experience"):
         parsed_data["experience"] = []
     if not parsed_data.get("education"):
@@ -116,6 +117,28 @@ def parse_resume(file_path: str) -> StructuredResume:
         parsed_data["projects"] = []
     if not parsed_data.get("achievements"):
         parsed_data["achievements"] = []
+
+    # Auto-categorize flat skills list if returned as list instead of dict
+    if isinstance(parsed_data.get("skills"), list):
+        flat_skills = parsed_data["skills"]
+        cats = {
+            "Languages": [],
+            "AI/ML & GenAI": [],
+            "Data & Platforms": [],
+            "Software & Infrastructure": []
+        }
+        for s in flat_skills:
+            s_clean = s.strip()
+            if s_clean in ["Python", "SQL", "C++", "Java", "C", "R", "Go", "TypeScript", "JavaScript", "Rust"]:
+                cats["Languages"].append(s_clean)
+            elif any(k in s_clean for k in ["AI", "ML", "GenAI", "LLM", "RAG", "Machine Learning", "Deep Learning", "Anomaly", "XGBoost", "Naive Bayes", "Vision", "U-Net", "DenseNet"]):
+                cats["AI/ML & GenAI"].append(s_clean)
+            elif any(k in s_clean for k in ["PySpark", "Azure", "Cloudera", "PostgreSQL", "SAS", "SQL", "Database", "Spark", "Hive"]):
+                cats["Data & Platforms"].append(s_clean)
+            else:
+                cats["Software & Infrastructure"].append(s_clean)
+        # Prune empty categories
+        parsed_data["skills"] = {k: v for k, v in cats.items() if v}
 
     # Post-process experience and project descriptions to ensure clean string representations
     for item in parsed_data.get("experience", []):

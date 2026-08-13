@@ -1877,20 +1877,25 @@ function App() {
                     style={{ padding: '8px 12px', fontSize: '0.78rem' }}
                     onClick={async (e) => {
                       e.stopPropagation();
-                      if (parsedPdfUrl) {
-                        window.open(parsedPdfUrl, '_blank');
-                      } else {
-                        setStatusMessage('Downloading master compiled PDF...');
-                        try {
-                          const res = await fetch(`${API_BASE}/download_application_pdf/master/original.pdf`);
-                          if (res.ok) {
-                            window.open(`${API_BASE}/download_application_pdf/master/original.pdf`, '_blank');
-                          } else {
-                            setStatusMessage('Master PDF compilation ready after tailoring.');
-                          }
-                        } catch (err) {
-                          setStatusMessage('Master PDF ready after tailoring.');
+                      setLoading(true);
+                      setStatusMessage('Compiling Master Resume PDF…');
+                      try {
+                        const res = await fetch(`${API_BASE}/compile_master_pdf`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ resume_data: resumeData }),
+                        });
+                        if (!res.ok) throw new Error('PDF compilation failed');
+                        const data = await res.json();
+                        if (data.pdf_url) {
+                          const fullUrl = data.pdf_url.startsWith('http') ? data.pdf_url : `${API_BASE}${data.pdf_url}`;
+                          window.open(fullUrl, '_blank');
+                          setStatusMessage('✅ Master PDF compiled and opened!');
                         }
+                      } catch (err) {
+                        setStatusMessage(`Failed to view PDF: ${err.message}`);
+                      } finally {
+                        setLoading(false);
                       }
                     }}
                   >

@@ -2151,126 +2151,8 @@ async def open_in_overleaf(request: OverleafRequest):
 
 
 def _build_original_latex(resume_data: dict) -> str:
-    """Build a clean LaTeX resume from raw parsed resume JSON — no AI tailoring."""
-    def esc(s: str) -> str:
-        """Escape special LaTeX characters."""
-        if not s:
-            return ""
-        for char, rep in [("&", r"\&"), ("%", r"\%"), ("$", r"\$"), ("#", r"\#"),
-                           ("_", r"\_"), ("{", r"\{"), ("}", r"\}"), ("~", r"\textasciitilde{}"),
-                           ("^", r"\^{}"), ("\\", r"\textbackslash{}")]:
-            s = s.replace(char, rep)
-        return s
-
-    name = esc(resume_data.get("name", ""))
-    email = esc(resume_data.get("email", ""))
-    phone = esc(resume_data.get("phone", ""))
-    linkedin = esc(resume_data.get("linkedin", ""))
-    summary = esc(resume_data.get("summary", ""))
-    skills = resume_data.get("skills", [])
-    experience = resume_data.get("experience", [])
-    education = resume_data.get("education", [])
-
-    contact_parts = [p for p in [email, phone, linkedin] if p]
-    contact_line = " $\\vert$ ".join(contact_parts)
-
-    # Skills block
-    skills_str = ""
-    if skills:
-        # Chunk into rows of 6
-        chunks = [skills[i:i+6] for i in range(0, len(skills), 6)]
-        rows = []
-        for chunk in chunks:
-            rows.append(f"    \\textbf{{Skills}} & {esc(', '.join(chunk))} \\\\")
-        skills_str = f"""
-\\begin{{rSection}}{{Technical Skills}}
-\\begin{{tabular}}{{ @{{}} >{{\\bfseries}}l @{{\\hspace{{6ex}}}} l }}
-{chr(10).join(rows)}
-\\end{{tabular}}
-\\end{{rSection}}"""
-
-    # Experience block
-    exp_str = ""
-    if experience:
-        exp_blocks = []
-        for exp in experience:
-            company = esc(exp.get("company", ""))
-            role = esc(exp.get("role", ""))
-            
-            # Extract start and end dates or fall back to dates/duration string
-            start_date = exp.get("start_date")
-            end_date = exp.get("end_date")
-            dates = exp.get("dates", exp.get("date", exp.get("duration", "")))
-            
-            if start_date:
-                # Normalize current/present working
-                end_normalized = "Present"
-                if end_date:
-                    end_clean = end_date.strip().lower()
-                    if end_clean not in ["current", "present", "now", "present working", "currently working"]:
-                        end_normalized = end_date
-                dates_str = f"{start_date} -- {end_normalized}"
-            else:
-                dates_str = dates
-            
-            # Clean up the final dates string case-insensitively for current/present
-            if dates_str:
-                for term in ["current", "present working", "currently working", "present"]:
-                    if term in dates_str.lower():
-                        # Replace specific term with capitalized "Present"
-                        import re
-                        dates_str = re.sub(re.escape(term), "Present", dates_str, flags=re.IGNORECASE)
-            
-            dates_final = esc(dates_str)
-            bullets = exp.get("description", [])
-            bullet_lines = "\n".join([f"    \\item {esc(b)}" for b in bullets if b])
-            exp_blocks.append(
-                f"  \\begin{{rSubsection}}{{{company}}}{{{dates_final}}}{{{role}}}{{}}\n{bullet_lines}\n  \\end{{rSubsection}}"
-            )
-        exp_str = f"""
-\\begin{{rSection}}{{Professional Experience}}
-{chr(10).join(exp_blocks)}
-\\end{{rSection}}"""
-
-    # Education block
-    edu_str = ""
-    if education:
-        edu_blocks = []
-        for edu in education:
-            if isinstance(edu, dict):
-                institution = esc(edu.get("institution", edu.get("school", "")))
-                degree = esc(edu.get("degree", ""))
-                year = esc(str(edu.get("year", edu.get("graduation_year", ""))))
-                edu_blocks.append(f"  \\textbf{{{institution}}} \\hfill {year} \\\\\n  {degree}")
-            else:
-                edu_blocks.append(f"  {esc(str(edu))}")
-        edu_str = f"""
-\\begin{{rSection}}{{Education}}
-{chr(10).join(edu_blocks)}
-\\end{{rSection}}"""
-
-    summary_str = ""
-    if summary:
-        summary_str = f"""
-\\begin{{rSection}}{{Professional Summary}}
-{summary}
-\\end{{rSection}}"""
-
-    return f"""\\documentclass{{resume}}
-\\usepackage[left=0.4in,top=0.4in,right=0.4in,bottom=0.4in]{{geometry}}
-\\usepackage{{hyperref}}
-\\hypersetup{{hidelinks}}
-
-\\name{{{name}}}
-\\address{{{contact_line}}}
-
-\\begin{{document}}
-{summary_str}
-{skills_str}
-{exp_str}
-{edu_str}
-\\end{{document}}
-"""
+    """Build canonical Master LaTeX resume using the exact resume.cls template and font formatting."""
+    return generate_latex_from_json(resume_data)
 
 
 class OriginalOverleafRequest(BaseModel):
@@ -2286,6 +2168,45 @@ async def open_original_in_overleaf(request: OriginalOverleafRequest):
         candidate_name = request.resume_data.get("name", "")
         url = await asyncio.to_thread(upload_zip_to_tmpfiles, latex_code, candidate_name, request.job_title, request.company)
         return {"url": url}
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/compile_master_pdf")
+async def compile_master_pdf(request: OriginalOverleafRequest):
+    """Compile the user's original master resume to PDF using Tectonic and return download URL."""
+    try:
+        latex_code = _build_original_latex(request.resume_data)
+        candidate_name = request.resume_data.get("name", "Master")
+        safe_name = _safe_key(candidate_name)
+        user_out_dir = os.path.join(OUTPUT_DIR, safe_name)
+        os.makedirs(user_out_dir, exist_ok=True)
+        
+        # Copy resume.cls
+        cls_src = os.path.join(UPLOAD_DIR, "resume.cls")
+        if not os.path.exists(cls_src):
+            cls_src = os.path.join(BASE_DIR, "assets", "resume.cls")
+        if os.path.exists(cls_src):
+            shutil.copy2(cls_src, os.path.join(user_out_dir, "resume.cls"))
+            
+        tex_path = os.path.join(user_out_dir, "master_resume.tex")
+        pdf_path = os.path.join(user_out_dir, "master_resume.pdf")
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(latex_code)
+            
+        comp_res = await asyncio.to_thread(
+            subprocess.run,
+            ["tectonic", tex_path, "--outdir", user_out_dir],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if comp_res.returncode == 0 and os.path.exists(pdf_path):
+            pdf_url = f"/download_application_pdf/{safe_name}/master_resume.pdf"
+            return {"status": "success", "pdf_url": pdf_url}
+        else:
+            print(f"[compile_master_pdf] Tectonic error: {comp_res.stderr}")
+            raise HTTPException(status_code=500, detail=f"LaTeX compilation failed: {comp_res.stderr}")
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
