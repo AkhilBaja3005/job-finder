@@ -199,11 +199,11 @@ RULE 1 — CONTACT HEADER (ABSOLUTE ZERO TOLERANCE):
   • Copy \\name{{...}} and \\address{{...}} character-for-character from master. NEVER rewrite them.
   • Do NOT change the name, email, phone, or LinkedIn URL.
 
-RULE 2 — GPA / CPI / GRADES (ZERO TOLERANCE):
+RULE 2 — GPA / CPI / GRADES & EDUCATION HIGHLIGHTS (ZERO TOLERANCE):
   • Find every line in the master Education section that contains a numeric grade, CPI, GPA, or percentage (e.g. "CPI: 8.04", "94.2\\%").
   • Copy those values exactly into the tailored Education section on the SAME line as the degree, right-aligned with \\hfill.
   • Example: {{\\textit{{B.Tech in Engineering Science}}}} \\hfill {{\\em CPI: 8.04}} \\\\
-  • If you omit this, the output is REJECTED.
+  • EDUCATION LEADERSHIP & HIGHLIGHTS: Any leadership line under an education entry (e.g., "\\textit{{\\textbf{{Internship and Placement Cell Coordinator}} — Managed corporate outreach...}}") MUST be kept directly inside the Education section under that degree. Do NOT move it to Achievements or drop it.
 
 RULE 3 — SECTION & CONTENT COMPLETENESS & NESTED ITEMIZE FOR SUB-PROJECTS:
   • Preserve EVERY school, job, and project. Do NOT delete, rename, or merge any.

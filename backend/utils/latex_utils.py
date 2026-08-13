@@ -355,11 +355,16 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
             gpa    = edu.get("gpa", "") or edu.get("cpi", "")
             if gpa and not gpa.lower().startswith(("cpi", "gpa", "grade", "percentage", "cgpa")):
                 gpa = f"CPI: {gpa}"
+            highlights = edu.get("highlights", [])
             latex.append(f"{{\\bf {school}}} \\hfill {{\\em {dates}}} \\\\")
             if gpa:
                 latex.append(f"{{\\textit{{{degree}}}}} \\hfill {{\\em {gpa}}} \\\\")
             else:
                 latex.append(f"{{\\textit{{{degree}}}}} \\\\")
+            if highlights:
+                for h in highlights:
+                    formatted_h = _format_bullet_bolding(h, skills_list)
+                    latex.append(f"\\textit{{\\textbf{{{formatted_h}}}}} \\\\")
         if latex[-1].endswith(" \\\\"):
             latex[-1] = latex[-1][:-3]
         latex.append("\\end{rSection}")
