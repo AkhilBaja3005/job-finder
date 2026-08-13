@@ -216,8 +216,9 @@ RULE 3 — SECTION & CONTENT COMPLETENESS & NESTED ITEMIZE FOR SUB-PROJECTS:
     \\end{{itemize}}
   • NEVER output repeated standalone \\item bullets with duplicate sub-project title prefixes.
 
-RULE 4 — ONE-PAGE BUDGET & PLAYBOOK POSITIONING (CRITICAL):
+RULE 4 — ONE-PAGE BUDGET, BOLDING & PLAYBOOK POSITIONING (CRITICAL):
   • Professional Summary MUST be placed at the top (below header), kept to 2-3 lines visually, avoiding weak phrases like "Strong foundation in...". Position primarily as: AI/ML Engineer with 3+ years experience across Qualcomm + Axis Bank, specialized in Production GenAI, LLM Context Engineering, Software Systems, and ML.
+  • BOLDING RULES: You MUST automatically bold key ML/AI models (e.g., `\\textbf{{XGBoost}}`, `\\textbf{{Naive Bayes}}`, `\\textbf{{Isolation Forest}}`), metrics (`\\textbf{{40\\%}}`), awards, and regulatory/institution bodies (`\\textbf{{RBI (Reserve Bank of India)}}` or `\\textbf{{RBI}}`).
   • The entire tailored resume MUST fit on exactly ONE page.
   • Write concise bullets using the Playbook formula: Action + Technology + Problem + Measurable Metric. Each bullet MUST occupy between 70% and 150% of one line.
   • Do NOT add extra \\vspace or \\newline commands.

@@ -205,6 +205,11 @@ def _format_bullet_bolding(text: str, dynamic_skills: Optional[List[str]] = None
         if not parts[i].startswith('\\textbf{'):
             # Bold percentage metrics, currencies, scale numbers
             parts[i] = re.sub(r'(?<!\w)(\d+(?:\.\d+)?%|\$[\d\.]+[MKB]?\+?|£[\d\.]+[MKB]?\+?|\b\d+(?:,\d{3})+\+?|\b\d+[MK]|\b\d+Cr\+?|\b\d+\+)(?!\w)', r'\\textbf{\1}', parts[i])
+            # Bold explicit key models, regulatory bodies, and frameworks requested in system rules
+            explicit_bold_terms = ["RBI", "Reserve Bank of India", "XGBoost", "Naive Bayes", "Isolation Forest", "Azure OpenAI", "Cloudera ML"]
+            for term in sorted(explicit_bold_terms, key=len, reverse=True):
+                pattern = r'(?<!\\textbf\{)(?<!\w)(' + re.escape(term) + r')(?!\w)(?!\})'
+                parts[i] = re.sub(pattern, r'\\textbf{\1}', parts[i])
             # Bold dynamic skills extracted from candidate profile
             for kw in keywords_to_bold:
                 pattern = r'(?<!\w)(' + re.escape(kw) + r')(?!\w)'
