@@ -101,25 +101,23 @@ def apply_latex_hotfix(
         fixed,
     )
 
-    # ── Switch to fontspec + Times New Roman (XeTeX mode) ──────────────────
-    # In Tectonic (XeTeX), \usepackage{fontawesome} triggers fontspec internally.
-    # The fix: explicitly use fontspec + setmainfont{Times New Roman} so fontspec
-    # is OUR choice, not fontawesome's side-effect. This gives:
-    #   TimesNewRomanPS-BoldMT + FontAwesome icons, exact Overleaf parity.
-    # Strip old pdfTeX font packages that conflict with fontspec:
-    fixed = re.sub(r'\\usepackage\{(lmodern|helvet|palatino|charter|bookman|courier|marvosym)\}', '', fixed)
-    fixed = re.sub(r'\\usepackage\[T1\]\{fontenc\}', '', fixed)
-    fixed = re.sub(r'\\usepackage\{times\}', '', fixed)
-    # Inject fontspec preamble if not already present
-    if '\\usepackage{fontspec}' not in fixed:
-        doc_class_end = fixed.find('\n', fixed.find('\\documentclass'))
-        fixed = fixed[:doc_class_end + 1] + '\\usepackage{fontspec}\n\\setmainfont{Times New Roman}\n' + fixed[doc_class_end + 1:]
-    # Ensure fontawesome is present (icons need it)
-    if '\\usepackage{fontawesome}' not in fixed:
-        fixed = fixed.replace('\\usepackage{fontspec}', '\\usepackage{fontspec}\n\\usepackage{fontawesome}')
-    # Replace marvosym icon commands back to fontawesome if they snuck in
-    fixed = re.sub(r'\\Letter\\\s*', r'\\faEnvelope\ ', fixed)
-    fixed = re.sub(r'\\Telefon\\\s*', r'\\faPhone\ ', fixed)
+    # ── Ensure font matches master \usepackage{times} ──────────────────────
+    # Strip fontawesome — in Tectonic it resets the full font context to Latin
+    # Modern, wiping Times Roman and all bold variants (confirmed by PDF font
+    # audit). Use marvosym instead: \Letter (envelope) and \Telefon (phone)
+    # are font-safe and preserve Times New Roman + bold.
+    fixed = re.sub(r'\\usepackage\{(lmodern|helvet|palatino|charter|bookman|courier|fontawesome|fontawesome5)\}', '', fixed)
+    if "\\usepackage{times}" not in fixed:
+        fixed = fixed.replace("\\usepackage[T1]{fontenc}", "\\usepackage[T1]{fontenc}\n\\usepackage{times}")
+    if "\\usepackage{marvosym}" not in fixed:
+        fixed = fixed.replace("\\usepackage{times}", "\\usepackage{marvosym}\n\\usepackage{times}")
+    # Replace fontawesome icon commands with marvosym equivalents
+    fixed = re.sub(r'\\faEnvelope\s*\{([^}]*)\}', r'\\Letter\ \1', fixed)
+    fixed = re.sub(r'\\faPhone\s*\{([^}]*)\}', r'\\Telefon\ \1', fixed)
+    fixed = re.sub(r'\\faLinkedinSquare\s*\{([^}]*)\}', r'\1', fixed)
+    fixed = re.sub(r'\\faGithub\s*\{([^}]*)\}', r'\1', fixed)
+    fixed = re.sub(r'\\faGlobe\s*\{([^}]*)\}', r'\1', fixed)
+    fixed = re.sub(r'\\fa[A-Za-z]+\s*\{([^}]*)\}', r'\1', fixed)  # catch-all
 
     # ── Inject \frenchspacing to ensure clean, consistent inter-sentence spacing
     if "\\frenchspacing" not in fixed:
@@ -282,28 +280,27 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
 
     contact_parts = []
     if email:
-        contact_parts.append(f"\\faEnvelope\\ {email}")
+        contact_parts.append(f"\\Letter\\ {email}")
     if phone:
-        contact_parts.append(f"\\faPhone\\ {phone}")
+        contact_parts.append(f"\\Telefon\\ {phone}")
     if linkedin:
         li_user = linkedin.split("/in/")[-1].rstrip("/") if "/in/" in linkedin else linkedin
-        contact_parts.append(f"\\href{{{linkedin}}}{{\\faLinkedinSquare\\ {li_user}}}")
+        contact_parts.append(f"\\href{{{linkedin}}}{{\\raisebox{{-0.1em}}{{\\scriptsize\\textbf{{in}}}}~{li_user}}}")
     if github:
         gh_user = github.split("github.com/")[-1].rstrip("/") if "github.com" in github else github
-        contact_parts.append(f"\\href{{{github}}}{{\\faGithub\\ {gh_user}}}")
+        contact_parts.append(f"\\href{{{github}}}{{gh/{gh_user}}}")
 
     address_line = " \\mybar ".join(contact_parts)
 
     latex = []
     latex.append("\\documentclass[12pt]{resume}")
-    # XeTeX + fontspec: load Times New Roman as the main font via fontspec.
-    # fontawesome also uses fontspec internally in XeTeX mode, so having fontspec
-    # loaded explicitly means fontawesome's OTF load is scoped correctly and does
-    # NOT override our setmainfont choice.
-    latex.append("\\usepackage{fontspec}")
-    latex.append("\\setmainfont{Times New Roman}")
+    latex.append("\\usepackage[T1]{fontenc}")
     latex.append("\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{geometry}")
-    latex.append("\\usepackage{fontawesome}")
+    # marvosym provides \Letter (envelope) and \Telefon (phone) icons without
+    # resetting the font context — fontawesome is NOT used because in Tectonic
+    # it wipes Times New Roman and all bold variants.
+    latex.append("\\usepackage{marvosym}")
+    latex.append("\\usepackage{times}")
     latex.append("\\usepackage{hyperref}")
     latex.append("\\newcommand\\mybar{\\kern1pt\\rule[-\\dp\\strutbox]{.8pt}{\\baselineskip}\\kern1pt}")
     latex.append("\\hypersetup{\n    colorlinks=false,\n    pdfborder={0 0 0}\n}")
