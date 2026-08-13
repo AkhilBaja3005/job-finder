@@ -702,9 +702,9 @@ def set_session_data(token: Optional[str], data: dict, path: str):
     if token:
         # Load master latex if available
         master_latex = ""
-        if path and os.path.exists(path):
+        if path and os.path.exists(path) and path.endswith(".tex"):
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
                     master_latex = f.read()
             except Exception as e:
                 print(f"Failed to read master latex: {e}")
@@ -2150,9 +2150,9 @@ async def open_in_overleaf(request: OverleafRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _build_original_latex(resume_data: dict) -> str:
+def _build_original_latex(resume_data: dict, master_path: Optional[str] = None) -> str:
     """Build canonical Master LaTeX resume using the exact resume.cls template and font formatting."""
-    return generate_latex_from_json(resume_data)
+    return apply_latex_hotfix(generate_latex_from_json(resume_data))
 
 
 class OriginalOverleafRequest(BaseModel):
@@ -2164,7 +2164,9 @@ class OriginalOverleafRequest(BaseModel):
 async def open_original_in_overleaf(request: OriginalOverleafRequest):
     """Export the user's original (non-tailored) resume to Overleaf as LaTeX."""
     try:
-        latex_code = _build_original_latex(request.resume_data)
+        session = get_session_data(None)
+        master_path = session.get("path") if session else None
+        latex_code = _build_original_latex(request.resume_data, master_path)
         candidate_name = request.resume_data.get("name", "")
         url = await asyncio.to_thread(upload_zip_to_tmpfiles, latex_code, candidate_name, request.job_title, request.company)
         return {"url": url}
@@ -2176,7 +2178,9 @@ async def open_original_in_overleaf(request: OriginalOverleafRequest):
 async def compile_master_pdf(request: OriginalOverleafRequest):
     """Compile the user's original master resume to PDF using Tectonic and return download URL."""
     try:
-        latex_code = _build_original_latex(request.resume_data)
+        session = get_session_data(None)
+        master_path = session.get("path") if session else None
+        latex_code = _build_original_latex(request.resume_data, master_path)
         candidate_name = request.resume_data.get("name", "Master")
         safe_name = _safe_key(candidate_name)
         user_out_dir = os.path.join(OUTPUT_DIR, safe_name)
@@ -2189,10 +2193,30 @@ async def compile_master_pdf(request: OriginalOverleafRequest):
         if os.path.exists(cls_src):
             shutil.copy2(cls_src, os.path.join(user_out_dir, "resume.cls"))
             
+        # Mechanical adjustments to strictly enforce 1-page fit
+        pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, latex_code, 1.0, 1.0, None)
+        opt_scale = 1.0
+        opt_ls = 1.0
+        if pages > 1:
+            for ls in [0.95, 0.91, 0.88, 0.82, 0.78]:
+                p, _ = await asyncio.to_thread(compile_and_check_page_metrics, latex_code, 1.0, ls, None)
+                if p == 1:
+                    opt_ls = ls
+                    pages = 1
+                    break
+        if pages > 1:
+            for scale in [0.85, 0.75, 0.65]:
+                p, _ = await asyncio.to_thread(compile_and_check_page_metrics, latex_code, scale, opt_ls, None)
+                if p == 1:
+                    opt_scale = scale
+                    break
+
+        final_latex = apply_latex_hotfix(latex_code, opt_scale, opt_ls, None)
+
         tex_path = os.path.join(user_out_dir, "master_resume.tex")
         pdf_path = os.path.join(user_out_dir, "master_resume.pdf")
         with open(tex_path, "w", encoding="utf-8") as f:
-            f.write(latex_code)
+            f.write(final_latex)
             
         comp_res = await asyncio.to_thread(
             subprocess.run,

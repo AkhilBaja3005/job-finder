@@ -226,19 +226,18 @@ RULE 5 — LATEX PREAMBLE, FONT & SECTION PATTERN (ZERO DEVIATION):
   • PREAMBLE LOCK: You MUST preserve the exact preamble, document class `\\documentclass[12pt]{{resume}}`, packages (`\\usepackage[T1]{{fontenc}}`, `\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{{geometry}}`, `\\usepackage{{fontawesome}}`, `\\usepackage{{times}}`, `\\usepackage{{hyperref}}`), and the custom macro `\\newcommand\\mybar{{\\kern1pt\\rule[-\\dp\\strutbox]{{.8pt}}{{\\baselineskip}}\\kern1pt}}`.
   • FONT: Use ONLY `times` font package as defined in master. Do NOT change, replace, or add other font packages (helvet, lmodern, etc.).
   • BULLET SYMBOLS & SPACING: Preamble MUST include `\\renewcommand{{\\labelitemi}}{{$\\\\bullet$}}` and `\\renewcommand{{\\labelitemii}}{{$\\\\bullet$}}`. Use `\\setlength{{\\itemsep}}{{-0.20em}}` and `\\setlength{{\\parsep}}{{0em}}` inside `itemize` blocks.
-  • DYNAMIC SKILLS CATEGORIZATION (ZERO OVERLAP): Group Technical Skills into 3-5 distinct, non-overlapping categories (e.g., Languages, AI/ML & GenAI, Data & Platforms, Software & Infrastructure) where every skill exists in EXACTLY ONE category.
+  • TECHNICAL SKILLS (MANDATORY & ZERO OVERLAP): You MUST include `\\begin{{rSection}}{{Technical Skills}}`. Group Technical Skills into 3-5 distinct, non-overlapping categories (e.g., Languages, AI/ML & GenAI, Data & Platforms, Software & Infrastructure) where every skill exists in EXACTLY ONE category. Omitting the Technical Skills section is an INSTANT FAILURE.
   • ABSOLUTE CRITICAL SECTION SEQUENCE: You MUST render sections in this exact order:
     1. Professional Summary (`\\begin{{rSection}}{{Professional Summary}}`)
     2. Work Experience (`\\begin{{rSection}}{{Work Experience}}`)
     3. Technical Skills (`\\begin{{rSection}}{{Technical Skills}}`)
     4. Education (`\\begin{{rSection}}{{Education}}`)
     5. Projects (`\\begin{{rSection}}{{Projects}}`)
-    6. Achievements & Leadership (if present)
-  • NEVER alter this section sequence or document structure under any circumstances.
+  • NEVER omit Technical Skills or alter this section sequence under any circumstances.
 
 RULE 6 — ATS KEYWORD INTEGRATION & INLINE AWARDS:
   • Inject relevant missing keywords into Technical Skills and bullets naturally.
-  • Keep awards inline with accomplishments (e.g., \\textbf{{Qualcomm Certificate of Recognition}} and \\textbf{{BIU Star Award}}) — NEVER create a separate Awards section.
+  • INLINE AWARDS (NO SEPARATE ACHIEVEMENTS SECTION): Keep awards inline inside Work Experience bullets (e.g., `— \\textbf{{Qualcomm Certificate of Recognition}}` and `— \\textbf{{BIU Star Award}}`). NEVER create a separate `Achievements & Leadership` section!
   • Bold key metrics AND important tool names using \\textbf{{}} — e.g. \\textbf{{50\\%}}, \\textbf{{PySpark}}, \\textbf{{3x}}. Apply \\textbf to at least 2 items per bullet section.
   • ABSOLUTE CRITICAL: NEVER use markdown asterisks for bold (**word** or __word__). You MUST use ONLY LaTeX \\textbf{{word}}. If you write ** anywhere in the output it will BREAK the PDF compilation.
   • Translate JD phrases into natural accomplishments — NEVER copy-paste verbatim.

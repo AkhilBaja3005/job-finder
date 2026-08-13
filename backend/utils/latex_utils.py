@@ -22,17 +22,17 @@ def extract_latex_command(latex_code: str, cmd_name: str) -> Optional[str]:
     if idx == -1:
         return None
     brace_count = 0
-    start_idx = -1
+    found_first_brace = False
     for i in range(idx + len(cmd_name), len(latex_code)):
         char = latex_code[i]
         if char == '{':
-            if brace_count == 0:
-                start_idx = i
+            found_first_brace = True
             brace_count += 1
         elif char == '}':
-            brace_count -= 1
-            if brace_count == 0:
-                return latex_code[idx: i + 1]
+            if found_first_brace:
+                brace_count -= 1
+                if brace_count == 0:
+                    return latex_code[idx: i + 1]
     return None
 
 
@@ -74,12 +74,12 @@ def apply_latex_hotfix(
             else:
                 fixed = fixed.replace("\\begin{document}", name_block + "\n\\begin{document}", 1)
 
-        if address_block:
-            gen_addr = extract_latex_command(fixed, "\\address")
-            if gen_addr:
-                fixed = fixed.replace(gen_addr, address_block, 1)
-            else:
-                fixed = fixed.replace("\\begin{document}", address_block + "\n\\begin{document}", 1)
+    # ── Ensure \address{...} is converted to \printaddress{...} inside \begin{document} to prevent Tectonic compilation errors ──
+    addr_block = extract_latex_command(fixed, "\\address")
+    if addr_block:
+        print_addr_str = addr_block.replace("\\address{", "\\printaddress{")
+        fixed = fixed.replace(addr_block, "")
+        fixed = fixed.replace("\\begin{document}", "\\begin{document}\n" + print_addr_str, 1)
 
     # ── Strip any existing spacing def overrides (we re-inject below) ────────
     for pattern in [
@@ -101,42 +101,10 @@ def apply_latex_hotfix(
         fixed,
     )
 
-    # ── Inject spacing overrides after \\documentclass ───────────────────────
-    ns  = f"{0.10 * spacing_scale:.3f}em"
-    as_ = f"{0.06 * spacing_scale:.3f}em"
-    ss  = f"{0.20 * spacing_scale:.3f}em"
-    sls = f"{0.08 * spacing_scale:.3f}em"
-    spacing_overrides = (
-        f"\n\\def\\nameskip{{\\vspace{{{ns}}}}}\n"
-        f"\\def\\addressskip{{\\vspace{{{as_}}}}}\n"
-        f"\\def\\sectionskip{{\\vspace{{{ss}}}}}\n"
-        f"\\def\\sectionlineskip{{\\vspace{{{sls}}}}}\n"
-        "\\renewcommand{\\smallskip}{\\vspace{1.5pt}}\n"
-    )
-    if linespread != 1.0:
-        spacing_overrides += f"\\linespread{{{linespread:.2f}}}\n"
-
-    for dc in ["\\documentclass{resume}", "\\documentclass[11pt]{resume}"]:
-        if dc in fixed:
-            fixed = fixed.replace(dc, dc + spacing_overrides, 1)
-            break
-    else:
-        fixed = fixed.replace("\\begin{document}", spacing_overrides + "\\begin{document}", 1)
-
-    # ── Remove empty itemize blocks that cause LaTeX 'missing \item' errors ──
-    fixed = re.sub(r'\\begin\{itemize\}(\\setlength\{[^}]*\})*\s*\\end\{itemize\}', '', fixed)
-
-    # ── Compress itemize / list environment padding & force second-level bullets to dots (not dashes) ──
-    fixed = fixed.replace("\\begin{itemize}", "\\begin{itemize}\\setlength{\\itemsep}{-1.5pt}\\setlength{\\parsep}{0pt}\\setlength{\\topsep}{0pt}")
-
-    # Ensure itemize bullets render as solid dots (\textbullet) across all levels
-    if "\\renewcommand{\\labelitemi}" not in fixed:
-        fixed = fixed.replace("\\begin{document}", "\\renewcommand{\\labelitemi}{\\textbullet}\n\\renewcommand{\\labelitemii}{\\textbullet}\n\\begin{document}", 1)
-    elif "\\renewcommand{\\labelitemii}" not in fixed:
-        fixed = fixed.replace("\\begin{document}", "\\renewcommand{\\labelitemii}{\\textbullet}\n\\begin{document}", 1)
-
-    # ── Replace outdated times package with modern lmodern (ensures full bold weight rendering)
-    fixed = fixed.replace("\\usepackage{times}", "\\usepackage{lmodern}")
+    # ── Ensure font matches master \usepackage{times} ──────────────────────
+    fixed = re.sub(r'\\usepackage\{(lmodern|helvet|palatino|charter|bookman|courier)\}', '', fixed)
+    if "\\usepackage{times}" not in fixed:
+        fixed = fixed.replace("\\usepackage[T1]{fontenc}", "\\usepackage[T1]{fontenc}\n\\usepackage{times}")
 
     # ── Inject \frenchspacing to ensure clean, consistent inter-sentence spacing
     if "\\frenchspacing" not in fixed:
@@ -160,24 +128,38 @@ def apply_latex_hotfix(
         fixed,
     )
 
-    # ── Force p{0.97\textwidth} tabular for skills (prevents overflow) ───────
-    fixed = re.sub(
-        r'\\begin\{tabular\}\{\s*@\{\}\s*>\s*\{\}\s*l\s*@\{\s*\\hspace\{\s*\d+ex\s*\}\s*\}\s*l\s*\}',
-        r'\\begin{tabular}{ @{} p{0.97\\textwidth} }',
-        fixed,
-    )
+    # ── Categorize uncategorized Technical Skills section using LLM ─────────────
+    def _categorize_skills_sec(match):
+        content = match.group(1).strip()
+        # If it has multiple bolded category headers (e.g. \textbf{Languages:}), keep it
+        if r"\textbf{Languages:" in content or r"\textbf{AI/ML" in content or r"\textbf{Data &" in content or r"\textbf{Software &" in content:
+            return match.group(0)  # Already cleanly categorized
+        
+        # Strip any single \textbf{Technical Skills:} prefix
+        clean_content = re.sub(r'\\textbf\{Technical\s+Skills:\}\s*', '', content)
+        clean_content = re.sub(r'\\vspace\{[^{}]*\}', '', clean_content).strip()
+        
+        from services.resume_parser import categorize_skills_with_llm
+        cats = categorize_skills_with_llm(clean_content)
+        
+        lines = []
+        for cat, s_list in cats.items():
+            if s_list:
+                s_str = ", ".join(s_list) if isinstance(s_list, list) else str(s_list)
+                cat_name = cat.replace("&", "\\&").replace("%", "\\%")
+                lines.append(f"\\textbf{{{cat_name}:}} {s_str} \\\\")
+        if lines:
+            if lines[-1].endswith(" \\\\"):
+                lines[-1] = lines[-1][:-3]
+            return f"\\begin{{rSection}}{{Technical Skills}}\n\\vspace{{-0.1em}}\n" + "\n".join(lines) + f"\n\\end{{rSection}}"
+        return match.group(0)
 
-    # ── Fix hyperref to hide link borders ────────────────────────────────────
-    HYPERREF_PATCH = (
-        "\\usepackage[hidelinks]{hyperref}\n"
-        "\\makeatletter\n"
-        "\\providecommand{\\Hy@colorlink}[1]{}\n"
-        "\\providecommand{\\Hy@endcolorlink}{}\n"
-        "\\providecommand{\\@urlcolor}{black}\n"
-        "\\makeatother"
-    )
-    if "\\usepackage{hyperref}" in fixed and "[hidelinks]" not in fixed:
-        fixed = fixed.replace("\\usepackage{hyperref}", HYPERREF_PATCH, 1)
+    fixed = re.sub(r'\\begin\{rSection\}\{Technical\s+Skills\}(.*?)\\end\{rSection\}', _categorize_skills_sec, fixed, flags=re.DOTALL)
+
+    # ── Remove separate Achievements & Leadership section if LLM created one ─────
+    ach_sec_pattern = r'\\begin\{rSection\}\{Achievements\s*\\?&\s*Leadership\}\s*\\begin\{itemize\}.*?\\end\{itemize\}\s*\\end\{rSection\}'
+    fixed = re.sub(ach_sec_pattern, '', fixed, flags=re.DOTALL)
+
     # ── Replace bare tildes (~40% → \textasciitilde40%) ───────────────────────
     fixed = re.sub(r'~\s*(?=\d|\\textbf|\{\\bf)', r'\\textasciitilde ', fixed)
 
@@ -284,16 +266,17 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
         name_block    = extract_latex_command(master_latex, "\\name")
         address_block = extract_latex_command(master_latex, "\\address")
         latex.append(name_block if name_block else f"\\name{{{name}}}")
-        if address_block:
-            latex.append(address_block)
-        elif address_line:
-            latex.append(f"\\address{{{address_line}}}")
     else:
         latex.append(f"\\name{{{name}}}")
-        if address_line:
-            latex.append(f"\\address{{{address_line}}}")
 
     latex.append("\\begin{document}")
+
+    if master_latex and address_block:
+        # Convert \address{...} to \printaddress{...} so it renders cleanly inside \begin{document}
+        clean_addr = address_block.replace("\\address{", "\\printaddress{")
+        latex.append(clean_addr)
+    elif address_line:
+        latex.append(f"\\printaddress{{{address_line}}}")
 
     skills = data.get("skills", [])
     skills_list = skills if isinstance(skills, list) else []
@@ -318,7 +301,10 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
             end     = exp.get("end_date", "")
             dates   = f"{start} -- {end}" if start and end else (start or end or exp.get("dates", ""))
             bullets = exp.get("description", [])
+            techs   = exp.get("technologies", "")
             latex.append(f"{{\\bf {company} \\mybar \\textnormal{{{role}}}}} \\hfill {{\\em {dates}}}")
+            if techs:
+                latex.append(f"\\\\ {{\\em Technologies: {techs}}}")
             if bullets:
                 latex.append("\\vspace{-0.35em}")
                 latex.append("\\begin{itemize}")
@@ -331,6 +317,17 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
         latex.append("\\end{rSection}")
 
     # Technical Skills
+    if not skills or (isinstance(skills, dict) and len(skills) == 0):
+        # Fallback: Collect technologies listed under Work Experience if skills dictionary is empty
+        fallback_skills = []
+        for exp in data.get("experience", []):
+            techs = exp.get("technologies") or ""
+            if techs:
+                fallback_skills.extend([t.strip() for t in techs.split(",") if t.strip()])
+        if fallback_skills:
+            from services.resume_parser import categorize_skills_with_llm
+            skills = categorize_skills_with_llm(list(set(fallback_skills)))
+
     if skills:
         latex.append("\\vspace{-0.3em}")
         latex.append("\\begin{rSection}{Technical Skills}")

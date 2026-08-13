@@ -1816,13 +1816,13 @@ function App() {
                 background: resumeData ? 'rgba(16,185,129,0.04)' : 'var(--panel-bg)',
                 transition: 'all 0.25s ease'
               }}>
-                <input type="file" accept=".pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
+                <input type="file" accept=".tex,.pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
                 {resumeData ? (
                   <>
                     <div style={{ fontSize: '1.5rem' }}>✅</div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 700, color: 'var(--accent-green)', fontSize: '0.92rem' }}>{resumeData.name}</div>
-                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>Click to replace master resume</div>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>Click to replace master resume (.TEX, .PDF, .DOCX)</div>
                     </div>
                   </>
                 ) : (
@@ -1830,7 +1830,7 @@ function App() {
                     <div style={{ fontSize: '1.5rem' }}>📄</div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Drop your resume here or click to browse</div>
-                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>PDF or DOCX — this becomes your master profile</div>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>LaTeX (.tex), PDF, or DOCX — becomes your master profile</div>
                     </div>
                   </>
                 )}
@@ -1870,36 +1870,6 @@ function App() {
                     }}
                   >
                     🍃 Open Master in Overleaf
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    disabled={loading}
-                    style={{ padding: '8px 12px', fontSize: '0.78rem' }}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      setLoading(true);
-                      setStatusMessage('Compiling Master Resume PDF…');
-                      try {
-                        const res = await fetch(`${API_BASE}/compile_master_pdf`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ resume_data: resumeData }),
-                        });
-                        if (!res.ok) throw new Error('PDF compilation failed');
-                        const data = await res.json();
-                        if (data.pdf_url) {
-                          const fullUrl = data.pdf_url.startsWith('http') ? data.pdf_url : `${API_BASE}${data.pdf_url}`;
-                          window.open(fullUrl, '_blank');
-                          setStatusMessage('✅ Master PDF compiled and opened!');
-                        }
-                      } catch (err) {
-                        setStatusMessage(`Failed to view PDF: ${err.message}`);
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                  >
-                    📄 View PDF
                   </button>
                 </div>
               )}

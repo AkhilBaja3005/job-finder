@@ -15,6 +15,7 @@ class WorkExperience(BaseModel):
     role: str
     start_date: str
     end_date: str
+    technologies: Optional[str] = Field(default="", description="Technologies list under role e.g. 'Python, C++, Jedi, Jenkins...'")
     description: List[str]
 
 class Education(BaseModel):
@@ -57,6 +58,129 @@ def extract_text_from_docx(file_path: str) -> str:
         text.append(para.text)
     return "\n".join(text)
 
+class SkillsCategorizationResponse(BaseModel):
+    categorized_skills: Dict[str, List[str]] = Field(description="Dictionary of category names to list of skill strings")
+
+def categorize_skills_with_llm(raw_skills: Union[str, List[str]]) -> Dict[str, List[str]]:
+    """Use dedicated LLM call to dynamically categorize raw skill strings/lists into 3-5 categories."""
+    if isinstance(raw_skills, list):
+        skills_str = ", ".join([str(s) for s in raw_skills])
+    else:
+        skills_str = str(raw_skills)
+        
+    prompt = f"""
+    You are an expert technical recruiter and resume classifier.
+    Extract all individual technical skill items, tools, languages, frameworks, and libraries from the text below, and group them into 3 to 5 distinct, non-overlapping functional categories tailored to the candidate's domain (e.g. "Languages", "AI/ML & GenAI", "Data & Platforms", "Software & Infrastructure", "Cloud & DevOps", etc.).
+    
+    CRITICAL RULES:
+    1. Extract ONLY concise skill names (e.g. "Python", "SQL", "Docker", "RAG", "PySpark"). Do NOT output full sentences or paragraph text.
+    2. Every skill in the input MUST be placed into EXACTLY ONE category.
+    3. Do NOT duplicate any skill across multiple categories.
+    4. Keep category names concise and professional.
+    
+    Input Skill Text:
+    {skills_str}
+    """
+    try:
+        response_text = generate_content_with_fallback(prompt, SkillsCategorizationResponse)
+        parsed = json.loads(response_text)
+        cats = parsed.get("categorized_skills", {})
+        if isinstance(cats, dict) and len(cats) > 0:
+            clean_cats = {}
+            for k, v in cats.items():
+                if isinstance(v, list):
+                    valid_items = []
+                    for item in v:
+                        s_str = str(item).replace("\n", " ").strip()
+                        if s_str and len(s_str) < 50 and not s_str.lower().startswith("education") and not s_str.lower().startswith("work experience"):
+                            valid_items.append(s_str)
+                    if valid_items:
+                        clean_cats[k] = valid_items
+            if clean_cats:
+                return clean_cats
+    except Exception as e:
+        print(f"[categorize_skills_with_llm] LLM call error: {e}")
+        
+    # Rule-based categorization fallback if LLM call fails or returns flat object
+    flat_skills = [s.strip() for s in skills_str.split(",") if s.strip() and len(s.strip()) < 50]
+    cats = {
+        "Languages": [],
+        "AI/ML & GenAI": [],
+        "Data & Analytics": [],
+        "Frontend & Web": [],
+        "DevOps, SRE & Cloud": [],
+        "Testing & QA": [],
+        "Finance & Quant": [],
+        "Software & Systems": []
+    }
+    
+    lang_keywords = ["python", "sql", "c++", "java", "c#", "c", "r", "golang", "go", "typescript", "javascript", "rust", "bash", "shell", "scala", "kotlin", "swift", "php", "ruby", "perl", "matlab"]
+    
+    aiml_keywords = [
+        "ai", "ml", "genai", "llm", "rag", "machine learning", "deep learning", "anomaly", "xgboost", 
+        "naive bayes", "vision", "u-net", "densenet", "computer vision", "nlp", "transformers", "pytorch", 
+        "tensorflow", "keras", "scikit-learn", "sklearn", "opencv", "langchain", "llama", "azure openai", 
+        "huggingface", "context engineering", "fine-tuning", "prompt engineering", "reinforcement learning", 
+        "bert", "diffusion", "neural network", "forecast", "forecasting", "predictive modeling"
+    ]
+    
+    data_analytics_keywords = [
+        "pyspark", "azure", "cloudera", "postgresql", "postgres", "sas", "database", "spark", "hive", 
+        "snowflake", "bigquery", "redshift", "mongo", "mongodb", "redis", "mysql", "oracle", "elasticsearch", 
+        "kafka", "airflow", "databricks", "hadoop", "etl", "elt", "data warehouse", "dbt", "looker", "tableau", 
+        "power bi", "powerbi", "excel", "google analytics", "mixpanel", "data modeling", "business intelligence", 
+        "kpi", "a/b testing", "data pipeline", "pandas", "numpy", "statistics"
+    ]
+
+    frontend_keywords = [
+        "react", "react.js", "next.js", "nextjs", "vue", "vue.js", "angular", "svelte", "html", "html5", 
+        "css", "css3", "tailwind", "bootstrap", "webpack", "vite", "redux", "zustand", "webassembly", 
+        "responsive design", "ux", "ui", "storybook"
+    ]
+
+    devops_sre_keywords = [
+        "docker", "kubernetes", "k8s", "helm", "terraform", "ansible", "puppet", "chef", "aws", "gcp", 
+        "cloud", "azure", "ci/cd", "jenkins", "github actions", "gitlab ci", "rancher", "prometheus", 
+        "grafana", "datadog", "splunk", "istio", "argocd", "linux", "unix", "sre", "infrastructure as code"
+    ]
+
+    testing_keywords = [
+        "pytest", "unittest", "junit", "selenium", "cypress", "playwright", "jest", "mocha", "chai", 
+        "test automation", "qa", "integration testing", "end-to-end testing", "tdd", "bdd", "loadrunner", "jmeter"
+    ]
+
+    quant_finance_keywords = [
+        "stochastic", "black-scholes", "monte carlo", "risk modeling", "var", "value at risk", "time series", 
+        "algorithmic trading", "derivatives", "options", "fixed income", "portfolio optimization", "quantitative analysis", 
+        "quant", "bloomberg", "reuters", "financial modeling", "econometrics"
+    ]
+
+    for s in flat_skills:
+        s_clean = s.strip()
+        if not s_clean:
+            continue
+        s_lower = s_clean.lower()
+        
+        if any(k == s_lower or (len(k) > 2 and k in s_lower and not any(ai_k in s_lower for ai_k in ["ai", "ml", "learning"])) for k in lang_keywords):
+            cats["Languages"].append(s_clean)
+        elif any(k in s_lower for k in aiml_keywords):
+            cats["AI/ML & GenAI"].append(s_clean)
+        elif any(k in s_lower for k in frontend_keywords):
+            cats["Frontend & Web"].append(s_clean)
+        elif any(k in s_lower for k in devops_sre_keywords):
+            cats["DevOps, SRE & Cloud"].append(s_clean)
+        elif any(k in s_lower for k in testing_keywords):
+            cats["Testing & QA"].append(s_clean)
+        elif any(k in s_lower for k in quant_finance_keywords):
+            cats["Finance & Quant"].append(s_clean)
+        elif any(k in s_lower for k in data_analytics_keywords):
+            cats["Data & Analytics"].append(s_clean)
+        else:
+            cats["Software & Systems"].append(s_clean)
+    
+    res_cats = {k: v for k, v in cats.items() if v}
+    return res_cats if res_cats else {"Technical Skills": flat_skills}
+
 def parse_resume(file_path: str) -> StructuredResume:
     ext = os.path.splitext(file_path)[1].lower()
     if ext == '.pdf':
@@ -78,7 +202,11 @@ def parse_resume(file_path: str) -> StructuredResume:
     CRITICAL RULES:
     1. Clean up any spacing or kerning anomalies in the candidate's name (e.g. "P A L L A V I" → "PALLAVI").
     2. Extract ALL URLs from the resume into the `links` array. This MUST include LinkedIn URLs (e.g. https://linkedin.com/in/username), GitHub URLs, portfolios, etc. Do NOT leave `links` empty if URLs are present.
-    3. TECHNICAL SKILLS CATEGORIZATION (CRITICAL): Group technical skills into 3-5 distinct, non-overlapping category key-value pairs inside `skills` (e.g. {{"Languages": ["Python", "SQL", "C++", "Java"], "AI/ML & GenAI": ["Generative AI", "LLMs", "RAG", "Machine Learning"], "Data & Platforms": ["PySpark", "Azure OpenAI", "PostgreSQL"], "Software & Infrastructure": ["Docker", "Jenkins", "Git"]}}). Ensure ZERO duplicate skills across categories!
+    3. TECHNICAL SKILLS CATEGORIZATION (ABSOLUTE MANDATORY):
+       - Look for ANY skill sections or inline category blocks (e.g. "TECHNICAL SKILLS", "Languages: ...", "AI/ML & GenAI: ...", "Data & Platforms: ...", "Software & Infrastructure: ...").
+       - Even if text is unformatted or lacking section linebreaks (e.g. "TECHNICAL SKILLSLanguages: Python, SQL..."), extract EVERY single skill and group them into 3-5 distinct, non-overlapping category key-value pairs inside `skills`.
+       - Example: {{"Languages": ["Python", "SQL", "C++", "Java"], "AI/ML & GenAI": ["Generative AI", "LLMs", "RAG", "Machine Learning", "Deep Learning", "Anomaly Detection", "XGBoost", "Naive Bayes", "Computer Vision (U-Net, DenseNet)"], "Data & Platforms": ["PySpark", "Azure OpenAI", "Cloudera ML", "PostgreSQL", "SAS EG"], "Software & Infrastructure": ["Docker", "Rancher", "RabbitMQ", "Jenkins", "Git", "AST Parsing", "Static Analysis", "Distributed Systems", "Microservices", "CI/CD", "Unit Testing"]}}.
+       - Do NOT return an empty object for `skills` if technical skills or technologies are present anywhere in the text!
     4. For each Education entry, extract:
        - Full start date AND graduation date (e.g. "Sept 2026 – Sept 2027", "Aug 2019 – May 2023"). Do NOT drop the start/end dates.
        - City/Country location if listed (e.g. "London, UK").
@@ -86,6 +214,7 @@ def parse_resume(file_path: str) -> StructuredResume:
        - Leadership/extracurricular/coordinator bullets into `highlights` (e.g. "Internship and Placement Cell Coordinator — Managed corporate outreach...").
     5. Extract the phone number exactly as it appears.
     6. WORK EXPERIENCE BULLETS & SUB-PROJECTS: If a work experience entry contains sub-project headers (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), do NOT duplicate the sub-project title prefix on every child bullet point! Keep the sub-project header distinct or keep individual accomplishment bullets clean.
+    7. WORK EXPERIENCE TECHNOLOGIES: If a work experience entry lists technologies under the role (e.g. "Technologies: Python, C++, Jedi, Jenkins..."), extract them into the `technologies` string field.
 
     Raw Resume Text:
     ---
@@ -118,27 +247,32 @@ def parse_resume(file_path: str) -> StructuredResume:
     if not parsed_data.get("achievements"):
         parsed_data["achievements"] = []
 
-    # Auto-categorize flat skills list if returned as list instead of dict
-    if isinstance(parsed_data.get("skills"), list):
-        flat_skills = parsed_data["skills"]
-        cats = {
-            "Languages": [],
-            "AI/ML & GenAI": [],
-            "Data & Platforms": [],
-            "Software & Infrastructure": []
-        }
-        for s in flat_skills:
-            s_clean = s.strip()
-            if s_clean in ["Python", "SQL", "C++", "Java", "C", "R", "Go", "TypeScript", "JavaScript", "Rust"]:
-                cats["Languages"].append(s_clean)
-            elif any(k in s_clean for k in ["AI", "ML", "GenAI", "LLM", "RAG", "Machine Learning", "Deep Learning", "Anomaly", "XGBoost", "Naive Bayes", "Vision", "U-Net", "DenseNet"]):
-                cats["AI/ML & GenAI"].append(s_clean)
-            elif any(k in s_clean for k in ["PySpark", "Azure", "Cloudera", "PostgreSQL", "SAS", "SQL", "Database", "Spark", "Hive"]):
-                cats["Data & Platforms"].append(s_clean)
+    # Auto-categorize skills using dedicated LLM call
+    raw_skills = parsed_data.get("skills")
+    if not isinstance(raw_skills, dict) or len(raw_skills) == 0 or sum(len(v) for v in raw_skills.values() if isinstance(v, list)) == 0:
+        if raw_skills and not isinstance(raw_skills, dict):
+            parsed_data["skills"] = categorize_skills_with_llm(raw_skills)
+        else:
+            # Comprehensive Fallback: Collect all technical terms, technologies, and framework mentions from work experience and projects
+            collected = []
+            for exp in parsed_data.get("experience", []):
+                if exp.get("technologies"):
+                    collected.extend([t.strip() for t in exp["technologies"].split(",") if t.strip()])
+                for b in exp.get("description", []):
+                    # Pick key terms mentioned in experience bullets
+                    for kw in ["Python", "SQL", "C++", "Java", "C", "R", "Generative AI", "LLMs", "RAG", "Machine Learning", "Deep Learning", "Anomaly Detection", "XGBoost", "Naive Bayes", "PySpark", "Azure OpenAI", "Cloudera ML", "PostgreSQL", "SAS EG", "Docker", "Rancher", "RabbitMQ", "Jenkins", "Git", "AST Parsing", "Static Analysis", "Distributed Systems", "Microservices"]:
+                        if kw.lower() in str(b).lower() and kw not in collected:
+                            collected.append(kw)
+            for proj in parsed_data.get("projects", []):
+                if proj.get("title"):
+                    for kw in ["Deep Learning", "Computer Vision", "PostgreSQL", "U-Net", "DenseNet", "Data Infrastructure"]:
+                        if kw.lower() in str(proj["title"]).lower() and kw not in collected:
+                            collected.append(kw)
+            
+            if collected:
+                parsed_data["skills"] = categorize_skills_with_llm(list(set(collected)))
             else:
-                cats["Software & Infrastructure"].append(s_clean)
-        # Prune empty categories
-        parsed_data["skills"] = {k: v for k, v in cats.items() if v}
+                parsed_data["skills"] = {}
 
     # Post-process experience and project descriptions to ensure clean string representations
     for item in parsed_data.get("experience", []):
