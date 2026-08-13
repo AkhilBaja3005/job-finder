@@ -158,7 +158,9 @@ def apply_latex_hotfix(
         lines = []
         for cat, s_list in cats.items():
             if s_list:
+                # Skills values must NOT be bolded — only the category label is bold
                 s_str = ", ".join(s_list) if isinstance(s_list, list) else str(s_list)
+                s_str = re.sub(r'\\textbf\{([^{}]*)\}', r'\1', s_str)  # strip any \textbf{} from skill values
                 cat_name = cat.replace("&", "\\&").replace("%", "\\%")
                 lines.append(f"\\textbf{{{cat_name}:}} {s_str} \\\\")
         if lines:
@@ -168,6 +170,29 @@ def apply_latex_hotfix(
         return match.group(0)
 
     fixed = re.sub(r'\\begin\{rSection\}\{Technical\s+Skills\}(.*?)\\end\{rSection\}', _categorize_skills_sec, fixed, flags=re.DOTALL)
+
+    # ── Strip \textbf{} from skill values in Technical Skills (LLM sometimes bolds individual skills) ──
+    def _strip_bold_from_skills(match):
+        section_body = match.group(1)
+        # For each line of the form \textbf{Category:} skill1, \textbf{skill2}, ...
+        # preserve the leading \textbf{Category:} label but strip \textbf{} from the rest
+        def _strip_skill_bold(line_match):
+            label = line_match.group(1)   # e.g. "Languages:"
+            rest  = line_match.group(2)   # e.g. "Python, \textbf{XGBoost}, RAG \\"
+            rest_clean = re.sub(r'\\textbf\{([^{}]*)\}', r'\1', rest)
+            return f'\\textbf{{{label}}} {rest_clean}'
+        section_body = re.sub(
+            r'\\textbf\{([^{}]+)\}\s+(.*)',
+            _strip_skill_bold,
+            section_body
+        )
+        return f'\\begin{{rSection}}{{Technical Skills}}{section_body}\\end{{rSection}}'
+    fixed = re.sub(
+        r'\\begin\{rSection\}\{Technical\s+Skills\}(.*?)\\end\{rSection\}',
+        _strip_bold_from_skills,
+        fixed,
+        flags=re.DOTALL
+    )
 
     # ── Remove separate Achievements & Leadership section if LLM created one ─────
     ach_sec_pattern = r'\\begin\{rSection\}\{Achievements\s*\\?&\s*Leadership\}\s*\\begin\{itemize\}.*?\\end\{itemize\}\s*\\end\{rSection\}'
@@ -376,6 +401,8 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
             for cat, s_list in skills.items():
                 cat_name = cat.replace("&", "\\&").replace("%", "\\%")
                 s_str = ", ".join(s_list) if isinstance(s_list, list) else str(s_list)
+                # Skills values must NOT be bolded — strip any \textbf{} that came from the data
+                s_str = re.sub(r'\\textbf\{([^{}]*)\}', r'\1', s_str)
                 latex.append(f"\\textbf{{{cat_name}:}} {s_str} \\\\")
             if latex[-1].endswith(" \\\\"):
                 latex[-1] = latex[-1][:-3]
