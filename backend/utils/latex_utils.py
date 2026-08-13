@@ -178,6 +178,9 @@ def apply_latex_hotfix(
     )
     if "\\usepackage{hyperref}" in fixed and "[hidelinks]" not in fixed:
         fixed = fixed.replace("\\usepackage{hyperref}", HYPERREF_PATCH, 1)
+    # ── Replace bare tildes (~40% → \textasciitilde40%) ───────────────────────
+    fixed = re.sub(r'~\s*(?=\d|\\textbf|\{\\bf)', r'\\textasciitilde ', fixed)
+
     # ── Auto-bold Inline Awards, Honors & Certificates generically if LLM missed \textbf{} ──
     award_patterns = [
         r'(?<!\\textbf\{)([A-Z][A-Za-z0-9\s]{2,40}\s+Award\b)(?!\})',
@@ -357,23 +360,33 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
         latex.append("\\end{rSection}")
 
     # Projects (Formatted as direct single-line items with \\ like user master resume)
+    # Projects (Formatted as itemized section with colon separators, bolding & \textasciitilde)
     proj_list = data.get("projects", [])
     if proj_list:
         latex.append("\\begin{rSection}{Projects}")
-        for i, proj in enumerate(proj_list):
+        latex.append("\\vspace{-0.2em}")
+        latex.append("\\begin{itemize}")
+        latex.append("    \\setlength{\\itemsep}{-0.25em}")
+        latex.append("    \\setlength{\\parsep}{0em}")
+        for proj in proj_list:
             title   = proj.get("title", "")
             bullets = proj.get("description", [])
-            latex.append(f"{{\\bf {title}}}")
+            body_text = ""
             if bullets:
-                for j, b in enumerate(bullets):
-                    formatted_b = _format_bullet_bolding(b, skills_list)
-                    # Render as hyphenated one-liner text lines ending with \\
-                    prefix = "- " if not formatted_b.strip().startswith("-") else ""
-                    latex.append(f"{prefix}{formatted_b} \\\\")
-            if i < len(proj_list) - 1 and latex[-1].endswith(" \\\\"):
-                pass
-        if latex[-1].endswith(" \\\\"):
-            latex[-1] = latex[-1][:-3]
+                if isinstance(bullets, list):
+                    body_text = " ".join([b.strip() for b in bullets])
+                else:
+                    body_text = str(bullets).strip()
+            
+            # Replace raw tildes before metrics (~40% -> \textasciitilde40%)
+            body_text = re.sub(r'~\s*(?=\d|\\textbf)', r'\\textasciitilde ', body_text)
+            formatted_body = _format_bullet_bolding(body_text, skills_list)
+            
+            if body_text:
+                latex.append(f"    \\item \\textbf{{{title}:}} {formatted_body}")
+            else:
+                latex.append(f"    \\item \\textbf{{{title}}}")
+        latex.append("\\end{itemize}")
         latex.append("\\end{rSection}")
 
     # Achievements & Leadership (Rendered as clean single section or inline highlights)
