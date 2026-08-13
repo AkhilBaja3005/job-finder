@@ -102,19 +102,22 @@ def apply_latex_hotfix(
     )
 
     # ── Ensure font matches master \usepackage{times} ──────────────────────
-    # Also strip fontawesome — in Tectonic it resets the full font context to
-    # Latin Modern, wiping Times Roman and all bold variants (confirmed by
-    # PDF font audit: NimbusRomNo9L-Medi vanishes, LMRoman17-Regular appears).
+    # Strip fontawesome — in Tectonic it resets the full font context to Latin
+    # Modern, wiping Times Roman and all bold variants (confirmed by PDF font
+    # audit). Use marvosym instead: \Letter (envelope) and \Telefon (phone)
+    # are font-safe and preserve Times New Roman + bold.
     fixed = re.sub(r'\\usepackage\{(lmodern|helvet|palatino|charter|bookman|courier|fontawesome|fontawesome5)\}', '', fixed)
     if "\\usepackage{times}" not in fixed:
         fixed = fixed.replace("\\usepackage[T1]{fontenc}", "\\usepackage[T1]{fontenc}\n\\usepackage{times}")
-    # Replace fontawesome icon commands that remain after stripping the package
-    fixed = re.sub(r'\\faEnvelope\{([^}]*)\}', r'\1', fixed)
-    fixed = re.sub(r'\\faPhone\{([^}]*)\}', r'\1', fixed)
-    fixed = re.sub(r'\\faLinkedinSquare\{([^}]*)\}', r'\1', fixed)
-    fixed = re.sub(r'\\faGithub\{([^}]*)\}', r'\1', fixed)
-    fixed = re.sub(r'\\faGlobe\{([^}]*)\}', r'\1', fixed)
-    fixed = re.sub(r'\\fa[A-Za-z]+\{([^}]*)\}', r'\1', fixed)  # catch-all for any remaining \faXxx{} icons
+    if "\\usepackage{marvosym}" not in fixed:
+        fixed = fixed.replace("\\usepackage{times}", "\\usepackage{marvosym}\n\\usepackage{times}")
+    # Replace fontawesome icon commands with marvosym equivalents
+    fixed = re.sub(r'\\faEnvelope\s*\{([^}]*)\}', r'\\Letter\ \1', fixed)
+    fixed = re.sub(r'\\faPhone\s*\{([^}]*)\}', r'\\Telefon\ \1', fixed)
+    fixed = re.sub(r'\\faLinkedinSquare\s*\{([^}]*)\}', r'\1', fixed)
+    fixed = re.sub(r'\\faGithub\s*\{([^}]*)\}', r'\1', fixed)
+    fixed = re.sub(r'\\faGlobe\s*\{([^}]*)\}', r'\1', fixed)
+    fixed = re.sub(r'\\fa[A-Za-z]+\s*\{([^}]*)\}', r'\1', fixed)  # catch-all
 
     # ── Inject \frenchspacing to ensure clean, consistent inter-sentence spacing
     if "\\frenchspacing" not in fixed:
@@ -252,15 +255,15 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
 
     contact_parts = []
     if email:
-        contact_parts.append(email)
+        contact_parts.append(f"\\Letter\\ {email}")
     if phone:
-        contact_parts.append(phone)
+        contact_parts.append(f"\\Telefon\\ {phone}")
     if linkedin:
         li_user = linkedin.split("/in/")[-1].rstrip("/") if "/in/" in linkedin else linkedin
-        contact_parts.append(f"\\href{{{linkedin}}}{{linkedin.com/in/{li_user}}}")
+        contact_parts.append(f"\\href{{{linkedin}}}{{\\raisebox{{-0.1em}}{{\\scriptsize\\textbf{{in}}}}~{li_user}}}")
     if github:
         gh_user = github.split("github.com/")[-1].rstrip("/") if "github.com" in github else github
-        contact_parts.append(f"\\href{{{github}}}{{github.com/{gh_user}}}")
+        contact_parts.append(f"\\href{{{github}}}{{gh/{gh_user}}}")
 
     address_line = " \\mybar ".join(contact_parts)
 
@@ -268,8 +271,10 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
     latex.append("\\documentclass[12pt]{resume}")
     latex.append("\\usepackage[T1]{fontenc}")
     latex.append("\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{geometry}")
-    # NOTE: fontawesome is intentionally omitted — it resets the Tectonic font
-    # context to Latin Modern, wiping Times New Roman and all bold variants.
+    # marvosym provides \Letter (envelope) and \Telefon (phone) icons without
+    # resetting the font context — fontawesome is NOT used because in Tectonic
+    # it wipes Times New Roman and all bold variants.
+    latex.append("\\usepackage{marvosym}")
     latex.append("\\usepackage{times}")
     latex.append("\\usepackage{hyperref}")
     latex.append("\\newcommand\\mybar{\\kern1pt\\rule[-\\dp\\strutbox]{.8pt}{\\baselineskip}\\kern1pt}")
