@@ -346,7 +346,12 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
             field  = edu.get("field_of_study", "")
             if field and field.lower() not in degree.lower():
                 degree = f"{degree} in {field}"
-            dates  = edu.get("graduation_date") or edu.get("dates") or ""
+            start  = edu.get("start_date", "")
+            grad   = edu.get("graduation_date") or edu.get("dates") or ""
+            if start and grad and start.lower() not in grad.lower():
+                dates = f"{start} -- {grad}"
+            else:
+                dates = grad or start
             gpa    = edu.get("gpa", "") or edu.get("cpi", "")
             if gpa and not gpa.lower().startswith(("cpi", "gpa", "grade", "percentage", "cgpa")):
                 gpa = f"CPI: {gpa}"

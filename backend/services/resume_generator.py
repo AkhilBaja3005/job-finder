@@ -232,7 +232,7 @@ RESUME_HTML_TEMPLATE = """
                 <div class="edu-entry">
                     <div class="edu-header">
                         <span class="edu-inst">{{ edu.institution }}{% if edu.location %} &bull; {{ edu.location }}{% endif %}</span>
-                        <span class="edu-date">{{ edu.graduation_date or edu.dates }}</span>
+                        <span class="edu-date">{% if edu.start_date and edu.graduation_date and edu.start_date.lower() not in edu.graduation_date.lower() %}{{ edu.start_date }} &ndash; {{ edu.graduation_date }}{% else %}{{ edu.graduation_date or edu.start_date or edu.dates }}{% endif %}</span>
                     </div>
                     <div class="edu-degree">
                         <span>
