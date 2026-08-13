@@ -222,20 +222,19 @@ RULE 4 — ONE-PAGE BUDGET & PLAYBOOK POSITIONING (CRITICAL):
   • Write concise bullets using the Playbook formula: Action + Technology + Problem + Measurable Metric. Each bullet MUST occupy between 70% and 150% of one line.
   • Do NOT add extra \\vspace or \\newline commands.
 
-RULE 5 — LATEX STRUCTURE, SECTION SEQUENCE & TECHNICAL SKILLS CATEGORIZATION:
-  • Preserve \\documentclass, all \\usepackage lines, geometry, and custom macros (\\mybar, etc.).
-  • BULLET SYMBOLS: Second-level (nested) itemize bullets MUST render as solid dots (\\textbullet) rather than en-dashes (--). Keep \\renewcommand{{\\labelitemii}}{{\\textbullet}} in preamble or use [label=\\textbullet].
-  • DYNAMIC SKILLS CATEGORIZATION (ZERO OVERLAP): When formatting Technical Skills, group skills into 3-5 distinct, non-overlapping functional categories tailored to the target role (e.g. for AI/ML: Languages, AI/ML & GenAI, Data & Platforms, Software & Infrastructure; for Data Analyst: Languages, Analytics & BI, Databases, Tools; for DevOps: Languages, Cloud & CI/CD, Containerization, Infrastructure). Ensure EVERY skill is placed in EXACTLY ONE category with ZERO overlap across categories.
-  • Keep the tabular/category layout in Technical Skills clean and readable.
-  • Do NOT add \\linespread, \\pagestyle, or spacing overrides — these are injected by the compiler.
+RULE 5 — LATEX PREAMBLE, FONT & SECTION PATTERN (ZERO DEVIATION):
+  • PREAMBLE LOCK: You MUST preserve the exact preamble, document class `\\documentclass[12pt]{{resume}}`, packages (`\\usepackage[T1]{{fontenc}}`, `\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{{geometry}}`, `\\usepackage{{fontawesome}}`, `\\usepackage{{times}}`, `\\usepackage{{hyperref}}`), and the custom macro `\\newcommand\\mybar{{\\kern1pt\\rule[-\\dp\\strutbox]{{.8pt}}{{\\baselineskip}}\\kern1pt}}`.
+  • FONT: Use ONLY `times` font package as defined in master. Do NOT change, replace, or add other font packages (helvet, lmodern, etc.).
+  • BULLET SYMBOLS & SPACING: Preamble MUST include `\\renewcommand{{\\labelitemi}}{{$\\\\bullet$}}` and `\\renewcommand{{\\labelitemii}}{{$\\\\bullet$}}`. Use `\\setlength{{\\itemsep}}{{-0.20em}}` and `\\setlength{{\\parsep}}{{0em}}` inside `itemize` blocks.
+  • DYNAMIC SKILLS CATEGORIZATION (ZERO OVERLAP): Group Technical Skills into 3-5 distinct, non-overlapping categories (e.g., Languages, AI/ML & GenAI, Data & Platforms, Software & Infrastructure) where every skill exists in EXACTLY ONE category.
   • ABSOLUTE CRITICAL SECTION SEQUENCE: You MUST render sections in this exact order:
-    1. Professional Summary
-    2. Work Experience
-    3. Technical Skills
-    4. Education
-    5. Projects
+    1. Professional Summary (`\\begin{{rSection}}{{Professional Summary}}`)
+    2. Work Experience (`\\begin{{rSection}}{{Work Experience}}`)
+    3. Technical Skills (`\\begin{{rSection}}{{Technical Skills}}`)
+    4. Education (`\\begin{{rSection}}{{Education}}`)
+    5. Projects (`\\begin{{rSection}}{{Projects}}`)
     6. Achievements & Leadership (if present)
-  • NEVER alter this section sequence under any circumstances.
+  • NEVER alter this section sequence or document structure under any circumstances.
 
 RULE 6 — ATS KEYWORD INTEGRATION & INLINE AWARDS:
   • Inject relevant missing keywords into Technical Skills and bullets naturally.
