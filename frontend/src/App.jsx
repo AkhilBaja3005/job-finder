@@ -1875,7 +1875,8 @@ function App() {
               )}
             </div>
 
-            {/* Chrome Extension Pairing Key Card */}
+            {/* Chrome Extension Pairing Key Card (hidden for now) */}
+            {/*
             <div style={{
               background: 'rgba(56, 189, 248, 0.05)',
               borderRadius: '12px',
@@ -1908,6 +1909,7 @@ function App() {
                 {(user && user.sync_code) ? user.sync_code : 'GUEST1'}
               </div>
             </div>
+            */}
 
             {/* Daily Cron Match Mailer Subscription settings */}
             <div style={{ border: '1px solid rgba(56, 189, 248, 0.1)', borderRadius: '12px', overflow: 'hidden', background: 'rgba(56, 189, 248, 0.03)' }}>
