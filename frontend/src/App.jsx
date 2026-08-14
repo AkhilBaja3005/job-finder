@@ -2947,7 +2947,15 @@ function App() {
                       <div style={{ background: 'var(--panel-bg)', padding: '14px', borderRadius: '10px', borderLeft: '3px solid var(--accent-secondary)' }}>
                         <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--accent-secondary)', marginBottom: '8px' }}>SKILLS & FRAMEWORKS</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {(Array.isArray(resumeData.skills) ? resumeData.skills : [resumeData.skills]).map((s, i) => (
+                          {(
+                            Array.isArray(resumeData.skills)
+                              ? resumeData.skills
+                              : typeof resumeData.skills === 'object'
+                              ? Object.entries(resumeData.skills).flatMap(([cat, list]) =>
+                                  Array.isArray(list) ? list.map(item => `${cat}: ${item}`) : [`${cat}: ${list}`]
+                                )
+                              : [String(resumeData.skills)]
+                          ).map((s, i) => (
                             <span key={i} style={{ padding: '4px 9px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.1)', color: 'var(--accent-secondary)', fontSize: '0.76rem', fontWeight: 600 }}>
                               {s}
                             </span>

@@ -45,19 +45,31 @@ def generate_outreach_message(
         OutreachMessage with all sections
     """
 
-    # Extract key info from resume
+    # Extract key info from resume & safely flatten list vs dict fields
     candidate_name = resume_data.get("name", "Candidate")
     candidate_email = resume_data.get("email", "")
     candidate_phone = resume_data.get("phone", "")
-    candidate_skills = resume_data.get("skills", [])
+    raw_candidate_skills = resume_data.get("skills", [])
+    if isinstance(raw_candidate_skills, dict):
+        candidate_skills = [s for sublist in raw_candidate_skills.values() for s in (sublist if isinstance(sublist, list) else [sublist])]
+    elif isinstance(raw_candidate_skills, list):
+        candidate_skills = raw_candidate_skills
+    else:
+        candidate_skills = []
+
     candidate_experience = resume_data.get("experience", [])
+    if not isinstance(candidate_experience, list):
+        candidate_experience = []
 
     # Extract key info from ATS analysis
     match_analysis = ats_analysis.get("match_analysis", {})
     overall_score = match_analysis.get("overall_score", 0)
-    matched_skills = match_analysis.get("matched_skills", [])
-    missing_skills = match_analysis.get("missing_skills", [])
-    tailoring_suggestions = match_analysis.get("tailoring_suggestions", [])
+    raw_matched_skills = match_analysis.get("matched_skills", [])
+    matched_skills = raw_matched_skills if isinstance(raw_matched_skills, list) else []
+    raw_missing_skills = match_analysis.get("missing_skills", [])
+    missing_skills = raw_missing_skills if isinstance(raw_missing_skills, list) else []
+    raw_tailoring_suggestions = match_analysis.get("tailoring_suggestions", [])
+    tailoring_suggestions = raw_tailoring_suggestions if isinstance(raw_tailoring_suggestions, list) else []
 
     # Build context for LLM
     experience_summary = ""

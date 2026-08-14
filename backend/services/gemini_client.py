@@ -567,17 +567,23 @@ def _execute_openrouter(prompt: str, model_list: list, response_schema, api_key:
 # ─────────────────────────────────────────────────────────────────────────────
 # High-Level Entrypoints
 # ─────────────────────────────────────────────────────────────────────────────
+STRONG_JSON_MODELS = [
+    "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", "gemini-3.5-flash-lite"
+]
+
 def generate_content_with_fallback(
     prompt: str,
     response_schema=None,
     custom_api_key: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
     system_instruction: Optional[str] = None,
+    model_tier: Optional[str] = None,
 ) -> str:
     """JSON / structured output generation via fallback list."""
     full_prompt = f"SYSTEM INSTRUCTION: {system_instruction}\n\n{prompt}" if system_instruction else prompt
+    models_to_use = STRONG_JSON_MODELS if model_tier == 'strong' else JSON_FALLBACK_MODELS
     return _generate_with_model_list(
-        full_prompt, JSON_FALLBACK_MODELS, response_schema, custom_api_key, on_log
+        full_prompt, models_to_use, response_schema, custom_api_key, on_log
     )
 
 
