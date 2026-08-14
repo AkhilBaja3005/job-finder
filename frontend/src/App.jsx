@@ -36,10 +36,10 @@ async function* streamNdjson(response) {
 
   try {
     while (true) {
-      // Race stream read against a 30-second stall timeout
+      // Race stream read against a 120-second stall timeout (long discovery/scraping cycles)
       const readPromise = reader.read();
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Stream stalled: No response chunk received for 30s')), 30000)
+        setTimeout(() => reject(new Error('Stream stalled: No response chunk received for 120s')), 120000)
       );
 
       const { value, done } = await Promise.race([readPromise, timeoutPromise]);
@@ -4430,8 +4430,8 @@ function App() {
       {prepModalOpen && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 9999, backdropFilter: 'blur(8px)', animation: 'fadeIn 0.25s ease both',
+          background: 'rgba(9, 13, 26, 0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', animation: 'fadeIn 0.25s ease both',
           padding: '20px'
         }} onClick={closePrepModal}>
           <div
@@ -4441,10 +4441,11 @@ function App() {
             aria-label="Interview Preparation Guide"
             tabIndex={-1}
             style={{
-              background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+              background: 'rgba(15, 23, 42, 0.85)', border: '1px solid rgba(56, 189, 248, 0.25)',
+              backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
               borderRadius: '16px', padding: '24px', maxWidth: '800px', width: '100%',
               maxHeight: '85vh', display: 'flex', flexDirection: 'column',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.7)', animation: 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) both'
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.75)', animation: 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) both'
             }} onClick={(e) => e.stopPropagation()}>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '16px', flexShrink: 0 }}>

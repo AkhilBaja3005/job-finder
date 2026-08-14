@@ -599,7 +599,7 @@ Evaluate the QUALITY of the tailored resume by comparing it against both the tar
 
 QUALITY RUBRIC — evaluate each item independently and set its boolean field accordingly:
 1. ats_fit_ok: Are the top 3-5 job keywords from the JD naturally integrated into experience/skill bullets?
-   (Check for contextual use, NOT verbatim copy-paste from JD.)
+   (Check for contextual use, NOT verbatim copy-paste from JD. NOTE: If the JD excerpt below is empty or not provided, automatically set ats_fit_ok = true.)
 2. impact_metrics_ok: Do the majority of bullets contain at least one quantified result (%, numbers, scale)?
 3. truthfulness_ok: Does tailored content stay within the candidate's real background?
    - The CANDIDATE ORIGINAL PROFILE below — including each job's/project's "bullets" field —
@@ -613,6 +613,7 @@ QUALITY RUBRIC — evaluate each item independently and set its boolean field ac
 4. conciseness_ok: Are bullets tight (1-1.5 lines)? No sprawling multi-line sentences?
 
 Set each boolean independently and truthfully — do NOT set all four to true just because most pass.
+If no JD description was provided, set ats_fit_ok to true automatically.
 In feedback, name exactly which criterion(s) failed and what to fix. If all four pass, give brief positive feedback.
 
 Target Job Title: {job_title}
@@ -631,7 +632,7 @@ TAILORED LaTeX:
 """
 
     try:
-        response_text = generate_content_with_fallback(prompt, ResumeReviewResult, custom_api_key, on_log)
+        response_text = generate_content_with_fallback(prompt, ResumeReviewResult, custom_api_key, on_log, model_tier='strong')
         parsed = _parse_llm_json(response_text, label="resume review")
         return ResumeReviewResult(**parsed)
     except Exception as e:

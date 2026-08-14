@@ -3356,12 +3356,19 @@ async def generate_outreach(request: GenerateOutreachRequest, authorization: Opt
             if not recruiter_info.get("company_name"):
                 recruiter_info["company_name"] = request.company_name
 
-        # Create a mock ATS analysis if not provided (for message generation)
-        # In real usage, this would come from the analyze_job endpoint
+        # Safely extract skills as a list (could be dict or list in session_resume_data)
+        raw_skills = session_resume_data.get("skills", [])
+        if isinstance(raw_skills, dict):
+            flat_skills = [s for sublist in raw_skills.values() for s in (sublist if isinstance(sublist, list) else [sublist])]
+        elif isinstance(raw_skills, list):
+            flat_skills = raw_skills
+        else:
+            flat_skills = []
+
         ats_analysis = {
             "match_analysis": {
                 "overall_score": 75,
-                "matched_skills": session_resume_data.get("skills", [])[:5],
+                "matched_skills": flat_skills[:5],
                 "missing_skills": [],
                 "tailoring_suggestions": []
             }
