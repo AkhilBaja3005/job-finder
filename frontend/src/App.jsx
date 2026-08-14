@@ -1871,6 +1871,51 @@ function App() {
                   >
                     🍃 Open Master in Overleaf
                   </button>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={loading}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      color: 'var(--accent-secondary)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)'
+                    }}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setLoading(true);
+                      setStatusMessage('Compiling Master Resume PDF…');
+                      try {
+                        const res = await fetch(`${API_BASE}/compile_master_pdf`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            resume_data: resumeData,
+                            job_title: 'Master Resume',
+                            company: '',
+                          }),
+                        });
+                        if (!res.ok) throw new Error('Master PDF compilation failed');
+                        const data = await res.json();
+                        if (data.pdf_url) {
+                          window.open(`${API_BASE}${data.pdf_url}`, '_blank');
+                          setStatusMessage('📄 Master PDF opened!');
+                        }
+                      } catch (err) {
+                        setStatusMessage(`Failed to compile Master PDF: ${err.message}`);
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                  >
+                    📄 View Compiled Master PDF
+                  </button>
                 </div>
               )}
             </div>
