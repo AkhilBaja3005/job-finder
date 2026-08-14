@@ -128,6 +128,23 @@ def apply_latex_hotfix(
     fixed = re.sub(r'\\Letter\\\s*', r'\\faEnvelope\ ', fixed)
     fixed = re.sub(r'\\Telefon\\\s*', r'\\faPhone\ ', fixed)
 
+    # ── Inject spacing_scale and linespread overrides ────────────────────────
+    spacing_overrides = []
+    if linespread != 1.0:
+        spacing_overrides.append(f"\\linespread{{{linespread:.2f}}}\\selectfont")
+    if spacing_scale != 1.0:
+        sec_skip = max(0.2, 0.45 * spacing_scale)
+        sec_line_skip = max(0.1, 0.25 * spacing_scale)
+        name_sk = max(0.2, 0.45 * spacing_scale)
+        addr_sk = max(0.2, 0.45 * spacing_scale)
+        spacing_overrides.append(f"\\def\\sectionskip{{{sec_skip:.2f}em}}")
+        spacing_overrides.append(f"\\def\\sectionlineskip{{{sec_line_skip:.2f}em}}")
+        spacing_overrides.append(f"\\def\\nameskip{{{name_sk:.2f}em}}")
+        spacing_overrides.append(f"\\def\\addressskip{{{addr_sk:.2f}em}}")
+
+    if spacing_overrides:
+        fixed = fixed.replace("\\begin{document}", "\\begin{document}\n" + "\n".join(spacing_overrides), 1)
+
     # ── Inject \frenchspacing to ensure clean, consistent inter-sentence spacing
     if "\\frenchspacing" not in fixed:
         fixed = fixed.replace("\\begin{document}", "\\frenchspacing\n\\begin{document}", 1)
