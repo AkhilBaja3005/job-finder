@@ -240,17 +240,32 @@ RETURN STRICT JSON ONLY in the following format:
         fieldDetails.push({ fieldId, label, answer });
         highlightAIField(element);
       }
-    } else if (type === 'checkbox' || type === 'radio') {
+    } else if (type === 'checkbox' || type === 'radio' || element.getAttribute('role') === 'checkbox' || element.getAttribute('role') === 'radio') {
       const input = element as HTMLInputElement;
       const lowerAns = String(answer).toLowerCase();
       if (lowerAns === 'true' || lowerAns === 'yes' || lowerAns === 'checked' || lowerAns.includes('select')) {
-        if (!input.checked) {
-          input.click();
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-          solvedCount++;
-          fieldDetails.push({ fieldId, label, answer: 'Checked / Selected' });
-          highlightAIField(input);
+        element.click();
+        if (input.type === 'checkbox' || input.type === 'radio') {
+          input.checked = true;
         }
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        solvedCount++;
+        fieldDetails.push({ fieldId, label, answer: 'Checked / Selected' });
+        highlightAIField(element);
+      }
+    } else if (element.getAttribute('contenteditable') === 'true' || element.tagName === 'DIV' || element.tagName === 'BUTTON') {
+      if (element.getAttribute('contenteditable') === 'true') {
+        element.textContent = answer;
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        solvedCount++;
+        fieldDetails.push({ fieldId, label, answer });
+        highlightAIField(element);
+      } else {
+        // Custom button card or div option click
+        element.click();
+        solvedCount++;
+        fieldDetails.push({ fieldId, label, answer: 'Clicked Card' });
+        highlightAIField(element);
       }
     } else {
       fillNativeInput(element as HTMLInputElement | HTMLTextAreaElement, answer);

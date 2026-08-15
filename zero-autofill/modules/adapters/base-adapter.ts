@@ -18,6 +18,9 @@ export function fillNativeInput(element: HTMLInputElement | HTMLTextAreaElement,
   const prototype = Object.getPrototypeOf(element);
   const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
 
+  // Focus element to trigger active framework state tracking
+  try { element.focus(); } catch (e) {}
+
   if (prototypeValueSetter && valueSetter !== prototypeValueSetter) {
     prototypeValueSetter.call(element, stringVal);
   } else if (valueSetter) {
@@ -26,10 +29,14 @@ export function fillNativeInput(element: HTMLInputElement | HTMLTextAreaElement,
     element.value = stringVal;
   }
 
-  // Dispatch bubbling events so reactive framework state updates automatically
-  element.dispatchEvent(new Event('input', { bubbles: true }));
+  // Dispatch bubbling InputEvent and KeyboardEvent so React 18/19 and Vue 3 synthetic listeners trigger
+  try {
+    element.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: stringVal }));
+  } catch (e) {
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+  }
   element.dispatchEvent(new Event('change', { bubbles: true }));
-  element.dispatchEvent(new Event('blur', { bubbles: true }));
+  element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
   element.setAttribute('data-zero-autofilled', 'true');
 }
 
