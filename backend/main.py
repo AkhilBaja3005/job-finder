@@ -7,6 +7,7 @@ import subprocess
 import re
 import io
 import ssl
+import glob
 import traceback
 import zipfile
 import urllib.request
@@ -728,16 +729,14 @@ def get_session_data(token: Optional[str]) -> dict:
     key = token or "guest"
     with _store_lock:
         data = _session_store.get(key)
-        if data and data.get("data"):
+        if data and data.get("data") and data["data"].get("education"):
             return data
             
     # Try fetching from Supabase if token exists
     if token:
         try:
             user = get_user_by_token(token)
-            # Query the user_resumes table instead or query users safely
             if user:
-                # We dynamically check if Supabase returned the fields or try querying user_resumes
                 user_id = user.get("id")
                 from services.auth import supabase_request
                 res = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
@@ -755,6 +754,20 @@ def get_session_data(token: Optional[str]) -> dict:
                     return {"data": resume_dict, "path": path}
         except Exception as e:
             print(f"Failed to load resume from Supabase user session: {e}")
+
+    # Search output directory for the latest complete state file
+    try:
+        output_base = os.path.join(os.path.dirname(__file__), "output")
+        state_files = glob.glob(os.path.join(output_base, "**", "resume_state_*.json"), recursive=True)
+        for sf in sorted(state_files, key=os.path.getmtime, reverse=True):
+            with open(sf, "r", encoding="utf-8") as f:
+                content = json.load(f)
+                d = content.get("data", {})
+                if d and d.get("education"):
+                    set_session_data(key, d, content.get("path", ""))
+                    return {"data": d, "path": content.get("path", "")}
+    except Exception as ex:
+        print(f"[get_session_data] Error searching state files: {ex}")
 
     # Fallback to guest if user session is empty
     with _store_lock:
@@ -822,13 +835,29 @@ else:
     
     if uploaded_files:
         try:
-            file_path = uploaded_files[0]
-            print(f"Found uploaded resume at startup: {file_path}. Auto-parsing...")
-            structured_data = parse_resume(file_path)
-            set_session_data("guest", structured_data.model_dump(), file_path)
-            with open(default_guest_state_file, "w") as f:
-                json.dump({"data": structured_data.model_dump(), "path": file_path}, f, indent=2)
-            print("Successfully parsed and saved resume state at startup.")
+            # First check if a comprehensive parsed state already exists in output/
+            output_base = os.path.join(os.path.dirname(__file__), "output")
+            existing_states = glob.glob(os.path.join(output_base, "**", "resume_state_*.json"), recursive=True)
+            loaded_master = False
+            for sf in sorted(existing_states, key=os.path.getmtime, reverse=True):
+                with open(sf, "r", encoding="utf-8") as f:
+                    st_json = json.load(f)
+                    st_data = st_json.get("data", {})
+                    if st_data and st_data.get("education"):
+                        set_session_data("guest", st_data, st_json.get("path", ""))
+                        with open(default_guest_state_file, "w", encoding="utf-8") as gf:
+                            json.dump({"data": st_data, "path": st_json.get("path", "")}, gf, indent=2)
+                        loaded_master = True
+                        print(f"Loaded master candidate resume state from {sf}")
+                        break
+            if not loaded_master:
+                file_path = uploaded_files[0]
+                print(f"Found uploaded resume at startup: {file_path}. Auto-parsing...")
+                structured_data = parse_resume(file_path)
+                set_session_data("guest", structured_data.model_dump(), file_path)
+                with open(default_guest_state_file, "w") as f:
+                    json.dump({"data": structured_data.model_dump(), "path": file_path}, f, indent=2)
+                print("Successfully parsed and saved resume state at startup.")
         except Exception as e:
             print(f"Failed to auto-parse uploaded resume: {e}")
 
@@ -989,6 +1018,36 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/get_session_resume")
+async def get_session_resume(authorization: Optional[str] = Header(None)):
+    """Returns the current parsed resume data for the active session token or default guest."""
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+
+    session_info = get_session_data(token)
+    data = session_info.get("data", {})
+    if not data or not data.get("education"):
+        # Check guest state file fallback
+        guest_file = _get_guest_state_file(token)
+        if not os.path.exists(guest_file):
+            guest_file = _get_guest_state_file("guest")
+        if os.path.exists(guest_file):
+            try:
+                with open(guest_file, "r", encoding="utf-8") as f:
+                    saved = json.load(f)
+                    data = saved.get("data", {})
+                    set_session_data(token or "guest", data, saved.get("path", ""))
+            except Exception as e:
+                print(f"[get_session_resume] Error reading state file: {e}")
+
+    return {
+        "status": "success",
+        "data": data,
+        "path": session_info.get("path", "")
+    }
 
 def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, linespread: float = 1.0, master_latex: Optional[str] = None) -> tuple[int, float]:
     try:
@@ -3935,7 +3994,7 @@ if os.path.exists(frontend_dist):
     @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
     async def serve_frontend(rest_of_path: str):
         # Ignore API endpoints and action handlers so they pass through to regular routes
-        if rest_of_path in ("health", "healthz") or any(api in rest_of_path for api in ("admin/", "user/", "auth/", "email_action", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "download_application_pdf", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
+        if rest_of_path in ("health", "healthz") or any(api in rest_of_path for api in ("admin/", "user/", "auth/", "get_session_resume", "generate_outreach", "email_action", "scrape_job", "upload_resume", "apply", "assets/", "analyze_job", "download_latex", "download_application_pdf", "compile_latex", "generate_tailored_resume", "open_in_overleaf", "search_matching_jobs", "clear_cache")):
             raise HTTPException(status_code=404, detail="Not Found")
         
         if rest_of_path == "favicon.svg":
