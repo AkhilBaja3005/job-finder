@@ -3475,6 +3475,47 @@ function App() {
                                     🎤 Interview Prep
                                   </button>
                                   <button
+                                     className="btn btn-secondary"
+                                     style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)', whiteSpace: 'nowrap' }}
+                                     onClick={async () => {
+                                       setLoading(true);
+                                       setStatusMessage('Generating tailored cover letter...');
+                                       try {
+                                         const res = await fetch(`${API_BASE}/generate_cover_letter_history`, {
+                                           method: 'POST',
+                                           headers: {
+                                             'Content-Type': 'application/json',
+                                             'Authorization': `Bearer ${getAuthHeader()}`
+                                           },
+                                           body: JSON.stringify({
+                                             job_title: entry.job_title || 'Target Role',
+                                             company: entry.company || 'Target Company',
+                                             job_url: entry.job_url || null
+                                           })
+                                         });
+                                         if (res.ok) {
+                                           const data = await res.json();
+                                           setJobTitle(entry.job_title || '');
+                                           setCompany(entry.company || '');
+                                           setAnalysisResult({ cover_letter: data.cover_letter });
+                                           setDashboardMode('tailor');
+                                           setMasterSubTab('cover');
+                                           setIsDiscoveryView(false);
+                                           setStatusMessage('📝 Tailored cover letter generated!');
+                                         } else {
+                                           const err = await res.json();
+                                           setStatusMessage(`❌ Error: ${err.detail}`);
+                                         }
+                                       } catch (e) {
+                                         setStatusMessage(`❌ Error: ${e.message}`);
+                                       } finally {
+                                         setLoading(false);
+                                       }
+                                     }}
+                                   >
+                                     📝 Cover Letter
+                                   </button>
+                                  <button
                                     className="btn btn-secondary"
                                     style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', borderColor: 'var(--accent-primary)', color: '#fff', whiteSpace: 'nowrap' }}
                                     onClick={async () => {

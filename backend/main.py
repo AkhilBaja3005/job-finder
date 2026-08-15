@@ -3204,6 +3204,57 @@ Do NOT add conversational intro/outro. Output ONLY the raw Markdown.
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class CoverLetterHistoryRequest(BaseModel):
+    job_title: str
+    company: str
+    job_url: Optional[str] = None
+
+@app.post("/generate_cover_letter_history")
+async def generate_cover_letter_history(request: CoverLetterHistoryRequest, authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        token = "guest"
+    else:
+        token = authorization.split(" ")[1]
+    
+    session = get_session_data(token)
+    resume = session.get("data")
+    if not resume:
+        raise HTTPException(status_code=400, detail="No candidate resume found. Upload a resume first.")
+
+    jd_text = ""
+    if request.job_url:
+        try:
+            scraped = await scrape_job_description(request.job_url)
+            jd_text = scraped.get("description", "")
+        except Exception:
+            pass
+
+    prompt = f"""You are an expert career writer.
+Write a concise, compelling cover letter (under 300 words) tailored to the role of '{request.job_title}' at '{request.company}'.
+
+CANDIDATE PROFILE:
+{json.dumps(resume, indent=2)}
+
+JOB DETAILS:
+Role: {request.job_title}
+Company: {request.company}
+JD Excerpt: {jd_text[:1200] if jd_text else "Not provided"}
+
+RULES:
+1. Cover letter under 300 words.
+2. STRICTLY NO EM-DASHES (--) OR HYPHENS AS SENTENCE BREAKS.
+3. STRICTLY NO CLICHES or generic filler phrases ("passionate about", "leverage my skills", "hit the ground running").
+4. Active, confident voice. Focus on problem-solving accomplishments from candidate's profile.
+5. Return ONLY the raw cover letter text. No markdown commentary around it.
+"""
+
+    try:
+        from services.gemini_client import generate_content_with_fallback
+        cover_letter = await asyncio.to_thread(generate_content_with_fallback, prompt)
+        return {"status": "success", "cover_letter": cover_letter}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 class ScrapeRequest(BaseModel):
     url: str
 
