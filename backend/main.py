@@ -1866,22 +1866,22 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
 
 @app.post("/clear_cache")
 async def clear_cache(authorization: Optional[str] = Header(None)):
-    """Resets all in-memory caches and deletes temporary files in uploads and output folders."""
+    """Resets user-scoped in-memory session caches and deletes temporary files for the calling user only."""
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
         
     try:
-        # 1. Clear in-memory caches
-        _analysis_cache.clear()
-        _job_search_cache.clear()
-            
-        # 2. Clean temporary output files
-        if os.path.exists(OUTPUT_DIR):
-            for filename in os.listdir(OUTPUT_DIR):
-                file_path = os.path.join(OUTPUT_DIR, filename)
-                # Keep resume_state_*, application_history_*, and tailored_*.pdf persistent storage files
-                if filename.startswith("resume_state") or filename.startswith("application_history_") or filename.startswith("tailored_"):
+        user = await async_get_user_by_token(token) if token else None
+        user_key = _safe_key(user["id"] if user else token) if (user or token) else "guest"
+        user_upload_dir, user_output_dir = _get_user_storage_dirs(user_key)
+
+        # 1. Clean requesting user's output directory only
+        if os.path.exists(user_output_dir):
+            for filename in os.listdir(user_output_dir):
+                file_path = os.path.join(user_output_dir, filename)
+                # Preserve permanent master resume state and application history files
+                if filename.startswith("resume_state") or filename.startswith("application_history_"):
                     continue
                 try:
                     if os.path.isfile(file_path) or os.path.islink(file_path):
@@ -1889,35 +1889,33 @@ async def clear_cache(authorization: Optional[str] = Header(None)):
                     elif os.path.isdir(file_path):
                         shutil.rmtree(file_path)
                 except Exception as ex:
-                    print(f"Failed to delete output file {file_path}: {ex}")
-                    
-        # 3. Clean temporary uploads (except for the default resume.cls)
-        if os.path.exists(UPLOAD_DIR):
-            for filename in os.listdir(UPLOAD_DIR):
+                    print(f"Failed to delete user output file {file_path}: {ex}")
+
+        # 2. Clean requesting user's upload directory only (preserve resume.cls if present)
+        if os.path.exists(user_upload_dir):
+            for filename in os.listdir(user_upload_dir):
                 if filename == "resume.cls":
                     continue
-                file_path = os.path.join(UPLOAD_DIR, filename)
+                file_path = os.path.join(user_upload_dir, filename)
                 try:
                     if os.path.isfile(file_path) or os.path.islink(file_path):
                         os.unlink(file_path)
                     elif os.path.isdir(file_path):
                         shutil.rmtree(file_path)
                 except Exception as ex:
-                    print(f"Failed to delete upload file {file_path}: {ex}")
+                    print(f"Failed to delete user upload file {file_path}: {ex}")
 
-        # Also reset session store for guest/user
+        # 3. Reset session store and analysis cache entries scoped to this token/user
         if token:
             with _store_lock:
                 _session_store.pop(token, None)
+            _analysis_cache.pop(token, None)
         else:
             with _store_lock:
-                _session_store.clear()
-                
-        # Re-sync resume.cls fallback
-        if os.path.exists(default_cls_source):
-            shutil.copy2(default_cls_source, target_cls_path)
+                _session_store.pop("guest", None)
+            _analysis_cache.pop("guest", None)
 
-        return {"status": "success", "message": "All cache, session store, and temporary files cleared successfully."}
+        return {"status": "success", "message": "User cache and temporary files cleared successfully."}
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
