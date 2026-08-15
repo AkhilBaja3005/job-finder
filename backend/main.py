@@ -1880,8 +1880,8 @@ async def clear_cache(authorization: Optional[str] = Header(None)):
         if os.path.exists(user_output_dir):
             for filename in os.listdir(user_output_dir):
                 file_path = os.path.join(user_output_dir, filename)
-                # Preserve permanent master resume state and application history files
-                if filename.startswith("resume_state") or filename.startswith("application_history_"):
+                # Preserve permanent application history files
+                if filename.startswith("application_history_"):
                     continue
                 try:
                     if os.path.isfile(file_path) or os.path.islink(file_path):
