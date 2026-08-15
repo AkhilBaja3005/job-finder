@@ -203,22 +203,30 @@ def apply_latex_hotfix(
 
     fixed = re.sub(r'\\begin\{rSection\}\{Technical\s+Skills\}(.*?)\\end\{rSection\}', _categorize_skills_sec, fixed, flags=re.DOTALL)
 
+    # ── Remove stray tabular environment tags inserted by LLM or regex ───────
+    fixed = re.sub(r'\\begin\{tabular\}\{[^{}]*\}', '', fixed)
+    fixed = re.sub(r'\\end\{tabular\}', '', fixed)
+
     # ── Strip \textbf{} from skill values in Technical Skills (LLM sometimes bolds individual skills) ──
     def _strip_bold_from_skills(match):
         section_body = match.group(1)
-        # For each line of the form \textbf{Category:} skill1, \textbf{skill2}, ...
-        # preserve the leading \textbf{Category:} label but strip \textbf{} from the rest
-        def _strip_skill_bold(line_match):
-            label = line_match.group(1)   # e.g. "Languages:"
-            rest  = line_match.group(2)   # e.g. "Python, \textbf{XGBoost}, RAG \\"
-            rest_clean = re.sub(r'\\textbf\{([^{}]*)\}', r'\1', rest)
-            return f'\\textbf{{{label}}} {rest_clean}'
-        section_body = re.sub(
-            r'\\textbf\{([^{}]+)\}\s+(.*)',
-            _strip_skill_bold,
-            section_body
-        )
-        return f'\\begin{{rSection}}{{Technical Skills}}{section_body}\\end{{rSection}}'
+        lines = section_body.split('\n')
+        new_lines = []
+        for line in lines:
+            if line.strip().startswith('\\textbf{'):
+                # Line format: \textbf{Label:} skill1, \textbf{skill2}, ...
+                # Preserve \textbf{Label:} at start, strip \textbf{} from the rest
+                m = re.match(r'^(\s*\\textbf\{[^{}]+\}\s*)(.*)$', line)
+                if m:
+                    prefix = m.group(1)
+                    rest = m.group(2)
+                    rest_clean = re.sub(r'\\textbf\{([^{}]*)\}', r'\1', rest)
+                    new_lines.append(prefix + rest_clean)
+                else:
+                    new_lines.append(line)
+            else:
+                new_lines.append(line)
+        return f'\\begin{{rSection}}{{Technical Skills}}\n' + '\n'.join(new_lines) + f'\n\\end{{rSection}}'
     fixed = re.sub(
         r'\\begin\{rSection\}\{Technical\s+Skills\}(.*?)\\end\{rSection\}',
         _strip_bold_from_skills,
