@@ -248,7 +248,10 @@ def _generate_with_model_list(
         raise ValueError("Pipeline dropped to final floor, but GEMINI_API_KEY environment variable is missing.")
 
     client = get_gemini_client(gemini_key)
-    config_args = {"temperature": 0.1, "tools": []}
+    config_args = {
+        "temperature": 0.1,
+        "automatic_function_calling": types.AutomaticFunctionCallingConfig(disable=True)
+    }
     if response_schema is not None:
         config_args["response_mime_type"] = "application/json"
         config_args["response_schema"] = clean_schema(response_schema.model_json_schema())
