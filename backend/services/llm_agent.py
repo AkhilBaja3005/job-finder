@@ -217,8 +217,8 @@ RULE 3 — SECTION & CONTENT COMPLETENESS & NESTED ITEMIZE FOR SUB-PROJECTS:
   • NEVER output repeated standalone \\item bullets with duplicate sub-project title prefixes.
 
 RULE 4 — ONE-PAGE BUDGET, BOLDING & PLAYBOOK POSITIONING (CRITICAL):
-  • Professional Summary MUST be placed at the top (below header), kept to 2-3 lines visually, avoiding weak phrases like "Strong foundation in...". Position primarily as: AI/ML Engineer with 3+ years experience across Qualcomm + Axis Bank, specialized in Production GenAI, LLM Context Engineering, Software Systems, and ML.
-  • BOLDING RULES: You MUST automatically bold key ML/AI models (e.g., `\\textbf{{XGBoost}}`, `\\textbf{{Naive Bayes}}`, `\\textbf{{Isolation Forest}}`), metrics (`\\textbf{{40\\%}}`), awards, and regulatory/institution bodies (`\\textbf{{RBI (Reserve Bank of India)}}` or `\\textbf{{RBI}}`).
+  • Professional Summary MUST be placed at the top (below header), kept to 2-3 lines visually, avoiding weak phrases like "Strong foundation in...". Position primarily based on the candidate's actual master experience, domain, and target role.
+  • BOLDING RULES: You MUST automatically bold key technical models/frameworks, metrics (e.g. `\\textbf{{40\\%}}`), awards, and key institutions explicitly present in the candidate's text.
   • The entire tailored resume MUST fit on exactly ONE page.
   • Write concise bullets using the Playbook formula: Action + Technology + Problem + Measurable Metric. Each bullet MUST occupy between 70% and 150% of one line.
   • Do NOT add extra \\vspace or \\newline commands.
@@ -227,7 +227,7 @@ RULE 5 — LATEX PREAMBLE, FONT & SECTION PATTERN (ZERO DEVIATION):
   • PREAMBLE LOCK: You MUST preserve the exact preamble, document class `\\documentclass[12pt]{{resume}}`, packages (`\\usepackage[T1]{{fontenc}}`, `\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{{geometry}}`, `\\usepackage{{fontawesome}}`, `\\usepackage{{times}}`, `\\usepackage{{hyperref}}`), and the custom macro `\\newcommand\\mybar{{\\kern1pt\\rule[-\\dp\\strutbox]{{.8pt}}{{\\baselineskip}}\\kern1pt}}`.
   • FONT: Use ONLY `times` font package as defined in master. Do NOT change, replace, or add other font packages (helvet, lmodern, etc.).
   • BULLET SYMBOLS & SPACING: Preamble MUST include `\\renewcommand{{\\labelitemi}}{{$\\\\bullet$}}` and `\\renewcommand{{\\labelitemii}}{{$\\\\bullet$}}`. Use `\\setlength{{\\itemsep}}{{-0.20em}}` and `\\setlength{{\\parsep}}{{0em}}` inside `itemize` blocks.
-  • TECHNICAL SKILLS (MANDATORY & ZERO OVERLAP): You MUST include `\\begin{{rSection}}{{Technical Skills}}`. Group Technical Skills into 3-5 distinct, non-overlapping categories (e.g., Languages, AI/ML & GenAI, Data & Platforms, Software & Infrastructure) where every skill exists in EXACTLY ONE category. Format each category line as `\\textbf{{Category:}} skill1, skill2 \\\\`. Do NOT use `\\begin{{tabular}}` or `\\end{{tabular}}` environments. Omitting the Technical Skills section is an INSTANT FAILURE.
+  • TECHNICAL SKILLS (MANDATORY & ZERO OVERLAP): You MUST include `\\begin{{rSection}}{{Technical Skills}}`. Group Technical Skills into 3-5 distinct, non-overlapping categories where every skill exists in EXACTLY ONE category. Format each category line as `\\textbf{{Category:}} skill1, skill2 \\\\`. Do NOT use `\\begin{{tabular}}` or `\\end{{tabular}}` environments. Omitting the Technical Skills section is an INSTANT FAILURE.
   • ABSOLUTE CRITICAL SECTION SEQUENCE: You MUST render sections in this exact order:
     1. Professional Summary (`\\begin{{rSection}}{{Professional Summary}}`)
     2. Work Experience (`\\begin{{rSection}}{{Work Experience}}`)
@@ -237,19 +237,19 @@ RULE 5 — LATEX PREAMBLE, FONT & SECTION PATTERN (ZERO DEVIATION):
   • NEVER omit Technical Skills or alter this section sequence under any circumstances.
 
 RULE 6 — ATS KEYWORD INTEGRATION & INLINE AWARDS:
-  • Inject relevant missing keywords into Technical Skills and bullets naturally.
-  • INLINE AWARDS (NO SEPARATE ACHIEVEMENTS SECTION): Keep awards inline inside Work Experience bullets (e.g., `— \\textbf{{Qualcomm Certificate of Recognition}}` and `— \\textbf{{BIU Star Award}}`). NEVER create a separate `Achievements & Leadership` section!
-  • Bold key metrics AND important tool names using \\textbf{{}} — e.g. \\textbf{{50\\%}}, \\textbf{{PySpark}}, \\textbf{{3x}}. Apply \\textbf to at least 2 items per bullet section.
+  • Inject relevant missing keywords into Technical Skills and bullets naturally ONLY IF they match or extend the candidate's actual experience.
+  • INLINE AWARDS (NO SEPARATE ACHIEVEMENTS SECTION): Keep awards inline inside Work Experience bullets. NEVER create a separate `Achievements & Leadership` section!
+  • Bold key metrics AND important tool names using \\textbf{{}} — e.g. \\textbf{{50\\%}}, \\textbf{{3x}}. Apply \\textbf to at least 2 items per bullet section.
   • ABSOLUTE CRITICAL: NEVER use markdown asterisks for bold (**word** or __word__). You MUST use ONLY LaTeX \\textbf{{word}}. If you write ** anywhere in the output it will BREAK the PDF compilation.
   • Translate JD phrases into natural accomplishments — NEVER copy-paste verbatim.
 
 RULE 7 — OUTPUT FORMAT:
   • Return ONLY the raw LaTeX source. No markdown fences, no explanations, no commentary.
 
-RULE 8 — TRUTHFULNESS & CREDENTIALS (ABSOLUTE TRUST):
-  • NEVER fabricate security clearances, specialized government clearances, or certifications unless they are explicitly present in the original master resume.
+RULE 8 — TRUTHFULNESS & CREDENTIALS (ABSOLUTE TRUST & ZERO FABRICATION):
+  • NEVER fabricate security clearances, specialized government clearances, certifications, technologies, languages, or frameworks (e.g. PyTorch, RAG, R, C) unless they are explicitly present in the original master resume.
   • Keep years of experience accurate and consistent with the candidate's actual timeline history. Never exaggerate the candidate's total years of experience in summaries.
-  • Do not invent expert proficiency in major frameworks, libraries, tools, or compliance/regulatory standards if they are completely absent from the master profile. Focus on highlighting real transferable skills and conceptual alignment instead.
+  • Do NOT invent expert proficiency in major frameworks, libraries, tools, or compliance/regulatory standards if they are completely absent from the master profile. Focus on highlighting real transferable skills and conceptual alignment instead.
 
 RULE 9 — EMPLOYMENT DATES LOCK (ZERO TOLERANCE):
   • You MUST copy all employment start and end dates (e.g., June 2023 - Present) character-for-character from the master resume.

@@ -203,10 +203,9 @@ def parse_resume(file_path: str) -> StructuredResume:
     1. Clean up any spacing or kerning anomalies in the candidate's name (e.g. "P A L L A V I" → "PALLAVI").
     2. Extract ALL URLs from the resume into the `links` array. This MUST include LinkedIn URLs (e.g. https://linkedin.com/in/username), GitHub URLs, portfolios, etc. Do NOT leave `links` empty if URLs are present.
     3. TECHNICAL SKILLS CATEGORIZATION (ABSOLUTE MANDATORY):
-       - Look for ANY skill sections or inline category blocks (e.g. "TECHNICAL SKILLS", "Languages: ...", "AI/ML & GenAI: ...", "Data & Platforms: ...", "Software & Infrastructure: ...").
-       - Even if text is unformatted or lacking section linebreaks (e.g. "TECHNICAL SKILLSLanguages: Python, SQL..."), extract EVERY single skill and group them into 3-5 distinct, non-overlapping category key-value pairs inside `skills`.
-       - Example: {{"Languages": ["Python", "SQL", "C++", "Java"], "AI/ML & GenAI": ["Generative AI", "LLMs", "RAG", "Machine Learning", "Deep Learning", "Anomaly Detection", "XGBoost", "Naive Bayes", "Computer Vision (U-Net, DenseNet)"], "Data & Platforms": ["PySpark", "Azure OpenAI", "Cloudera ML", "PostgreSQL", "SAS EG"], "Software & Infrastructure": ["Docker", "Rancher", "RabbitMQ", "Jenkins", "Git", "AST Parsing", "Static Analysis", "Distributed Systems", "Microservices", "CI/CD", "Unit Testing"]}}.
-       - Do NOT return an empty object for `skills` if technical skills or technologies are present anywhere in the text!
+       - Extract ONLY skills explicitly mentioned in the raw resume text below. Do NOT fabricate or assume any skill not present in the candidate's text.
+       - Group extracted skills into 3-5 distinct, non-overlapping category key-value pairs inside `skills` matching how they appear in the candidate's resume (e.g. "Languages", "Frameworks & Tools", "Databases", "Cloud & Infrastructure").
+       - Do NOT invent or copy skills from any external template!
     4. For each Education entry, extract:
        - Full start date AND graduation date (e.g. "Sept 2026 – Sept 2027", "Aug 2019 – May 2023"). Do NOT drop the start/end dates.
        - City/Country location if listed (e.g. "London, UK").

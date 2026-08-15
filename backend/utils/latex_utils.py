@@ -430,23 +430,8 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
         latex.append("\\begin{rSection}{Technical Skills}")
         latex.append("\\vspace{-0.1em}")
         if isinstance(skills, list):
-            cats = {
-                "Languages": [],
-                "AI/ML & GenAI": [],
-                "Data & Platforms": [],
-                "Software & Infrastructure": []
-            }
-            for s in skills:
-                s_clean = s.strip()
-                if s_clean in ["Python", "SQL", "C++", "Java", "C", "R", "Go", "TypeScript", "JavaScript", "Rust"]:
-                    cats["Languages"].append(s_clean)
-                elif any(k in s_clean for k in ["AI", "ML", "GenAI", "LLM", "RAG", "Machine Learning", "Deep Learning", "Anomaly", "XGBoost", "Naive Bayes", "Vision", "U-Net", "DenseNet"]):
-                    cats["AI/ML & GenAI"].append(s_clean)
-                elif any(k in s_clean for k in ["PySpark", "Azure", "Cloudera", "PostgreSQL", "SAS", "SQL", "Database", "Spark", "Hive"]):
-                    cats["Data & Platforms"].append(s_clean)
-                else:
-                    cats["Software & Infrastructure"].append(s_clean)
-            skills = {k: v for k, v in cats.items() if v}
+            from services.resume_parser import categorize_skills_with_llm
+            skills = categorize_skills_with_llm(skills)
 
         if isinstance(skills, dict):
             for cat, s_list in skills.items():
