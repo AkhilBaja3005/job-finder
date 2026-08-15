@@ -47,6 +47,13 @@ class TTLCache:
                     self._store.pop(k, None)
             self._store[key] = (now, value)
 
+    def pop(self, key: Any, default: Any = None) -> Any:
+        with self._lock:
+            entry = self._store.pop(key, None)
+            if entry is None:
+                return default
+            return entry[1]
+
     def clear(self) -> None:
         with self._lock:
             self._store.clear()
