@@ -1315,19 +1315,24 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             elif not request.skip_tailoring:
                 try:
                     entry_company = await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
+                    safe_key = _safe_key(token)
+                    _, user_out_dir = _get_user_storage_dirs(safe_key)
+                    tex_path, temp_pdf_path = _user_output_paths(token)
+                    cached_pdf = temp_pdf_path if os.path.exists(temp_pdf_path) else tex_path.replace(".tex", ".pdf")
+                    cached_pdf_url = f"/download_application_pdf/{safe_key}/{os.path.basename(cached_pdf)}" if os.path.exists(cached_pdf) else None
+                    cached_cand = session_resume_data.get("name", "") if isinstance(session_resume_data, dict) else ""
+                    cached_overleaf = upload_zip_to_tmpfiles(cached.get("latex_code", ""), cached_cand, request.job_title, entry_company) if cached.get("latex_code") else None
+                    
                     await asyncio.to_thread(record_application, token, {
                         "job_title": request.job_title,
                         "company": entry_company,
                         "job_url": request.job_url or "",
                         "score": cached.get("match_analysis", {}).get("overall_score"),
                         "status": "tailored",
+                        "pdf_url": cached_pdf_url,
+                        "overleaf_url": cached_overleaf
                     })
-                    # Dispatch email on cache hit if PDF exists
-                    safe_key = _safe_key(token)
-                    _, user_out_dir = _get_user_storage_dirs(safe_key)
-                    tex_path, temp_pdf_path = _user_output_paths(token)
-                    cached_pdf = temp_pdf_path if os.path.exists(temp_pdf_path) else tex_path.replace(".tex", ".pdf")
-                    await _send_website_tailoring_email(token, session_resume_data, cached, request.job_title, entry_company, request.job_url, None, cached_pdf)
+                    await _send_website_tailoring_email(token, session_resume_data, cached, request.job_title, entry_company, request.job_url, cached_overleaf, cached_pdf)
                 except Exception as hist_err:
                     print(f"[analyze_job] Failed to record application history / email on cache hit: {hist_err}")
             async def cached_event_generator():
@@ -1375,12 +1380,21 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     elif not request.skip_tailoring:
                         try:
                             entry_company = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
+                            safe_key = _safe_key(token)
+                            tex_path, temp_pdf_path = _user_output_paths(token)
+                            cached_pdf = temp_pdf_path if os.path.exists(temp_pdf_path) else tex_path.replace(".tex", ".pdf")
+                            cached_pdf_url = f"/download_application_pdf/{safe_key}/{os.path.basename(cached_pdf)}" if os.path.exists(cached_pdf) else None
+                            cached_cand = session_resume_data.get("name", "") if isinstance(session_resume_data, dict) else ""
+                            cached_overleaf = upload_zip_to_tmpfiles(cached.get("latex_code", ""), cached_cand, job_title, entry_company) if cached.get("latex_code") else None
+                            
                             await asyncio.to_thread(record_application, token, {
                                 "job_title": job_title,
                                 "company": entry_company,
                                 "job_url": request.job_url or "",
                                 "score": cached.get("match_analysis", {}).get("overall_score"),
                                 "status": "tailored",
+                                "pdf_url": cached_pdf_url,
+                                "overleaf_url": cached_overleaf
                             })
                         except Exception as hist_err:
                             print(f"[analyze_job] Failed to record application history (cache hit): {hist_err}")
