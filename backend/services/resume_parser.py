@@ -252,21 +252,23 @@ def parse_resume(file_path: str) -> StructuredResume:
         if raw_skills and not isinstance(raw_skills, dict):
             parsed_data["skills"] = categorize_skills_with_llm(raw_skills)
         else:
-            # Comprehensive Fallback: Collect all technical terms, technologies, and framework mentions from work experience and projects
+            # Fallback: Extract technical terms directly mentioned in the user's actual text
             collected = []
             for exp in parsed_data.get("experience", []):
                 if exp.get("technologies"):
                     collected.extend([t.strip() for t in exp["technologies"].split(",") if t.strip()])
                 for b in exp.get("description", []):
-                    # Pick key terms mentioned in experience bullets
-                    for kw in ["Python", "SQL", "C++", "Java", "C", "R", "Generative AI", "LLMs", "RAG", "Machine Learning", "Deep Learning", "Anomaly Detection", "XGBoost", "Naive Bayes", "PySpark", "Azure OpenAI", "Cloudera ML", "PostgreSQL", "SAS EG", "Docker", "Rancher", "RabbitMQ", "Jenkins", "Git", "AST Parsing", "Static Analysis", "Distributed Systems", "Microservices"]:
-                        if kw.lower() in str(b).lower() and kw not in collected:
-                            collected.append(kw)
+                    # Find technical terms (capitalized words, frameworks, tools) from actual text
+                    for match in re.findall(r'\b[A-Z][A-Za-z0-9+#.]{1,20}\b', str(b)):
+                        if match not in ["The", "A", "An", "In", "On", "At", "To", "For", "With", "By", "From", "And", "Or", "Using", "Used", "Built", "Created", "Led", "Managed", "Reduced", "Increased"]:
+                            if match not in collected:
+                                collected.append(match)
             for proj in parsed_data.get("projects", []):
                 if proj.get("title"):
-                    for kw in ["Deep Learning", "Computer Vision", "PostgreSQL", "U-Net", "DenseNet", "Data Infrastructure"]:
-                        if kw.lower() in str(proj["title"]).lower() and kw not in collected:
-                            collected.append(kw)
+                    for match in re.findall(r'\b[A-Z][A-Za-z0-9+#.]{1,20}\b', str(proj["title"])):
+                        if match not in ["Project", "System", "Platform", "Tool", "App", "Application", "Dashboard"]:
+                            if match not in collected:
+                                collected.append(match)
             
             if collected:
                 parsed_data["skills"] = categorize_skills_with_llm(list(set(collected)))
