@@ -2238,18 +2238,33 @@ async def compile_master_pdf(request: OriginalOverleafRequest):
 
 
 @app.get("/auth/url")
-async def auth_url():
-    return {"url": get_google_auth_url()}
+async def auth_url(request: Request):
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    scheme = request.headers.get("x-forwarded-proto") or "https"
+    custom_host = f"{scheme}://{host}" if host else None
+    return {"url": get_google_auth_url(host=custom_host)}
 
 @app.get("/auth/callback")
-async def auth_callback(code: str):
+async def auth_callback(request: Request, code: str):
     try:
-        email, picture_url = exchange_google_code_for_email(code)
+        # Dynamically infer the frontend origin from incoming Host / X-Forwarded-Host header
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+        scheme = request.headers.get("x-forwarded-proto") or "https"
+        
+        email, picture_url = exchange_google_code_for_email(code, host=f"{scheme}://{host}" if host else None)
         user = create_or_get_user(email, picture_url)
         token = create_session(user["id"])
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        
+        frontend_url = os.getenv("FRONTEND_URL", "").strip()
+        if not frontend_url or "abaja-job-finder.hf.space" in frontend_url:
+            if host:
+                frontend_url = f"{scheme}://{host}"
+            else:
+                frontend_url = "http://localhost:5173"
+                
         return RedirectResponse(url=f"{frontend_url}?token={token}")
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"OAuth verification failed: {str(e)}")
 
 @app.post("/auth/mock")
