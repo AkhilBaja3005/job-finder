@@ -14,37 +14,37 @@ export interface FormFieldSchema {
  */
 export function extractPageFormSchema(): FormFieldSchema[] {
   const fields: FormFieldSchema[] = [];
-  const elements = document.querySelectorAll('input, textarea, select');
+  
+  // Include standard inputs AND custom framework elements (div comboboxes, ARIA controls, custom buttons)
+  const elements = document.querySelectorAll(
+    'input, textarea, select, [role="combobox"], [role="listbox"], [role="radiogroup"], [role="checkbox"], [contenteditable="true"], button[class*="select"], div[class*="select"], div[class*="option"], div[role="button"]'
+  );
 
   elements.forEach((el, index) => {
-    const element = el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+    const element = el as HTMLElement;
 
-    // Skip hidden or submit/button inputs
-    if ((element as HTMLElement).offsetParent === null) return;
+    // Skip hidden elements or form submission buttons
+    if (element.offsetParent === null) return;
     const type = (element.getAttribute('type') || '').toLowerCase();
-    if (['hidden', 'submit', 'button', 'file', 'image'].includes(type)) return;
+    if (['hidden', 'submit', 'file', 'image'].includes(type)) return;
+    if (element.tagName === 'BUTTON' && (type === 'submit' || (element.textContent || '').toLowerCase().includes('submit'))) return;
 
     const id = element.getAttribute('id') || element.getAttribute('name') || `ai_field_${index}`;
     element.setAttribute('data-zero-field-id', id);
 
-    const placeholder = element.getAttribute('placeholder') || '';
+    const placeholder = element.getAttribute('placeholder') || element.getAttribute('aria-placeholder') || '';
     const ariaLabel = element.getAttribute('aria-label') || '';
     
-    // Find closest field wrapper/question block
+    // Find tight parent label or preceding heading
     const fieldBlock = element.closest('[class*="field"], [class*="formField"], [class*="question"], .application-question, .form-group, label') || element.parentElement;
-
-    // Search for explicit label/legend/heading elements within the block
     let labelTextEl = fieldBlock?.querySelector('label, [class*="label"], legend, h3, h4, h5, [class*="title"], [class*="heading"]') as HTMLElement | null;
 
-    // If label element encompasses entire block or contains input itself, look for preceding text/header sibling
     if (!labelTextEl || labelTextEl.contains(element)) {
       labelTextEl = (element.previousElementSibling as HTMLElement) || fieldBlock;
     }
 
-    // Extract text content and filter out input/button text
     let labelText = '';
     if (labelTextEl && labelTextEl !== element) {
-      // Clone element to remove script/style tags or input text
       const clone = labelTextEl.cloneNode(true) as HTMLElement;
       clone.querySelectorAll('input, textarea, select, button, script, style').forEach(child => child.remove());
       labelText = (clone.textContent || '').replace(/\s+/g, ' ').trim();
@@ -54,7 +54,6 @@ export function extractPageFormSchema(): FormFieldSchema[] {
       labelText = ariaLabel || placeholder || id;
     }
 
-    // Clean up label text to remove excessive raw text
     const cleanLabel = labelText.length > 250 ? labelText.substring(0, 250) + '...' : labelText;
 
     if (element.tagName === 'SELECT') {
@@ -69,32 +68,46 @@ export function extractPageFormSchema(): FormFieldSchema[] {
         fieldType: 'select',
         options
       });
-    } else if (element.tagName === 'TEXTAREA') {
+    } else if (element.tagName === 'TEXTAREA' || element.getAttribute('contenteditable') === 'true') {
       fields.push({
         fieldId: id,
         label: cleanLabel,
         fieldType: 'textarea',
         placeholder
       });
-    } else if (type === 'checkbox' || type === 'radio') {
-      const optionText = element.closest('label')?.textContent?.trim() || element.value || 'Yes';
+    } else if (type === 'checkbox' || type === 'radio' || element.getAttribute('role') === 'checkbox' || element.getAttribute('role') === 'radio') {
+      const optionText = element.closest('label')?.textContent?.trim() || (element as HTMLInputElement).value || element.textContent?.trim() || 'Yes';
       fields.push({
         fieldId: id,
         label: `${cleanLabel} (Option: ${optionText})`,
-        fieldType: type as 'checkbox' | 'radio',
+        fieldType: (type || 'checkbox') as 'checkbox' | 'radio',
         options: [optionText]
       });
-    } else if (element.tagName === 'INPUT') {
+    } else {
+      // Standard input or custom div combobox / button card
+      const isCombobox = element.getAttribute('role') === 'combobox' || element.classList.toString().toLowerCase().includes('select');
       fields.push({
         fieldId: id,
         label: cleanLabel,
-        fieldType: 'text',
+        fieldType: isCombobox ? 'select' : 'text',
         placeholder
       });
     }
   });
 
   return fields;
+}
+
+/**
+ * Extract sanitized raw HTML form source (removing scripts/styles) for LLM structural analysis
+ */
+export function extractSanitizedFormHTML(): string {
+  const forms = document.querySelectorAll('form, [class*="form"], [class*="application"], main');
+  const target = forms.length > 0 ? forms[0] : document.body;
+  const clone = target.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('script, style, svg, path, link, meta').forEach(el => el.remove());
+  const html = clone.outerHTML.replace(/\s+/g, ' ').trim();
+  return html.length > 15000 ? html.substring(0, 15000) + '...' : html;
 }
 
 /**
@@ -108,27 +121,37 @@ export async function batchSolvePageQuestions(
   const fields = extractPageFormSchema();
   if (fields.length === 0) return { solvedCount: 0, answers: {} };
 
+  const rawFormHTML = extractSanitizedFormHTML();
+
   const promptPayload = {
     candidateProfile: {
       ...profile,
       fullName: `${profile.personal.firstName} ${profile.personal.lastName}`.trim()
     },
     pageTitle: document.title,
+    rawFormHTMLSnippet: rawFormHTML,
     questionsToSolve: fields
   };
 
   const systemPrompt = `You are a high-caliber AI Career Coach and Multimodal Resume Assistant.
-You have been provided with both a visual screenshot of the job application page and the DOM question schema.
-Analyze the candidate's complete profile and resume below, match visual layout cues from the screenshot to "questionsToSolve", and answer each question.
+You have been provided with:
+1. A visual screenshot of the job application page.
+2. The raw HTML form source code ("rawFormHTMLSnippet").
+3. The interactive DOM question schema ("questionsToSolve").
+
+Analyze the candidate's complete profile and resume below, inspect the raw HTML form structure and screenshot to pick which element/field to fill, and answer each question.
 
 CRITICAL INSTRUCTIONS:
 1. Every answer MUST be personalized, specific, and directly synthesized from the Candidate Profile and Work Experience.
-2. DO NOT output generic or template filler (e.g. "I am eager to contribute..."). Cite actual skills, projects, technologies, and achievements from the candidate's background.
-3. For dropdown/select questions, choose the EXACT string from the provided "options" list.
-4. For short inputs (e.g. LinkedIn, GitHub, Name, City), output the candidate's exact profile value.
+2. DO NOT output generic filler. Cite actual skills, projects, technologies, and achievements.
+3. For dropdown/select questions or custom ARIA comboboxes, choose the EXACT string from the provided options or raw HTML option list.
+4. For short inputs (LinkedIn, GitHub, Name, City), output the exact profile value.
 
 Candidate Profile:
 ${JSON.stringify(promptPayload.candidateProfile, null, 2)}
+
+Raw Form HTML Snippet:
+${promptPayload.rawFormHTMLSnippet}
 
 Questions to Solve:
 ${JSON.stringify(promptPayload.questionsToSolve, null, 2)}
