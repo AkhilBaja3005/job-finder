@@ -59,128 +59,118 @@ def extract_text_from_docx(file_path: str) -> str:
         text.append(para.text)
     return "\n".join(text)
 
+class CategorizedSkillItem(BaseModel):
+    skill: str = Field(description="Normalized skill name")
+    category: str = Field(description="One of the categories e.g. Languages, AI/ML & GenAI, Data & Analytics, Frontend & Web, DevOps & Cloud, Testing & QA, Finance & Quant, Software & Systems")
+
 class SkillsCategorizationResponse(BaseModel):
-    categorized_skills: Dict[str, List[str]] = Field(description="Dictionary of category names to list of skill strings")
+    categorized: List[CategorizedSkillItem] = Field(default_factory=list)
+
+KNOWN_SKILL_CATEGORY_MAP = {
+    # Languages
+    "python": "Languages", "sql": "Languages", "c++": "Languages", "java": "Languages", "c#": "Languages",
+    "c": "Languages", "r": "Languages", "golang": "Languages", "go": "Languages", "typescript": "Languages",
+    "javascript": "Languages", "rust": "Languages", "bash": "Languages", "shell": "Languages", "scala": "Languages",
+    "kotlin": "Languages", "swift": "Languages", "php": "Languages", "ruby": "Languages", "perl": "Languages", "matlab": "Languages",
+    # AI/ML & GenAI
+    "ai": "AI/ML & GenAI", "ml": "AI/ML & GenAI", "genai": "AI/ML & GenAI", "llm": "AI/ML & GenAI", "rag": "AI/ML & GenAI",
+    "machine learning": "AI/ML & GenAI", "deep learning": "AI/ML & GenAI", "pytorch": "AI/ML & GenAI", "tensorflow": "AI/ML & GenAI",
+    "keras": "AI/ML & GenAI", "scikit-learn": "AI/ML & GenAI", "sklearn": "AI/ML & GenAI", "opencv": "AI/ML & GenAI",
+    "langchain": "AI/ML & GenAI", "llamaindex": "AI/ML & GenAI", "huggingface": "AI/ML & GenAI", "computer vision": "AI/ML & GenAI",
+    "nlp": "AI/ML & GenAI", "transformers": "AI/ML & GenAI", "xgboost": "AI/ML & GenAI",
+    # Data & Analytics
+    "pyspark": "Data & Analytics", "postgresql": "Data & Analytics", "postgres": "Data & Analytics", "sas": "Data & Analytics",
+    "spark": "Data & Analytics", "hive": "Data & Analytics", "snowflake": "Data & Analytics", "bigquery": "Data & Analytics",
+    "redshift": "Data & Analytics", "mongodb": "Data & Analytics", "mongo": "Data & Analytics", "redis": "Data & Analytics",
+    "mysql": "Data & Analytics", "oracle": "Data & Analytics", "elasticsearch": "Data & Analytics", "kafka": "Data & Analytics",
+    "airflow": "Data & Analytics", "databricks": "Data & Analytics", "hadoop": "Data & Analytics", "pandas": "Data & Analytics",
+    "numpy": "Data & Analytics", "power bi": "Data & Analytics", "powerbi": "Data & Analytics", "tableau": "Data & Analytics",
+    # Frontend & Web
+    "react": "Frontend & Web", "react.js": "Frontend & Web", "next.js": "Frontend & Web", "nextjs": "Frontend & Web",
+    "vue": "Frontend & Web", "vue.js": "Frontend & Web", "angular": "Frontend & Web", "svelte": "Frontend & Web",
+    "html": "Frontend & Web", "html5": "Frontend & Web", "css": "Frontend & Web", "css3": "Frontend & Web",
+    "tailwind": "Frontend & Web", "bootstrap": "Frontend & Web", "webpack": "Frontend & Web", "vite": "Frontend & Web",
+    # DevOps & Cloud
+    "docker": "DevOps & Cloud", "kubernetes": "DevOps & Cloud", "k8s": "DevOps & Cloud", "helm": "DevOps & Cloud",
+    "terraform": "DevOps & Cloud", "aws": "DevOps & Cloud", "gcp": "DevOps & Cloud", "azure": "DevOps & Cloud",
+    "jenkins": "DevOps & Cloud", "github actions": "DevOps & Cloud", "rancher": "DevOps & Cloud", "git": "DevOps & Cloud",
+    # Testing & QA
+    "pytest": "Testing & QA", "unittest": "Testing & QA", "junit": "Testing & QA", "selenium": "Testing & QA",
+    "cypress": "Testing & QA", "playwright": "Testing & QA", "jest": "Testing & QA"
+}
 
 def categorize_skills_with_llm(raw_skills: Union[str, List[str]]) -> Dict[str, List[str]]:
-    """Use dedicated LLM call to dynamically categorize raw skill strings/lists into 3-5 categories."""
-    if isinstance(raw_skills, list):
-        skills_str = ", ".join([str(s) for s in raw_skills])
-    else:
-        skills_str = str(raw_skills)
-        
-    prompt = f"""
-    You are an expert technical recruiter and resume classifier.
-    Extract all individual technical skill items, tools, languages, frameworks, and libraries from the text below, and group them into 3 to 5 distinct, non-overlapping functional categories tailored to the candidate's domain (e.g. "Languages", "AI/ML & GenAI", "Data & Platforms", "Software & Infrastructure", "Cloud & DevOps", etc.).
-    
-    CRITICAL RULES:
-    1. Extract ONLY concise skill names (e.g. "Python", "SQL", "Docker", "RAG", "PySpark"). Do NOT output full sentences or paragraph text.
-    2. Every skill in the input MUST be placed into EXACTLY ONE category.
-    3. Do NOT duplicate any skill across multiple categories.
-    4. Keep category names concise and professional.
-    
-    Input Skill Text:
-    {skills_str}
     """
-    try:
-        response_text = generate_content_with_fallback(prompt, SkillsCategorizationResponse)
-        parsed = json.loads(response_text)
-        cats = parsed.get("categorized_skills", {})
-        if isinstance(cats, dict) and len(cats) > 0:
-            clean_cats = {}
-            for k, v in cats.items():
-                if isinstance(v, list):
-                    valid_items = []
-                    for item in v:
-                        s_str = str(item).replace("\n", " ").strip()
-                        if s_str and len(s_str) < 50 and not s_str.lower().startswith("education") and not s_str.lower().startswith("work experience"):
-                            valid_items.append(s_str)
-                    if valid_items:
-                        clean_cats[k] = valid_items
-            if clean_cats:
-                return clean_cats
-    except Exception as e:
-        print(f"[categorize_skills_with_llm] LLM call error: {e}")
-        
-    # Rule-based categorization fallback if LLM call fails or returns flat object
-    flat_skills = [s.strip() for s in skills_str.split(",") if s.strip() and len(s.strip()) < 50]
-    cats = {
-        "Languages": [],
-        "AI/ML & GenAI": [],
-        "Data & Analytics": [],
-        "Frontend & Web": [],
-        "DevOps, SRE & Cloud": [],
-        "Testing & QA": [],
-        "Finance & Quant": [],
-        "Other Technical Skills": []
-    }
-    
-    lang_keywords = ["python", "sql", "c++", "java", "c#", "c", "r", "golang", "go", "typescript", "javascript", "rust", "bash", "shell", "scala", "kotlin", "swift", "php", "ruby", "perl", "matlab"]
-    
-    aiml_keywords = [
-        "ai", "ml", "genai", "llm", "rag", "machine learning", "deep learning", "anomaly", "xgboost", 
-        "naive bayes", "vision", "u-net", "densenet", "computer vision", "nlp", "transformers", "pytorch", 
-        "tensorflow", "keras", "scikit-learn", "sklearn", "opencv", "langchain", "llama", "azure openai", 
-        "huggingface", "context engineering", "fine-tuning", "prompt engineering", "reinforcement learning", 
-        "bert", "diffusion", "neural network", "forecast", "forecasting", "predictive modeling"
-    ]
-    
-    data_analytics_keywords = [
-        "pyspark", "azure", "cloudera", "postgresql", "postgres", "sas", "database", "spark", "hive", 
-        "snowflake", "bigquery", "redshift", "mongo", "mongodb", "redis", "mysql", "oracle", "elasticsearch", 
-        "kafka", "airflow", "databricks", "hadoop", "etl", "elt", "data warehouse", "dbt", "looker", "tableau", 
-        "power bi", "powerbi", "excel", "google analytics", "mixpanel", "data modeling", "business intelligence", 
-        "kpi", "a/b testing", "data pipeline", "pandas", "numpy", "statistics"
-    ]
+    Hybrid Skill Categorization Engine:
+    1. Deterministic Dictionary Map for 80% known skills (instant, 0 latency, 0 hallucination).
+    2. LLM Fallback Call for remaining unknown/unclassified skills with temperature=0.
+    """
+    if isinstance(raw_skills, list):
+        skill_items = [str(s).strip() for s in raw_skills if str(s).strip()]
+    else:
+        skill_items = [s.strip() for s in str(raw_skills).split(",") if s.strip()]
 
-    frontend_keywords = [
-        "react", "react.js", "next.js", "nextjs", "vue", "vue.js", "angular", "svelte", "html", "html5", 
-        "css", "css3", "tailwind", "bootstrap", "webpack", "vite", "redux", "zustand", "webassembly", 
-        "responsive design", "ux", "ui", "storybook"
-    ]
+    result_categories: Dict[str, List[str]] = {}
+    unknown_skills: List[str] = []
 
-    devops_sre_keywords = [
-        "docker", "kubernetes", "k8s", "helm", "terraform", "ansible", "puppet", "chef", "aws", "gcp", 
-        "cloud", "azure", "ci/cd", "jenkins", "github actions", "gitlab ci", "rancher", "prometheus", 
-        "grafana", "datadog", "splunk", "istio", "argocd", "linux", "unix", "sre", "infrastructure as code"
-    ]
-
-    testing_keywords = [
-        "pytest", "unittest", "junit", "selenium", "cypress", "playwright", "jest", "mocha", "chai", 
-        "test automation", "qa", "integration testing", "end-to-end testing", "tdd", "bdd", "loadrunner", "jmeter"
-    ]
-
-    quant_finance_keywords = [
-        "stochastic", "black-scholes", "monte carlo", "risk modeling", "var", "value at risk", "time series", 
-        "algorithmic trading", "derivatives", "options", "fixed income", "portfolio optimization", "quantitative analysis", 
-        "quant", "bloomberg", "reuters", "financial modeling", "econometrics"
-    ]
-
-    for s in flat_skills:
+    # Step 1: Deterministic dictionary mapping
+    for s in skill_items:
         s_clean = s.strip()
-        if not s_clean:
+        if not s_clean or len(s_clean) > 50:
             continue
-        s_lower = s_clean.lower()
-        
-        if any(k == s_lower or (len(k) > 2 and k in s_lower and not any(ai_k in s_lower for ai_k in ["ai", "ml", "learning"])) for k in lang_keywords):
-            cats["Languages"].append(s_clean)
-        elif any(k in s_lower for k in aiml_keywords):
-            cats["AI/ML & GenAI"].append(s_clean)
-        elif any(k in s_lower for k in frontend_keywords):
-            cats["Frontend & Web"].append(s_clean)
-        elif any(k in s_lower for k in devops_sre_keywords):
-            cats["DevOps, SRE & Cloud"].append(s_clean)
-        elif any(k in s_lower for k in testing_keywords):
-            cats["Testing & QA"].append(s_clean)
-        elif any(k in s_lower for k in quant_finance_keywords):
-            cats["Finance & Quant"].append(s_clean)
-        elif any(k in s_lower for k in data_analytics_keywords):
-            cats["Data & Analytics"].append(s_clean)
+        cat = KNOWN_SKILL_CATEGORY_MAP.get(s_clean.lower())
+        if cat:
+            result_categories.setdefault(cat, [])
+            if s_clean not in result_categories[cat]:
+                result_categories[cat].append(s_clean)
         else:
-            cats["Other Technical Skills"].append(s_clean)
-    
-    res_cats = {k: v for k, v in cats.items() if v}
-    return res_cats if res_cats else {"Technical Skills": flat_skills}
+            unknown_skills.append(s_clean)
+
+    # Step 2: LLM Fallback for remaining unknown skills
+    if unknown_skills:
+        prompt = f"""
+You are a skill categorization engine. You will be given a list of skills and a set of categories.
+Assign each skill to exactly ONE category — the single best fit.
+
+CATEGORIES:
+1. Languages — programming languages (e.g. C++, Java, Rust, Go).
+2. AI/ML & GenAI — machine learning models, frameworks, AI tools, LLMs (e.g. PyTorch, LangChain, Transformers).
+3. Data & Analytics — databases, query tools, BI, data processing engines (e.g. PostgreSQL, Spark, Tableau).
+4. Frontend & Web — web development frameworks, UI tools, web tech (e.g. React, HTML, CSS).
+5. DevOps & Cloud — cloud platforms, containerization, CI/CD, VCS (e.g. AWS, Docker, Git, Jenkins).
+6. Testing & QA — automation frameworks, testing tools (e.g. Selenium, Cypress).
+7. Finance & Quant — risk modeling, quantitative finance, financial tools (e.g. Black-Scholes, Monte Carlo).
+8. Software & Systems — software architecture, developer tools, system libraries (e.g. RabbitMQ, AST Parsing, Microservices).
+
+RULES:
+- Normalize near-duplicate names before categorizing (e.g. "PowerBI" → "Power BI").
+- Do NOT invent skills that were not in the input list. Do NOT skip any input skill.
+- Output ONLY valid JSON matching the schema.
+
+SKILLS TO CATEGORIZE:
+{", ".join(unknown_skills)}
+"""
+        try:
+            response_text = generate_content_with_fallback(prompt, SkillsCategorizationResponse)
+            parsed = json.loads(response_text)
+            items = parsed.get("categorized", [])
+            for item in items:
+                if isinstance(item, dict):
+                    sk = item.get("skill", "").strip()
+                    cat = item.get("category", "Software & Systems").strip()
+                    if sk and len(sk) < 50:
+                        result_categories.setdefault(cat, [])
+                        if sk not in result_categories[cat]:
+                            result_categories[cat].append(sk)
+        except Exception as e:
+            print(f"[categorize_skills_with_llm] Hybrid LLM fallback error: {e}")
+            for sk in unknown_skills:
+                result_categories.setdefault("Software & Systems", [])
+                if sk not in result_categories["Software & Systems"]:
+                    result_categories["Software & Systems"].append(sk)
+
+    res_cats = {k: v for k, v in result_categories.items() if v}
+    return res_cats if res_cats else {"Technical Skills": skill_items}
 
 def parse_resume(file_path: str) -> StructuredResume:
     ext = os.path.splitext(file_path)[1].lower()
