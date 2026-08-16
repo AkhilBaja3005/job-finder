@@ -112,7 +112,7 @@ def categorize_skills_with_llm(raw_skills: Union[str, List[str]]) -> Dict[str, L
         "DevOps, SRE & Cloud": [],
         "Testing & QA": [],
         "Finance & Quant": [],
-        "Software & Systems": []
+        "Other Technical Skills": []
     }
     
     lang_keywords = ["python", "sql", "c++", "java", "c#", "c", "r", "golang", "go", "typescript", "javascript", "rust", "bash", "shell", "scala", "kotlin", "swift", "php", "ruby", "perl", "matlab"]
@@ -177,7 +177,7 @@ def categorize_skills_with_llm(raw_skills: Union[str, List[str]]) -> Dict[str, L
         elif any(k in s_lower for k in data_analytics_keywords):
             cats["Data & Analytics"].append(s_clean)
         else:
-            cats["Software & Systems"].append(s_clean)
+            cats["Other Technical Skills"].append(s_clean)
     
     res_cats = {k: v for k, v in cats.items() if v}
     return res_cats if res_cats else {"Technical Skills": flat_skills}
@@ -253,23 +253,11 @@ def parse_resume(file_path: str) -> StructuredResume:
         if raw_skills and not isinstance(raw_skills, dict):
             parsed_data["skills"] = categorize_skills_with_llm(raw_skills)
         else:
-            # Fallback: Extract technical terms directly mentioned in the user's actual text
+            # Fallback: Collect explicit technologies string from work experience entries
             collected = []
             for exp in parsed_data.get("experience", []):
                 if exp.get("technologies"):
                     collected.extend([t.strip() for t in exp["technologies"].split(",") if t.strip()])
-                for b in exp.get("description", []):
-                    # Find technical terms (capitalized words, frameworks, tools) from actual text
-                    for match in re.findall(r'\b[A-Z][A-Za-z0-9+#.]{1,20}\b', str(b)):
-                        if match not in ["The", "A", "An", "In", "On", "At", "To", "For", "With", "By", "From", "And", "Or", "Using", "Used", "Built", "Created", "Led", "Managed", "Reduced", "Increased"]:
-                            if match not in collected:
-                                collected.append(match)
-            for proj in parsed_data.get("projects", []):
-                if proj.get("title"):
-                    for match in re.findall(r'\b[A-Z][A-Za-z0-9+#.]{1,20}\b', str(proj["title"])):
-                        if match not in ["Project", "System", "Platform", "Tool", "App", "Application", "Dashboard"]:
-                            if match not in collected:
-                                collected.append(match)
             
             if collected:
                 parsed_data["skills"] = categorize_skills_with_llm(list(set(collected)))
