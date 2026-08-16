@@ -204,6 +204,28 @@ _COMPILED_TITLE_TIER_PATTERNS: List[Tuple[str, re.Pattern]] = [
     for kw in TITLE_TIERS[tier]
 ]
 
+# Precompiled alias patterns per canonical skill (using _clean_text(alias)) for fast importance weighting
+_COMPILED_SKILL_ALIAS_PATTERNS: Dict[str, List[re.Pattern]] = {
+    canonical: [re.compile(r'\b' + re.escape(_clean_text(alias)) + r'\b', re.IGNORECASE) for alias in aliases]
+    for canonical, aliases in SKILL_ALIASES.items()
+}
+
+@dataclass
+class ScoringConfig:
+    """Configurable scoring weights, thresholds, and penalty scaling factors."""
+    skill_mandatory_weight: float = 85.0    # Portion of skills_score from required skills
+    skill_preferred_weight: float = 15.0    # Portion of skills_score from preferred skills
+    overall_skills_weight: float = 0.40     # Overall score weight for skills
+    overall_exp_weight: float = 0.35        # Overall score weight for experience
+    overall_fit_weight: float = 0.25        # Overall score weight for role fit
+    tier_penalty_per_level: float = 0.15    # Penalty per missing seniority tier level
+    tenure_volatility_modifier: float = 0.88# Tenure modifier for avg tenure < 9 months
+    master_ats_floor: int = 55              # Standalone master resume score min floor
+    master_ats_cap: int = 95                # Standalone master resume score max cap
+    display_match_threshold: float = 0.15   # Display threshold for matched vs missing skills list
+
+DEFAULT_SCORING_CONFIG = ScoringConfig()
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. DATA CONTAINERS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -255,7 +277,7 @@ def _extract_taxonomy_skills(text: str) -> Set[str]:
     for pattern, token in _COMPILED_HIGH_RISK_PATTERNS:
         if pattern.search(cleaned):
             context_pattern = HIGH_RISK_TOKEN_CONTEXT[token]
-            # "golang" is unambiguous on its own — no context word needed.
+            # "golang" in text directly grants "go" token match without requiring context guard words
             if (token == "go" and "golang" in cleaned) or context_pattern.search(cleaned):
                 found_skills.add(_HIGH_RISK_CANONICAL[token])
 
@@ -332,6 +354,28 @@ def _parse_date_to_ordinal(date_str: str) -> Optional[int]:
     now = datetime.datetime.now()
     if s in ('present', 'current', 'now', 'ongoing', 'till date') or 'present' in s:
         return now.toordinal()
+    
+    # 1. Fallback: Numeric MM/YYYY or M/YYYY (e.g. "01/2023", "5/2021")
+    m_slash = re.search(r'\b(0?[1-9]|1[0-2])/(19\d{2}|20\d{2})\b', s)
+    if m_slash:
+        return datetime.date(int(m_slash.group(2)), int(m_slash.group(1)), 1).toordinal()
+
+    # 2. Fallback: Numeric YYYY-MM (e.g. "2023-01")
+    m_dash = re.search(r'\b(19\d{2}|20\d{2})-(0?[1-9]|1[0-2])\b', s)
+    if m_dash:
+        return datetime.date(int(m_dash.group(1)), int(m_dash.group(2)), 1).toordinal()
+
+    # 3. Fallback: Quarter YYYY-Qn or Qn YYYY (e.g. "Q1 2023", "2023-Q3")
+    m_q1 = re.search(r'\bq([1-4])\s*(19\d{2}|20\d{2})\b', s)
+    if m_q1:
+        q_month = (int(m_q1.group(1)) - 1) * 3 + 1
+        return datetime.date(int(m_q1.group(2)), q_month, 1).toordinal()
+    m_q2 = re.search(r'\b(19\d{2}|20\d{2})\s*[-/]?\s*q([1-4])\b', s)
+    if m_q2:
+        q_month = (int(m_q2.group(2)) - 1) * 3 + 1
+        return datetime.date(int(m_q2.group(1)), q_month, 1).toordinal()
+
+    # 4. Standard "Mon YYYY" or bare year
     year_match = re.search(r'\b(19\d{2}|20\d{2})\b', s)
     if not year_match: return None
     year = int(year_match.group(1))
@@ -343,25 +387,43 @@ def _parse_date_to_ordinal(date_str: str) -> Optional[int]:
             break
     return datetime.date(year, month, 1).toordinal()
 
-def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, List[Tuple[int, int, float]]]:
+def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, List[Tuple[int, int, float]], List[str]]:
     """
     Merges overlapping professional experience, tracking total years,
-    average structural tenure parameters, and recency coefficients.
+    average structural tenure parameters, recency coefficients, and date parsing failures.
     """
     intervals = []
     job_durations = []
+    parse_failures = []
 
-    for exp in resume_data.get("experience", []):
+    for idx, exp in enumerate(resume_data.get("experience", [])):
         if not isinstance(exp, dict):
             continue
-        start = _parse_date_to_ordinal(exp.get("start_date", ""))
-        end = _parse_date_to_ordinal(exp.get("end_date", "") or "Present")
-        if start and end and end > start:
+        role_label = exp.get("role") or f"Position #{idx+1}"
+        company_label = exp.get("company") or "Unknown Company"
+        job_context = f"'{role_label} at {company_label}'"
+
+        start_str = exp.get("start_date", "")
+        end_str = exp.get("end_date", "")
+        if not end_str:
+            end_str = "Present"
+
+        start = _parse_date_to_ordinal(start_str)
+        if start_str and start is None:
+            parse_failures.append(f"Could not parse start_date: '{start_str}' in job {job_context}")
+
+        end = _parse_date_to_ordinal(end_str)
+        if end_str and end is None:
+            parse_failures.append(f"Could not parse end_date: '{end_str}' in job {job_context}")
+
+        if start and end and end >= start:
+            if start == end:
+                end = start + 365
             intervals.append((start, end))
             job_durations.append((end - start) / 365.25)
             
     if not intervals:
-        return 0.0, 0.0, []
+        return 0.0, 0.0, [], parse_failures
         
     intervals.sort(key=lambda x: x[0])
     merged: List[Tuple[int, int]] = []
@@ -383,11 +445,10 @@ def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, Lis
     weighted_segments = []
     for start, end in merged:
         years_ago = (now_ordinal - end) / 365.25
-        # Recency Multiplier: 100% value for recent work; decays to a 40% floor over 5 years
         weight = 1.0 if years_ago <= 1.0 else max(0.4, 1.0 - ((years_ago - 1.0) / 4.0) * 0.6)
         weighted_segments.append((start, end, weight))
         
-    return calendar_years, avg_tenure, weighted_segments
+    return calendar_years, avg_tenure, weighted_segments, parse_failures
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. EDUCATION CREDITS, SENIORITY TIERS & TENURE VOLATILITY ADJUSTERS
@@ -441,32 +502,60 @@ def get_candidate_seniority_tier(resume_data: dict) -> str:
             return tier
     return "mid"
 
+def _compute_skill_importance_weights(jd_text: str, skills: List[str]) -> Dict[str, float]:
+    """
+    Computes normalized importance weights (summing to 1.0) for a list of skills
+    based on JD mention frequency and placement in the intro/title lines.
+    """
+    if not skills:
+        return {}
+    
+    cleaned_jd = _clean_text(jd_text)
+    lines = [line.strip() for line in jd_text.split('\n') if line.strip()]
+    header_text = _clean_text(" ".join(lines[:2])) if lines else ""
+
+    raw_scores: Dict[str, float] = {}
+    for skill in skills:
+        patterns = _COMPILED_SKILL_ALIAS_PATTERNS.get(skill)
+        if not patterns:
+            # Fallback for dynamic skills outside predefined taxonomy
+            aliases = SKILL_ALIASES.get(skill, [skill])
+            patterns = [re.compile(r'\b' + re.escape(_clean_text(alias)) + r'\b', re.IGNORECASE) for alias in aliases]
+
+        count = 0
+        for pattern in patterns:
+            count += len(pattern.findall(cleaned_jd))
+        
+        # Give bonus weight if mentioned in title/intro lines
+        header_bonus = 0
+        for pattern in patterns:
+            if pattern.search(header_text):
+                header_bonus = 1
+                break
+        
+        raw_scores[skill] = max(1.0, float(count)) + header_bonus
+
+    total_raw = sum(raw_scores.values())
+    if total_raw == 0:
+        return {s: 1.0 / len(skills) for s in skills}
+    
+    return {s: raw_scores[s] / total_raw for s in skills}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 7. CONTEXTUAL DENSITY SKILLS EVALUATOR
 # ─────────────────────────────────────────────────────────────────────────────
 def compute_skills_score(
     resume_data: dict, required_skills: List[str], preferred_skills: List[str],
-    weighted_segments: List[Tuple[int, int, float]]
+    weighted_segments: List[Tuple[int, int, float]],
+    jd_text: str = "",
+    config: ScoringConfig = DEFAULT_SCORING_CONFIG
 ) -> SkillMatchResult:
     """Evaluates keyword matches using location weighting and a stuffing-prevention cap."""
     if not required_skills:
-        # No taxonomy skills were extractable from the JD text at all (common
-        # for JDs in non-tech-heavy industries whose tools aren't in
-        # SKILL_ALIASES, e.g. legal/finance-specific software). This is NOT
-        # the same as "candidate matches every requirement" — returning 100
-        # here previously produced a false-perfect skills_score with 0/0
-        # matched skills, inflating overall_score. Use a neutral score
-        # instead so an unscoreable JD doesn't look like a perfect match.
         return SkillMatchResult(60, [], [], [], [], "No mandatory technical keywords recognized in this JD — skills score is a neutral default, not a real match assessment.")
 
     skills_sec_canon = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
 
-    # Time-Decay weights helper:
-    # Estimate years elapsed since today (2026) for the job's timeline to apply decay factors:
-    # - Job end date within 2 years (since 2024): 1.0x weight modifier
-    # - Job end date 2-5 years ago (2021-2024): 0.8x weight modifier
-    # - Job end date 5+ years ago (before 2021): 0.6x weight modifier
-    current_year = 2026
     job_profiles: List[Tuple[Set[str], float]] = []
     for exp in resume_data.get("experience", []):
         if not isinstance(exp, dict):
@@ -475,74 +564,67 @@ def compute_skills_score(
         end_str = exp.get("end_date", "") or "Present"
         end = _parse_date_to_ordinal(end_str)
         
-        # Calculate time decay factor based on job recency
-        decay_factor = 1.0
-        try:
-            # Parse year from end date string (e.g. "2021", "Dec 2022", etc.)
-            end_year_match = re.search(r'\b(20\d{2})\b', end_str)
-            if end_year_match:
-                end_year = int(end_year_match.group(1))
-                years_ago = current_year - end_year
-                if years_ago > 5:
-                    decay_factor = 0.6
-                elif years_ago > 2:
-                    decay_factor = 0.8
-            elif "present" in end_str.lower() or "current" in end_str.lower():
-                decay_factor = 1.0
-        except Exception:
-            pass
-
         weight = 0.5
         if start and end:
             for s_ord, e_ord, w_val in weighted_segments:
-                if start >= s_ord and end <= e_ord:
+                if max(start, s_ord) < min(end, e_ord):
                     weight = w_val
                     break
         
-        # Apply the recency decay to the timeline segment weight
-        effective_weight = weight * decay_factor
         job_text = _clean_text(exp.get("role", "") + " " + " ".join(exp.get("description", [])))
-        job_profiles.append((_extract_taxonomy_skills(job_text), effective_weight))
+        job_profiles.append((_extract_taxonomy_skills(job_text), weight))
 
     def evaluate_skill_strength(skill: str) -> float:
         # Base credit from skills list
         strength = 0.5 if skill in skills_sec_canon else 0.0
         for j_skills, weight in job_profiles:
             if skill in j_skills:
-                # Add contextual weight. Apply a density scale caps to prevent stuffing:
-                # a skill matching across multiple past jobs adds incrementally but caps out.
+                # Add contextual weight using timeline recency segment weight
                 strength += (0.5 * weight)
         return min(1.0, strength) # Hard anti-stuffing / density cap limit
 
-    matched_req, missing_req, total_req_strength = [], [], 0.0
+    # Decoupled Threshold Architecture:
+    # 1. Continuous strength (str_val) contributes to total_req_strength/total_pref_strength
+    #    for ALL required/preferred skills to eliminate hard-cliff scoring penalties for older experience.
+    # 2. A separate display threshold (>= config.display_match_threshold) is used purely to determine
+    #    matched_required vs missing_required lists for UI reporting and audit breakdowns.
+    DISPLAY_MATCH_THRESHOLD = config.display_match_threshold
+
+    # Compute skill importance weights if jd_text is provided
+    importance_weights = _compute_skill_importance_weights(jd_text, required_skills) if jd_text else {s: 1.0 / len(required_skills) for s in required_skills}
+
+    matched_req, missing_req, weighted_req_strength = [], [], 0.0
     for s in required_skills:
         str_val = evaluate_skill_strength(s)
-        if str_val >= 0.35:
+        w = importance_weights.get(s, 1.0 / len(required_skills))
+        weighted_req_strength += (str_val * w)
+        if str_val >= DISPLAY_MATCH_THRESHOLD:
             matched_req.append(s)
-            total_req_strength += str_val
         else:
             missing_req.append(s)
 
-    matched_pref, total_pref_strength = [], 0.0
+    matched_pref, missing_pref, total_pref_strength = [], [], 0.0
     for s in preferred_skills:
         str_val = evaluate_skill_strength(s)
-        if str_val >= 0.35:
+        total_pref_strength += str_val
+        if str_val >= DISPLAY_MATCH_THRESHOLD:
             matched_pref.append(s)
-            total_pref_strength += str_val
+        else:
+            missing_pref.append(s)
 
-    req_score = (total_req_strength / len(required_skills)) * 85
-    pref_score = (total_pref_strength / len(preferred_skills)) * 15 if preferred_skills else 15
+    req_score = weighted_req_strength * config.skill_mandatory_weight
+    pref_score = (total_pref_strength / len(preferred_skills)) * config.skill_preferred_weight if preferred_skills else config.skill_preferred_weight
     final_skills_score = min(100, max(0, round(req_score + pref_score)))
     
-    detail = f"Required Match Strength: {len(matched_req)}/{len(required_skills)} (Recency decayed). Section weights: Mandatory: {round(req_score)}/85"
-    if preferred_skills: detail += f" + Preferred: {round(pref_score)}/15."
+    detail = f"Required Match Strength: {len(matched_req)}/{len(required_skills)} (Weighted importance). Section weights: Mandatory: {round(req_score)}/{round(config.skill_mandatory_weight)}"
+    if preferred_skills: detail += f" + Preferred: {round(pref_score)}/{round(config.skill_preferred_weight)}."
 
-    return SkillMatchResult(final_skills_score, matched_req, matched_pref, missing_req, [], detail)
+    return SkillMatchResult(final_skills_score, matched_req, matched_pref, missing_req, missing_pref, detail)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. MAIN ENTRY PIPELINE
 # ─────────────────────────────────────────────────────────────────────────────
-def compute_ats_score(resume_data: dict, jd_text: str) -> ATSScoreResult:
+def compute_ats_score(resume_data: dict, jd_text: str, config: ScoringConfig = DEFAULT_SCORING_CONFIG) -> ATSScoreResult:
     """Executes the optimized multi-stage deterministic ATS ingestion pipeline."""
     # Stage 1: Screen binary knockouts
     eligible, reason = evaluate_knockouts(resume_data, jd_text)
@@ -551,7 +633,7 @@ def compute_ats_score(resume_data: dict, jd_text: str) -> ATSScoreResult:
         
     # Stage 2: Extract requirements and map out timelines
     required_years, required_edu, required_tier = extract_jd_expectations(jd_text)
-    calendar_years, avg_tenure, weighted_segments = calculate_flattened_experience(resume_data)
+    calendar_years, avg_tenure, weighted_segments, parse_failures = calculate_flattened_experience(resume_data)
     required_skills, preferred_skills = extract_jd_skills(jd_text)
     
     # Stage 3: Inject Advanced Degree Virtual Credits
@@ -580,17 +662,17 @@ def compute_ats_score(resume_data: dict, jd_text: str) -> ATSScoreResult:
     tier_modifier = 1.0
     if cand_tier_idx < req_tier_idx:
         # Penalize undersized seniority context (e.g., Senior role target vs Junior candidate title history)
-        tier_modifier -= 0.15 * (req_tier_idx - cand_tier_idx)
+        tier_modifier -= config.tier_penalty_per_level * (req_tier_idx - cand_tier_idx)
 
     # Stage 6: Apply Volatility Metrics (Tenure stability scaling factor)
     tenure_modifier = 1.0
     if avg_tenure > 0.0 and avg_tenure < 0.75:  # Avg tenure lower than 9 months
-        tenure_modifier = 0.88  # Apply operational stability scaling penalty
+        tenure_modifier = config.tenure_volatility_modifier  # Apply operational stability scaling penalty
         
     final_experience_score = min(100, max(0, round(base_exp_score * tier_modifier * tenure_modifier)))
 
     # Stage 7: Evaluate Contextual Taxonomy Matrix
-    skill_res = compute_skills_score(resume_data, required_skills, preferred_skills, weighted_segments)
+    skill_res = compute_skills_score(resume_data, required_skills, preferred_skills, weighted_segments, jd_text=jd_text, config=config)
     
     all_matched = sorted(list(set(skill_res.matched_required + skill_res.matched_preferred)))
     score_breakdown = {
@@ -603,6 +685,8 @@ def compute_ats_score(resume_data: dict, jd_text: str) -> ATSScoreResult:
         "required_skills_found": ", ".join(skill_res.matched_required) or "None",
         "missing_critical_skills": ", ".join(skill_res.missing_required) or "None"
     }
+    if parse_failures:
+        score_breakdown["date_parse_warnings"] = " | ".join(parse_failures)
 
     return ATSScoreResult(
         eligible=True,
@@ -616,9 +700,9 @@ def compute_ats_score(resume_data: dict, jd_text: str) -> ATSScoreResult:
         score_breakdown=score_breakdown
     )
 
-def compute_overall_score(skills: int, experience: int, role_fit: int) -> int:
+def compute_overall_score(skills: int, experience: int, role_fit: int, config: ScoringConfig = DEFAULT_SCORING_CONFIG) -> int:
     """Calculates final combined ATS score matching recruiter weights."""
-    return round(0.40 * skills + 0.35 * experience + 0.25 * role_fit)
+    return round(config.overall_skills_weight * skills + config.overall_exp_weight * experience + config.overall_fit_weight * role_fit)
 
 
 def estimate_role_fit_score(resume_data: dict, jd_text: str) -> int:
@@ -649,7 +733,7 @@ def estimate_role_fit_score(resume_data: dict, jd_text: str) -> int:
     return max(0, min(100, base + domain_adjustment))
 
 
-def evaluate_master_resume(resume_data: dict) -> dict:
+def evaluate_master_resume(resume_data: dict, config: ScoringConfig = DEFAULT_SCORING_CONFIG) -> dict:
     """
     Evaluates master resume health standalone upon upload before tailoring against a specific job.
     Checks Playbook compliance, quantification density, skill taxonomy coverage, and timeline integrity.
@@ -657,7 +741,7 @@ def evaluate_master_resume(resume_data: dict) -> dict:
     suggestions = []
     
     # 1. Experience Timeline & Metrics Check
-    cand_years, avg_tenure, weighted_segments = calculate_flattened_experience(resume_data)
+    cand_years, avg_tenure, weighted_segments, _ = calculate_flattened_experience(resume_data)
     
     exp_list = resume_data.get("experience", [])
     total_bullets = 0
@@ -697,8 +781,8 @@ def evaluate_master_resume(resume_data: dict) -> dict:
         suggestions.append("⚠️ Avoid weak positioning: Replace phrases like 'strong foundation in' with experienced phrasing e.g. 'AI/ML Engineer with 3+ years experience...'.")
 
     # 4. Overall Baseline ATS Score Calculation
-    base_ats_score = round(0.40 * tech_score + 0.35 * (90 if cand_years >= 2 else 70) + 0.25 * quant_score)
-    base_ats_score = max(55, min(95, base_ats_score))
+    base_ats_score = round(config.overall_skills_weight * tech_score + config.overall_exp_weight * (90 if cand_years >= 2 else 70) + config.overall_fit_weight * quant_score)
+    base_ats_score = max(config.master_ats_floor, min(config.master_ats_cap, base_ats_score))
 
     # 5. Gemini AI Executive Qualitative Audit (Domain-Agnostic & Adaptive)
     ai_suggestions = []

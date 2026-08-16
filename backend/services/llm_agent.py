@@ -569,7 +569,7 @@ def review_tailored_resume(
     # ── Phase 2: LLM soft-quality check ──────────────────────────────────────
     jd_excerpt = _truncate_jd(job_description, max_chars=1200)
 
-    computed_years, avg_tenure, weighted_segments = calculate_flattened_experience(original_resume_data)
+    computed_years, avg_tenure, weighted_segments, _ = calculate_flattened_experience(original_resume_data)
     
 
     # Formulate a clean profile snapshot for validation. Include full

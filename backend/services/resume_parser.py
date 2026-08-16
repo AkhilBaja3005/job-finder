@@ -96,7 +96,12 @@ KNOWN_SKILL_CATEGORY_MAP = {
     "jenkins": "DevOps & Cloud", "github actions": "DevOps & Cloud", "rancher": "DevOps & Cloud", "git": "DevOps & Cloud",
     # Testing & QA
     "pytest": "Testing & QA", "unittest": "Testing & QA", "junit": "Testing & QA", "selenium": "Testing & QA",
-    "cypress": "Testing & QA", "playwright": "Testing & QA", "jest": "Testing & QA"
+    "cypress": "Testing & QA", "playwright": "Testing & QA", "jest": "Testing & QA",
+    # Business Analysis & Methodologies
+    "requirements gathering": "Business Analysis", "gap analysis": "Business Analysis", "user stories": "Business Analysis",
+    "brd": "Business Analysis", "brds": "Business Analysis", "frd": "Business Analysis", "process mapping": "Business Analysis",
+    "stakeholder management": "Business Analysis", "agile": "Business Analysis", "scrum": "Business Analysis",
+    "jira": "Business Analysis", "confluence": "Business Analysis", "business analysis": "Business Analysis"
 }
 
 def categorize_skills_with_llm(raw_skills: Union[str, List[str]]) -> Dict[str, List[str]]:
@@ -133,14 +138,15 @@ You are a skill categorization engine. You will be given a list of skills and a 
 Assign each skill to exactly ONE category — the single best fit.
 
 CATEGORIES:
-1. Languages — programming languages (e.g. C++, Java, Rust, Go).
+1. Languages — programming languages (e.g. C++, Java, Rust, Go, Python, SQL, R).
 2. AI/ML & GenAI — machine learning models, frameworks, AI tools, LLMs (e.g. PyTorch, LangChain, Transformers).
-3. Data & Analytics — databases, query tools, BI, data processing engines (e.g. PostgreSQL, Spark, Tableau).
-4. Frontend & Web — web development frameworks, UI tools, web tech (e.g. React, HTML, CSS).
-5. DevOps & Cloud — cloud platforms, containerization, CI/CD, VCS (e.g. AWS, Docker, Git, Jenkins).
-6. Testing & QA — automation frameworks, testing tools (e.g. Selenium, Cypress).
-7. Finance & Quant — risk modeling, quantitative finance, financial tools (e.g. Black-Scholes, Monte Carlo).
-8. Software & Systems — software architecture, developer tools, system libraries (e.g. RabbitMQ, AST Parsing, Microservices).
+3. Data & Analytics — databases, query tools, BI, data processing engines (e.g. PostgreSQL, Spark, Tableau, Power BI, Excel).
+4. Business Analysis — requirements gathering, process mapping, user stories, BRDs, Agile/Scrum, stakeholder management, Jira.
+5. Frontend & Web — web development frameworks, UI tools, web tech (e.g. React, HTML, CSS).
+6. DevOps & Cloud — cloud platforms, containerization, CI/CD, VCS (e.g. AWS, Docker, Git, Jenkins).
+7. Testing & QA — automation frameworks, testing tools (e.g. Selenium, Cypress).
+8. Finance & Quant — risk modeling, quantitative finance, financial tools (e.g. Black-Scholes, Monte Carlo).
+9. Software & Systems — software architecture, developer tools, system libraries (e.g. RabbitMQ, AST Parsing, Microservices).
 
 RULES:
 - Normalize near-duplicate names before categorizing (e.g. "PowerBI" → "Power BI").

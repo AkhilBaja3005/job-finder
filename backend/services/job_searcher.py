@@ -589,7 +589,7 @@ def _score_job_with_title_heuristic(job: JobSearchResult, resume_data: dict) -> 
     # imply a real 0/0 skill match ratio behind a misleadingly high percentage.
     skills_score = max(40, min(95, int((len(matched_skills) / total_title_skills) * 100))) if title_skill_set else 60
 
-    cand_years, avg_tenure, weighted_segments = calculate_flattened_experience(resume_data)
+    cand_years, avg_tenure, weighted_segments, _ = calculate_flattened_experience(resume_data)
 
     req_years = 2
     title_years_match = re.search(r'(\d+)\s*(?:\+|to|-)?\s*\d*\s*(?:year|yr|y/o)', title_lower)
