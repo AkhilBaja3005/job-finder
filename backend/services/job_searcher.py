@@ -4,6 +4,7 @@ import urllib.parse
 import urllib.request
 import re
 import asyncio
+import hashlib
 # pyrefly: ignore [missing-import]
 from bs4 import BeautifulSoup
 from typing import List, Optional, Dict, Any
@@ -502,16 +503,24 @@ def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:
 
 
 async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, browser, semaphore: asyncio.Semaphore, on_log=None) -> Optional[dict]:
-    """Fetches the real JD for a single job and scores it with the exact same
+    """Fetches the real JD for a single job (with 24h TTLCache lookup) and scores it with the exact same
     deterministic engine (compute_ats_score / compute_overall_score) that the
     Tailor Resume flow uses, so discovery's overall score is directly comparable
     to the ATS score shown after tailoring — not a separately-invented estimate."""
-    async with semaphore:
-        try:
-            scraped = await scrape_job_description(job.url, browser=browser, on_log=on_log)
-        except Exception as e:
-            print(f"[Job Searcher] Failed to fetch JD for '{job.title}' at {job.url}: {e}")
-            return None
+    url_cache_key = f"jd_scrape_{hashlib.md5(job.url.encode('utf-8')).hexdigest()}"
+    cached_scraped = _job_search_cache.get(url_cache_key)
+
+    if cached_scraped:
+        scraped = cached_scraped
+    else:
+        async with semaphore:
+            try:
+                scraped = await scrape_job_description(job.url, browser=browser, on_log=on_log)
+                if scraped and scraped.get("description"):
+                    _job_search_cache.set(url_cache_key, scraped)
+            except Exception as e:
+                print(f"[Job Searcher] Failed to fetch JD for '{job.title}' at {job.url}: {e}")
+                return None
 
     jd_text = scraped.get("description", "")
     raw_text = scraped.get("raw_text", "")

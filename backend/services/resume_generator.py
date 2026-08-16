@@ -182,9 +182,25 @@ RESUME_HTML_TEMPLATE = """
         {% if resume.skills %}
         <section>
             <h2>Technical Skills</h2>
-            <p class="skills-list">
-                <strong>Technical Skills:</strong> {{ resume.skills | join(', ') }}
-            </p>
+            {% if resume.skills is mapping %}
+                <div class="skills-list">
+                    {% for cat, items in resume.skills.items() %}
+                        {% if items %}
+                        <div style="margin-bottom: 2px;">
+                            <strong>{{ cat }}:</strong> {{ items | join(', ') if items is iterable and items is not string else items }}
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% elif resume.skills is iterable and resume.skills is not string %}
+                <p class="skills-list">
+                    <strong>Technical Skills:</strong> {{ resume.skills | join(', ') }}
+                </p>
+            {% else %}
+                <p class="skills-list">
+                    <strong>Technical Skills:</strong> {{ resume.skills }}
+                </p>
+            {% endif %}
         </section>
         {% endif %}
 
@@ -303,12 +319,63 @@ async def generate_pdf_resume(resume_data: dict, output_pdf_path: str):
     with open(temp_html_path, "w") as f:
         f.write(html_content)
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+    # Reuse app shared Playwright browser if ready; fallback to fresh launch if startup isn't complete
+    try:
+        from services.scraper import _shared_browser
+        browser = _shared_browser
+    except Exception:
+        browser = None
 
+    if browser and browser.is_connected():
+        page = await browser.new_page()
+        should_close_browser = False
+    else:
+        p_temp = await async_playwright().start()
+        browser = await p_temp.chromium.launch(headless=True)
+        page = await browser.new_page()
+        should_close_browser = True
+
+    try:
         # Load the HTML content
         await page.goto(f"file://{os.path.abspath(temp_html_path)}")
+
+        # ── Vertical Page Occupancy Detector ─────────────────────────────────
+        # Printable A4 height inside Chromium margins (0.38in top/bottom) ~ 1040px at 96 DPI
+        content_height = await page.evaluate("document.querySelector('.resume-page').offsetHeight")
+        target_height = 1040.0
+        occupancy_ratio = round(content_height / target_height, 2)
+        print(f"[PDF Occupancy Detector] Rendered DOM Height: {content_height}px (Occupancy Ratio: {int(occupancy_ratio * 100)}%).")
+
+        if content_height < 920:
+            # Underfilled resume (<88% occupancy) — Inject Auto-Vertical Compensation Spacing
+            print("[PDF Occupancy Detector] Resume is underfilled (<88% occupied). Applying Auto-Vertical Compensation Spacing...")
+            await page.evaluate("""() => {
+                const style = document.createElement('style');
+                style.textContent = `
+                    section { margin-bottom: 9px !important; }
+                    h2 { margin-top: 10px !important; margin-bottom: 6px !important; }
+                    .job-entry { margin-bottom: 7px !important; }
+                    .job-bullets li { margin-bottom: 2.5px !important; line-height: 1.28 !important; }
+                    .summary-text { line-height: 1.30 !important; margin-bottom: 4px !important; }
+                    .skills-list { line-height: 1.28 !important; }
+                `;
+                document.head.appendChild(style);
+            }""")
+            adjusted_height = await page.evaluate("document.querySelector('.resume-page').offsetHeight")
+            print(f"[PDF Occupancy Detector] Auto-Compensation Applied! New DOM Height: {adjusted_height}px ({int(round(adjusted_height / target_height, 2) * 100)}% occupied).")
+        elif content_height > 1040:
+            # Overflowing resume (>100% height) — Tighten spacing to enforce 1-page compliance
+            print("[PDF Occupancy Detector] Resume exceeds 1 page height. Tightening vertical spacing...")
+            await page.evaluate("""() => {
+                const style = document.createElement('style');
+                style.textContent = `
+                    section { margin-bottom: 4px !important; }
+                    h2 { margin-top: 5px !important; margin-bottom: 2px !important; }
+                    .job-entry { margin-bottom: 3px !important; }
+                    .job-bullets li { margin-bottom: 0px !important; line-height: 1.18 !important; }
+                `;
+                document.head.appendChild(style);
+            }""")
 
         # Save as PDF — let @page CSS handle all margins, so pass zeros here
         await page.pdf(
@@ -318,7 +385,10 @@ async def generate_pdf_resume(resume_data: dict, output_pdf_path: str):
             prefer_css_page_size=True,
             margin={"top": "0", "bottom": "0", "left": "0", "right": "0"}
         )
-        await browser.close()
+    finally:
+        await page.close()
+        if should_close_browser:
+            await browser.close()
 
     # Clean up temp HTML
     if os.path.exists(temp_html_path):

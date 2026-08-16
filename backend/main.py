@@ -480,13 +480,60 @@ app = FastAPI(title="AI Job Finder Agent API", lifespan=lifespan)
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# ── Rate Limiter & CORS Security Configuration ────────────────────────────
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8000",
+]
+for env_key in ["FRONTEND_URL", "HF_SPACE_URL", "VERCEL_URL", "VERCEL_PROJECT_PRODUCTION_URL"]:
+    val = os.getenv(env_key, "").strip()
+    if val:
+        if not val.startswith("http"):
+            val = f"https://{val}"
+        if val not in ALLOWED_ORIGINS:
+            ALLOWED_ORIGINS.append(val)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=ALLOWED_ORIGINS if os.getenv("ENV") == "production" else ["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from routes.auth_routes import router as auth_router
+app.include_router(auth_router)
+
+# Simple in-memory token bucket rate limiter for sensitive endpoints
+_rate_limit_store: Dict[str, List[float]] = {}
+_RATE_LIMIT_WINDOW = 60.0  # seconds
+_RATE_LIMIT_MAX_REQUESTS = 15  # requests per window
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    # Apply rate limiting to resource-intensive endpoints: /tailor, /discover, /upload_resume
+    path = request.url.path
+    if any(path.startswith(target) for target in ["/tailor", "/discover", "/upload_resume"]):
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        now = time.time()
+        
+        # Clean expired timestamps
+        history = _rate_limit_store.get(client_ip, [])
+        history = [t for t in history if now - t < _RATE_LIMIT_WINDOW]
+        
+        if len(history) >= _RATE_LIMIT_MAX_REQUESTS:
+            return Response(
+                content=json.dumps({"detail": "Rate limit exceeded. Please wait a minute before making more requests."}),
+                status_code=429,
+                media_type="application/json"
+            )
+        
+        history.append(now)
+        _rate_limit_store[client_ip] = history
+
+    return await call_next(request)
 
 @app.middleware("http")
 async def bypass_ngrok_browser_warning(request: Request, call_next):
@@ -1361,13 +1408,13 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             jd_text = request.job_description
             job_title = request.job_title
             if request.job_url and not jd_text:
-                yield json.dumps({"type": "log", "message": "🤖 Launching Playwright browser to scrape job link..."}) + "\n"
+                yield json.dumps({"type": "log", "percent": 15, "message": "🤖 Launching Playwright browser to scrape job link..."}) + "\n"
                 t0 = time.time()
                 scraped = await scrape_job_description(request.job_url)
                 jd_text = scraped["description"]
                 job_title = scraped["title"]
                 ctx.log_step("scrape_job", time.time() - t0)
-                yield json.dumps({"type": "log", "message": f"✅ Scraped job details for: {job_title}"}) + "\n"
+                yield json.dumps({"type": "log", "percent": 20, "message": f"✅ Scraped job details for: {job_title}"}) + "\n"
                 yield json.dumps({"type": "scraped_data", "job_title": job_title, "job_description": jd_text}) + "\n"
                 
                 # Check cache again after scraping
@@ -1398,10 +1445,11 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                             })
                         except Exception as hist_err:
                             print(f"[analyze_job] Failed to record application history (cache hit): {hist_err}")
-                    yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
+                    yield json.dumps({"type": "log", "percent": 100, "message": "⚡ Loaded analysis from local cache!"}) + "\n"
                     company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
                     yield json.dumps({
                         "type": "result",
+                        "percent": 100,
                         "job_title": job_title,
                         "job_description": jd_text,
                         "company": company_name,
@@ -1409,7 +1457,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     }) + "\n"
                     return
                 
-            yield json.dumps({"type": "log", "message": "🤖 Comparing candidate profile & calculating ATS gap analysis..."}) + "\n"
+            yield json.dumps({"type": "log", "percent": 40, "message": "🤖 Comparing candidate profile & calculating ATS gap analysis..."}) + "\n"
             master_latex = None
             if session_resume_path and session_resume_path.endswith(".tex") and os.path.exists(session_resume_path):
                 with open(session_resume_path, "r", encoding="utf-8") as f:
@@ -1452,13 +1500,14 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             for event in _drain_remaining_logs():
                 yield event
 
-            yield json.dumps({"type": "log", "message": "✍️ Generated tailored resume content and cover letter."}) + "\n"
+            yield json.dumps({"type": "log", "percent": 75, "message": "✍️ Generated tailored resume content and cover letter."}) + "\n"
 
             if request.skip_tailoring:
                 dumped = analysis.model_dump()
                 company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
                 yield json.dumps({
                     "type": "result",
+                    "percent": 100,
                     "job_title": job_title,
                     "job_description": jd_text,
                     "company": company_name,
@@ -1481,7 +1530,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 
                 if not request.force_tailoring:
                     while reviewer_attempts < 3:
-                        yield json.dumps({"type": "log", "message": f"👀 Recruiter review check (Attempt {reviewer_attempts + 1})..."}) + "\n"
+                        yield json.dumps({"type": "log", "percent": 80 + (reviewer_attempts * 3), "message": f"👀 Recruiter review check (Attempt {reviewer_attempts + 1})..."}) + "\n"
                         t0 = time.time()
                         
                         # Task-wrapped check to drain logs concurrently
@@ -1500,11 +1549,11 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                             yield event
 
                         if review.satisfied:
-                            yield json.dumps({"type": "log", "message": "✅ Recruiter review approved!"}) + "\n"
+                            yield json.dumps({"type": "log", "percent": 88, "message": "✅ Recruiter review approved!"}) + "\n"
                             break
         
                         last_rejection_feedback = review.feedback
-                        yield json.dumps({"type": "log", "message": f"⚠️ Recruiter rejected (Attempt {reviewer_attempts + 1}): {review.feedback}"}) + "\n"
+                        yield json.dumps({"type": "log", "percent": 82, "message": f"⚠️ Recruiter rejected (Attempt {reviewer_attempts + 1}): {review.feedback}"}) + "\n"
                         t0 = time.time()
                         
                         # Task-wrapped tailoring retry to drain logs concurrently
@@ -1524,7 +1573,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                                 
                         curr_hash = hashlib.md5(analysis.latex_code.encode("utf-8"), usedforsecurity=False).hexdigest()
                         if curr_hash == prev_review_hash:
-                            yield json.dumps({"type": "log", "message": "⚠️ AI reviewer feedback generated identical LaTeX output. Breaking reviewer loop."}) + "\n"
+                            yield json.dumps({"type": "log", "percent": 88, "message": "⚠️ AI reviewer feedback generated identical LaTeX output. Breaking reviewer loop."}) + "\n"
                             stalled_on_identical_output = True
                             break
                         prev_review_hash = curr_hash
@@ -1533,17 +1582,19 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     if review is not None and not review.satisfied and (reviewer_attempts >= 3 or stalled_on_identical_output):
                         yield json.dumps({
                             "type": "rejection_warning", 
+                            "percent": 100,
                             "message": f"Candidate may not be a suitable fit for this job after {reviewer_attempts + 1} recruitment checks. Reason: {last_rejection_feedback}"
                         }) + "\n"
                         return
                 else:
                     yield json.dumps({
                         "type": "log",
+                        "percent": 88,
                         "message": "⚠️ Proceeding with resume tailoring anyway due to user override request."
                     }) + "\n"
     
                 # --- Page-fit loop (compile first, try mechanical adjustments first) ---
-                yield json.dumps({"type": "log", "message": "⚙️ Compiling PDF & checking page layout..."}) + "\n"
+                yield json.dumps({"type": "log", "percent": 90, "message": "⚙️ Compiling PDF & checking page layout..."}) + "\n"
                 t0 = time.time()
                 pages, filled_height = await asyncio.to_thread(compile_and_check_page_metrics, analysis.latex_code, 1.0, 1.0, master_latex)
                 ctx.log_step("compile_pdf_check_metrics", time.time() - t0, "Tectonic")
@@ -1720,7 +1771,9 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     "recruiter_name": recruiter_name,
                     "recruiter_profile_url": recruiter_profile_url,
                     "overleaf_url": overleaf_url,
-                    "pdf_url": pdf_url
+                    "pdf_url": pdf_url,
+                    "tailored_tex": analysis.latex_code if analysis else None,
+                    "pdf_path": persistent_pdf_path if "persistent_pdf_path" in locals() else None
                 })
             except Exception as hist_err:
                 print(f"[analyze_job] Failed to record application history: {hist_err}")
@@ -2424,6 +2477,59 @@ async def send_application_pdf_email(request: SendApplicationPdfEmailRequest, au
         return {"status": "success", "message": f"Tailored PDF sent to {dest_email}"}
     else:
         raise HTTPException(status_code=500, detail="Failed to send email. Check SMTP settings.")
+
+
+class OutreachRequest(BaseModel):
+    job_description: str
+    job_title: Optional[str] = "Target Role"
+    company_name: Optional[str] = "Company"
+    recruiter_name: Optional[str] = None
+    recruiter_email: Optional[str] = None
+    send_email: Optional[bool] = False
+
+@app.post("/generate_recruiter_outreach")
+async def generate_recruiter_outreach_endpoint(
+    request: OutreachRequest,
+    authorization: Optional[str] = Header(None),
+    x_gemini_api_key: Optional[str] = Header(None, alias="X-Gemini-API-Key")
+):
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    session = get_session_data(token)
+    session_resume_data = session.get("data", {})
+    if not session_resume_data:
+        raise HTTPException(status_code=400, detail="Master resume missing. Please upload a resume first.")
+
+    active_api_key = x_gemini_api_key
+    if not active_api_key and token:
+        user = await async_get_user_by_token(token)
+        if user:
+            active_api_key = user.get("gemini_api_key")
+
+    ats_analysis = get_cached_analysis(token, request.job_title, request.job_description) or {}
+
+    outreach = await asyncio.to_thread(
+        generate_outreach_message,
+        request.job_description,
+        session_resume_data,
+        ats_analysis,
+        request.recruiter_name,
+        request.company_name or "Company",
+        active_api_key
+    )
+
+    if request.send_email and request.recruiter_email:
+        from services.email_service import async_send_notification_email
+        await async_send_notification_email(
+            to_email=request.recruiter_email,
+            subject=outreach.email_subject,
+            text_body=outreach.email_body,
+            html_body=f"<div style='font-family:sans-serif;line-height:1.6;'>{outreach.email_body.replace('\n', '<br>')}</div>"
+        )
+
+    return {
+        "status": "success",
+        "outreach": outreach.model_dump()
+    }
 
 
 @app.post("/user/test_email")

@@ -194,6 +194,9 @@ async def autofill_job_application(url: str, resume_data: dict, resume_pdf_path:
 
         page = context.pages[0] if context.pages else await context.new_page()
 
+        # Handle JS alert/confirm/prompt dialogs automatically to prevent autofill freezes
+        page.on("dialog", lambda dialog: asyncio.create_task(dialog.accept()))
+
         print(f"Navigating to: {url}")
         await page.goto(url)
 

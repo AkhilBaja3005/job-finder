@@ -4,10 +4,60 @@ import json
 import asyncio
 import urllib.request
 import urllib.parse
-from typing import Optional
+import secrets
+import string
+import httpx
+from typing import Optional, Dict, Any
 
 from utils.ssl_utils import SSL_CONTEXT
 from utils.ttl_cache import TTLCache
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+# ── Persistent HTTP Session Pool for High-Throughput DB Queries ──────────────
+_async_http_client: Optional[httpx.AsyncClient] = None
+
+def get_async_http_client() -> httpx.AsyncClient:
+    global _async_http_client
+    if _async_http_client is None or _async_http_client.is_closed:
+        headers = {}
+        if SUPABASE_KEY:
+            headers = {
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+            }
+        _async_http_client = httpx.AsyncClient(headers=headers, timeout=10.0, follow_redirects=True)
+    return _async_http_client
+
+async def async_supabase_request(endpoint: str, method: str = "GET", payload: Optional[Dict[str, Any]] = None) -> list:
+    """High-throughput async HTTP pool request to Supabase PostgREST API."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return []
+
+    url = f"{SUPABASE_URL}/rest/v1/{endpoint}"
+    client = get_async_http_client()
+
+    try:
+        if method.upper() == "GET":
+            resp = await client.get(url)
+        elif method.upper() == "POST":
+            resp = await client.post(url, json=payload)
+        elif method.upper() == "PATCH":
+            resp = await client.patch(url, json=payload)
+        elif method.upper() == "DELETE":
+            resp = await client.delete(url)
+        else:
+            return []
+
+        if resp.status_code in (200, 201):
+            return resp.json()
+        return []
+    except Exception as e:
+        print(f"[Supabase Async Pool Error] {method} {endpoint}: {e}")
+        return []
 
 # ── Token → user TTL cache ────────────────────────────────────────────────────
 # Avoids hitting Supabase on every authenticated request.
@@ -69,7 +119,7 @@ def create_or_get_user(email: str, picture_url: Optional[str] = None) -> dict:
         return user
         
     # Generate unique 6-character alphanumeric sync code for new user
-    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    code = _generate_unique_sync_code()
     payload = {"email": email, "send_tailored_email": True, "sync_code": code}
     if picture_url:
         payload["picture_url"] = picture_url
@@ -112,8 +162,20 @@ def get_user_by_token(token: str) -> Optional[dict]:
         return result
     return None
 
-import random
+import secrets
 import string
+
+def _generate_unique_sync_code() -> str:
+    """Generates a cryptographically secure, collision-checked 6-character sync code."""
+    alphabet = string.ascii_uppercase + string.digits
+    for _ in range(10):
+        code = ''.join(secrets.choice(alphabet) for _ in range(6))
+        # Check if code already exists in Supabase
+        existing = supabase_request(f"users?sync_code=eq.{code}&select=id", "GET")
+        if not existing:
+            return code
+    # Fallback to 8-character code if 6-char collision space is saturated
+    return ''.join(secrets.choice(alphabet) for _ in range(8))
 
 def generate_user_sync_code(user_id) -> str:
     """Generates or fetches a permanent 6-character alphanumeric sync key for linking extension."""
@@ -121,8 +183,7 @@ def generate_user_sync_code(user_id) -> str:
     if users and users[0].get("sync_code"):
         return users[0]["sync_code"]
     
-    # Generate unique 6-character alphanumeric code
-    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    code = _generate_unique_sync_code()
     supabase_request(f"users?id=eq.{user_id}", "PATCH", {"sync_code": code})
     return code
 

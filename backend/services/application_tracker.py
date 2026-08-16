@@ -13,6 +13,7 @@ import json
 import os
 import re
 import time
+import hashlib
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -106,11 +107,26 @@ def record_application(token: Optional[str], entry: dict) -> None:
             supa_payload["overleaf_url"] = record.get("overleaf_url")
         if record.get("pdf_url"):
             supa_payload["pdf_url"] = record.get("pdf_url")
+        if record.get("tailored_tex"):
+            supa_payload["tailored_tex"] = record.get("tailored_tex")
 
         result = supabase_request("applications", "POST", supa_payload)
         if result:
             return
         print("[application_tracker] Supabase write returned no rows, falling back to local file")
+
+    # Local snapshot persistence
+    if record.get("pdf_path") and os.path.exists(record.get("pdf_path")):
+        try:
+            snapshot_dir = os.path.join(OUTPUT_DIR, _safe_key(token), "snapshots")
+            os.makedirs(snapshot_dir, exist_ok=True)
+            app_id = f"{int(record['timestamp'])}_{hashlib.md5(record.get('job_title', '').encode('utf-8')).hexdigest()[:6]}"
+            snap_pdf = os.path.join(snapshot_dir, f"tailored_{app_id}.pdf")
+            import shutil
+            shutil.copy2(record["pdf_path"], snap_pdf)
+            record["snapshot_pdf_path"] = snap_pdf
+        except Exception as snap_err:
+            print(f"[application_tracker] Warning: Could not create PDF snapshot: {snap_err}")
 
     entries = _read_local_history(token)
     entries.append(record)
