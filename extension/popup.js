@@ -127,22 +127,13 @@ document.addEventListener("DOMContentLoaded", () => {
           const authorMatch = document.title.match(/at\s+([^|-]+)/i);
           if (authorMatch) company = authorMatch[1].trim();
         }
-        if (!company || company.length <= 4 && currentJobInfo.url) {
-          if (currentJobInfo.url.includes("oraclecloud.com") || currentJobInfo.url.includes("myworkdayjobs.com") || currentJobInfo.url.includes("fa.us")) {
-            // Check title or URL query params for real company name
-            if (document.title.toLowerCase().includes("goldman sachs")) company = "Goldman Sachs";
-            else {
-              const cleanHost = new URL(currentJobInfo.url).hostname.toLowerCase();
-              if (cleanHost.includes("hdpc") || cleanHost.includes("oraclecloud")) company = "Goldman Sachs";
+        if (!company && currentJobInfo.url) {
+          try {
+            const host = new URL(currentJobInfo.url).hostname.replace("www.", "").split(".")[0];
+            if (host && !["linkedin", "indeed", "glassdoor", "myworkdayjobs", "oraclecloud"].includes(host.toLowerCase())) {
+              company = host.charAt(0).toUpperCase() + host.slice(1);
             }
-          } else {
-            try {
-              const host = new URL(currentJobInfo.url).hostname.replace("www.", "").split(".")[0];
-              if (host && !["linkedin", "indeed", "glassdoor", "myworkdayjobs", "oraclecloud", "hdpc"].includes(host.toLowerCase())) {
-                company = host.charAt(0).toUpperCase() + host.slice(1);
-              }
-            } catch (e) {}
-          }
+          } catch (e) {}
         }
       }
       currentJobInfo.company = company || "Hiring Company";
@@ -187,6 +178,15 @@ document.addEventListener("DOMContentLoaded", () => {
                     scoreCircle.textContent = `${score}%`;
                     scoreSub.textContent = score >= 70 ? "Strong match profile" : "Missing key keywords";
 
+                    if (ev.company && (!currentJobInfo.company || currentJobInfo.company === "Target Company" || currentJobInfo.company === "Hiring Company")) {
+                      currentJobInfo.company = ev.company;
+                      activeCompanyName.textContent = ev.company;
+                    }
+                    if (ev.job_title && currentJobInfo.title && currentJobInfo.title.length > 40) {
+                      currentJobInfo.title = ev.job_title;
+                      activeRoleTitle.textContent = ev.job_title;
+                    }
+
                     if (missing.length > 0) {
                       missingSkillsContainer.innerHTML = missing.slice(0, 6).map(s => `<span class="skill-chip">${s}</span>`).join("");
                       missingSkillsSection.style.display = "block";
@@ -220,8 +220,7 @@ document.addEventListener("DOMContentLoaded", () => {
               if (title.includes(" - Single Position")) title = title.replace(" - Single Position", "");
               title = title.split(" | ")[0].split(" - Careers")[0].trim();
             }
-            let brandMatch = document.body.innerText.match(/(Goldman Sachs|Google|Amazon|Microsoft|Meta|Apple|Netflix|Micron|Oracle|JPMorgan)/i);
-            let phenomCompany = brandMatch ? brandMatch[1] : document.querySelector(".company-name, .org-name, [data-ph-at-id='company-name']")?.innerText?.trim();
+            let phenomCompany = document.querySelector(".company-name, .org-name, [data-ph-at-id='company-name']")?.innerText?.trim();
             let company = phenomCompany || document.querySelector(".job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name, [data-company-name='true']")?.innerText?.trim() || "";
             let description = document.querySelector("#job-details, .jobs-description__content, #jobDescriptionText, .job-description, [data-ph-at-id='job-description'], main")?.innerText?.trim() || document.body.innerText.slice(0, 4000);
             return { title, company, description, url };
