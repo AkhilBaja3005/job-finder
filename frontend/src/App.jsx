@@ -3179,7 +3179,18 @@ function App() {
                           border: historyFilter === 'website' ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)'
                         }}
                       >
-                        💻 Website Mode ({applicationHistory.filter(e => e.source_mode !== 'extension').length})
+                        💻 Website Mode ({applicationHistory.filter(e => e.source_mode !== 'extension' && e.source_mode !== 'email').length})
+                      </button>
+                      <button
+                        onClick={() => setHistoryFilter('email')}
+                        style={{
+                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
+                          background: historyFilter === 'email' ? 'rgba(236,72,153,0.2)' : 'rgba(255,255,255,0.05)',
+                          color: historyFilter === 'email' ? '#f472b6' : 'var(--text-muted)',
+                          border: historyFilter === 'email' ? '1px solid #f472b6' : '1px solid rgba(255,255,255,0.1)'
+                        }}
+                      >
+                        📧 Email Mode ({applicationHistory.filter(e => e.source_mode === 'email').length})
                       </button>
                     </div>
 
@@ -3250,7 +3261,8 @@ function App() {
                         if (historyFilter === 'tailored' && entry.status === 'applied') return false;
                         if (historyFilter === 'applied' && entry.status !== 'applied') return false;
                         if (historyFilter === 'extension' && entry.source_mode !== 'extension') return false;
-                        if (historyFilter === 'website' && entry.source_mode === 'extension') return false;
+                        if (historyFilter === 'website' && (entry.source_mode === 'extension' || entry.source_mode === 'email')) return false;
+                        if (historyFilter === 'email' && entry.source_mode !== 'email') return false;
                         if (minHistoryScore > 0) {
                           const itemScore = typeof entry.score === 'number' ? entry.score : 0;
                           if (itemScore < minHistoryScore) return false;
@@ -3298,11 +3310,11 @@ function App() {
                                   )}
                                   <span style={{
                                     fontSize: '0.66rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
-                                    backgroundColor: entry.source_mode === 'extension' ? 'rgba(168,85,247,0.15)' : 'rgba(245,158,11,0.15)',
-                                    color: entry.source_mode === 'extension' ? '#c084fc' : '#fbbf24',
-                                    border: entry.source_mode === 'extension' ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(245,158,11,0.3)'
+                                    backgroundColor: entry.source_mode === 'extension' ? 'rgba(168,85,247,0.15)' : entry.source_mode === 'email' ? 'rgba(236,72,153,0.15)' : 'rgba(245,158,11,0.15)',
+                                    color: entry.source_mode === 'extension' ? '#c084fc' : entry.source_mode === 'email' ? '#f472b6' : '#fbbf24',
+                                    border: entry.source_mode === 'extension' ? '1px solid rgba(168,85,247,0.3)' : entry.source_mode === 'email' ? '1px solid rgba(236,72,153,0.3)' : '1px solid rgba(245,158,11,0.3)'
                                   }}>
-                                    {entry.source_mode === 'extension' ? '🧩 Extension' : '💻 Website'}
+                                    {entry.source_mode === 'extension' ? '🧩 Extension' : entry.source_mode === 'email' ? '📧 Email' : '💻 Website'}
                                   </span>
                                 </div>
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
