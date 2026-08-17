@@ -311,7 +311,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 try {
                   const ev = JSON.parse(line);
                   if (ev.type === "log" && ev.message) {
-                    showToast(ev.message);
+                    if (!ev.message.includes("Comparing candidate profile") && !ev.message.includes("ATS gap analysis")) {
+                      showToast(ev.message);
+                    }
                   } else if (ev.type === "result") {
                     showToast("📧 ✅ Tailored package emailed seamlessly to your inbox!");
                   }
