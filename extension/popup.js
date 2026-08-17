@@ -1,4 +1,15 @@
-// popup.js - ATS Tailor Extension Controller (v2.5.0 Full Restoration)
+// popup.js - ATS Tailor Extension Controller (v2.6.0 Parametric Production Ready)
+
+// Parameterized API Base URL (Configurable via chrome.storage.local key "backendUrl")
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+let API_BASE_URL = DEFAULT_API_BASE_URL;
+
+chrome.storage.local.get(["backendUrl"], (items) => {
+  if (items && items.backendUrl && items.backendUrl.trim()) {
+    API_BASE_URL = items.backendUrl.trim().replace(/\/+$/, "");
+  }
+});
+
 
 document.addEventListener("DOMContentLoaded", () => {
   const activeRoleTitle = document.getElementById("active-role-title");
@@ -41,7 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     const cleanKey = syncKey.trim();
-    fetch("http://127.0.0.1:8000/user/me", {
+    fetch(`${API_BASE_URL}/user/me`, {
       headers: { "Authorization": `Bearer ${cleanKey}` }
     })
       .then((res) => res.json())
@@ -119,27 +130,50 @@ document.addEventListener("DOMContentLoaded", () => {
 
       currentJobInfo = details;
       activeRoleTitle.textContent = currentJobInfo.title;
+      activeCompanyName.textContent = currentJobInfo.company || "Detecting company...";
 
-      // Extract company from page title or URL domain if selector returns empty
-      let company = currentJobInfo.company;
-      if (!company || company === "Target Company") {
-        if (currentJobInfo.url && currentJobInfo.url.includes("linkedin.com")) {
-          const authorMatch = document.title.match(/at\s+([^|-]+)/i);
-          if (authorMatch) company = authorMatch[1].trim();
+      // Call dedicated extension endpoint to extract exact Company & Role via LLM
+      chrome.storage.local.get(["userToken"], (items) => {
+        const token = items ? items.userToken || "guest" : "guest";
+        if (currentJobInfo.description && currentJobInfo.description.length > 20) {
+          fetch(`${API_BASE_URL}/extension/parse_job_details`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              page_text: currentJobInfo.pageSource || currentJobInfo.description,
+              page_url: currentJobInfo.url,
+              page_title: currentJobInfo.title
+            })
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (data && data.company) {
+                currentJobInfo.company = data.company;
+                activeCompanyName.textContent = data.company;
+              } else if (!currentJobInfo.company || currentJobInfo.company === "Detecting company...") {
+                currentJobInfo.company = "Hiring Company";
+                activeCompanyName.textContent = "Hiring Company";
+              }
+              if (data && data.job_title) {
+                currentJobInfo.title = data.job_title;
+                activeRoleTitle.textContent = data.job_title;
+              }
+              fetchAtsScore(currentJobInfo);
+            })
+            .catch(() => {
+              if (!currentJobInfo.company || currentJobInfo.company === "Detecting company...") {
+                currentJobInfo.company = "Hiring Company";
+                activeCompanyName.textContent = "Hiring Company";
+              }
+              fetchAtsScore(currentJobInfo);
+            });
+        } else {
+          fetchAtsScore(currentJobInfo);
         }
-        if (!company && currentJobInfo.url) {
-          try {
-            const host = new URL(currentJobInfo.url).hostname.replace("www.", "").split(".")[0];
-            if (host && !["linkedin", "indeed", "glassdoor", "myworkdayjobs", "oraclecloud"].includes(host.toLowerCase())) {
-              company = host.charAt(0).toUpperCase() + host.slice(1);
-            }
-          } catch (e) {}
-        }
-      }
-      currentJobInfo.company = company || "Hiring Company";
-      activeCompanyName.textContent = currentJobInfo.company;
-
-      fetchAtsScore(currentJobInfo);
+      });
     }
 
     function fetchAtsScore(jobInfo) {
@@ -150,7 +184,7 @@ document.addEventListener("DOMContentLoaded", () => {
       chrome.storage.local.get(["userToken"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
         if (jobInfo.description && jobInfo.description.length > 30) {
-          fetch("http://127.0.0.1:8000/analyze_job", {
+          fetch(`${API_BASE_URL}/analyze_job`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -223,7 +257,8 @@ document.addEventListener("DOMContentLoaded", () => {
             let phenomCompany = document.querySelector(".company-name, .org-name, [data-ph-at-id='company-name']")?.innerText?.trim();
             let company = phenomCompany || document.querySelector(".job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name, [data-company-name='true']")?.innerText?.trim() || "";
             let description = document.querySelector("#job-details, .jobs-description__content, #jobDescriptionText, .job-description, [data-ph-at-id='job-description'], main")?.innerText?.trim() || document.body.innerText.slice(0, 4000);
-            return { title, company, description, url };
+            const pageSource = document.body ? document.body.innerText.slice(0, 15000) : description;
+            return { title, company, description, url, pageSource };
           }
         }, (results) => {
           if (results && results[0] && results[0].result) {
@@ -246,7 +281,7 @@ document.addEventListener("DOMContentLoaded", () => {
       chrome.storage.local.get(["userToken"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
         showToast("⏳ Tailoring resume & compiling PDF package...");
-        fetch("http://127.0.0.1:8000/analyze_job", {
+        fetch(`${API_BASE_URL}/analyze_job`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -258,7 +293,8 @@ document.addEventListener("DOMContentLoaded", () => {
             job_description: currentJobInfo.description,
             send_email: true,
             skip_tailoring: false,
-            force_tailoring: true
+            force_tailoring: true,
+            source_mode: "extension" 
           })
         })
           .then(async (res) => {
@@ -295,7 +331,7 @@ document.addEventListener("DOMContentLoaded", () => {
       chrome.storage.local.get(["userToken"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
         showToast("⏳ Generating Cover Letter...");
-        fetch("http://127.0.0.1:8000/generate_cover_letter_history", {
+        fetch(`${API_BASE_URL}/generate_cover_letter_history`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -329,7 +365,7 @@ document.addEventListener("DOMContentLoaded", () => {
       chrome.storage.local.get(["userToken"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
         showToast("⏳ Generating Recruiter Outreach...");
-        fetch("http://127.0.0.1:8000/generate_outreach", {
+        fetch(`${API_BASE_URL}/generate_outreach`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
