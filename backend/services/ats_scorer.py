@@ -26,30 +26,56 @@ SKILL_ALIASES: Dict[str, List[str]] = {
     "deep learning":       ["deep learning", "dl", "neural network", "neural net", "cnn", "rnn"],
     "llm":                 ["llm", "large language model", "gpt", "gemini", "claude", "chatgpt"],
     "nlp":                 ["nlp", "natural language processing", "text mining"],
-    "computer vision":     ["computer vision", "image recognition", "object detection"], # "cv" dropped: near-universally means "curriculum vitae" in resume/JD text, not this skill
+    "computer vision":     ["computer vision", "image recognition", "object detection"],
     "generative ai":       ["generative ai", "gen ai", "genai", "diffusion model"],
     "rag":                 ["rag", "retrieval augmented generation", "retrieval-augmented"],
     "fine-tuning":         ["fine-tuning", "finetuning", "lora", "qlora", "peft"],
     "pytorch":             ["pytorch", "torch"],
     "tensorflow":          ["tensorflow", "tf", "keras"],
     "langchain":           ["langchain", "lang chain"],
+    "prompt engineering": ["prompt engineering", "prompt design"],
+    "huggingface":          ["hugging face", "huggingface", "transformers library", "transformers"],
+    "mlops":               ["mlops", "mlflow", "kubeflow", "sagemaker"],
     "python":              ["python", "py"],
     "javascript":          ["javascript", "js", "node", "nodejs", "node.js"],
     "typescript":          ["typescript", "ts"],
     "java":                ["java", "jvm"],
     "c++":                 ["c++", "cpp"],
-    "go":                  ["go", "golang"], # Handled specially via context boundary to avoid "google/godaddy" false positives
+    "csharp":              ["c#", "csharp", ".net", "dotnet", "asp.net"],
+    "go":                  ["go", "golang"],
     "rust":                ["rust", "rustlang"],
+    "php":                 ["php"],
+    "ruby":                ["ruby", "rails", "ruby on rails"],
+    "swift":               ["swift", "swiftui"],
+    "kotlin":              ["kotlin"],
     "sql":                 ["sql", "mysql", "postgresql", "postgres", "sqlite"],
+    "redis":               ["redis"],
+    "kafka":               ["kafka", "apache kafka"],
+    "databricks":          ["databricks"],
+    "snowflake":           ["snowflake"],
+    "elasticsearch":       ["elasticsearch", "opensearch"],
     "aws":                 ["aws", "amazon web services", "ec2", "s3", "lambda"],
     "gcp":                 ["gcp", "google cloud", "bigquery", "vertex ai"],
+    "azure":               ["azure", "microsoft azure", "azure devops", "aks"],
     "docker":              ["docker", "containerization"],
     "kubernetes":          ["kubernetes", "k8s", "eks"],
     "terraform":           ["terraform", "iac"],
+    "ansible":             ["ansible"],
+    "helm":                ["helm"],
     "ci/cd":               ["ci/cd", "github actions", "jenkins", "gitlab ci", "cicd"],
+    "observability":       ["grafana", "prometheus", "datadog"],
     "react":               ["react", "reactjs", "react.js"],
+    "nextjs":              ["next.js", "nextjs"],
+    "vue":                 ["vue", "vuejs", "vue.js"],
+    "angular":             ["angular", "angularjs"],
+    "django":              ["django"],
+    "flask":               ["flask"],
     "fastapi":             ["fastapi"],
-    "vector database":     ["vector database", "vector db", "pinecone", "weaviate", "chromadb"],
+    "spring":              ["spring boot", "springboot", "spring framework"],
+    "graphql":             ["graphql"],
+    "mobile":              ["react native", "flutter", "ios", "android"],
+    "cybersecurity":       ["cybersecurity", "penetration testing", "soc2", "iso 27001", "iam", "oauth"],
+    "vector database":     ["vector database", "vector db", "pinecone", "weaviate", "chromadb", "qdrant", "milvus"],
 
     # ── Product management ──────────────────────────────────────────────
     "product management":  ["product management", "product manager", "product owner"],
@@ -152,27 +178,24 @@ def _clean_text(text: str) -> str:
     """Standardizes spaces and structural boundary components."""
     if not text: return ""
     text = text.lower()
+    # Preserve # (for C#) and dots in .net/framework names
     text = re.sub(r'[•·▪▸–—\-\_/]', ' ', text)
     return re.sub(r'\s+', ' ', text).strip()
 
 # Global structural reverse lookups
 _SKILL_LOOKUP: Dict[str, str] = {alias.lower(): canonical for canonical, aliases in SKILL_ALIASES.items() for alias in aliases}
 
-# Precompiled skill-matching patterns, built once at module load rather than
-# re.escape()'d and re-searched fresh on every _extract_taxonomy_skills() call
-# — this function runs per job in discovery (up to DISCOVERY_JD_FETCH_CAP
-# times) plus per experience entry in compute_skills_score, so avoiding
-# redundant pattern construction on a hot path matters.
-#
-# Patterns are built from the _clean_text()-normalized alias, not the raw
-# alias string. _extract_taxonomy_skills always searches _clean_text()'d
-# input, which replaces separators (-, _, /, bullets, dashes) with spaces —
-# so a raw alias containing one of those characters (e.g. "ci/cd",
-# "fine-tuning") could never match, since the separator in the pattern would
-# never appear in the text being searched. Normalizing the alias the same way
-# keeps the two sides consistent.
+def _build_skill_pattern(alias: str) -> re.Pattern:
+    cleaned_alias = _clean_text(alias)
+    # If alias ends with non-word character like '#', use word boundary before and non-word or space after
+    if cleaned_alias.endswith('#'):
+        return re.compile(r'\b' + re.escape(cleaned_alias) + r'(?:\b|\s|[.,;!?]|$)')
+    elif cleaned_alias.startswith('.'):
+        return re.compile(r'(?:^|\s)' + re.escape(cleaned_alias) + r'\b')
+    return re.compile(r'\b' + re.escape(cleaned_alias) + r'\b')
+
 _COMPILED_SKILL_PATTERNS: List[Tuple[re.Pattern, str]] = [
-    (re.compile(r'\b' + re.escape(_clean_text(alias)) + r'\b'), canonical)
+    (_build_skill_pattern(alias), canonical)
     for alias, canonical in _SKILL_LOOKUP.items()
     if alias not in HIGH_RISK_TOKENS
 ]
@@ -219,7 +242,8 @@ class ScoringConfig:
     overall_exp_weight: float = 0.35        # Overall score weight for experience
     overall_fit_weight: float = 0.25        # Overall score weight for role fit
     tier_penalty_per_level: float = 0.15    # Penalty per missing seniority tier level
-    tenure_volatility_modifier: float = 0.88# Tenure modifier for avg tenure < 9 months
+    tenure_volatility_modifier: float = 0.88# Default tenure modifier for avg tenure < 9 months
+    tenure_volatility_modifier_range: float = 0.12 # Max scaling penalty range for severe job hopping (< 0.75 yrs avg)
     master_ats_floor: int = 55              # Standalone master resume score min floor
     master_ats_cap: int = 95                # Standalone master resume score max cap
     display_match_threshold: float = 0.15   # Display threshold for matched vs missing skills list
@@ -321,6 +345,16 @@ def extract_jd_skills(jd_text: str) -> Tuple[List[str], List[str]]:
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. BINARY HARD-KNOCKOUT LAYER
 # ─────────────────────────────────────────────────────────────────────────────
+VISA_BLOCK_PHRASES = [
+    "no visa sponsorship", "must have right to work", "not able to sponsor",
+    "without sponsorship", "us citizens only", "must be authorized to work",
+    "no sponsorship available"
+]
+LOCATION_TRIGGER_PHRASES = [
+    "must be based in", "onsite in", "must reside in",
+    "candidates must be located in"
+]
+
 def evaluate_knockouts(resume_data: dict, jd_text: str) -> Tuple[bool, Optional[str]]:
     """Evaluates critical alignment filters (Location restrictions / Visa Sponsorship requirements)."""
     jd_lower = jd_text.lower()
@@ -330,16 +364,16 @@ def evaluate_knockouts(resume_data: dict, jd_text: str) -> Tuple[bool, Optional[
     requires_sponsorship = resume_data.get("requires_sponsorship", False)
     
     # Rule A: Detect explicit geographic on-site requirements
-    if "must be based in" in jd_lower or "onsite in" in jd_lower:
+    if any(p in jd_lower for p in LOCATION_TRIGGER_PHRASES):
         # Simple string-match locator verification
-        city_match = re.search(r'(?:based in|onsite in)\s+([a-z\s]{3,20})', jd_lower)
+        city_match = re.search(r'(?:based in|onsite in|located in|reside in)\s+([a-z\s]{3,20})', jd_lower)
         if city_match:
             target_city = city_match.group(1).strip()
             if target_city not in location_str and len(location_str) > 0:
                 return False, f"Geographic mismatch. Target location required: {target_city.title()}."
 
     # Rule B: Explicit Visa sponsorship disqualification
-    if "no visa sponsorship" in jd_lower or "must have right to work" in jd_lower:
+    if any(p in jd_lower for p in VISA_BLOCK_PHRASES):
         if requires_sponsorship:
             return False, "Candidate requires visa sponsorship which is unavailable for this role."
             
@@ -409,7 +443,9 @@ def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, Lis
             end_str = "Present"
 
         start = _parse_date_to_ordinal(start_str)
-        if start_str and start is None:
+        if not start_str:
+            parse_failures.append(f"Missing start_date for job {job_context} (timeline range omitted from calculation)")
+        elif start is None:
             parse_failures.append(f"Could not parse start_date: '{start_str}' in job {job_context}")
 
         end = _parse_date_to_ordinal(end_str)
@@ -453,24 +489,53 @@ def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, Lis
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. EDUCATION CREDITS, SENIORITY TIERS & TENURE VOLATILITY ADJUSTERS
 # ─────────────────────────────────────────────────────────────────────────────
-def get_highest_education_tier(resume_data: dict) -> str:
+def get_highest_education_tier(resume_data: dict, only_completed: bool = True) -> str:
+    """
+    Returns the candidate's highest degree tier. By default, only counts
+    degrees whose end_date has already passed — an in-progress degree with
+    a future end_date shouldn't grant the same virtual experience-years
+    credit as a completed one.
+    """
     edu_list = resume_data.get("education", [])
-    edu_text = ""
+    now_ordinal = datetime.datetime.now().toordinal()
+    tier_rank = {"bachelors": 0, "masters": 1, "phd": 2}
+    tier = "bachelors"
+
     for edu in edu_list:
-        if isinstance(edu, dict):
-            edu_text += " " + edu.get("degree", "").lower()
-    if "phd" in edu_text or "ph.d" in edu_text or "doctorate" in edu_text: return "phd"
-    if "master" in edu_text or "ms" in edu_text or "msc" in edu_text or "mba" in edu_text: return "masters"
-    return "bachelors"
+        if not isinstance(edu, dict):
+            continue
+        degree_text = edu.get("degree", "").lower()
+        end_date_str = edu.get("end_date") or edu.get("graduation_date", "")
+        end_ordinal = _parse_date_to_ordinal(end_date_str)
+
+        if only_completed and end_ordinal is not None and end_ordinal > now_ordinal:
+            continue  # ongoing/future degree — skip for completed credit
+
+        candidate_tier = "bachelors"
+        if "phd" in degree_text or "ph.d" in degree_text or "doctorate" in degree_text:
+            candidate_tier = "phd"
+        elif "master" in degree_text or "msc" in degree_text or "mba" in degree_text:
+            candidate_tier = "masters"
+
+        if tier_rank[candidate_tier] > tier_rank[tier]:
+            tier = candidate_tier
+
+    return tier
 
 def extract_jd_expectations(jd_text: str) -> Tuple[int, str, str]:
     """Parses JD text for explicit years, required degrees, and targeted seniority tiers."""
     cleaned = _clean_text(jd_text)
     
-    # 1. Parse required experience years
+    # 1. Parse required experience years (tolerant of apostrophes, adjectives, and range lower bounds like 3-5)
     years_required = 0
-    p_years = re.search(r'(\d+)\+?\s*(?:to\s*\d+)?\s*years?\s+(?:of\s+)?(?:relevant|work)?\s*experience', cleaned)
-    if p_years: years_required = int(p_years.group(1))
+    p_years = re.search(r"(\d+)(?:\s*[-–—\s]\s*(\d+))?\+?\s*(?:to\s*\d+)?\s*years?\s*'?\s*(?:of\s+)?(?:[a-z]+\s+){0,2}experience", cleaned)
+    if p_years:
+        years_required = int(p_years.group(1))
+    else:
+        # Fallback for bare "N+ years in..." or "N+ years"
+        p_bare = re.search(r"(\d+)\+\s*years?\b", cleaned)
+        if p_bare:
+            years_required = int(p_bare.group(1))
     
     # 2. Parse education tier request
     edu_tier = "bachelors"
@@ -506,6 +571,7 @@ def _compute_skill_importance_weights(jd_text: str, skills: List[str]) -> Dict[s
     """
     Computes normalized importance weights (summing to 1.0) for a list of skills
     based on JD mention frequency and placement in the intro/title lines.
+    Guarded for high-risk tokens to prevent non-technical word collisions.
     """
     if not skills:
         return {}
@@ -516,23 +582,40 @@ def _compute_skill_importance_weights(jd_text: str, skills: List[str]) -> Dict[s
 
     raw_scores: Dict[str, float] = {}
     for skill in skills:
-        patterns = _COMPILED_SKILL_ALIAS_PATTERNS.get(skill)
+        patterns = []
+        if skill in HIGH_RISK_TOKENS or skill in _HIGH_RISK_CANONICAL.values():
+            # Find the matching token key
+            matching_token = None
+            for tok, canon in _HIGH_RISK_CANONICAL.items():
+                if canon == skill or tok == skill:
+                    matching_token = tok
+                    break
+            if matching_token:
+                # Use context pattern for guarded high-risk token
+                ctx_pat = HIGH_RISK_TOKEN_CONTEXT.get(matching_token)
+                base_pat = re.compile(r'\b' + re.escape(_clean_text(matching_token)) + r'\b', re.IGNORECASE)
+                patterns = [(base_pat, ctx_pat)]
+        
         if not patterns:
-            # Fallback for dynamic skills outside predefined taxonomy
-            aliases = SKILL_ALIASES.get(skill, [skill])
-            patterns = [re.compile(r'\b' + re.escape(_clean_text(alias)) + r'\b', re.IGNORECASE) for alias in aliases]
+            pattern_list = _COMPILED_SKILL_ALIAS_PATTERNS.get(skill)
+            if not pattern_list:
+                aliases = SKILL_ALIASES.get(skill, [skill])
+                pattern_list = [_build_skill_pattern(alias) for alias in aliases]
+            patterns = [(p, None) for p in pattern_list]
 
         count = 0
-        for pattern in patterns:
-            count += len(pattern.findall(cleaned_jd))
-        
-        # Give bonus weight if mentioned in title/intro lines
         header_bonus = 0
-        for pattern in patterns:
-            if pattern.search(header_text):
-                header_bonus = 1
-                break
-        
+        for pat, ctx_pat in patterns:
+            if ctx_pat:
+                if ctx_pat.search(cleaned_jd):
+                    count += len(pat.findall(cleaned_jd))
+                    if ctx_pat.search(header_text) and pat.search(header_text):
+                        header_bonus = 1
+            else:
+                count += len(pat.findall(cleaned_jd))
+                if pat.search(header_text):
+                    header_bonus = 1
+
         raw_scores[skill] = max(1.0, float(count)) + header_bonus
 
     total_raw = sum(raw_scores.values())
@@ -551,9 +634,6 @@ def compute_skills_score(
     config: ScoringConfig = DEFAULT_SCORING_CONFIG
 ) -> SkillMatchResult:
     """Evaluates keyword matches using location weighting and a stuffing-prevention cap."""
-    if not required_skills:
-        return SkillMatchResult(60, [], [], [], [], "No mandatory technical keywords recognized in this JD — skills score is a neutral default, not a real match assessment.")
-
     skills_sec_canon = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
 
     job_profiles: List[Tuple[Set[str], float]] = []
@@ -575,13 +655,28 @@ def compute_skills_score(
         job_profiles.append((_extract_taxonomy_skills(job_text), weight))
 
     def evaluate_skill_strength(skill: str) -> float:
-        # Base credit from skills list
         strength = 0.5 if skill in skills_sec_canon else 0.0
         for j_skills, weight in job_profiles:
             if skill in j_skills:
-                # Add contextual weight using timeline recency segment weight
                 strength += (0.5 * weight)
-        return min(1.0, strength) # Hard anti-stuffing / density cap limit
+        return min(1.0, strength)
+
+    DISPLAY_MATCH_THRESHOLD = config.display_match_threshold
+
+    if not required_skills:
+        if preferred_skills:
+            matched_pref, missing_pref, total_pref_strength = [], [], 0.0
+            for s in preferred_skills:
+                str_val = evaluate_skill_strength(s)
+                total_pref_strength += str_val
+                if str_val >= DISPLAY_MATCH_THRESHOLD:
+                    matched_pref.append(s)
+                else:
+                    missing_pref.append(s)
+            match_ratio = total_pref_strength / len(preferred_skills)
+            dynamic_score = min(85, max(50, round(50 + (match_ratio * 35))))
+            return SkillMatchResult(dynamic_score, [], matched_pref, [], missing_pref, f"No mandatory requirements extracted; score computed dynamically from preferred skill matches ({len(matched_pref)}/{len(preferred_skills)}).")
+        return SkillMatchResult(60, [], [], [], [], "No mandatory technical keywords recognized in this JD — skills score is a neutral default, not a real match assessment.")
 
     # Decoupled Threshold Architecture:
     # 1. Continuous strength (str_val) contributes to total_req_strength/total_pref_strength
@@ -666,8 +761,9 @@ def compute_ats_score(resume_data: dict, jd_text: str, config: ScoringConfig = D
 
     # Stage 6: Apply Volatility Metrics (Tenure stability scaling factor)
     tenure_modifier = 1.0
-    if avg_tenure > 0.0 and avg_tenure < 0.75:  # Avg tenure lower than 9 months
-        tenure_modifier = config.tenure_volatility_modifier  # Apply operational stability scaling penalty
+    if 0.0 < avg_tenure < 0.75:  # Avg tenure lower than 9 months
+        severity = (0.75 - avg_tenure) / 0.75
+        tenure_modifier = 1.0 - (config.tenure_volatility_modifier_range * severity)
         
     final_experience_score = min(100, max(0, round(base_exp_score * tier_modifier * tenure_modifier)))
 
@@ -810,7 +906,8 @@ def evaluate_master_resume(resume_data: dict, config: ScoringConfig = DEFAULT_SC
             if isinstance(parsed, list):
                 ai_suggestions = [str(x) for x in parsed if isinstance(x, str)]
     except Exception as e:
-        print(f"[evaluate_master_resume] Gemini note: {e}")
+        # Silently degrade qualitative Gemini audit fallback to baseline rules
+        pass
 
     combined_sugs = suggestions + ai_suggestions
     return {

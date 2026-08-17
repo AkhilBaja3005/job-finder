@@ -216,7 +216,12 @@ RULE 3 — SECTION & CONTENT COMPLETENESS & NESTED ITEMIZE FOR SUB-PROJECTS:
     \\end{{itemize}}
   • NEVER output repeated standalone \\item bullets with duplicate sub-project title prefixes.
 
-RULE 4 — ONE-PAGE BUDGET, BOLDING & PLAYBOOK POSITIONING (CRITICAL):
+RULE 4 — ONE-PAGE BUDGET, BOLDING & DEGREE TIMELINE ACCURACY (CRITICAL):
+  • DATE-AWARE DEGREE STATUS: Check the candidate's Education dates against current timeline.
+    - If an education entry has an ongoing/future end date (e.g. "Sept 2026 – Sept 2027"), the candidate is an ENROLLED CANDIDATE / PURSUING the degree.
+    - You MUST phrase it as: "MSc Candidate in Artificial Intelligence at Imperial College London" or "Currently pursuing an MSc in...".
+    - NEVER write "Holds an MSc" or "Graduated with an MSc" for an ongoing/future degree.
+    - Use "Holds a [Degree]" or "B.Tech from [Institution]" ONLY for degrees with completed past dates (e.g. "Aug 2019 – May 2023").
   • Professional Summary MUST be placed at the top (below header), kept to 2-3 lines visually, avoiding weak phrases like "Strong foundation in...". Position primarily based on the candidate's actual master experience, domain, and target role.
   • BOLDING RULES: You MUST automatically bold key technical models/frameworks, metrics (e.g. `\\textbf{{40\\%}}`), awards, and key institutions explicitly present in the candidate's text.
   • The entire tailored resume MUST fit on exactly ONE page.
