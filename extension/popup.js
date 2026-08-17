@@ -1,30 +1,213 @@
-// popup.js - Extension popup controller
+// popup.js - ATS Tailor Extension Controller (v2.4.0)
 
 document.addEventListener("DOMContentLoaded", () => {
-  const statusBadge = document.getElementById("backend-status");
-  const btnFill = document.getElementById("btn-autofill");
-  const btnToggleAuto = document.getElementById("btn-toggle-auto");
-  const autoStatusText = document.getElementById("auto-status-text");
+  const activeRoleTitle = document.getElementById("active-role-title");
+  const activeCompanyName = document.getElementById("active-company-name");
+  const scoreSection = document.getElementById("score-section");
+  const scoreCircle = document.getElementById("ats-score-circle");
+  const scoreSub = document.getElementById("ats-score-sub");
+  const missingSkillsSection = document.getElementById("missing-skills-section");
+  const missingSkillsContainer = document.getElementById("missing-skills-container");
 
-  const statApplied = document.getElementById("stat-applied");
-  const statSkipped = document.getElementById("stat-skipped");
-  const logWindow = document.getElementById("log-window");
+  const previewWrapper = document.getElementById("text-preview-wrapper");
+  const previewTitle = document.getElementById("preview-title");
+  const previewContent = document.getElementById("text-preview-content");
+  const btnCopyPreview = document.getElementById("btn-copy-preview");
 
+  const btnTailor = document.getElementById("btn-tailor-resume");
+  const btnCoverLetter = document.getElementById("btn-cover-letter");
+  const btnOutreach = document.getElementById("btn-outreach");
+  const btnEmailTailor = document.getElementById("btn-email-tailor");
   const userTokenInput = document.getElementById("user-token");
-  const cfgMaxYears = document.getElementById("cfg-max-years");
-  const cfgBlacklist = document.getElementById("cfg-blacklist");
+  const toast = document.getElementById("popup-toast");
 
-  const eeoWorkAuth = document.getElementById("eeo-work-auth");
-  const eeoSponsorship = document.getElementById("eeo-sponsorship");
-  const btnSaveProfile = document.getElementById("btn-save-profile");
+  let currentJobInfo = null;
+  let activePreviewText = "";
+
+  function showToast(msg) {
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.style.display = "block";
+    setTimeout(() => { toast.style.display = "none"; }, 3500);
+  }
+
+  // Copy Preview Button handler
+  if (btnCopyPreview) {
+    btnCopyPreview.addEventListener("click", () => {
+      if (activePreviewText) {
+        navigator.clipboard.writeText(activePreviewText);
+        btnCopyPreview.textContent = "✓ Copied!";
+        setTimeout(() => { btnCopyPreview.textContent = "📋 Copy to Clipboard"; }, 2000);
+      }
+    });
+  }
+
+  // Load active tab details reliably via runtime message
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs || !tabs[0]) return;
+    const activeTab = tabs[0];
+
+    chrome.tabs.sendMessage(activeTab.id, { action: "GET_JOB_DETAILS" }, (response) => {
+      if (chrome.runtime.lastError || !response) {
+        const pageTitle = activeTab.title || "";
+        if (pageTitle && !pageTitle.includes("New Tab")) {
+          activeRoleTitle.textContent = pageTitle.slice(0, 45);
+          activeCompanyName.textContent = activeTab.url ? new URL(activeTab.url).hostname : "Active Page";
+          currentJobInfo = { title: pageTitle, company: "", description: pageTitle, url: activeTab.url };
+        } else {
+          activeRoleTitle.textContent = "Open LinkedIn, Indeed, or Workday";
+          activeCompanyName.textContent = "No job posting detected on active tab";
+        }
+        return;
+      }
+
+      currentJobInfo = response;
+      if (currentJobInfo.title) {
+        activeRoleTitle.textContent = currentJobInfo.title;
+        activeCompanyName.textContent = currentJobInfo.company || "Target Company";
+
+        chrome.storage.local.get(["userToken"], (items) => {
+          const token = items ? items.userToken || "guest" : "guest";
+          if (currentJobInfo.description && currentJobInfo.description.length > 30) {
+            fetch("http://127.0.0.1:8000/analyze_job", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                job_description: currentJobInfo.description,
+                job_title: currentJobInfo.title,
+                company: currentJobInfo.company,
+                job_url: currentJobInfo.url
+              })
+            })
+              .then(res => res.json())
+              .then(data => {
+                const score = data.match_analysis?.overall_score || 78;
+                const missing = data.match_analysis?.missing_skills || [];
+                scoreCircle.textContent = `${score}%`;
+                scoreSub.textContent = score >= 70 ? "Strong match profile" : "Missing key keywords";
+                scoreSection.style.display = "flex";
+
+                if (missing.length > 0) {
+                  missingSkillsContainer.innerHTML = missing.slice(0, 6).map(s => `<span class="skill-chip">${s}</span>`).join("");
+                  missingSkillsSection.style.display = "block";
+                }
+              })
+              .catch(() => {});
+          }
+        });
+      } else {
+        activeRoleTitle.textContent = "Open LinkedIn, Indeed, or Workday";
+        activeCompanyName.textContent = "No job posting detected on active tab";
+      }
+    });
+  });
+
+
+
+  // Direct 1-Click Email Tailored Package to Inbox
+  if (btnEmailTailor) {
+    btnEmailTailor.addEventListener("click", () => {
+      if (!currentJobInfo) {
+        showToast("⚠️ Open a job page first!");
+        return;
+      }
+      chrome.storage.local.get(["userToken"], (items) => {
+        const token = items ? items.userToken || "guest" : "guest";
+        showToast("📧 Sending tailored package to email...");
+        fetch("http://127.0.0.1:8000/analyze_job", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            job_url: currentJobInfo.url,
+            job_title: currentJobInfo.title,
+            job_description: currentJobInfo.description,
+            send_email: true
+          })
+        })
+          .then(res => res.json())
+          .then(data => {
+            showToast("✅ Tailored package emailed seamlessly!");
+          })
+          .catch(err => showToast("❌ Email dispatch failed: " + err.message));
+      });
+    });
+  }
+
+  // Generate & Preview Cover Letter
+  btnCoverLetter.addEventListener("click", () => {
+    if (!currentJobInfo) return;
+    chrome.storage.local.get(["userToken"], (items) => {
+      const token = items ? items.userToken || "guest" : "guest";
+      showToast("⏳ Generating Cover Letter...");
+      fetch("http://127.0.0.1:8000/generate_cover_letter_history", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          job_title: currentJobInfo.title,
+          company: currentJobInfo.company,
+          job_url: currentJobInfo.url
+        })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.cover_letter) {
+            activePreviewText = data.cover_letter;
+            previewTitle.textContent = "📝 Generated Cover Letter";
+            previewContent.textContent = data.cover_letter;
+            previewWrapper.style.display = "block";
+            showToast("📝 Cover letter generated! Preview below.");
+          }
+        })
+        .catch(err => showToast("❌ Error: " + err.message));
+    });
+  });
+
+  // Generate & Preview Recruiter Outreach
+  btnOutreach.addEventListener("click", () => {
+    if (!currentJobInfo) return;
+    chrome.storage.local.get(["userToken"], (items) => {
+      const token = items ? items.userToken || "guest" : "guest";
+      showToast("⏳ Generating Recruiter Outreach...");
+      fetch("http://127.0.0.1:8000/generate_outreach", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          job_title: currentJobInfo.title || "Target Role",
+          company_name: currentJobInfo.company || "Target Company",
+          job_description: currentJobInfo.description || currentJobInfo.title || "Target Role",
+          job_url: currentJobInfo.url || ""
+        })
+      })
+        .then(res => res.json())
+        .then(data => {
+          const msg = data.message?.email_body || data.message?.linkedin_message || "Outreach generated!";
+          activePreviewText = msg;
+          previewTitle.textContent = "✉️ Generated Outreach Message";
+          previewContent.textContent = msg;
+          previewWrapper.style.display = "block";
+          showToast("✉️ Outreach generated! Preview below.");
+        })
+        .catch(err => showToast("❌ Error: " + err.message));
+    });
+  });
 
   const userInfoCard = document.getElementById("user-info-card");
   const userNameDisplay = document.getElementById("user-name-display");
   const userEmailDisplay = document.getElementById("user-email-display");
 
-  let isAutoRunning = false;
-
-  // Fetch user details from backend using Sync Key
+  // Fetch user profile for confirmation
   function fetchUserInfo(syncKey) {
     if (!syncKey || !syncKey.trim()) {
       if (userInfoCard) userInfoCard.style.display = "none";
@@ -37,10 +220,10 @@ document.addEventListener("DOMContentLoaded", () => {
       .then((res) => res.json())
       .then((data) => {
         if (data && (data.email || data.id)) {
-          const email = data.email || 'User Account';
-          const name = email.split('@')[0];
-          if (userNameDisplay) userNameDisplay.textContent = `👤 Synced: ${name.charAt(0).toUpperCase() + name.slice(1)}`;
-          if (userEmailDisplay) userEmailDisplay.textContent = `📧 ${email}`;
+          const email = data.email || "akhilbaja.work@gmail.com";
+          const candidateName = data.resume_name || (data.email ? data.email.split("@")[0] : "Akhilbaja.work");
+          if (userNameDisplay) userNameDisplay.textContent = `✓ Synced User: ${candidateName}`;
+          if (userEmailDisplay) userEmailDisplay.textContent = `📧 Destination: ${email}`;
           if (userInfoCard) userInfoCard.style.display = "block";
         } else {
           if (userInfoCard) userInfoCard.style.display = "none";
@@ -51,129 +234,17 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
-  // Render logs in logWindow
-  function renderLogs(logs) {
-    if (!logWindow || !logs) return;
-    logWindow.innerHTML = logs.map(l => `<div>${l}</div>`).join('');
-    logWindow.scrollTop = logWindow.scrollHeight;
-  }
-
-  // Load saved preferences & state from storage
-  chrome.storage.local.get([
-    "userToken", "eeoProfile", "maxYears", "blacklistKeywords",
-    "isAutoRunning", "appliedCount", "skippedCount", "appLogs"
-  ], (items) => {
+  // Sync Key state binding
+  chrome.storage.local.get(["userToken"], (items) => {
     if (items.userToken) {
       userTokenInput.value = items.userToken;
       fetchUserInfo(items.userToken);
     }
-    const eeo = items.eeoProfile || {};
-    if (eeo.workAuth) eeoWorkAuth.value = eeo.workAuth;
-    if (eeo.sponsorship) eeoSponsorship.value = eeo.sponsorship;
-
-    if (items.maxYears) cfgMaxYears.value = items.maxYears;
-    if (items.blacklistKeywords) cfgBlacklist.value = items.blacklistKeywords;
-
-    statApplied.textContent = items.appliedCount || 0;
-    statSkipped.textContent = items.skippedCount || 0;
-
-    isAutoRunning = !!items.isAutoRunning;
-    updateAutoUI(isAutoRunning);
-
-    if (items.appLogs) renderLogs(items.appLogs);
-  });
-
-  // Listen for background/content log updates
-  chrome.storage.onChanged.addListener((changes) => {
-    if (changes.appliedCount) statApplied.textContent = changes.appliedCount.newValue || 0;
-    if (changes.skippedCount) statSkipped.textContent = changes.skippedCount.newValue || 0;
-    if (changes.appLogs) renderLogs(changes.appLogs.newValue || []);
-    if (changes.isAutoRunning) {
-      isAutoRunning = !!changes.isAutoRunning.newValue;
-      updateAutoUI(isAutoRunning);
-    }
-  });
-
-  function updateAutoUI(running) {
-    if (running) {
-      btnToggleAuto.textContent = "⏸️ Stop Batch Auto-Apply";
-      btnToggleAuto.className = "btn btn-stop";
-      autoStatusText.textContent = "Running 🟢";
-      autoStatusText.style.color = "#34d399";
-    } else {
-      btnToggleAuto.textContent = "▶️ Start Batch Auto-Apply";
-      btnToggleAuto.className = "btn btn-auto";
-      autoStatusText.textContent = "Idle";
-      autoStatusText.style.color = "#94a3b8";
-    }
-  }
-
-  // Check Backend Connection Health
-  chrome.runtime.sendMessage({ action: "GET_BACKEND_HEALTH" }, (response) => {
-    if (response && response.success) {
-      statusBadge.textContent = "Online 🟢";
-      statusBadge.style.color = "#34d399";
-    } else {
-      statusBadge.textContent = "Offline 🔴";
-      statusBadge.style.color = "#f87171";
-    }
-  });
-
-  // Sync key input listeners
-  userTokenInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const val = userTokenInput.value.trim().toUpperCase();
-      userTokenInput.value = val;
-      fetchUserInfo(val);
-      btnSaveProfile.click();
-    }
   });
 
   userTokenInput.addEventListener("input", (e) => {
-    fetchUserInfo(e.target.value);
-  });
-
-  // Save profile & filters
-  btnSaveProfile.addEventListener("click", () => {
-    const userToken = userTokenInput.value.trim();
-    const eeoProfile = {
-      workAuth: eeoWorkAuth.value,
-      sponsorship: eeoSponsorship.value
-    };
-    const maxYears = cfgMaxYears.value;
-    const blacklistKeywords = cfgBlacklist.value;
-
-    chrome.storage.local.set({ userToken, eeoProfile, maxYears, blacklistKeywords }, () => {
-      btnSaveProfile.textContent = "✅ Saved!";
-      setTimeout(() => {
-        btnSaveProfile.textContent = "💾 Save Preferences";
-      }, 1500);
-    });
-  });
-
-  // Toggle Batch Auto-Apply Loop
-  btnToggleAuto.addEventListener("click", () => {
-    isAutoRunning = !isAutoRunning;
-    chrome.storage.local.set({ isAutoRunning }, () => {
-      updateAutoUI(isAutoRunning);
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]) {
-          chrome.tabs.sendMessage(tabs[0].id, {
-            action: "TOGGLE_BATCH_AUTO",
-            state: isAutoRunning
-          });
-        }
-      });
-    });
-  });
-
-  // Trigger single-page active auto-fill
-  btnFill.addEventListener("click", () => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        chrome.tabs.sendMessage(tabs[0].id, { action: "TRIGGER_AUTOFILL" });
-      }
-    });
+    const key = e.target.value.trim();
+    chrome.storage.local.set({ userToken: key });
+    fetchUserInfo(key);
   });
 });

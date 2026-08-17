@@ -819,6 +819,7 @@ class JobAnalysisRequest(BaseModel):
     job_description: Optional[str] = Field(default=None, max_length=20000)
     skip_tailoring: bool = False
     force_tailoring: bool = False
+    send_email: bool = False
 
 class ApplyRequest(BaseModel):
     job_url: str
@@ -1255,6 +1256,9 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
         if user_obj:
             should_email = user_obj.get("send_tailored_email", False)
 
+        if request_send_email:
+            should_email = True
+
         print(f"[analyze_job] Tailored email check: user={user_obj.get('email') if user_obj else None}, should_email={should_email}")
 
         if should_email and user_obj and user_obj.get("email"):
@@ -1413,6 +1417,27 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 scraped = await scrape_job_description(request.job_url)
                 jd_text = scraped["description"]
                 job_title = scraped["title"]
+                
+                # Guard: Reject bot-blocked / Cloudflare verification challenge pages
+                _bot_block_phrases = [
+                    "cloudflare security verification",
+                    "anti-bot challenge",
+                    "security verification page",
+                    "verify you are human",
+                    "checking your browser",
+                    "enable javascript and cookies",
+                    "access denied",
+                    "just a moment",
+                    "error processing your request"
+                ]
+                if scraped.get("is_bot_blocked") or any(p in jd_text.lower() for p in _bot_block_phrases):
+                    yield json.dumps({"type": "log", "percent": 100, "message": "⚠️ Security challenge detected: The job board returned an anti-bot verification page."}) + "\n"
+                    yield json.dumps({
+                        "type": "error",
+                        "message": "The job posting URL returned a security verification / anti-bot challenge page (e.g. Cloudflare). Please copy and paste the raw job description text directly into the text area."
+                    }) + "\n"
+                    return
+
                 ctx.log_step("scrape_job", time.time() - t0)
                 yield json.dumps({"type": "log", "percent": 20, "message": f"✅ Scraped job details for: {job_title}"}) + "\n"
                 yield json.dumps({"type": "scraped_data", "job_title": job_title, "job_description": jd_text}) + "\n"
@@ -1757,7 +1782,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                             except Exception as post_calc_err:
                                 print(f"[analyze_job] Post-tailoring score computation exception: {post_calc_err}")
 
-                            await _send_website_tailoring_email(token, session_resume_data, dumped, job_title, company_name, request.job_url, overleaf_url, persistent_pdf_path)
+                            await _send_website_tailoring_email(token, session_resume_data, dumped, job_title, company_name, request.job_url, overleaf_url, persistent_pdf_path, request_send_email=request.send_email)
                 except Exception as pdf_compile_err:
                     print(f"[analyze_job] Failed to compile persistent PDF copy: {pdf_compile_err}")
 
@@ -2519,11 +2544,12 @@ async def generate_recruiter_outreach_endpoint(
 
     if request.send_email and request.recruiter_email:
         from services.email_service import async_send_notification_email
+        html_formatted_body = outreach.email_body.replace("\n", "<br>")
         await async_send_notification_email(
             to_email=request.recruiter_email,
             subject=outreach.email_subject,
             text_body=outreach.email_body,
-            html_body=f"<div style='font-family:sans-serif;line-height:1.6;'>{outreach.email_body.replace('\n', '<br>')}</div>"
+            html_body=f"<div style='font-family:sans-serif;line-height:1.6;'>{html_formatted_body}</div>"
         )
 
     return {

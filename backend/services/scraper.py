@@ -522,8 +522,22 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
             # Ensure we have a valid description
             description = cleaned_info.get("description", "") or cleaned_text
             if not description or len(description.strip()) < 100:
-                # If Gemini returned empty or too short, use the raw cleaned text
                 description = cleaned_text
+
+            # Detect bot-block / Cloudflare verification text leaking into extracted description
+            _bot_block_indicators = [
+                "cloudflare security verification",
+                "anti-bot challenge",
+                "security verification page",
+                "verify you are human",
+                "checking your browser",
+                "enable javascript and cookies",
+                "access denied",
+                "just a moment",
+                "error processing your request"
+            ]
+            desc_lower = description.lower()
+            is_blocked = any(ind in desc_lower for ind in _bot_block_indicators) or any(ind in (cleaned_info.get("title") or title).lower() for ind in _bot_block_indicators)
 
             return {
                 "title": cleaned_info.get("title", title) or title,
@@ -531,17 +545,32 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                 "raw_text": cleaned_text,
                 "company": extracted_company,
                 "url": url,
-                "html": html
+                "html": html,
+                "is_bot_blocked": is_blocked
             }
         except Exception as e:
             print(f"[Scraper] Gemini cleanup failed ({e}), falling back to raw extracted text.")
+            _bot_block_indicators = [
+                "cloudflare security verification",
+                "anti-bot challenge",
+                "security verification page",
+                "verify you are human",
+                "checking your browser",
+                "enable javascript and cookies",
+                "access denied",
+                "just a moment",
+                "error processing your request"
+            ]
+            cleaned_lower = cleaned_text.lower()
+            is_blocked = any(ind in cleaned_lower for ind in _bot_block_indicators) or any(ind in title.lower() for ind in _bot_block_indicators)
             return {
                 "title": title,
                 "description": cleaned_text,
                 "raw_text": cleaned_text,
                 "company": extracted_company,
                 "url": url,
-                "html": html
+                "html": html,
+                "is_bot_blocked": is_blocked
             }
     except Exception as e:
         # Fallback: extract title slug and query search metadata if Playwright gets blocked

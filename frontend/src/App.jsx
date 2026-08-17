@@ -172,6 +172,11 @@ function App() {
   const [prepModalOpen, setPrepModalOpen] = useState(false);
   const [prepMarkdown, setPrepMarkdown] = useState('');
   const [prepJobInfo, setPrepJobInfo] = useState({ jobTitle: '', company: '' });
+  // Cover Letter Modal feature state
+  const [coverLetterModalOpen, setCoverLetterModalOpen] = useState(false);
+  const [coverLetterText, setCoverLetterText] = useState('');
+  const [coverLetterJobInfo, setCoverLetterJobInfo] = useState({ jobTitle: '', company: '' });
+  const [coverLetterCopiedModal, setCoverLetterCopiedModal] = useState(false);
 
   // Escape-to-close + focus trap/return for each modal (shared behavior)
   const [applyingSugIdx, setApplyingSugIdx] = useState(null);
@@ -396,6 +401,37 @@ function App() {
     };
     fetchUser();
   }, [authToken]);
+
+  // Deep-linking / URL Parameter pre-fill from Extension
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const targetJobUrl = params.get("job_url");
+    const targetJobTitle = params.get("job_title");
+    const targetCompany = params.get("company");
+    const targetJd = params.get("job_description");
+
+    if (targetJobUrl || targetJobTitle || targetJd) {
+      if (targetJobUrl) setJobUrl(targetJobUrl);
+      if (targetJobTitle) setJobTitle(targetJobTitle);
+      if (targetCompany) setCompany(targetCompany);
+      if (targetJd) {
+        setJobDescription(targetJd);
+        scrapedJobDescriptionRef.current = targetJd;
+      }
+      setDashboardMode("tailor");
+      setIsDiscoveryView(false);
+
+      // Clean URL bar parameters without refreshing page
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      // Auto-trigger analysis if resume is loaded
+      if (resumeData) {
+        setTimeout(() => {
+          handleAnalyzeJob(targetJobUrl, targetJobTitle);
+        }, 500);
+      }
+    }
+  }, [resumeData]);
 
   // Fetch persisted resume state on boot
   useEffect(() => {
@@ -3495,13 +3531,13 @@ function App() {
                                          });
                                          if (res.ok) {
                                            const data = await res.json();
-                                           setJobTitle(entry.job_title || '');
-                                           setCompany(entry.company || '');
-                                           setAnalysisResult({ cover_letter: data.cover_letter });
-                                           setDashboardMode('tailor');
-                                           setMasterSubTab('cover');
-                                           setIsDiscoveryView(false);
-                                           setStatusMessage('📝 Tailored cover letter generated!');
+                                            setCoverLetterText(data.cover_letter);
+                                            setCoverLetterJobInfo({
+                                              jobTitle: entry.job_title || 'Target Role',
+                                              company: entry.company || 'Target Company'
+                                            });
+                                            setCoverLetterModalOpen(true);
+                                            setStatusMessage('📝 Tailored cover letter generated!');
                                          } else {
                                            const err = await res.json();
                                            setStatusMessage(`❌ Error: ${err.detail}`);
@@ -4089,82 +4125,86 @@ function App() {
                 )}
 
                 {/* ── Hybrid ATS Score Dashboard ── */}
-                <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                {analysisResult?.match_analysis && (
+                  <>
+                    <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
-                  {/* Overall ring */}
-                  <div className="match-ring-container" style={{ flexShrink: 0 }}>
-                    <div
-                      className="match-ring"
-                      style={{
-                        '--percent': analysisResult.match_analysis.overall_score,
-                        '--color': getScoreColor(analysisResult.match_analysis.overall_score),
-                      }}
-                    >
-                      <span className="match-ring-text">
-                        {analysisResult.match_analysis.overall_score}%
-                      </span>
-                    </div>
-                    <span style={{ marginTop: '8px', fontWeight: '600', fontSize: '0.85rem' }}>Overall Match</span>
-                    <span style={{ fontSize: '0.68rem', opacity: 0.45, marginTop: '2px' }}>
-                      40% skills · 35% exp · 25% role
-                    </span>
-                  </div>
-
-                  {/* Score breakdown bars */}
-                  <div style={{ flex: 1, minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '13px', justifyContent: 'center' }}>
-                    {[
-                      { label: 'Skills Match', score: analysisResult.match_analysis.skills_score, method: 'Deterministic', detail: analysisResult.match_analysis.keyword_stats?.required_matched ? `${analysisResult.match_analysis.keyword_stats.required_matched} keywords` : null },
-                      { label: 'Experience', score: analysisResult.match_analysis.experience_score, method: 'Deterministic', detail: analysisResult.match_analysis.keyword_stats?.candidate_years ? `${analysisResult.match_analysis.keyword_stats.candidate_years}y / ${analysisResult.match_analysis.keyword_stats.required_years || '?'}y req` : null },
-                      { label: 'Role Fit', score: analysisResult.match_analysis.role_fit_score, method: 'AI Semantic', detail: 'Domain · Seniority · Industry' },
-                    ].map(({ label, score, method, detail }, i) => (
-                      <div key={label}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                          <span style={{ fontSize: '0.83rem', fontWeight: 600 }}>{label}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                            <span style={{ fontSize: '0.68rem', padding: '2px 7px', borderRadius: '999px', background: method === 'Deterministic' ? 'rgba(100,220,130,0.12)' : 'rgba(56,189,248,0.12)', color: method === 'Deterministic' ? '#64dc82' : '#38bdf8', fontWeight: 600 }}>
-                              {method}
-                            </span>
-                            <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>{score}%</span>
-                          </div>
+                      {/* Overall ring */}
+                      <div className="match-ring-container" style={{ flexShrink: 0 }}>
+                        <div
+                          className="match-ring"
+                          style={{
+                            '--percent': analysisResult.match_analysis.overall_score || 0,
+                            '--color': getScoreColor(analysisResult.match_analysis.overall_score || 0),
+                          }}
+                        >
+                          <span className="match-ring-text">
+                            {analysisResult.match_analysis.overall_score || 0}%
+                          </span>
                         </div>
-                        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '6px', height: '7px', overflow: 'hidden' }}>
-                          <div
-                            className="score-bar-fill"
-                            style={{
-                              width: `${score}%`,
-                              background: getScoreColor(score),
-                              animationDelay: `${i * 0.12}s`
-                            }}
-                          />
-                        </div>
-                        {detail && <span style={{ fontSize: '0.68rem', opacity: 0.45, marginTop: '3px', display: 'block' }}>{detail}</span>}
+                        <span style={{ marginTop: '8px', fontWeight: '600', fontSize: '0.85rem' }}>Overall Match</span>
+                        <span style={{ fontSize: '0.68rem', opacity: 0.45, marginTop: '2px' }}>
+                          40% skills · 35% exp · 25% role
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                </div>
 
-                {/* Skills Tags */}
-                <div style={{ marginTop: '20px' }}>
-                  <h3>Matched Skills</h3>
-                  <div className="tag-list">
-                    {(analysisResult.match_analysis.matched_skills || []).map((skill, i) => (
-                      <span key={i} className="tag tag-match">
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                      {/* Score breakdown bars */}
+                      <div style={{ flex: 1, minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '13px', justifyContent: 'center' }}>
+                        {[
+                          { label: 'Skills Match', score: analysisResult.match_analysis.skills_score || 0, method: 'Deterministic', detail: analysisResult.match_analysis.keyword_stats?.required_matched ? `${analysisResult.match_analysis.keyword_stats.required_matched} keywords` : null },
+                          { label: 'Experience', score: analysisResult.match_analysis.experience_score || 0, method: 'Deterministic', detail: analysisResult.match_analysis.keyword_stats?.candidate_years ? `${analysisResult.match_analysis.keyword_stats.candidate_years}y / ${analysisResult.match_analysis.keyword_stats.required_years || '?'}y req` : null },
+                          { label: 'Role Fit', score: analysisResult.match_analysis.role_fit_score || 0, method: 'AI Semantic', detail: 'Domain · Seniority · Industry' },
+                        ].map(({ label, score, method, detail }, i) => (
+                          <div key={label}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                              <span style={{ fontSize: '0.83rem', fontWeight: 600 }}>{label}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                <span style={{ fontSize: '0.68rem', padding: '2px 7px', borderRadius: '999px', background: method === 'Deterministic' ? 'rgba(100,220,130,0.12)' : 'rgba(56,189,248,0.12)', color: method === 'Deterministic' ? '#64dc82' : '#38bdf8', fontWeight: 600 }}>
+                                  {method}
+                                </span>
+                                <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>{score}%</span>
+                              </div>
+                            </div>
+                            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '6px', height: '7px', overflow: 'hidden' }}>
+                              <div
+                                className="score-bar-fill"
+                                style={{
+                                  width: `${score}%`,
+                                  background: getScoreColor(score),
+                                  animationDelay: `${i * 0.12}s`
+                                }}
+                              />
+                            </div>
+                            {detail && <span style={{ fontSize: '0.68rem', opacity: 0.45, marginTop: '3px', display: 'block' }}>{detail}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
-                <div style={{ marginTop: '10px' }}>
-                  <h3>Missing Required Skills</h3>
-                  <div className="tag-list">
-                    {(analysisResult.match_analysis.missing_skills || []).map((skill, i) => (
-                      <span key={i} className="tag tag-missing">
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                    {/* Skills Tags */}
+                    <div style={{ marginTop: '20px' }}>
+                      <h3>Matched Skills</h3>
+                      <div className="tag-list">
+                        {(analysisResult.match_analysis.matched_skills || []).map((skill, i) => (
+                          <span key={i} className="tag tag-match">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '10px' }}>
+                      <h3>Missing Required Skills</h3>
+                      <div className="tag-list">
+                        {(analysisResult.match_analysis.missing_skills || []).map((skill, i) => (
+                          <span key={i} className="tag tag-missing">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
 
 
                 {/* Workspace Panels or Tailor Resume Decision Banner */}
@@ -4191,6 +4231,46 @@ function App() {
                         onClick={() => handleGenerateTailoredResume(false)}
                       >
                         ⚡ Tailor Resume & Cover Letter
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: '11px 20px', borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)', fontWeight: 600 }}
+                        onClick={async () => {
+                          setLoading(true);
+                          setStatusMessage('Generating standalone cover letter...');
+                          try {
+                            const res = await fetch(`${API_BASE}/generate_cover_letter_history`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${getAuthHeader()}`
+                              },
+                              body: JSON.stringify({
+                                job_title: jobTitle || 'Target Role',
+                                company: company || 'Target Company',
+                                job_url: jobUrl || null
+                              })
+                            });
+                            if (res.ok) {
+                              const data = await res.json();
+                              setAnalysisResult(prev => ({
+                                ...(prev || {}),
+                                cover_letter: data.cover_letter
+                              }));
+                              setKeepOriginalMode(true);
+                              setStatusMessage('📝 Tailored cover letter generated!');
+                            } else {
+                              const err = await res.json();
+                              setStatusMessage(`❌ Error: ${err.detail || 'Failed to generate cover letter'}`);
+                            }
+                          } catch (e) {
+                            setStatusMessage(`❌ Error: ${e.message}`);
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}
+                      >
+                        📝 Cover Letter Only
                       </button>
                       <button
                         className="btn btn-secondary"
@@ -4256,6 +4336,37 @@ function App() {
                         ← Go Back & Tailor
                       </button>
                     </div>
+
+                    {analysisResult?.cover_letter && (
+                      <div className="workspace-panel" style={{ width: '100%', maxWidth: '700px', marginTop: '16px' }}>
+                        <div className="panel-toolbar">
+                          <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Generated Cover Letter</h3>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                              onClick={handleDownloadCoverLetter}
+                            >
+                              ⬇️ Download
+                            </button>
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                              onClick={() => {
+                                navigator.clipboard.writeText(analysisResult.cover_letter || '');
+                                setCoverLetterCopied(true);
+                                setTimeout(() => setCoverLetterCopied(false), 2000);
+                              }}
+                            >
+                              {coverLetterCopied ? '✓ Copied!' : '📋 Copy'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="panel-content" style={{ whiteSpace: 'pre-wrap', textAlign: 'left' }}>
+                          {analysisResult.cover_letter}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                 ) : (
@@ -4542,67 +4653,124 @@ function App() {
 
       {/* Dedicated Interview Prep Modal */}
       {prepModalOpen && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(9, 13, 26, 0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 9999, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', animation: 'fadeIn 0.25s ease both',
-          padding: '20px'
-        }} onClick={closePrepModal}>
+        <div className="modal-overlay" onClick={closePrepModal} style={{ pointerEvents: 'auto', zIndex: 10000 }}>
           <div
             ref={prepModalRef}
+            className="modal-content outreach-modal"
             role="dialog"
             aria-modal="true"
             aria-label="Interview Preparation Guide"
             tabIndex={-1}
-            style={{
-              background: 'rgba(15, 23, 42, 0.85)', border: '1px solid rgba(56, 189, 248, 0.25)',
-              backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-              borderRadius: '16px', padding: '24px', maxWidth: '800px', width: '100%',
-              maxHeight: '85vh', display: 'flex', flexDirection: 'column',
-              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.75)', animation: 'slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) both'
-            }} onClick={(e) => e.stopPropagation()}>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '16px', flexShrink: 0 }}>
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '800px', width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+          >
+            {/* Header */}
+            <div className="modal-header">
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  🎤 Interview Preparation Guide
-                </h2>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '3px' }}>
-                  Prepared for <strong>{prepJobInfo.jobTitle}</strong> at <strong>{prepJobInfo.company}</strong>
-                </div>
+                <h2>🎤 Interview Preparation Guide</h2>
+                <p className="modal-subtitle">
+                  {prepJobInfo.jobTitle} at {prepJobInfo.company}
+                </p>
               </div>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: '4px 8px', fontSize: '1.1rem', minWidth: '32px', minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onClick={closePrepModal}
-                aria-label="Close interview prep pack"
-              >
-                ✕
-              </button>
+              <button className="modal-close" onClick={closePrepModal}>✕</button>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px', fontSize: '0.88rem', lineHeight: 1.65, whiteSpace: 'pre-wrap', color: '#E2E8F0', textAlign: 'left' }}>
-              {prepMarkdown}
+            {/* Role Info Chip */}
+            <div className="recruiter-info-box">
+              <div className="recruiter-name">AI-Generated Tailored Interview Pack</div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Key technical questions, behavioral STAR responses, and role risks for {prepJobInfo.company}.
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-              <button
-                className="btn"
-                style={{ flex: 1, fontWeight: 700 }}
-                onClick={() => {
-                  navigator.clipboard.writeText(prepMarkdown);
-                  // showToast('✓ Copied preparation pack to clipboard!', 'success');
-                }}
-              >
-                📋 Copy Prep Guide
-              </button>
-              <button
-                className="btn btn-secondary"
-                style={{ flex: 1 }}
-                onClick={closePrepModal}
-              >
-                Close
-              </button>
+            {/* Content */}
+            <div className="outreach-content" style={{ flex: 1, overflowY: 'auto' }}>
+              <div className="message-text" style={{ whiteSpace: 'pre-wrap', textAlign: 'left', fontSize: '0.88rem', lineHeight: 1.65 }}>
+                {prepMarkdown}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="action-buttons" style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+                <button
+                  className="btn"
+                  style={{ flex: 1, fontWeight: 700 }}
+                  onClick={() => {
+                    navigator.clipboard.writeText(prepMarkdown);
+                  }}
+                >
+                  📋 Copy Prep Guide
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={closePrepModal}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dedicated Cover Letter Modal Popup */}
+      {coverLetterModalOpen && (
+        <div className="modal-overlay" onClick={() => setCoverLetterModalOpen(false)} style={{ pointerEvents: 'auto', zIndex: 10000 }}>
+          <div
+            className="modal-content outreach-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Tailored Cover Letter"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '800px', width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+          >
+            {/* Header */}
+            <div className="modal-header">
+              <div>
+                <h2>📝 Tailored Cover Letter</h2>
+                <p className="modal-subtitle">
+                  {coverLetterJobInfo.jobTitle} at {coverLetterJobInfo.company}
+                </p>
+              </div>
+              <button className="modal-close" onClick={() => setCoverLetterModalOpen(false)}>✕</button>
+            </div>
+
+            {/* Role Info Chip */}
+            <div className="recruiter-info-box">
+              <div className="recruiter-name">Custom Role-Matched Cover Letter</div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Tailored for {coverLetterJobInfo.jobTitle} application at {coverLetterJobInfo.company}.
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="outreach-content" style={{ flex: 1, overflowY: 'auto' }}>
+              <div className="message-text" style={{ whiteSpace: 'pre-wrap', textAlign: 'left', fontSize: '0.88rem', lineHeight: 1.65 }}>
+                {coverLetterText}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="action-buttons" style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+                <button
+                  className="btn"
+                  style={{ flex: 1, fontWeight: 700 }}
+                  onClick={() => {
+                    navigator.clipboard.writeText(coverLetterText);
+                    setCoverLetterCopiedModal(true);
+                    setTimeout(() => setCoverLetterCopiedModal(false), 2000);
+                  }}
+                >
+                  {coverLetterCopiedModal ? '✓ Copied to Clipboard!' : '📋 Copy Cover Letter'}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                  onClick={() => setCoverLetterModalOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
