@@ -1473,6 +1473,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                                 "job_url": request.job_url or "",
                                 "score": cached.get("match_analysis", {}).get("overall_score"),
                                 "status": "tailored",
+                                "source_mode": getattr(request, "source_mode", "website"),
                                 "pdf_url": cached_pdf_url,
                                 "overleaf_url": cached_overleaf
                             })
