@@ -92,7 +92,8 @@
       company = company.trim().charAt(0).toUpperCase() + company.trim().slice(1);
     }
 
-    return { title, company, description, url };
+    const pageSource = document.body ? document.body.innerText.slice(0, 15000) : description;
+    return { title, company, description, url, pageSource };
   }
 
   try {

@@ -92,13 +92,15 @@ def record_application(token: Optional[str], entry: dict) -> None:
         # — the write looked like it worked and the entry was just lost.
         supa_payload = {
             "user_id": user["id"],
-            "job_title": record.get("job_title", ""),
-            "company": record.get("company", ""),
+            "job_title": record.get("job_title", "") or "Target Role",
+            "company": record.get("company", "") or "Hiring Company",
             "job_url": record.get("job_url", ""),
             "score": record.get("score"),
             "status": record.get("status", "tailored"),
             "created_at": datetime.fromtimestamp(record["timestamp"], tz=timezone.utc).isoformat(),
         }
+        if record.get("source_mode"):
+            supa_payload["source_mode"] = record.get("source_mode")
         if record.get("recruiter_name"):
             supa_payload["recruiter_name"] = record.get("recruiter_name")
         if record.get("recruiter_profile_url"):
@@ -107,8 +109,6 @@ def record_application(token: Optional[str], entry: dict) -> None:
             supa_payload["overleaf_url"] = record.get("overleaf_url")
         if record.get("pdf_url"):
             supa_payload["pdf_url"] = record.get("pdf_url")
-        if record.get("tailored_tex"):
-            supa_payload["tailored_tex"] = record.get("tailored_tex")
 
         result = supabase_request("applications", "POST", supa_payload)
         if result:

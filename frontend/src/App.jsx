@@ -3159,6 +3159,28 @@ function App() {
                       >
                         ✅ Submitted ({applicationHistory.filter(e => e.status === 'applied').length})
                       </button>
+                      <button
+                        onClick={() => setHistoryFilter('extension')}
+                        style={{
+                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
+                          background: historyFilter === 'extension' ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.05)',
+                          color: historyFilter === 'extension' ? '#c084fc' : 'var(--text-muted)',
+                          border: historyFilter === 'extension' ? '1px solid #c084fc' : '1px solid rgba(255,255,255,0.1)'
+                        }}
+                      >
+                        🧩 Extension Mode ({applicationHistory.filter(e => e.source_mode === 'extension').length})
+                      </button>
+                      <button
+                        onClick={() => setHistoryFilter('website')}
+                        style={{
+                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
+                          background: historyFilter === 'website' ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.05)',
+                          color: historyFilter === 'website' ? '#fbbf24' : 'var(--text-muted)',
+                          border: historyFilter === 'website' ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)'
+                        }}
+                      >
+                        💻 Website Mode ({applicationHistory.filter(e => e.source_mode !== 'extension').length})
+                      </button>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -3227,6 +3249,8 @@ function App() {
                       .filter(entry => {
                         if (historyFilter === 'tailored' && entry.status === 'applied') return false;
                         if (historyFilter === 'applied' && entry.status !== 'applied') return false;
+                        if (historyFilter === 'extension' && entry.source_mode !== 'extension') return false;
+                        if (historyFilter === 'website' && entry.source_mode === 'extension') return false;
                         if (minHistoryScore > 0) {
                           const itemScore = typeof entry.score === 'number' ? entry.score : 0;
                           if (itemScore < minHistoryScore) return false;
@@ -3272,6 +3296,14 @@ function App() {
                                       <span>{platformBadge.icon}</span> {platformBadge.name}
                                     </span>
                                   )}
+                                  <span style={{
+                                    fontSize: '0.66rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
+                                    backgroundColor: entry.source_mode === 'extension' ? 'rgba(168,85,247,0.15)' : 'rgba(245,158,11,0.15)',
+                                    color: entry.source_mode === 'extension' ? '#c084fc' : '#fbbf24',
+                                    border: entry.source_mode === 'extension' ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(245,158,11,0.3)'
+                                  }}>
+                                    {entry.source_mode === 'extension' ? '🧩 Extension' : '💻 Website'}
+                                  </span>
                                 </div>
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
                                 {entry.recruiter_name && (
