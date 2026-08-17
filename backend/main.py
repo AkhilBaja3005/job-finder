@@ -1149,7 +1149,7 @@ def _extract_company_from_jd(jd_text: str, job_url: str = None) -> str:
         if m:
             name = m.group(1).strip().rstrip('.,;')
             # Filter out generic words and frameworks
-            if name.lower() not in {'the', 'a', 'an', 'we', 'our', 'this', 'you', 'your', 'us', 'etl', 'api', 'sdk', 'framework', 'platform', 'tool', 'system', 'devops', 'mlops', 'data', 'engineering', 'premium', 'try premium', 'premium. try premium', 'linkedin'} and 'premium' not in name.lower():
+            if name.lower() not in {'the', 'a', 'an', 'we', 'our', 'this', 'you', 'your', 'us', 'etl', 'api', 'sdk', 'framework', 'platform', 'tool', 'system', 'devops', 'mlops', 'data', 'engineering'} and 'premium' not in name.lower():
                 print(f"[_extract_company_from_jd] ✓ Regex extracted company: {name}")
                 return name
 
@@ -1372,7 +1372,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 cached["latex_code"] = ""
             elif not request.skip_tailoring:
                 try:
-                    entry_company = await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
+                    entry_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company', 'Detecting company...']) else await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
                     safe_key = _safe_key(token)
                     _, user_out_dir = _get_user_storage_dirs(safe_key)
                     tex_path, temp_pdf_path = _user_output_paths(token)
@@ -1459,7 +1459,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         cached["latex_code"] = ""
                     elif not request.skip_tailoring:
                         try:
-                            entry_company = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
+                            entry_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company', 'Detecting company...']) else await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
                             safe_key = _safe_key(token)
                             tex_path, temp_pdf_path = _user_output_paths(token)
                             cached_pdf = temp_pdf_path if os.path.exists(temp_pdf_path) else tex_path.replace(".tex", ".pdf")
@@ -1718,9 +1718,11 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             dumped = analysis.model_dump()
             set_cached_analysis(token, job_title, jd_text, dumped)
-            company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
-            if (not company_name or company_name == "Target Hiring Company") and "scraped" in locals() and scraped.get("company"):
+            company_name = request.company if (request.company and request.company not in ["Target Company", "Hiring Company", "Detecting company..."]) else None
+            if not company_name and "scraped" in locals() and scraped.get("company"):
                 company_name = scraped.get("company")
+            if not company_name:
+                company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
             recruiter_name = None
             recruiter_profile_url = None
             if request.job_url:

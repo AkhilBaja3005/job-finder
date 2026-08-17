@@ -177,6 +177,7 @@ def list_applications(token: Optional[str]) -> list[dict]:
                     "recruiter_profile_url": r.get("recruiter_profile_url"),
                     "overleaf_url": r.get("overleaf_url"),
                     "pdf_url": r.get("pdf_url"),
+                    "source_mode": r.get("source_mode", "website"),
                     "timestamp": datetime.fromisoformat(r["created_at"]).timestamp() if r.get("created_at") else None,
                 }
                 for r in rows
