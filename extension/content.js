@@ -1,11 +1,21 @@
-// content.js - Job Finder ATS Tailor Content Script (v2.3.0)
+// content.js - Job Finder ATS Tailor Content Script (v2.5.0 Failsafe)
 
 (function () {
-  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+  const host = window.location.hostname || "";
+  if (host === "localhost" || host === "127.0.0.1" || host.includes("127.0.0.1") || host.includes("localhost")) {
     return;
   }
 
-  // Extract page job details safely from active tab DOM
+  function isRuntimeValid() {
+    try {
+      return typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  if (!isRuntimeValid()) return;
+
   function extractJobDetails() {
     const url = window.location.href;
     let title = "";
@@ -23,8 +33,11 @@
       company = (
         document.querySelector(".job-details-jobs-unified-top-card__company-name") ||
         document.querySelector(".jobs-unified-top-card__company-name") ||
-        document.querySelector(".job-details-jobs-unified-top-card__primary-description") ||
-        document.querySelector(".jobs-unified-top-card__subtitle-primary-grouping")
+        document.querySelector(".jobs-unified-top-card__subtitle-primary-grouping a") ||
+        document.querySelector(".job-details-jobs-unified-top-card__primary-description a") ||
+        document.querySelector(".jobs-search__job-details--container .job-details-jobs-unified-top-card__company-name") ||
+        document.querySelector(".jobs-unified-top-card__primary-description") ||
+        document.querySelector("a[href*='/company/']")
       )?.innerText?.trim() || "";
 
       description = (
@@ -41,19 +54,59 @@
       title = document.querySelector("[data-automation-id='jobPostingHeader'], h2")?.innerText?.trim() || "";
       description = document.querySelector("[data-automation-id='jobPostingDescription']")?.innerText?.trim() || "";
     } else {
-      title = document.title;
-      description = document.body.innerText.slice(0, 4000);
+      // Oracle Cloud HCM / Enterprise ATS specific selectors
+      const oracleTitle = document.querySelector(".job-details-title, h1, [data-ph-at-id='job-title']")?.innerText?.trim();
+      const oracleCompany = (
+        document.querySelector(".org-name, .company-name, [data-ph-at-id='company-name']") ||
+        document.querySelector("meta[property='og:site_name']")
+      )?.content || document.querySelector(".org-name, .company-name")?.innerText?.trim();
+
+      title = oracleTitle || document.title;
+      company = oracleCompany || "";
+
+      description = (
+        document.querySelector(".job-description, #job-description, [data-ph-at-id='job-description'], .job-details-description") ||
+        document.querySelector("main")
+      )?.innerText || document.body.innerText.slice(0, 4000);
+    }
+
+    // Intelligent Job Title Cleaning
+    if (title) {
+      // If page title is "Senior Engineer - Single Position | Micron", extract "Senior Engineer"
+      if (title.includes(" - Single Position")) {
+        title = title.replace(" - Single Position", "");
+      }
+      title = title.split(" | ")[0].split(" - Careers")[0].trim();
+    }
+    if (!company && url) {
+      if (url.includes("oraclecloud.com") || url.includes("myworkdayjobs.com")) {
+        // Look for company branding inside DOM body text (e.g. Goldman Sachs)
+        const bodyText = document.body.innerText;
+        const brandMatch = bodyText.match(/(Goldman Sachs|Google|Amazon|Microsoft|Meta|Apple|Netflix|Micron|Oracle|JPMorgan)/i);
+        if (brandMatch) {
+          company = brandMatch[1];
+        }
+      }
+    }
+    if (company && typeof company === "string") {
+      company = company.trim().charAt(0).toUpperCase() + company.trim().slice(1);
     }
 
     return { title, company, description, url };
   }
 
-  // Listen for message requests from extension popup
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === "GET_JOB_DETAILS") {
-      const details = extractJobDetails();
-      sendResponse(details);
+  try {
+    if (isRuntimeValid() && chrome.runtime.onMessage) {
+      chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        try {
+          if (!isRuntimeValid()) return false;
+          if (request.action === "GET_JOB_DETAILS") {
+            const details = extractJobDetails();
+            sendResponse(details);
+          }
+        } catch (e) {}
+        return true;
+      });
     }
-    return true;
-  });
+  } catch (e) {}
 })();

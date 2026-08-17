@@ -1247,9 +1247,11 @@ class RunContext:
 async def _send_website_tailoring_email(token: Optional[str], session_resume_data: dict, dumped_analysis: dict, job_title: str, company_name: str, job_url: Optional[str], overleaf_url: Optional[str], persistent_pdf_path: str):
     """Helper to check user preference and dispatch website tailoring emails with PDF attachment."""
     print(f"[analyze_job] _send_website_tailoring_email called. token={bool(token)}, pdf_path={persistent_pdf_path}, exists={os.path.exists(persistent_pdf_path) if persistent_pdf_path else False}")
-    if not token or not persistent_pdf_path or not os.path.exists(persistent_pdf_path):
-        print(f"[analyze_job] Skipping website tailoring email: token or persistent_pdf_path invalid.")
+    if not token:
+        print(f"[analyze_job] Skipping website tailoring email: token invalid.")
         return
+    
+    pdf_attachment = persistent_pdf_path if (persistent_pdf_path and os.path.exists(persistent_pdf_path)) else None
     try:
         user_obj = await async_get_user_by_token(token)
         should_email = False
@@ -1332,7 +1334,7 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
                 subject=email_subj,
                 text_body=email_text,
                 html_body=email_html,
-                attachment_path=persistent_pdf_path,
+                attachment_path=pdf_attachment,
                 attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
             )
             print(f"[analyze_job] Tailored PDF email delivery result: {email_sent}")
@@ -1383,7 +1385,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         "pdf_url": cached_pdf_url,
                         "overleaf_url": cached_overleaf
                     })
-                    await _send_website_tailoring_email(token, session_resume_data, cached, request.job_title, entry_company, request.job_url, cached_overleaf, cached_pdf)
+                    await _send_website_tailoring_email(token, session_resume_data, cached, request.job_title, entry_company, request.job_url, cached_overleaf, cached_pdf, request_send_email=request.send_email)
                 except Exception as hist_err:
                     print(f"[analyze_job] Failed to record application history / email on cache hit: {hist_err}")
             async def cached_event_generator():
