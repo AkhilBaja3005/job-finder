@@ -201,8 +201,7 @@ function App() {
   const [cronLocation, setCronLocation] = useState('Remote');
   const [cronTime, setCronTime] = useState('18:00');
 
-  const [historyFilter, setHistoryFilter] = useState('all');
-  const [userSelectedSkills, setUserSelectedSkills] = useState(new Set()); // 'all' | 'tailored' | 'applied'
+  const [historyFilter, setHistoryFilter] = useState('all'); // 'all' | 'tailored' | 'applied'
   const [historySortOrder, setHistorySortOrder] = useState('newest'); // 'newest' | 'oldest'
   const [minHistoryScore, setMinHistoryScore] = useState(0); // Custom match percentage filter
   const scrapedJobDescriptionRef = useRef('');
@@ -3160,39 +3159,6 @@ function App() {
                       >
                         ✅ Submitted ({applicationHistory.filter(e => e.status === 'applied').length})
                       </button>
-                      <button
-                        onClick={() => setHistoryFilter('extension')}
-                        style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'extension' ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.05)',
-                          color: historyFilter === 'extension' ? '#c084fc' : 'var(--text-muted)',
-                          border: historyFilter === 'extension' ? '1px solid #c084fc' : '1px solid rgba(255,255,255,0.1)'
-                        }}
-                      >
-                        🧩 Extension Mode ({applicationHistory.filter(e => e.source_mode === 'extension').length})
-                      </button>
-                      <button
-                        onClick={() => setHistoryFilter('website')}
-                        style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'website' ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.05)',
-                          color: historyFilter === 'website' ? '#fbbf24' : 'var(--text-muted)',
-                          border: historyFilter === 'website' ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)'
-                        }}
-                      >
-                        💻 Website Mode ({applicationHistory.filter(e => e.source_mode !== 'extension' && e.source_mode !== 'email').length})
-                      </button>
-                      <button
-                        onClick={() => setHistoryFilter('email')}
-                        style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'email' ? 'rgba(236,72,153,0.2)' : 'rgba(255,255,255,0.05)',
-                          color: historyFilter === 'email' ? '#f472b6' : 'var(--text-muted)',
-                          border: historyFilter === 'email' ? '1px solid #f472b6' : '1px solid rgba(255,255,255,0.1)'
-                        }}
-                      >
-                        📧 Email Mode ({applicationHistory.filter(e => e.source_mode === 'email').length})
-                      </button>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -3261,9 +3227,6 @@ function App() {
                       .filter(entry => {
                         if (historyFilter === 'tailored' && entry.status === 'applied') return false;
                         if (historyFilter === 'applied' && entry.status !== 'applied') return false;
-                        if (historyFilter === 'extension' && entry.source_mode !== 'extension') return false;
-                        if (historyFilter === 'website' && (entry.source_mode === 'extension' || entry.source_mode === 'email')) return false;
-                        if (historyFilter === 'email' && entry.source_mode !== 'email') return false;
                         if (minHistoryScore > 0) {
                           const itemScore = typeof entry.score === 'number' ? entry.score : 0;
                           if (itemScore < minHistoryScore) return false;
@@ -3309,14 +3272,6 @@ function App() {
                                       <span>{platformBadge.icon}</span> {platformBadge.name}
                                     </span>
                                   )}
-                                  <span style={{
-                                    fontSize: '0.66rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px',
-                                    backgroundColor: entry.source_mode === 'extension' ? 'rgba(168,85,247,0.15)' : entry.source_mode === 'email' ? 'rgba(236,72,153,0.15)' : 'rgba(245,158,11,0.15)',
-                                    color: entry.source_mode === 'extension' ? '#c084fc' : entry.source_mode === 'email' ? '#f472b6' : '#fbbf24',
-                                    border: entry.source_mode === 'extension' ? '1px solid rgba(168,85,247,0.3)' : entry.source_mode === 'email' ? '1px solid rgba(236,72,153,0.3)' : '1px solid rgba(245,158,11,0.3)'
-                                  }}>
-                                    {entry.source_mode === 'extension' ? '🧩 Extension' : entry.source_mode === 'email' ? '📧 Email' : '💻 Website'}
-                                  </span>
                                 </div>
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
                                 {entry.recruiter_name && (
@@ -4239,33 +4194,13 @@ function App() {
                     </div>
 
                     <div style={{ marginTop: '10px' }}>
-                      <h3>Missing Required Skills <span style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)', fontWeight: 500 }}>(Click to force-include in resume)</span></h3>
+                      <h3>Missing Required Skills</h3>
                       <div className="tag-list">
-                        {(analysisResult.match_analysis.missing_skills || []).map((skill, i) => {
-                          const isSelected = userSelectedSkills.has(skill);
-                          return (
-                            <span
-                              key={i}
-                              className={`tag tag-missing ${isSelected ? 'selected-skill-chip' : ''}`}
-                              style={{
-                                cursor: 'pointer', userSelect: 'none', transition: 'all 0.2s ease',
-                                background: isSelected ? 'rgba(16, 185, 129, 0.25)' : undefined,
-                                border: isSelected ? '1px solid #10B981' : undefined,
-                                color: isSelected ? '#34D399' : undefined,
-                                fontWeight: isSelected ? 700 : 500
-                              }}
-                              onClick={() => {
-                                setUserSelectedSkills(prev => {
-                                  const next = new Set(prev);
-                                  if (next.has(skill)) next.delete(skill); else next.add(skill);
-                                  return next;
-                                });
-                              }}
-                            >
-                              {isSelected ? '✓ ' : '+ '}{skill}
-                            </span>
-                          );
-                        })}
+                        {(analysisResult.match_analysis.missing_skills || []).map((skill, i) => (
+                          <span key={i} className="tag tag-missing">
+                            {skill}
+                          </span>
+                        ))}
                       </div>
                     </div>
                   </>

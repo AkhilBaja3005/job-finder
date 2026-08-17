@@ -60,26 +60,17 @@ async def user_me(authorization: Optional[str] = Header(None)):
         sync_code = generate_user_sync_code(user["id"])
         user["sync_code"] = sync_code
 
-    # Fetch candidate name from user_resumes table or session store
+    # Fetch candidate name from user_resumes table
     try:
         from services.auth import supabase_request
-        res = supabase_request(f"user_resumes?user_id=eq.{user['id']}&select=resume_data", "GET")
+        res = supabase_request(f"user_resumes?user_id=eq.{user[id]}&select=resume_data", "GET")
         if res and len(res) > 0:
             import json
             rdata = json.loads(res[0].get("resume_data", "{}"))
             if rdata.get("name"):
                 user["resume_name"] = rdata.get("name")
     except Exception as e:
-        print(f"Failed to fetch candidate name for user_me from Supabase: {e}")
-
-    if not user.get("resume_name"):
-        try:
-            from main import get_session_data
-            sess = get_session_data(token)
-            if sess and isinstance(sess.get("data"), dict) and sess["data"].get("name"):
-                user["resume_name"] = sess["data"].get("name")
-        except Exception:
-            pass
+        print(f"Failed to fetch candidate name for user_me: {e}")
 
     return user
 
