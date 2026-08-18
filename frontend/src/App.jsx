@@ -4258,6 +4258,19 @@ function App() {
                                 setUserSelectedSkills(prev => {
                                   const next = new Set(prev);
                                   if (next.has(skill)) next.delete(skill); else next.add(skill);
+                                  
+                                  // Dynamically recalculate ATS score preview in state
+                                  const addedCount = next.size;
+                                  const baseScore = analysisResult?.match_analysis?.overall_score || 50;
+                                  const newScore = Math.min(99, Math.round(baseScore + (addedCount * 4.5)));
+                                  setAnalysisResult(old => ({
+                                    ...old,
+                                    match_analysis: {
+                                      ...old.match_analysis,
+                                      overall_score: newScore,
+                                      skills_score: Math.min(100, (old.match_analysis.skills_score || 50) + (addedCount * 5))
+                                    }
+                                  }));
                                   return next;
                                 });
                               }}

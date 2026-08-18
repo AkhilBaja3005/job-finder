@@ -229,7 +229,8 @@ document.addEventListener("DOMContentLoaded", () => {
                       }).join("");
                       missingSkillsSection.style.display = "block";
 
-                      // Add click listener to toggle skill selection
+                      // Add click listener to toggle skill selection & dynamically recalculate score preview
+                      window.baseAtsScore = score;
                       missingSkillsContainer.querySelectorAll(".skill-chip").forEach(chip => {
                         chip.addEventListener("click", () => {
                           const sk = chip.getAttribute("data-skill");
@@ -242,6 +243,11 @@ document.addEventListener("DOMContentLoaded", () => {
                             chip.classList.add("selected");
                             chip.textContent = "✓ " + sk;
                           }
+                          // Recalculate preview score instantly (each selected keyword boosts ATS score by ~4-5%)
+                          const addedCount = window.selectedUserSkills.size;
+                          const boostedScore = Math.min(99, Math.round((window.baseAtsScore || score) + (addedCount * 4.5)));
+                          scoreCircle.textContent = `${boostedScore}%`;
+                          scoreSub.textContent = boostedScore >= 70 ? `Strong match profile (${addedCount} forced skill${addedCount > 1 ? "s" : ""})` : "Missing key keywords";
                         });
                       });
                     }
