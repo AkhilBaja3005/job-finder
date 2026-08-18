@@ -415,10 +415,7 @@ document.addEventListener("DOMContentLoaded", () => {
             job_url: currentJobInfo.url
           })
         })
-          .then(res => {
-              clearTimeout(timeoutParseId);
-              return res.json();
-            })
+          .then(res => res.json())
           .then(data => {
             if (data.cover_letter) {
               activePreviewText = data.cover_letter;
@@ -453,10 +450,7 @@ document.addEventListener("DOMContentLoaded", () => {
             job_url: currentJobInfo.url || ""
           })
         })
-          .then(res => {
-              clearTimeout(timeoutParseId);
-              return res.json();
-            })
+          .then(res => res.json())
           .then(data => {
             const msg = data.message?.email_body || data.message?.linkedin_message || "Outreach generated!";
             activePreviewText = msg;
