@@ -153,7 +153,10 @@ document.addEventListener("DOMContentLoaded", () => {
       chrome.storage.local.get(["userToken"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
         if (currentJobInfo.description && currentJobInfo.description.length > 20) {
+          const controllerParse = new AbortController();
+          const timeoutParseId = setTimeout(() => controllerParse.abort(), 4000);
           fetch(`${API_BASE_URL}/extension/parse_job_details`, {
+            signal: controllerParse.signal,
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -165,7 +168,10 @@ document.addEventListener("DOMContentLoaded", () => {
               page_title: currentJobInfo.title
             })
           })
-            .then(res => res.json())
+            .then(res => {
+              clearTimeout(timeoutParseId);
+              return res.json();
+            })
             .then(data => {
               if (data && data.company) {
                 currentJobInfo.company = data.company;
@@ -181,6 +187,7 @@ document.addEventListener("DOMContentLoaded", () => {
               fetchAtsScore(currentJobInfo);
             })
             .catch(() => {
+              clearTimeout(timeoutParseId);
               if (!currentJobInfo.company || currentJobInfo.company === "Detecting company...") {
                 currentJobInfo.company = "Hiring Company";
                 activeCompanyName.textContent = "Hiring Company";
@@ -407,7 +414,10 @@ document.addEventListener("DOMContentLoaded", () => {
             job_url: currentJobInfo.url
           })
         })
-          .then(res => res.json())
+          .then(res => {
+              clearTimeout(timeoutParseId);
+              return res.json();
+            })
           .then(data => {
             if (data.cover_letter) {
               activePreviewText = data.cover_letter;
@@ -442,7 +452,10 @@ document.addEventListener("DOMContentLoaded", () => {
             job_url: currentJobInfo.url || ""
           })
         })
-          .then(res => res.json())
+          .then(res => {
+              clearTimeout(timeoutParseId);
+              return res.json();
+            })
           .then(data => {
             const msg = data.message?.email_body || data.message?.linkedin_message || "Outreach generated!";
             activePreviewText = msg;
