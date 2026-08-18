@@ -135,16 +135,17 @@ h1.title {
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
   width: 100vw;
   height: 100vh;
+  background: rgba(5, 8, 16, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 999999;
   padding: 20px;
-  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .card {
