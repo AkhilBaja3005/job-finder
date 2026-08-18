@@ -150,6 +150,36 @@ function App() {
   const [applicationHistory, setApplicationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  
+  // 1-Click Chrome Extension Auto-Sync Handler
+  const handleOneClickExtensionSync = (syncCode) => {
+    const targetKey = syncCode || (user && user.sync_code);
+    if (!targetKey) {
+      showToast("Please log in to auto-sync your extension key!", "error");
+      return;
+    }
+    // Attempt messaging Chrome extension via window / external messaging
+    if (typeof window.chrome !== "undefined" && window.chrome.runtime && window.chrome.runtime.sendMessage) {
+      try {
+        window.chrome.runtime.sendMessage({ action: "SYNC_USER_KEY", syncKey: targetKey }, (res) => {
+          if (res && res.success) {
+            showToast(`🚀 Extension Auto-Synced to Key: ${targetKey}!`, "success");
+          } else {
+            // Fallback to copying key and prompting extension download
+            navigator.clipboard.writeText(targetKey);
+            showToast(`📋 Sync Key (${targetKey}) copied! Open extension settings to paste.`, "info");
+          }
+        });
+      } catch (e) {
+        navigator.clipboard.writeText(targetKey);
+        showToast(`📋 Sync Key (${targetKey}) copied to clipboard!`, "info");
+      }
+    } else {
+      navigator.clipboard.writeText(targetKey);
+      showToast(`📋 Sync Key (${targetKey}) copied to clipboard!`, "info");
+    }
+  };
+
   const [user, setUser] = useState(null);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
@@ -1726,7 +1756,22 @@ function App() {
             ?
           </button>
           {user && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                className="btn"
+                style={{
+                  padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700,
+                  background: 'linear-gradient(135deg, #0284c7 0%, #10b981 100%)',
+                  color: '#fff', border: 'none', borderRadius: '20px',
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
+                  display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'
+                }}
+                onClick={() => handleOneClickExtensionSync(user.sync_code)}
+                title="1-Click Auto-Sync Chrome Extension with your Account"
+              >
+                <span>⚡ 1-Click Extension Sync</span>
+                {user.sync_code && <span style={{ background: 'rgba(0,0,0,0.25)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem' }}>{user.sync_code}</span>}
+              </button>
               <span style={{ fontSize: '0.82rem', color: 'var(--accent-green)', fontWeight: 500 }}>{user.email}</span>
               <button className="btn btn-secondary" style={{ padding: '5px 11px', fontSize: '0.76rem' }} onClick={handleLogout}>
                 Sign out

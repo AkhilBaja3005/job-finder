@@ -44,3 +44,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
   }
 });
+
+// Handle 1-Click Sync Key initialization from web app
+chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
+  if (request.action === "SYNC_USER_KEY" && request.syncKey) {
+    chrome.storage.local.set({ userToken: request.syncKey }, () => {
+      sendResponse({ success: true, syncedKey: request.syncKey });
+    });
+    return true;
+  }
+});
