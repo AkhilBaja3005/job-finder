@@ -1364,8 +1364,8 @@ async def parse_job_details_endpoint(request: ExtensionParseJobRequest):
     # 1. Try fast LinkedIn / Indeed Guest REST API if URL is provided
     if request.page_url and ("linkedin.com/jobs" in request.page_url or "indeed.com" in request.page_url):
         try:
-            from services.scraper import scrape_job_url
-            scraped = await scrape_job_url(request.page_url)
+            from services.scraper import scrape_job_description
+            scraped = await scrape_job_description(request.page_url)
             if scraped and scraped.get("description"):
                 if scraped.get("title") and scraped.get("title") != "LinkedIn Job":
                     title = scraped.get("title")
