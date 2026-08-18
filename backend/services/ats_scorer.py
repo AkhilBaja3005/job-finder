@@ -784,6 +784,7 @@ def compute_ats_score(resume_data: dict, jd_text: str, config: ScoringConfig = D
     if parse_failures:
         score_breakdown["date_parse_warnings"] = " | ".join(parse_failures)
 
+    score_breakdown["skill_weights"] = importance_weights
     return ATSScoreResult(
         eligible=True,
         knockout_reason=None,

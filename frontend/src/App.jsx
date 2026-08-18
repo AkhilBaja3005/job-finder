@@ -4259,16 +4259,23 @@ function App() {
                                   const next = new Set(prev);
                                   if (next.has(skill)) next.delete(skill); else next.add(skill);
                                   
-                                  // Dynamically recalculate ATS score preview in state
-                                  const addedCount = next.size;
-                                  const baseScore = analysisResult?.match_analysis?.overall_score || 50;
-                                  const newScore = Math.min(99, Math.round(baseScore + (addedCount * 4.5)));
+                                  // Dynamically recalculate ATS score preview using exact JD skill weights
+                                  const skillWeights = analysisResult?.match_analysis?.score_breakdown?.skill_weights || {};
+                                  const missingList = analysisResult?.match_analysis?.missing_skills || [];
+                                  let totalBoost = 0;
+                                  next.forEach(s => {
+                                    const w = skillWeights[s] || (1 / (missingList.length || 5));
+                                    totalBoost += (0.40 * 85.0 * w);
+                                  });
+                                  const baseScore = window.baseOriginalAtsScore || analysisResult?.match_analysis?.overall_score || 50;
+                                  if (!window.baseOriginalAtsScore) window.baseOriginalAtsScore = baseScore;
+                                  const newScore = Math.min(99, Math.round(window.baseOriginalAtsScore + totalBoost));
                                   setAnalysisResult(old => ({
                                     ...old,
                                     match_analysis: {
                                       ...old.match_analysis,
                                       overall_score: newScore,
-                                      skills_score: Math.min(100, (old.match_analysis.skills_score || 50) + (addedCount * 5))
+                                      skills_score: Math.min(100, Math.round((old.match_analysis.skills_score || 50) + (totalBoost * 2.5)))
                                     }
                                   }));
                                   return next;

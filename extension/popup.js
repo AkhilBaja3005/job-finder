@@ -243,9 +243,16 @@ document.addEventListener("DOMContentLoaded", () => {
                             chip.classList.add("selected");
                             chip.textContent = "✓ " + sk;
                           }
-                          // Recalculate preview score instantly (each selected keyword boosts ATS score by ~4-5%)
+                          // Recalculate preview score instantly using exact JD skill importance weights (0.40 * mandatory_weight * weight)
+                          const skillWeights = (ev.analysis && ev.analysis.match_analysis && ev.analysis.match_analysis.score_breakdown && ev.analysis.match_analysis.score_breakdown.skill_weights) || {};
+                          let totalBoost = 0;
+                          window.selectedUserSkills.forEach(s => {
+                            const w = skillWeights[s] || (1 / (missing.length || 5));
+                            // Boost = 0.40 (skills weight) * 85 (mandatory weight) * importance weight
+                            totalBoost += (0.40 * 85.0 * w);
+                          });
                           const addedCount = window.selectedUserSkills.size;
-                          const boostedScore = Math.min(99, Math.round((window.baseAtsScore || score) + (addedCount * 4.5)));
+                          const boostedScore = Math.min(99, Math.round((window.baseAtsScore || score) + totalBoost));
                           scoreCircle.textContent = `${boostedScore}%`;
                           scoreSub.textContent = boostedScore >= 70 ? `Strong match profile (${addedCount} forced skill${addedCount > 1 ? "s" : ""})` : "Missing key keywords";
                         });
