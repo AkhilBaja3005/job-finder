@@ -816,7 +816,6 @@ else:
 class JobAnalysisRequest(BaseModel):
     job_url: Optional[str] = None
     job_title: str = Field(max_length=300)
-    company: Optional[str] = None
     job_description: Optional[str] = Field(default=None, max_length=20000)
     skip_tailoring: bool = False
     force_tailoring: bool = False
@@ -1373,8 +1372,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 cached["latex_code"] = ""
             elif not request.skip_tailoring:
                 try:
-                    req_c1 = getattr(request, 'company', None)
-entry_company = req_c1 if (req_c1 and req_c1 not in ['Target Company', 'Hiring Company', 'Detecting company...']) else await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
+                    entry_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company', 'Detecting company...']) else await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
                     safe_key = _safe_key(token)
                     _, user_out_dir = _get_user_storage_dirs(safe_key)
                     tex_path, temp_pdf_path = _user_output_paths(token)
@@ -1461,8 +1459,7 @@ entry_company = req_c1 if (req_c1 and req_c1 not in ['Target Company', 'Hiring C
                         cached["latex_code"] = ""
                     elif not request.skip_tailoring:
                         try:
-                            req_c2 = getattr(request, 'company', None)
-entry_company = req_c2 if (req_c2 and req_c2 not in ['Target Company', 'Hiring Company', 'Detecting company...']) else await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
+                            entry_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company', 'Detecting company...']) else await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
                             safe_key = _safe_key(token)
                             tex_path, temp_pdf_path = _user_output_paths(token)
                             cached_pdf = temp_pdf_path if os.path.exists(temp_pdf_path) else tex_path.replace(".tex", ".pdf")
@@ -1716,14 +1713,13 @@ entry_company = req_c2 if (req_c2 and req_c2 not in ['Target Company', 'Hiring C
                         else:
                             break
     
-                analysis.latex_code = apply_latex_hotfix(analysis.latex_code, optimal_scale, optimal_linespread, master_latex)
+                analysis.latex_code = apply_latex_hotfix(analysis.latex_code, optimal_scale, optimal_linespread, master_latex, user_selected_skills=getattr(request, 'user_selected_skills', None))
             else:
-                analysis.latex_code = apply_latex_hotfix(analysis.latex_code, 1.0, 1.0, master_latex)
+                analysis.latex_code = apply_latex_hotfix(analysis.latex_code, 1.0, 1.0, master_latex, user_selected_skills=getattr(request, 'user_selected_skills', None))
 
             dumped = analysis.model_dump()
             set_cached_analysis(token, job_title, jd_text, dumped)
-            req_comp = getattr(request, "company", None)
-            company_name = req_comp if (req_comp and req_comp not in ["Target Company", "Hiring Company", "Detecting company..."]) else None
+            company_name = request.company if (request.company and request.company not in ["Target Company", "Hiring Company", "Detecting company..."]) else None
             if not company_name and "scraped" in locals() and scraped.get("company"):
                 company_name = scraped.get("company")
             if not company_name:

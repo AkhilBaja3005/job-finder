@@ -13,15 +13,15 @@
       color: #f8fafc;
       box-sizing: border-box;
     }
-    .header {
+    .header-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
       padding-bottom: 12px;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
     }
-    .header h2 {
+    .brand-title {
       font-size: 15px;
       margin: 0;
       color: #38bdf8;
@@ -29,22 +29,101 @@
       align-items: center;
       gap: 6px;
       font-weight: 800;
+      letter-spacing: -0.01em;
     }
-    .status-badge {
-      display: inline-block;
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       padding: 3px 8px;
       border-radius: 12px;
       font-size: 10px;
-      font-weight: 600;
+      font-weight: 700;
       background: rgba(16, 185, 129, 0.15);
       color: #34d399;
       border: 1px solid rgba(16, 185, 129, 0.3);
     }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #34d399;
+      box-shadow: 0 0 6px #34d399;
+    }
+    
+    /* Dedicated Top Right Account & Sync Bar */
+    .sync-card {
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .sync-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+      flex: 1;
+    }
+    .user-name-text {
+      font-size: 11px;
+      font-weight: 800;
+      color: #38bdf8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .user-email-text {
+      font-size: 10px;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sync-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .sync-key-label {
+      font-size: 10px;
+      font-weight: 800;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    input.sync-input {
+      width: 78px;
+      box-sizing: border-box;
+      background: #1e293b;
+      border: 1px solid #38bdf8;
+      color: #38bdf8;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      text-align: center;
+      outline: none;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+    }
+    input.sync-input:focus {
+      border-color: #34d399;
+      box-shadow: 0 0 8px rgba(52, 211, 153, 0.3);
+    }
+
     .card {
       background: rgba(255,255,255,0.03);
       border: 1px solid rgba(255,255,255,0.08);
       border-radius: 12px;
-      padding: 12px;
+      padding: 12px 14px;
       margin-bottom: 12px;
     }
     .score-box {
@@ -54,8 +133,8 @@
       background: rgba(56, 189, 248, 0.08);
       border: 1px solid rgba(56, 189, 248, 0.25);
       border-radius: 12px;
-      padding: 12px;
-      margin-bottom: 12px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
     }
     .score-circle {
       width: 52px;
@@ -70,53 +149,68 @@
       font-weight: 800;
       color: #38bdf8;
       flex-shrink: 0;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.2);
     }
     .skill-chip {
       display: inline-block;
       background: rgba(239, 68, 68, 0.15);
       border: 1px solid rgba(239, 68, 68, 0.3);
       color: #fca5a5;
-      padding: 3px 8px;
+      padding: 3px 9px;
       border-radius: 12px;
-      font-size: 11px;
-      font-weight: 600;
-      margin: 2px 4px 2px 0;
+      font-size: 10.5px;
+      font-weight: 700;
+      margin: 3px 4px 3px 0;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s ease;
+    }
+    .skill-chip:hover {
+      background: rgba(239, 68, 68, 0.28);
+      transform: scale(1.03);
+    }
+    .skill-chip.selected {
+      background: rgba(16, 185, 129, 0.25);
+      border: 1px solid #10b981;
+      color: #34d399;
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.25);
     }
     .btn {
       width: 100%;
       padding: 11px;
       border-radius: 8px;
       border: none;
-      background: linear-gradient(135deg, #0a66c2, #0284c7);
       color: #fff;
       font-weight: 700;
       font-size: 12px;
       cursor: pointer;
       margin-top: 8px;
-      transition: opacity 0.2s ease;
+      transition: all 0.2s ease;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
     .btn:hover {
-      opacity: 0.9;
+      opacity: 0.92;
+      transform: translateY(-1px);
+    }
+    .btn-email {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
     }
     .btn-secondary {
       background: rgba(255,255,255,0.06);
       color: #38bdf8;
-      border: 1px solid rgba(56,189,248,0.3);
-    }
-    .btn-email {
-      background: linear-gradient(135deg, #10b981, #059669);
-      color: #fff;
+      border: 1px solid rgba(56, 189, 248, 0.3);
     }
     .preview-box {
-      background: rgba(15, 23, 42, 0.9);
+      background: #090d16;
       border: 1px solid rgba(56, 189, 248, 0.3);
       border-radius: 10px;
       padding: 12px;
-      margin-top: 12px;
+      margin-top: 8px;
       margin-bottom: 12px;
       max-height: 180px;
       overflow-y: auto;
@@ -127,26 +221,13 @@
       word-break: break-word;
       text-align: left;
     }
-    input {
-      width: 100%;
-      box-sizing: border-box;
-      background: #1e293b;
-      border: 1px solid #38bdf8;
-      color: #38bdf8;
-      padding: 8px;
-      border-radius: 6px;
-      font-size: 11px;
-      margin-top: 4px;
-      font-weight: 600;
-      text-align: center;
-    }
     .toast {
       position: relative;
-      margin-top: 10px;
-      background: rgba(2, 132, 199, 0.2);
+      margin-top: 12px;
+      background: rgba(2, 132, 199, 0.25);
       border: 1px solid #0284c7;
       color: #38bdf8;
-      padding: 8px 12px;
+      padding: 9px 12px;
       border-radius: 8px;
       font-size: 11px;
       font-weight: 700;
@@ -156,55 +237,62 @@
   </style>
 </head>
 <body>
-  <div class="header">
-    <h2><span>🎯</span> Job Finder ATS Tailor</h2>
-    <span id="backend-status" class="status-badge">Connected</span>
+  <!-- Brand & Status Header Bar -->
+  <div class="header-bar">
+    <h2 class="brand-title"><span>🎯</span> Job Finder ATS Tailor</h2>
+    <span class="status-pill">
+      <span class="status-dot"></span>
+      <span id="backend-status">Connected</span>
+    </span>
+  </div>
+
+  <!-- Dedicated Account & Sync Bar -->
+  <div class="sync-card">
+    <div id="user-info-card" class="sync-left">
+      <div id="user-name-display" class="user-name-text">✓ AKHIL BAJA</div>
+      <div id="user-email-display" class="user-email-text">📧 akhilbaja.work@gmail.com</div>
+    </div>
+    <div class="sync-right">
+      <span class="sync-key-label">🔑 Key:</span>
+      <input type="text" id="user-token" class="sync-input" placeholder="GABY48">
+    </div>
   </div>
 
   <!-- Detected Active Job Card -->
   <div id="job-active-card" class="card">
-    <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 4px;">Detected Active Job:</div>
-    <div id="active-role-title" style="font-size: 13px; font-weight: 700; color: #fff;">Detecting job page...</div>
-    <div id="active-company-name" style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Open LinkedIn, Indeed, or Workday</div>
+    <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.05em;">Detected Active Job:</div>
+    <div id="active-role-title" style="font-size: 13px; font-weight: 700; color: #fff; line-height: 1.35;">Detecting job page...</div>
+    <div id="active-company-name" style="font-size: 11px; color: #94a3b8; margin-top: 3px; font-weight: 500;">Open LinkedIn, Indeed, or Workday</div>
   </div>
 
   <!-- ATS Match Score Section -->
-  <div id="score-section" class="score-box" style="display: none;">
-    <div id="ats-score-circle" class="score-circle">--%</div>
+  <div id="score-section" class="score-box">
+    <div id="ats-score-circle" class="score-circle">⏳</div>
     <div>
-      <div style="font-weight: 700; font-size: 13px;">ATS Match Score</div>
-      <div id="ats-score-sub" style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Missing key keywords</div>
+      <div style="font-weight: 700; font-size: 13px; color: #f8fafc;">ATS Match Score</div>
+      <div id="ats-score-sub" style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Computing ATS match score...</div>
     </div>
   </div>
 
   <!-- Missing Skills Chips -->
   <div id="missing-skills-section" style="margin-bottom: 12px; display: none;">
-    <div style="font-size: 10px; font-weight: 700; color: #fca5a5; text-transform: uppercase; margin-bottom: 4px;">Top Missing Keywords:</div>
+    <div style="font-size: 10px; font-weight: 700; color: #fca5a5; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.05em;">Top Missing Keywords:</div>
     <div id="missing-skills-container"></div>
   </div>
 
   <!-- Interactive Text Preview Box for Cover Letter / Outreach -->
   <div id="text-preview-wrapper" style="display: none;">
     <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span id="preview-title" style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase;">Preview Generated Content</span>
-      <button id="btn-copy-preview" style="background: #0284c7; border: none; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; cursor: pointer;">📋 Copy to Clipboard</button>
+      <span id="preview-title" style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;">Preview Generated Content</span>
+      <button id="btn-copy-preview" style="background: #0284c7; border: none; color: #fff; padding: 4px 9px; border-radius: 5px; font-size: 10px; font-weight: 700; cursor: pointer;">📋 Copy to Clipboard</button>
     </div>
     <div id="text-preview-content" class="preview-box"></div>
   </div>
 
   <!-- Extension Action Buttons -->
-    <button id="btn-email-tailor" class="btn btn-email">📧 1-Click Email Tailored Package</button>
+  <button id="btn-email-tailor" class="btn btn-email">📧 1-Click Email Tailored Package</button>
   <button id="btn-cover-letter" class="btn btn-secondary">📝 Generate & Preview Cover Letter</button>
   <button id="btn-outreach" class="btn btn-secondary">✉️ Generate & Preview Recruiter Outreach</button>
-
-  <div style="margin-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px;">
-    <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase;">🔑 Extension Sync Key:</div>
-    <input type="text" id="user-token" placeholder="Paste Sync Key from Dashboard">
-    <div id="user-info-card" style="margin-top: 8px; padding: 8px 10px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; display: none;">
-      <div style="font-size: 11px; font-weight: 700; color: #34d399;" id="user-name-display">👤 Connected User</div>
-      <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;" id="user-email-display">user@example.com</div>
-    </div>
-  </div>
 
   <div id="popup-toast" class="toast"></div>
 
