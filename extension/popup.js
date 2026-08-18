@@ -69,9 +69,9 @@ document.addEventListener("DOMContentLoaded", () => {
               candidateName = "AKHIL BAJA";
             }
           }
-          if (userNameDisplay) userNameDisplay.textContent = `✓ Synced User: ${candidateName}`;
-          if (userEmailDisplay) userEmailDisplay.textContent = `📧 Destination: ${email}`;
-          if (userInfoCard) userInfoCard.style.display = "block";
+          if (userNameDisplay) userNameDisplay.textContent = `✓ ${candidateName}`;
+          if (userEmailDisplay) userEmailDisplay.textContent = `📧 ${email}`;
+          if (userInfoCard) userInfoCard.style.display = "flex";
         } else {
           if (userInfoCard) userInfoCard.style.display = "none";
         }
@@ -222,8 +222,28 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
 
                     if (missing.length > 0) {
-                      missingSkillsContainer.innerHTML = missing.slice(0, 6).map(s => `<span class="skill-chip">${s}</span>`).join("");
+                      window.selectedUserSkills = window.selectedUserSkills || new Set();
+                      missingSkillsContainer.innerHTML = missing.slice(0, 8).map(s => {
+                        const isSelected = window.selectedUserSkills.has(s);
+                        return `<span class="skill-chip ${isSelected ? "selected" : ""}" data-skill="${s}">${isSelected ? "✓ " : "+ "}${s}</span>`;
+                      }).join("");
                       missingSkillsSection.style.display = "block";
+
+                      // Add click listener to toggle skill selection
+                      missingSkillsContainer.querySelectorAll(".skill-chip").forEach(chip => {
+                        chip.addEventListener("click", () => {
+                          const sk = chip.getAttribute("data-skill");
+                          if (window.selectedUserSkills.has(sk)) {
+                            window.selectedUserSkills.delete(sk);
+                            chip.classList.remove("selected");
+                            chip.textContent = "+ " + sk;
+                          } else {
+                            window.selectedUserSkills.add(sk);
+                            chip.classList.add("selected");
+                            chip.textContent = "✓ " + sk;
+                          }
+                        });
+                      });
                     }
                     break;
                   }
@@ -231,8 +251,8 @@ document.addEventListener("DOMContentLoaded", () => {
               }
             })
             .catch(() => {
-              scoreCircle.textContent = "78%";
-              scoreSub.textContent = "Estimated match profile";
+              scoreCircle.textContent = "⚠️";
+              scoreSub.textContent = "Offline / Server non-responsive";
             });
         }
       });
@@ -294,7 +314,8 @@ document.addEventListener("DOMContentLoaded", () => {
             send_email: true,
             skip_tailoring: false,
             force_tailoring: true,
-            source_mode: "extension" 
+            source_mode: "extension",
+            user_selected_skills: Array.from(window.selectedUserSkills || [])
           })
         })
           .then(async (res) => {

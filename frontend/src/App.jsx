@@ -201,7 +201,8 @@ function App() {
   const [cronLocation, setCronLocation] = useState('Remote');
   const [cronTime, setCronTime] = useState('18:00');
 
-  const [historyFilter, setHistoryFilter] = useState('all'); // 'all' | 'tailored' | 'applied'
+  const [historyFilter, setHistoryFilter] = useState('all');
+  const [userSelectedSkills, setUserSelectedSkills] = useState(new Set()); // 'all' | 'tailored' | 'applied'
   const [historySortOrder, setHistorySortOrder] = useState('newest'); // 'newest' | 'oldest'
   const [minHistoryScore, setMinHistoryScore] = useState(0); // Custom match percentage filter
   const scrapedJobDescriptionRef = useRef('');
@@ -4238,13 +4239,33 @@ function App() {
                     </div>
 
                     <div style={{ marginTop: '10px' }}>
-                      <h3>Missing Required Skills</h3>
+                      <h3>Missing Required Skills <span style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)', fontWeight: 500 }}>(Click to force-include in resume)</span></h3>
                       <div className="tag-list">
-                        {(analysisResult.match_analysis.missing_skills || []).map((skill, i) => (
-                          <span key={i} className="tag tag-missing">
-                            {skill}
-                          </span>
-                        ))}
+                        {(analysisResult.match_analysis.missing_skills || []).map((skill, i) => {
+                          const isSelected = userSelectedSkills.has(skill);
+                          return (
+                            <span
+                              key={i}
+                              className={`tag tag-missing ${isSelected ? 'selected-skill-chip' : ''}`}
+                              style={{
+                                cursor: 'pointer', userSelect: 'none', transition: 'all 0.2s ease',
+                                background: isSelected ? 'rgba(16, 185, 129, 0.25)' : undefined,
+                                border: isSelected ? '1px solid #10B981' : undefined,
+                                color: isSelected ? '#34D399' : undefined,
+                                fontWeight: isSelected ? 700 : 500
+                              }}
+                              onClick={() => {
+                                setUserSelectedSkills(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(skill)) next.delete(skill); else next.add(skill);
+                                  return next;
+                                });
+                              }}
+                            >
+                              {isSelected ? '✓ ' : '+ '}{skill}
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   </>

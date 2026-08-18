@@ -41,6 +41,7 @@ def apply_latex_hotfix(
     spacing_scale: float = 1.0,
     linespread: float = 1.0,
     master_latex: Optional[str] = None,
+    user_selected_skills: Optional[List[str]] = None,
 ) -> str:
     """
     Apply a battery of deterministic post-processing fixes to LLM-generated LaTeX:
@@ -159,7 +160,8 @@ def apply_latex_hotfix(
     fixed = re.sub(r'(?<!\\)&', r'\\&', fixed)
     fixed = re.sub(r'(?<!\\)%', r'\\%', fixed)
     fixed = re.sub(r'(?<!\\)_', r'\\_', fixed)
-    fixed = re.sub(r'(?<!\\)#', r'\\#', fixed)
+    # Escape unescaped # characters in body text, preserving LaTeX macro parameter declarations like #1, #2 inside \newcommand / \def
+    fixed = re.sub(r"(?<!\\)#(?!\d)", r'\\#', fixed)
     # Undo double-escapes that arise from the above
     fixed = fixed.replace('\\\\&', '\\&')
     fixed = fixed.replace('\\\\%', '\\%')
@@ -251,6 +253,40 @@ def apply_latex_hotfix(
     ]
     for pat in award_patterns:
         fixed = re.sub(pat, r'\\textbf{\1}', fixed)
+
+    # ── Inject user-selected skills directly into Technical Skills section (bypassing LLM review) ──
+    if user_selected_skills and len(user_selected_skills) > 0:
+        clean_user_skills = [s.strip() for s in user_selected_skills if s and s.strip()]
+        if clean_user_skills:
+            def _inject_user_skills(match):
+                sec_body = match.group(1)
+                missing_to_add = [s for s in clean_user_skills if s.lower() not in sec_body.lower()]
+                if not missing_to_add:
+                    return match.group(0)
+                
+                lines = sec_body.split('\n')
+                injected = False
+                new_lines = []
+                for line in lines:
+                    if not injected and line.strip().startswith('\\textbf{'):
+                        if line.strip().endswith('\\\\'):
+                            new_line = line[:-2].rstrip() + ", " + ", ".join(missing_to_add) + " \\\\"
+                        else:
+                            new_line = line + ", " + ", ".join(missing_to_add)
+                        new_lines.append(new_line)
+                        injected = True
+                    else:
+                        new_lines.append(line)
+                if not injected:
+                    new_lines.append(f"\\textbf{{Additional Skills:}} {', '.join(missing_to_add)}")
+                return f"\\begin{{rSection}}{{Technical Skills}}\n" + "\n".join(new_lines) + f"\n\\end{{rSection}}"
+
+            fixed = re.sub(
+                r'\\begin\{rSection\}\{Technical\s+Skills\}(.*?)\\end\{rSection\}',
+                _inject_user_skills,
+                fixed,
+                flags=re.DOTALL
+            )
 
     return fixed
 
