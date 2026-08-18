@@ -1347,6 +1347,23 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
         print(f"[analyze_job] Failed sending tailored email: {email_err}")
 
 
+class ExtensionParseJobRequest(BaseModel):
+    page_text: Optional[str] = None
+    page_url: Optional[str] = None
+    page_title: Optional[str] = None
+
+@app.post("/extension/parse_job_details")
+async def parse_job_details_endpoint(request: ExtensionParseJobRequest):
+    """Extract exact Company & Job Title via regex and Gemini LLM for Chrome Extension popup."""
+    title = request.page_title or ""
+    company = ""
+    if request.page_url:
+        company = await asyncio.to_thread(_extract_company_from_jd, request.page_text or "", request.page_url)
+    if not company and request.page_text:
+        company = await asyncio.to_thread(_extract_company_from_jd, request.page_text, None)
+    return {"job_title": title, "company": company or "Hiring Company"}
+
+
 @app.post("/analyze_job")
 async def analyze_job(request: JobAnalysisRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
     # Rate limit check for analyze_job
