@@ -67,7 +67,7 @@ def apply_latex_hotfix(
     if end_doc_idx != -1:
         fixed = fixed[:end_doc_idx + len("\\end{document}")]
 
-    # ── Restore \\name and \\address from master verbatim ────────────────────
+    # ── Restore \\name, \\address, and categorized Technical Skills from master verbatim ────────────────────
     if master_latex:
         name_block    = extract_latex_command(master_latex, "\\name")
         address_block = extract_latex_command(master_latex, "\\address")
@@ -78,6 +78,19 @@ def apply_latex_hotfix(
                 fixed = fixed.replace(gen_name, name_block, 1)
             else:
                 fixed = fixed.replace("\\begin{document}", name_block + "\n\\begin{document}", 1)
+
+        # If master resume has a categorized Technical Skills section, extract and preserve its exact structure
+        master_skills_match = re.search(r'(\\begin\{rSection\}\{Technical\s+Skills\}.*?\\end\{rSection\})', master_latex, re.DOTALL)
+        if master_skills_match:
+            master_skills_block = master_skills_match.group(1)
+            # Only restore if master actually has categorized headers
+            if re.search(r'\\textbf\{[^}]+:\}', master_skills_block):
+                fixed = re.sub(
+                    r'\\begin\{rSection\}\{Technical\s+Skills\}.*?\\end\{rSection\}',
+                    lambda _: master_skills_block,
+                    fixed,
+                    flags=re.DOTALL
+                )
 
     # ── Ensure \address{...} is converted to \printaddress{...} inside \begin{document} to prevent Tectonic compilation errors ──
     addr_block = extract_latex_command(fixed, "\\address")
@@ -182,8 +195,8 @@ def apply_latex_hotfix(
     # ── Categorize uncategorized Technical Skills section using LLM ─────────────
     def _categorize_skills_sec(match):
         content = match.group(1).strip()
-        # If it has multiple bolded category headers (e.g. \textbf{Languages:}), keep it
-        if r"\textbf{Languages:" in content or r"\textbf{AI/ML" in content or r"\textbf{Data &" in content or r"\textbf{Software &" in content:
+        # If it has bolded category headers (e.g. \textbf{Languages:}, \textbf{Category:}), keep it intact!
+        if re.search(r'\\textbf\{[^}]+:\}', content):
             return match.group(0)  # Already cleanly categorized
         
         # Strip any single \textbf{Technical Skills:} prefix
