@@ -273,7 +273,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Try runtime message first
     chrome.tabs.sendMessage(activeTab.id, { action: "GET_JOB_DETAILS" }, (response) => {
-      if (!chrome.runtime.lastError && response && response.title) {
+      const err = chrome.runtime.lastError; // Access to suppress unchecked runtime error
+      if (!err && response && response.title) {
         handleJobDetails(response);
       } else {
         // Fallback: Execute script directly
@@ -294,7 +295,8 @@ document.addEventListener("DOMContentLoaded", () => {
             return { title, company, description, url, pageSource };
           }
         }, (results) => {
-          if (results && results[0] && results[0].result) {
+          const err = chrome.runtime.lastError; // Access to suppress unchecked runtime error
+          if (!err && results && results[0] && results[0].result) {
             handleJobDetails(results[0].result);
           } else {
             handleJobDetails(null);
