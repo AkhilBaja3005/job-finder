@@ -93,7 +93,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!res.ok) throw new Error("HTTP " + res.status);
         return res.json();
       })
-      .then((res) => res.json())
       .then((data) => {
         if (data && (data.email || data.id)) {
           const email = data.email || "akhilbaja.work@gmail.com";
@@ -110,6 +109,8 @@ document.addEventListener("DOMContentLoaded", () => {
           if (userNameDisplay) userNameDisplay.textContent = `✓ ${candidateName}`;
           if (userEmailDisplay) userEmailDisplay.textContent = `📧 ${email}`;
           if (userInfoCard) userInfoCard.style.display = "flex";
+          const settingsUserInfo = document.getElementById("settings-user-info");
+          if (settingsUserInfo) settingsUserInfo.textContent = `✓ ${candidateName} (${email})`;
         } else {
           if (userInfoCard) userInfoCard.style.display = "none";
         }
