@@ -139,9 +139,6 @@ h1.title {
   bottom: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(9, 13, 26, 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
