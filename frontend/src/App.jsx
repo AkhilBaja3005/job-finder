@@ -19,6 +19,7 @@ window.fetch = async function (resource, config = {}) {
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE
+  || import.meta.env.VITE_BACKEND_URL
   || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://127.0.0.1:8000'
     : window.location.origin);
@@ -150,7 +151,45 @@ function App() {
   const [applicationHistory, setApplicationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  
+  // 1-Click Chrome Extension Auto-Sync & Auto-Download Handler
+  const handleOneClickExtensionSync = (syncCode) => {
+    const targetKey = syncCode || (user && user.sync_code) || "GABY48";
+    
+    // 1. Copy Key to Clipboard
+    try { navigator.clipboard.writeText(targetKey); } catch (e) {}
+
+    // 2. Broadcast postMessage to extension if already installed
+    let synced = false;
+    const handleResponse = (event) => {
+      if (event.data && event.data.type === "SYNC_JOB_FINDER_KEY_SUCCESS") {
+        synced = true;
+        showToast(`🚀 Extension Auto-Synced to Key: ${targetKey}!`, "success");
+        window.removeEventListener("message", handleResponse);
+      }
+    };
+    window.addEventListener("message", handleResponse);
+    window.postMessage({ type: "SYNC_JOB_FINDER_KEY", syncKey: targetKey }, "*");
+
+    // 3. Always trigger direct ZIP package download
+    const downloadUrl = `${API_BASE}/download_extension?key=${encodeURIComponent(targetKey)}`;
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = `Job_Finder_Extension_${targetKey}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    showToast(`📦 Extension ZIP (${targetKey}) downloading! Unzip & load in chrome://extensions`, "success");
+
+    setTimeout(() => {
+      window.removeEventListener("message", handleResponse);
+    }, 1500);
+  };
+
   const [user, setUser] = useState(null);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [showExtensionGuide, setShowExtensionGuide] = useState(false);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
   const [configStepActive, setConfigStepActive] = useState(true);
@@ -1401,7 +1440,8 @@ function App() {
   };
 
   return (
-    <div className="app-container">
+    <>
+      <div className="app-container">
       {/* Optimization #5: Progress bar at top of page */}
       {loading && <div className="progress-bar" />}
 
@@ -1726,11 +1766,92 @@ function App() {
             ?
           </button>
           {user && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.82rem', color: 'var(--accent-green)', fontWeight: 500 }}>{user.email}</span>
-              <button className="btn btn-secondary" style={{ padding: '5px 11px', fontSize: '0.76rem' }} onClick={handleLogout}>
-                Sign out
+            <div style={{ position: 'relative', display: 'inline-block', zIndex: 10000 }}>
+              <button
+                className="btn btn-secondary"
+                style={{
+                  padding: '6px 14px', fontSize: '0.84rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  borderColor: profileDropdownOpen ? '#38bdf8' : 'rgba(255,255,255,0.15)',
+                  background: profileDropdownOpen ? 'rgba(56, 189, 248, 0.15)' : '#0f172a'
+                }}
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+              >
+                <span>👤</span>
+                <span style={{ color: '#fff' }}>{user.email ? user.email.split("@")[0] : "Account"}</span>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{profileDropdownOpen ? "▲" : "▼"}</span>
               </button>
+
+              {profileDropdownOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 10px)', right: 0,
+                  width: '300px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(56, 189, 248, 0.3)',
+                  borderRadius: '18px', padding: '18px', zIndex: 99999,
+                  boxShadow: '0 24px 50px rgba(0, 0, 0, 0.85), 0 0 20px rgba(56, 189, 248, 0.15)',
+                  backdropFilter: 'blur(24px)', display: 'flex', flexDirection: 'column', gap: '14px'
+                }}>
+                  {/* User Profile Header Badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingBottom: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <div style={{
+                      width: '40px', height: '40px', borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #0284c7 0%, #10b981 100%)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 800, color: '#fff', fontSize: '1.1rem',
+                      boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)', flexShrink: 0
+                    }}>
+                      {user.email ? user.email.charAt(0).toUpperCase() : "U"}
+                    </div>
+                    <div style={{ overflow: 'hidden' }}>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Account</div>
+                      <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>
+                    </div>
+                  </div>
+
+                  {/* Subtle Action Button */}
+                  <button
+                    className="btn btn-secondary"
+                    style={{
+                      padding: '9px 14px', fontSize: '0.8rem', fontWeight: 700,
+                      borderColor: 'rgba(56, 189, 248, 0.4)', color: '#38bdf8',
+                      background: 'rgba(2, 132, 199, 0.12)', borderRadius: '10px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer'
+                    }}
+                    onClick={() => {
+                      handleOneClickExtensionSync(user.sync_code);
+                      setShowExtensionGuide(true);
+                      setProfileDropdownOpen(false);
+                    }}
+                  >
+                    <span>⚡ 1-Click Auto-Sync & Download</span>
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '7px 10px', fontSize: '0.76rem', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
+                    onClick={() => {
+                      setShowExtensionGuide(true);
+                      setProfileDropdownOpen(false);
+                    }}
+                  >
+                    <span>📖 Setup Instructions</span>
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    style={{
+                      padding: '8px', fontSize: '0.8rem', width: '100%',
+                      color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.25)',
+                      borderRadius: '10px', background: 'rgba(239, 68, 68, 0.05)'
+                    }}
+                    onClick={() => {
+                      setProfileDropdownOpen(false);
+                      handleLogout();
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -4258,6 +4379,26 @@ function App() {
                                 setUserSelectedSkills(prev => {
                                   const next = new Set(prev);
                                   if (next.has(skill)) next.delete(skill); else next.add(skill);
+                                  
+                                  // Dynamically recalculate ATS score preview using exact JD skill weights
+                                  const skillWeights = analysisResult?.match_analysis?.score_breakdown?.skill_weights || {};
+                                  const missingList = analysisResult?.match_analysis?.missing_skills || [];
+                                  let totalBoost = 0;
+                                  next.forEach(s => {
+                                    const w = skillWeights[s] || (1 / (missingList.length || 5));
+                                    totalBoost += (0.40 * 85.0 * w);
+                                  });
+                                  const baseScore = window.baseOriginalAtsScore || analysisResult?.match_analysis?.overall_score || 50;
+                                  if (!window.baseOriginalAtsScore) window.baseOriginalAtsScore = baseScore;
+                                  const newScore = Math.min(99, Math.round(window.baseOriginalAtsScore + totalBoost));
+                                  setAnalysisResult(old => ({
+                                    ...old,
+                                    match_analysis: {
+                                      ...old.match_analysis,
+                                      overall_score: newScore,
+                                      skills_score: Math.min(100, Math.round((old.match_analysis.skills_score || 50) + (totalBoost * 2.5)))
+                                    }
+                                  }));
                                   return next;
                                 });
                               }}
@@ -4842,6 +4983,93 @@ function App() {
       )}
 
     </div>
+
+      {/* Extension Installation Setup Guide Modal */}
+      {showExtensionGuide && (
+        <div className="modal-overlay" style={{ pointerEvents: 'auto' }}>
+          <div className="card" style={{
+            maxWidth: '540px', width: '100%', border: '1px solid rgba(56, 189, 248, 0.4)',
+            padding: '28px', background: '#0F172A', boxShadow: '0 25px 60px rgba(0,0,0,0.85)',
+            display: 'flex', flexDirection: 'column', gap: '18px', borderRadius: '20px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+              <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🎯 Chrome Extension Setup Guide</span>
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                onClick={() => setShowExtensionGuide(false)}
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+              <div style={{ background: 'rgba(2, 132, 199, 0.12)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase' }}>Your Personal Sync Key</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: 800, color: '#34d399', marginTop: '2px' }}>{user ? user.sync_code : "GABY48"}</div>
+                </div>
+                <button
+                  className="btn"
+                  style={{ padding: '6px 12px', fontSize: '0.76rem', background: '#0284c7', color: '#fff' }}
+                  onClick={() => {
+                    handleOneClickExtensionSync(user ? user.sync_code : "GABY48");
+                  }}
+                >
+                  📥 Re-Download ZIP
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>1</span>
+                  <div>
+                    <strong style={{ color: '#fff' }}>Download & Unzip</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Click <strong>1-Click Auto-Sync & Download</strong> to download your pre-configured ZIP package (e.g. <code>Job_Finder_Extension_GABY48.zip</code>). Double-click to unzip the folder.</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>2</span>
+                  <div>
+                    <strong style={{ color: '#fff' }}>Open Extensions Page</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>In Google Chrome, open a new tab and go to <code style={{ color: '#38bdf8' }}>chrome://extensions</code></div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>3</span>
+                  <div>
+                    <strong style={{ color: '#fff' }}>Enable Developer Mode</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Toggle the <strong>Developer mode</strong> switch in the top-right corner of Chrome Extensions page.</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>4</span>
+                  <div>
+                    <strong style={{ color: '#fff' }}>Load Unpacked Extension</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Click <strong>Load unpacked</strong> button at top-left and select the unzipped <code>extension</code> folder.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px', textAlign: 'center' }}>
+              <button
+                className="btn"
+                style={{ width: '100%', padding: '10px', fontSize: '0.86rem', fontWeight: 700, background: 'linear-gradient(135deg, #0284c7 0%, #10b981 100%)', color: '#fff' }}
+                onClick={() => setShowExtensionGuide(false)}
+              >
+                ✓ Got it! Start Tailoring Jobs
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

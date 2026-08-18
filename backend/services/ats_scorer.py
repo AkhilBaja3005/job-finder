@@ -769,6 +769,7 @@ def compute_ats_score(resume_data: dict, jd_text: str, config: ScoringConfig = D
 
     # Stage 7: Evaluate Contextual Taxonomy Matrix
     skill_res = compute_skills_score(resume_data, required_skills, preferred_skills, weighted_segments, jd_text=jd_text, config=config)
+    importance_weights = _compute_skill_importance_weights(jd_text, required_skills) if jd_text else {}
     
     all_matched = sorted(list(set(skill_res.matched_required + skill_res.matched_preferred)))
     score_breakdown = {
@@ -779,11 +780,11 @@ def compute_ats_score(resume_data: dict, jd_text: str, config: ScoringConfig = D
             f"Average Job Tenure: {round(avg_tenure, 1)}y. Final Dimension Score: {final_experience_score}/100."
         ),
         "required_skills_found": ", ".join(skill_res.matched_required) or "None",
-        "missing_critical_skills": ", ".join(skill_res.missing_required) or "None"
+        "missing_critical_skills": ", ".join(skill_res.missing_required) or "None",
+        "skill_weights": importance_weights
     }
     if parse_failures:
         score_breakdown["date_parse_warnings"] = " | ".join(parse_failures)
-
     return ATSScoreResult(
         eligible=True,
         knockout_reason=None,

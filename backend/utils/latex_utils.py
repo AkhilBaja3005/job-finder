@@ -55,6 +55,10 @@ def apply_latex_hotfix(
     """
     fixed = code
 
+    # ── Ensure Overleaf defaults to XeLaTeX compiler automatically ──────────────
+    if "% !TEX program = xelatex" not in fixed:
+        fixed = "% !TEX program = xelatex\n" + fixed
+
     # ── Strip conversational intro/outro ─────────────────────────────────────
     doc_class_idx = fixed.find("\\documentclass")
     if doc_class_idx != -1:

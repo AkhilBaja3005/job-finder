@@ -482,6 +482,8 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ── Rate Limiter & CORS Security Configuration ────────────────────────────
 ALLOWED_ORIGINS = [
+    "https://www.job-finder.space",
+    "https://job-finder.space",
     "http://localhost:5173",
     "http://localhost:3000",
     "http://127.0.0.1:5173",
@@ -1347,6 +1349,98 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
         print(f"[analyze_job] Failed sending tailored email: {email_err}")
 
 
+class ExtensionParseJobRequest(BaseModel):
+    page_text: Optional[str] = None
+    page_url: Optional[str] = None
+    page_title: Optional[str] = None
+
+@app.post("/extension/parse_job_details")
+async def parse_job_details_endpoint(request: ExtensionParseJobRequest):
+    """Extract exact Company, Job Title & full JD via LinkedIn/Indeed Guest API for Chrome Extension popup."""
+    title = request.page_title or ""
+    company = ""
+    description = request.page_text or ""
+    
+    # 1. Try fast LinkedIn / Indeed Guest REST API if URL is provided
+    if request.page_url and ("linkedin.com/jobs" in request.page_url or "indeed.com" in request.page_url):
+        try:
+            from services.scraper import scrape_job_url
+            scraped = await scrape_job_url(request.page_url)
+            if scraped and scraped.get("description"):
+                if scraped.get("title") and scraped.get("title") != "LinkedIn Job":
+                    title = scraped.get("title")
+                if scraped.get("company"):
+                    company = scraped.get("company")
+                if scraped.get("description") and len(scraped.get("description")) > 100:
+                    description = scraped.get("description")
+                print(f"[/extension/parse_job_details] ⚡ Enriched via Guest API: {company} - {title}")
+        except Exception as e:
+            print(f"[/extension/parse_job_details] Guest API enrichment warning: {e}")
+
+    # 2. Fallback to URL regex / LLM company extraction if guest API did not find company
+    if not company and request.page_url:
+        company = await asyncio.to_thread(_extract_company_from_jd, description, request.page_url)
+    if not company and description:
+        company = await asyncio.to_thread(_extract_company_from_jd, description, None)
+        
+    return {
+        "job_title": title,
+        "company": company or "Hiring Company",
+        "job_description": description
+    }
+
+
+@app.get("/download_extension")
+async def download_extension(key: Optional[str] = None):
+    """Dynamically package Chrome Extension ZIP with pre-filled Sync Key for 1-click installation."""
+
+    # Resolve extension directory across candidate paths
+    backend_file_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(backend_file_dir, "extension"),
+        os.path.join(os.path.dirname(backend_file_dir), "extension"),
+        os.path.join(os.getcwd(), "extension"),
+        os.path.join(BASE_DIR, "extension")
+    ]
+    ext_dir = None
+    for cand in candidates:
+        if os.path.exists(cand) and os.path.isdir(cand):
+            ext_dir = cand
+            break
+    if not ext_dir:
+        raise HTTPException(status_code=404, detail=f"Extension directory not found. Looked in: {candidates}")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for root, dirs, files in os.walk(ext_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, ext_dir)
+                
+                # Pre-fill sync key inside popup.js if key param is provided
+                if key and file == "popup.js":
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        js_content = f.read()
+                    # Inject default user token key into popup.js
+                    injection = f'chrome.storage.local.set({{ userToken: "{key}" }});\n  chrome.storage.local.get(["userToken"], (items) => {{'
+                    js_content = js_content.replace(
+                        'chrome.storage.local.get(["userToken"], (items) => {',
+                        injection
+                    )
+                    zip_file.writestr(arcname, js_content)
+                else:
+                    zip_file.write(file_path, arcname)
+
+    zip_buffer.seek(0)
+    filename = f"Job_Finder_Extension_{key or 'latest'}.zip"
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+
 @app.post("/analyze_job")
 async def analyze_job(request: JobAnalysisRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
     # Rate limit check for analyze_job
@@ -1508,7 +1602,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     pass
 
             recruiter_name = None
-            if request.job_url:
+            if request.job_url and not request.skip_tailoring:
                 try:
                     rec_info = await extract_recruiter(request.job_url, None)
                     recruiter_name = rec_info.get("recruiter_name")

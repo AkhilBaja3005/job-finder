@@ -4,7 +4,7 @@ import json
 import re
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Callable
+from typing import List, Optional, Dict, Callable, Any
 
 from services.gemini_client import generate_content_with_fallback, generate_latex_with_strong_model
 from services.ats_scorer import compute_ats_score, compute_overall_score, calculate_flattened_experience
@@ -26,7 +26,7 @@ class MatchScoreDetails(BaseModel):
     # Qualitative (LLM)
     tailoring_suggestions: List[str] = Field(description="Actionable suggestions to improve match")
     # Metadata
-    score_breakdown: Dict[str, str] = Field(default_factory=dict, description="Human-readable detail per dimension")
+    score_breakdown: Dict[str, Any] = Field(default_factory=dict, description="Human-readable detail per dimension")
     keyword_stats: Dict[str, str] = Field(default_factory=dict, description="Keyword match counts and year stats")
 
 class SectionUpdate(BaseModel):

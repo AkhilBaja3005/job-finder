@@ -1,7 +1,7 @@
 // popup.js - ATS Tailor Extension Controller (v2.6.0 Parametric Production Ready)
 
 // Parameterized API Base URL (Configurable via chrome.storage.local key "backendUrl")
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const DEFAULT_API_BASE_URL = "https://www.job-finder.space";
 let API_BASE_URL = DEFAULT_API_BASE_URL;
 
 chrome.storage.local.get(["backendUrl"], (items) => {
@@ -30,14 +30,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnEmailTailor = document.getElementById("btn-email-tailor");
   const userTokenInput = document.getElementById("user-token");
   const toast = document.getElementById("popup-toast");
+  const btnSettingsUrl = document.getElementById("btn-settings-url");
+  const settingsUrlBox = document.getElementById("settings-url-box");
 
-  const userInfoCard = document.getElementById("user-info-card");
-  const userNameDisplay = document.getElementById("user-name-display");
-  const userEmailDisplay = document.getElementById("user-email-display");
+  if (btnSettingsUrl && settingsUrlBox) {
+    btnSettingsUrl.addEventListener("click", () => {
+      const isHidden = settingsUrlBox.style.display === "none";
+      settingsUrlBox.style.display = isHidden ? "block" : "none";
+    });
+  }
 
   let currentJobInfo = null;
   let activePreviewText = "";
 
+  const userInfoCard = document.getElementById("user-info-card");
+  const userNameDisplay = document.getElementById("user-name-display");
+  const userEmailDisplay = document.getElementById("user-email-display");
   function showToast(msg) {
     if (!toast) return;
     toast.textContent = msg;
@@ -52,26 +60,33 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     const cleanKey = syncKey.trim();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     fetch(`${API_BASE_URL}/user/me`, {
+      signal: controller.signal,
       headers: { "Authorization": `Bearer ${cleanKey}` }
     })
-      .then((res) => res.json())
+      .then((res) => {
+        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
       .then((data) => {
         if (data && (data.email || data.id)) {
-          const email = data.email || "akhilbaja.work@gmail.com";
+          const email = data.email || "";
           let candidateName = data.resume_name;
+          if (!candidateName && email) {
+            const handle = email.split("@")[0];
+            candidateName = handle.replace(/[._-]/g, " ").toUpperCase();
+          }
           if (!candidateName) {
-            if (data.email && data.email.includes("akhilbaja")) {
-              candidateName = "AKHIL BAJA";
-            } else if (data.email) {
-              candidateName = data.email.split("@")[0].toUpperCase();
-            } else {
-              candidateName = "AKHIL BAJA";
-            }
+            candidateName = "ACTIVE USER";
           }
           if (userNameDisplay) userNameDisplay.textContent = `✓ ${candidateName}`;
           if (userEmailDisplay) userEmailDisplay.textContent = `📧 ${email}`;
           if (userInfoCard) userInfoCard.style.display = "flex";
+          const settingsUserInfo = document.getElementById("settings-user-info");
+          if (settingsUserInfo) settingsUserInfo.textContent = `✓ ${candidateName} (${email})`;
         } else {
           if (userInfoCard) userInfoCard.style.display = "none";
         }
@@ -136,7 +151,10 @@ document.addEventListener("DOMContentLoaded", () => {
       chrome.storage.local.get(["userToken"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
         if (currentJobInfo.description && currentJobInfo.description.length > 20) {
+          const controllerParse = new AbortController();
+          const timeoutParseId = setTimeout(() => controllerParse.abort(), 4000);
           fetch(`${API_BASE_URL}/extension/parse_job_details`, {
+            signal: controllerParse.signal,
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -148,7 +166,10 @@ document.addEventListener("DOMContentLoaded", () => {
               page_title: currentJobInfo.title
             })
           })
-            .then(res => res.json())
+            .then(res => {
+              clearTimeout(timeoutParseId);
+              return res.json();
+            })
             .then(data => {
               if (data && data.company) {
                 currentJobInfo.company = data.company;
@@ -161,9 +182,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 currentJobInfo.title = data.job_title;
                 activeRoleTitle.textContent = data.job_title;
               }
+              if (data && data.job_description && data.job_description.length > currentJobInfo.description.length) {
+                currentJobInfo.description = data.job_description;
+              }
               fetchAtsScore(currentJobInfo);
             })
             .catch(() => {
+              clearTimeout(timeoutParseId);
               if (!currentJobInfo.company || currentJobInfo.company === "Detecting company...") {
                 currentJobInfo.company = "Hiring Company";
                 activeCompanyName.textContent = "Hiring Company";
@@ -184,7 +209,10 @@ document.addEventListener("DOMContentLoaded", () => {
       chrome.storage.local.get(["userToken"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
         if (jobInfo.description && jobInfo.description.length > 30) {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
           fetch(`${API_BASE_URL}/analyze_job`, {
+            signal: controller.signal,
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -229,7 +257,8 @@ document.addEventListener("DOMContentLoaded", () => {
                       }).join("");
                       missingSkillsSection.style.display = "block";
 
-                      // Add click listener to toggle skill selection
+                      // Add click listener to toggle skill selection & dynamically recalculate score preview
+                      window.baseAtsScore = score;
                       missingSkillsContainer.querySelectorAll(".skill-chip").forEach(chip => {
                         chip.addEventListener("click", () => {
                           const sk = chip.getAttribute("data-skill");
@@ -242,6 +271,18 @@ document.addEventListener("DOMContentLoaded", () => {
                             chip.classList.add("selected");
                             chip.textContent = "✓ " + sk;
                           }
+                          // Recalculate preview score instantly using exact JD skill importance weights (0.40 * mandatory_weight * weight)
+                          const skillWeights = (ev.analysis && ev.analysis.match_analysis && ev.analysis.match_analysis.score_breakdown && ev.analysis.match_analysis.score_breakdown.skill_weights) || {};
+                          let totalBoost = 0;
+                          window.selectedUserSkills.forEach(s => {
+                            const w = skillWeights[s] || (1 / (missing.length || 5));
+                            // Boost = 0.40 (skills weight) * 85 (mandatory weight) * importance weight
+                            totalBoost += (0.40 * 85.0 * w);
+                          });
+                          const addedCount = window.selectedUserSkills.size;
+                          const boostedScore = Math.min(99, Math.round((window.baseAtsScore || score) + totalBoost));
+                          scoreCircle.textContent = `${boostedScore}%`;
+                          scoreSub.textContent = boostedScore >= 70 ? `Strong match profile (${addedCount} forced skill${addedCount > 1 ? "s" : ""})` : "Missing key keywords";
                         });
                       });
                     }
@@ -250,9 +291,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 } catch (e) {}
               }
             })
-            .catch(() => {
+            .then(() => clearTimeout(timeoutId))
+            .catch((err) => {
+              clearTimeout(timeoutId);
               scoreCircle.textContent = "⚠️";
-              scoreSub.textContent = "Offline / Server non-responsive";
+              scoreSub.textContent = err.name === "AbortError" ? "Timeout: Server took too long" : "Offline / Server non-responsive";
             });
         }
       });
@@ -260,13 +303,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Try runtime message first
     chrome.tabs.sendMessage(activeTab.id, { action: "GET_JOB_DETAILS" }, (response) => {
-      if (!chrome.runtime.lastError && response && response.title) {
+      const err = chrome.runtime.lastError; // Access to suppress unchecked runtime error
+      if (!err && response && response.title) {
         handleJobDetails(response);
       } else {
-        // Fallback: Execute script directly
-        chrome.scripting.executeScript({
-          target: { tabId: activeTab.id },
-          func: () => {
+        // Fallback: Execute script directly with error suppression
+        try {
+          chrome.scripting.executeScript({
+            target: { tabId: activeTab.id },
+            func: () => {
             const url = window.location.href;
             let phenomTitle = document.querySelector(".job-title, h1.job-title, [data-ph-at-id='job-title']")?.innerText?.trim();
             let title = phenomTitle || document.querySelector(".job-details-jobs-unified-top-card__job-title, .jobs-unified-top-card__job-title, .jobsearch-JobInfoHeader-title, h1")?.innerText?.trim() || document.title;
@@ -280,13 +325,17 @@ document.addEventListener("DOMContentLoaded", () => {
             const pageSource = document.body ? document.body.innerText.slice(0, 15000) : description;
             return { title, company, description, url, pageSource };
           }
-        }, (results) => {
-          if (results && results[0] && results[0].result) {
-            handleJobDetails(results[0].result);
-          } else {
-            handleJobDetails(null);
-          }
-        });
+          }, (results) => {
+            const err = chrome.runtime.lastError; // Access to suppress unchecked runtime error
+            if (!err && results && results[0] && results[0].result) {
+              handleJobDetails(results[0].result);
+            } else {
+              handleJobDetails(null);
+            }
+          });
+        } catch (e) {
+          handleJobDetails(null);
+        }
       }
     });
   });
@@ -366,7 +415,10 @@ document.addEventListener("DOMContentLoaded", () => {
             job_url: currentJobInfo.url
           })
         })
-          .then(res => res.json())
+          .then(res => {
+              clearTimeout(timeoutParseId);
+              return res.json();
+            })
           .then(data => {
             if (data.cover_letter) {
               activePreviewText = data.cover_letter;
@@ -401,7 +453,10 @@ document.addEventListener("DOMContentLoaded", () => {
             job_url: currentJobInfo.url || ""
           })
         })
-          .then(res => res.json())
+          .then(res => {
+              clearTimeout(timeoutParseId);
+              return res.json();
+            })
           .then(data => {
             const msg = data.message?.email_body || data.message?.linkedin_message || "Outreach generated!";
             activePreviewText = msg;

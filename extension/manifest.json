@@ -31,17 +31,19 @@
         "https://*/*",
         "http://*/*"
       ],
-      "exclude_matches": [
-        "http://localhost/*",
-        "http://127.0.0.1/*",
-        "https://localhost/*",
-        "https://127.0.0.1/*"
-      ],
+      "exclude_matches": [],
       "js": ["content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
   ],
+  "externally_connectable": {
+    "matches": [
+      "http://localhost/*",
+      "http://127.0.0.1/*",
+      "https://*/*"
+    ]
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

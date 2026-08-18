@@ -103,6 +103,8 @@ body::before {
 }
 
 header.app-header {
+  position: relative;
+  z-index: 9999;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -127,6 +129,25 @@ h1.title {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(4, 7, 14, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
 .card {
@@ -970,12 +991,14 @@ textarea:focus-visible {
     border-radius: 10px !important;
   }
 
-  /* Modals on mobile: full screen sheet style */
+  /* Modals on mobile: centered modal with full backdrop blur */
   .modal-overlay {
-    padding: 0 !important;
-    align-items: flex-end !important;
-    background: rgba(0, 0, 0, 0.75) !important;
-    backdrop-filter: blur(8px) !important;
+    padding: 16px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(4, 7, 14, 0.88) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
   }
 
   .modal-content, [role="dialog"] {

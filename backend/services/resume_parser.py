@@ -97,11 +97,11 @@ KNOWN_SKILL_CATEGORY_MAP = {
     # Testing & QA
     "pytest": "Testing & QA", "unittest": "Testing & QA", "junit": "Testing & QA", "selenium": "Testing & QA",
     "cypress": "Testing & QA", "playwright": "Testing & QA", "jest": "Testing & QA",
-    # Business Analysis & Methodologies
-    "requirements gathering": "Business Analysis", "gap analysis": "Business Analysis", "user stories": "Business Analysis",
-    "brd": "Business Analysis", "brds": "Business Analysis", "frd": "Business Analysis", "process mapping": "Business Analysis",
-    "stakeholder management": "Business Analysis", "agile": "Business Analysis", "scrum": "Business Analysis",
-    "jira": "Business Analysis", "confluence": "Business Analysis", "business analysis": "Business Analysis"
+    # Methodologies & Process
+    "requirements gathering": "Methodologies & Process", "gap analysis": "Methodologies & Process", "user stories": "Methodologies & Process",
+    "brd": "Methodologies & Process", "brds": "Methodologies & Process", "frd": "Methodologies & Process", "process mapping": "Methodologies & Process",
+    "stakeholder management": "Methodologies & Process", "agile": "Methodologies & Process", "scrum": "Methodologies & Process",
+    "jira": "Methodologies & Process", "confluence": "Methodologies & Process", "agile / scrum": "Methodologies & Process"
 }
 
 def categorize_skills_with_llm(raw_skills: Union[str, List[str]]) -> Dict[str, List[str]]:
@@ -141,7 +141,7 @@ CATEGORIES:
 1. Languages — programming languages (e.g. C++, Java, Rust, Go, Python, SQL, R).
 2. AI/ML & GenAI — machine learning models, frameworks, AI tools, LLMs (e.g. PyTorch, LangChain, Transformers).
 3. Data & Analytics — databases, query tools, BI, data processing engines (e.g. PostgreSQL, Spark, Tableau, Power BI, Excel).
-4. Business Analysis — requirements gathering, process mapping, user stories, BRDs, Agile/Scrum, stakeholder management, Jira.
+4. Methodologies & Process — project management, process frameworks, requirements, user stories, BRDs, Agile, Scrum, Jira.
 5. Frontend & Web — web development frameworks, UI tools, web tech (e.g. React, HTML, CSS).
 6. DevOps & Cloud — cloud platforms, containerization, CI/CD, VCS (e.g. AWS, Docker, Git, Jenkins).
 7. Testing & QA — automation frameworks, testing tools (e.g. Selenium, Cypress).
