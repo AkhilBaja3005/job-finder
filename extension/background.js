@@ -1,6 +1,11 @@
-// background.js - Job Finder AutoFill Extension Service Worker
+const DEFAULT_BACKEND_URL = "http://127.0.0.1:8000";
+let BACKEND_URL = DEFAULT_BACKEND_URL;
 
-const BACKEND_URL = "http://127.0.0.1:8000";
+chrome.storage.local.get(["backendUrl"], (items) => {
+  if (items && items.backendUrl && items.backendUrl.trim()) {
+    BACKEND_URL = items.backendUrl.trim().replace(/\/+$/, "");
+  }
+});
 
 // Handle messages from popup or content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
