@@ -1392,9 +1392,21 @@ async def parse_job_details_endpoint(request: ExtensionParseJobRequest):
 async def download_extension(key: Optional[str] = None):
     """Dynamically package Chrome Extension ZIP with pre-filled Sync Key for 1-click installation."""
 
-    ext_dir = os.path.join(BASE_DIR, "extension")
-    if not os.path.exists(ext_dir):
-        raise HTTPException(status_code=404, detail="Extension directory not found")
+    # Resolve extension directory across candidate paths
+    backend_file_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(backend_file_dir, "extension"),
+        os.path.join(os.path.dirname(backend_file_dir), "extension"),
+        os.path.join(os.getcwd(), "extension"),
+        os.path.join(BASE_DIR, "extension")
+    ]
+    ext_dir = None
+    for cand in candidates:
+        if os.path.exists(cand) and os.path.isdir(cand):
+            ext_dir = cand
+            break
+    if not ext_dir:
+        raise HTTPException(status_code=404, detail=f"Extension directory not found. Looked in: {candidates}")
 
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
