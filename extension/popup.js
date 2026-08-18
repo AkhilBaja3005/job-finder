@@ -214,7 +214,10 @@ document.addEventListener("DOMContentLoaded", () => {
       chrome.storage.local.get(["userToken"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
         if (jobInfo.description && jobInfo.description.length > 30) {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
           fetch(`${API_BASE_URL}/analyze_job`, {
+            signal: controller.signal,
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -293,9 +296,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 } catch (e) {}
               }
             })
-            .catch(() => {
+            .then(() => clearTimeout(timeoutId))
+            .catch((err) => {
+              clearTimeout(timeoutId);
               scoreCircle.textContent = "⚠️";
-              scoreSub.textContent = "Offline / Server non-responsive";
+              scoreSub.textContent = err.name === "AbortError" ? "Timeout: Server took too long" : "Offline / Server non-responsive";
             });
         }
       });
