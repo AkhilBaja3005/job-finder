@@ -182,8 +182,8 @@ def apply_latex_hotfix(
     # ── Categorize uncategorized Technical Skills section using LLM ─────────────
     def _categorize_skills_sec(match):
         content = match.group(1).strip()
-        # If it has multiple bolded category headers (e.g. \textbf{Languages:}), keep it
-        if r"\textbf{Languages:" in content or r"\textbf{AI/ML" in content or r"\textbf{Data &" in content or r"\textbf{Software &" in content:
+        # If it has bolded category headers (e.g. \textbf{Languages:}, \textbf{Category:}), keep it intact!
+        if re.search(r'\\textbf\{[^}]+:\}', content):
             return match.group(0)  # Already cleanly categorized
         
         # Strip any single \textbf{Technical Skills:} prefix
