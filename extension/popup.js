@@ -73,16 +73,14 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .then((data) => {
         if (data && (data.email || data.id)) {
-          const email = data.email || "akhilbaja.work@gmail.com";
+          const email = data.email || "";
           let candidateName = data.resume_name;
+          if (!candidateName && email) {
+            const handle = email.split("@")[0];
+            candidateName = handle.replace(/[._-]/g, " ").toUpperCase();
+          }
           if (!candidateName) {
-            if (data.email && data.email.includes("akhilbaja")) {
-              candidateName = "AKHIL BAJA";
-            } else if (data.email) {
-              candidateName = data.email.split("@")[0].toUpperCase();
-            } else {
-              candidateName = "AKHIL BAJA";
-            }
+            candidateName = "ACTIVE USER";
           }
           if (userNameDisplay) userNameDisplay.textContent = `✓ ${candidateName}`;
           if (userEmailDisplay) userEmailDisplay.textContent = `📧 ${email}`;
