@@ -277,10 +277,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!err && response && response.title) {
         handleJobDetails(response);
       } else {
-        // Fallback: Execute script directly
-        chrome.scripting.executeScript({
-          target: { tabId: activeTab.id },
-          func: () => {
+        // Fallback: Execute script directly with error suppression
+        try {
+          chrome.scripting.executeScript({
+            target: { tabId: activeTab.id },
+            func: () => {
             const url = window.location.href;
             let phenomTitle = document.querySelector(".job-title, h1.job-title, [data-ph-at-id='job-title']")?.innerText?.trim();
             let title = phenomTitle || document.querySelector(".job-details-jobs-unified-top-card__job-title, .jobs-unified-top-card__job-title, .jobsearch-JobInfoHeader-title, h1")?.innerText?.trim() || document.title;
@@ -294,14 +295,17 @@ document.addEventListener("DOMContentLoaded", () => {
             const pageSource = document.body ? document.body.innerText.slice(0, 15000) : description;
             return { title, company, description, url, pageSource };
           }
-        }, (results) => {
-          const err = chrome.runtime.lastError; // Access to suppress unchecked runtime error
-          if (!err && results && results[0] && results[0].result) {
-            handleJobDetails(results[0].result);
-          } else {
-            handleJobDetails(null);
-          }
-        });
+          }, (results) => {
+            const err = chrome.runtime.lastError; // Access to suppress unchecked runtime error
+            if (!err && results && results[0] && results[0].result) {
+              handleJobDetails(results[0].result);
+            } else {
+              handleJobDetails(null);
+            }
+          });
+        } catch (e) {
+          handleJobDetails(null);
+        }
       }
     });
   });
