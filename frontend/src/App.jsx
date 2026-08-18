@@ -1439,7 +1439,8 @@ function App() {
   };
 
   return (
-    <div className="app-container">
+    <>
+      <div className="app-container">
       {/* Optimization #5: Progress bar at top of page */}
       {loading && <div className="progress-bar" />}
 
@@ -5071,6 +5072,7 @@ function App() {
       )}
 
     </div>
+    </>
   );
 }
 
