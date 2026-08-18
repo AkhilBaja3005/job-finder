@@ -151,7 +151,7 @@ function App() {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   
-  // 1-Click Chrome Extension Auto-Sync Handler
+  // 1-Click Chrome Extension Auto-Sync & Auto-Download Handler
   const handleOneClickExtensionSync = (syncCode) => {
     const targetKey = syncCode || (user && user.sync_code);
     if (!targetKey) {
@@ -159,9 +159,10 @@ function App() {
       return;
     }
 
-    // Always copy to clipboard for convenience
+    // 1. Copy Key to Clipboard
     try { navigator.clipboard.writeText(targetKey); } catch (e) {}
 
+    // 2. Broadcast postMessage to extension if already installed
     let synced = false;
     const handleResponse = (event) => {
       if (event.data && event.data.type === "SYNC_JOB_FINDER_KEY_SUCCESS") {
@@ -171,28 +172,17 @@ function App() {
       }
     };
     window.addEventListener("message", handleResponse);
-
-    // Broadcast postMessage to extension content script
     window.postMessage({ type: "SYNC_JOB_FINDER_KEY", syncKey: targetKey }, "*");
 
+    // 3. Fallback: Trigger direct ZIP download if extension not installed/responding
     setTimeout(() => {
       window.removeEventListener("message", handleResponse);
       if (!synced) {
-        // Extension is not installed in Chrome: Trigger direct zip download & copy key
-        showToast(`📦 Downloading Extension & copied Sync Key (${targetKey})!`, "success");
-        try {
-          const downloadUrl = `${API_BASE}/download_extension?key=${encodeURIComponent(targetKey)}`;
-          const link = document.createElement("a");
-          link.href = downloadUrl;
-          link.download = `Job_Finder_Extension_${targetKey}.zip`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        } catch (e) {
-          console.error("Extension download trigger failed:", e);
-        }
+        showToast(`📦 Downloading Pre-configured Extension ZIP (${targetKey})!`, "success");
+        const downloadUrl = `${API_BASE}/download_extension?key=${encodeURIComponent(targetKey)}`;
+        window.location.href = downloadUrl;
       }
-    }, 600);
+    }, 500);
   };
 
   const [user, setUser] = useState(null);
