@@ -1,4 +1,9 @@
-import services.ats_scorer as ats
+"""
+test_ats_scorer.py — Comprehensive Golden Test Suite for ATS Scorer (Steps 1-5)
+"""
+
+import pytest
+from services import ats_scorer as ats
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -15,21 +20,15 @@ def test_extract_taxonomy_skills_basic_tech_aliases():
 
 
 def test_extract_taxonomy_skills_go_requires_context():
-    # Bare "go" with no engineering context should NOT match (avoids "go to
-    # market", "go-getter", etc. false positives).
     no_context = ats._extract_taxonomy_skills("We go the extra mile for every customer")
     assert "go" not in no_context
-
-    # "golang" always matches regardless of surrounding words.
     assert "go" in ats._extract_taxonomy_skills("5 years of golang experience")
-
-    # Bare "go" near an engineering-context word should match.
     assert "go" in ats._extract_taxonomy_skills("Go programming language backend services")
 
 
 def test_extract_taxonomy_skills_non_tech_domains():
     product = ats._extract_taxonomy_skills("Led product roadmap and ran A/B testing experiments using Jira")
-    assert "product management" not in product  # "roadmap" implies roadmapping, not product management itself
+    assert "product management" not in product
     assert "roadmapping" in product
     assert "a/b testing" in product
     assert "jira" in product
@@ -43,7 +42,7 @@ def test_extract_taxonomy_skills_non_tech_domains():
     assert "financial modeling" in finance
     assert "budgeting" in finance
     assert "excel" in finance
-    assert "quickbooks" in finance  # netsuite aliases to quickbooks canonical
+    assert "quickbooks" in finance
 
 
 def test_extract_taxonomy_skills_empty_text():
@@ -52,9 +51,7 @@ def test_extract_taxonomy_skills_empty_text():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# High-risk token context guards (go/pipeline/airflow/spark/excel/lean/sap) —
-# each is a common English word with a much more frequent non-skill meaning,
-# so a bare match with no nearby guard word must NOT register as a skill.
+# High-risk token context guards
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_high_risk_tokens_reject_generic_english_usage():
@@ -65,7 +62,6 @@ def test_high_risk_tokens_reject_generic_english_usage():
     assert ats._extract_taxonomy_skills("Managing our hiring pipeline for new candidates") == set()
     assert ats._extract_taxonomy_skills("This project will spark innovation across teams") == set()
     assert ats._extract_taxonomy_skills("The candidate should spark curiosity in others") == set()
-    # "CV" almost always means "curriculum vitae" in resume/JD text, not computer vision.
     assert ats._extract_taxonomy_skills("Please submit your CV and cover letter to apply") == set()
 
 
@@ -75,7 +71,6 @@ def test_high_risk_tokens_match_with_proper_context():
     assert "sap" in ats._extract_taxonomy_skills("Experience with SAP ERP and S4 HANA modules")
     assert "airflow" in ats._extract_taxonomy_skills("Built ETL data pipelines using Apache Airflow")
     assert "apache spark" in ats._extract_taxonomy_skills("We use Apache Spark for big data processing")
-    # "computer vision" (the multi-word alias) still matches on its own.
     assert "computer vision" in ats._extract_taxonomy_skills("Experience with computer vision and object detection")
 
 
@@ -84,9 +79,6 @@ def test_high_risk_tokens_match_with_proper_context():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_extract_jd_skills_does_not_leak_generic_pipeline_requirement():
-    # Regression: a sales JD mentioning "pipeline management" must not extract
-    # "pipeline" as a required *data engineering* skill keyword — it previously
-    # did, because "pipeline" had no context guard at all.
     jd = "Requirements: Strong sales pipeline management skills. 5+ years of experience."
     required, preferred = ats.extract_jd_skills(jd)
     assert "pipeline" not in required
@@ -109,7 +101,6 @@ def test_extract_jd_skills_splits_required_and_preferred():
     assert "aws" in required
     assert "kubernetes" in preferred
     assert "terraform" in preferred
-    # Preferred set must not double-count anything already required.
     assert not (set(required) & set(preferred))
 
 
@@ -121,12 +112,10 @@ def test_calculate_flattened_experience_merges_overlapping_jobs():
     resume = {
         "experience": [
             {"company": "A", "role": "Engineer", "start_date": "Jan 2020", "end_date": "Dec 2021", "description": []},
-            # Overlaps with the job above (started while it was still active)
             {"company": "B", "role": "Engineer", "start_date": "Jun 2021", "end_date": "Present", "description": []},
         ]
     }
     years, avg_tenure, segments, _ = ats.calculate_flattened_experience(resume)
-    # Merged timeline should be a single continuous segment, not double-counted.
     assert len(segments) == 1
     assert years > 0
 
@@ -139,12 +128,10 @@ def test_calculate_flattened_experience_no_valid_dates():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Seniority tier resolution priority (executive > lead > senior > mid > junior)
+# Seniority tier resolution priority
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_seniority_tier_resolves_to_highest_priority_match():
-    # "Senior Software Engineer" contains keywords for both "senior" and "mid"
-    # ("engineer") — must resolve to "senior" (higher priority), not "mid".
     resume = {"experience": [{"role": "Senior Software Engineer", "company": "X"}]}
     assert ats.get_candidate_seniority_tier(resume) == "senior"
 
@@ -226,9 +213,6 @@ def test_compute_ats_score_weak_match_has_missing_skills():
 
 
 def test_compute_ats_score_unscoreable_jd_uses_neutral_default():
-    # A JD with no recognizable taxonomy skills at all (e.g. a non-technical
-    # domain not covered by SKILL_ALIASES) must not be scored as a false 100%
-    # match — compute_skills_score's neutral-default path should kick in.
     jd = "We need someone who is a great team player with excellent communication."
     result = ats.compute_ats_score(_sample_resume(), jd)
     assert result.skills_score == 60
@@ -236,7 +220,6 @@ def test_compute_ats_score_unscoreable_jd_uses_neutral_default():
 
 
 def test_compute_overall_score_formula():
-    # 40% skills + 35% experience + 25% role_fit
     assert ats.compute_overall_score(100, 100, 100) == 100
     assert ats.compute_overall_score(0, 0, 0) == 0
     assert ats.compute_overall_score(80, 60, 40) == round(0.40 * 80 + 0.35 * 60 + 0.25 * 40)
@@ -247,10 +230,9 @@ def test_compute_overall_score_formula():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_old_job_skill_not_dropped():
-    """Step 1: Candidate with required skill only in an old job (ended 4+ years ago) and not listed in flat Skills."""
     resume = {
         "name": "Alex OldSkill",
-        "skills": ["SQL"],  # Python is NOT listed in flat skills list
+        "skills": ["SQL"],
         "experience": [
             {
                 "company": "Legacy Systems Corp",
@@ -263,13 +245,11 @@ def test_old_job_skill_not_dropped():
     }
     jd = "Requirements:\n- Python"
     res = ats.compute_ats_score(resume, jd)
-    # Continuous strength credit is awarded to Python from old job (recency weight 0.4 * 0.5 = 0.20 >= 0.15 threshold)
     assert res.skills_score > 0
     assert "python" in res.matched_skills
 
 
 def test_seniority_tier_modifier_both_directions():
-    """Step 5 test: Senior candidate vs Junior JD and Junior candidate vs Senior JD."""
     senior_resume = {
         "experience": [{"role": "Senior Staff Architect", "start_date": "2015", "end_date": "Present"}]
     }
@@ -280,16 +260,13 @@ def test_seniority_tier_modifier_both_directions():
     junior_jd = "Junior Software Engineer with 1 year experience"
     senior_jd = "Executive Director / Lead Architect with 10 years experience"
 
-    # Senior candidate on Junior JD should have no tier penalty
     res_sen_on_jun = ats.compute_ats_score(senior_resume, junior_jd)
-    # Junior candidate on Senior JD should incur tier penalty
     res_jun_on_sen = ats.compute_ats_score(junior_resume, senior_jd)
 
     assert res_sen_on_jun.experience_score >= res_jun_on_sen.experience_score
 
 
 def test_date_parsing_fallbacks_and_failure_reporting():
-    """Step 3 test: Handles MM/YYYY, YYYY-MM, Q1 2023 formats and surfaces unparseable date warnings."""
     resume_with_date_formats = {
         "experience": [
             {
@@ -320,7 +297,6 @@ def test_date_parsing_fallbacks_and_failure_reporting():
 
 
 def test_scoring_config_custom_override_roundtrip():
-    """Step 4 test: Confirms SCORING_CONFIG default produces identical output and custom config overrides weights."""
     resume = _sample_resume()
     jd = "Requirements: Python, AWS. Preferred: Docker."
     
@@ -329,14 +305,12 @@ def test_scoring_config_custom_override_roundtrip():
     assert default_res.skills_score == implicit_res.skills_score
     assert default_res.experience_score == implicit_res.experience_score
 
-    # Custom config override
     custom_config = ats.ScoringConfig(skill_mandatory_weight=50.0, skill_preferred_weight=50.0)
     custom_res = ats.compute_ats_score(resume, jd, config=custom_config)
     assert custom_res.eligible is True
 
 
 def test_slash_plus_skill_importance_weighting():
-    """Regression test: Skills with slash/plus (e.g. CI/CD, C++) match against cleaned_jd and get higher weight."""
     jd_text = """
     CI/CD Pipeline Lead Engineer
     Requirements:
@@ -347,6 +321,5 @@ def test_slash_plus_skill_importance_weighting():
     """
     weights = ats._compute_skill_importance_weights(jd_text, ["ci/cd", "python"])
     
-    # Assert strict inequality: CI/CD mentioned 4 times + title header bonus > Python mentioned once
     assert weights["ci/cd"] > weights["python"]
-    assert weights["ci/cd"] > 0.6  # Dominant portion of total weight
+    assert weights["ci/cd"] > 0.6
