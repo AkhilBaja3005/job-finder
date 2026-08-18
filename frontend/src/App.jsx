@@ -158,29 +158,45 @@ function App() {
       showToast("Please log in to auto-sync your extension key!", "error");
       return;
     }
-    // Attempt messaging Chrome extension via window / external messaging
-    if (typeof window.chrome !== "undefined" && window.chrome.runtime && window.chrome.runtime.sendMessage) {
-      try {
-        window.chrome.runtime.sendMessage({ action: "SYNC_USER_KEY", syncKey: targetKey }, (res) => {
-          if (res && res.success) {
-            showToast(`🚀 Extension Auto-Synced to Key: ${targetKey}!`, "success");
-          } else {
-            // Fallback to copying key and prompting extension download
-            navigator.clipboard.writeText(targetKey);
-            showToast(`📋 Sync Key (${targetKey}) copied! Open extension settings to paste.`, "info");
-          }
-        });
-      } catch (e) {
-        navigator.clipboard.writeText(targetKey);
-        showToast(`📋 Sync Key (${targetKey}) copied to clipboard!`, "info");
+
+    // Always copy to clipboard for convenience
+    try { navigator.clipboard.writeText(targetKey); } catch (e) {}
+
+    let synced = false;
+    const handleResponse = (event) => {
+      if (event.data && event.data.type === "SYNC_JOB_FINDER_KEY_SUCCESS") {
+        synced = true;
+        showToast(`🚀 Extension Auto-Synced to Key: ${targetKey}!`, "success");
+        window.removeEventListener("message", handleResponse);
       }
-    } else {
-      navigator.clipboard.writeText(targetKey);
-      showToast(`📋 Sync Key (${targetKey}) copied to clipboard!`, "info");
-    }
+    };
+    window.addEventListener("message", handleResponse);
+
+    // Broadcast postMessage to extension content script
+    window.postMessage({ type: "SYNC_JOB_FINDER_KEY", syncKey: targetKey }, "*");
+
+    setTimeout(() => {
+      window.removeEventListener("message", handleResponse);
+      if (!synced) {
+        // Extension is not installed in Chrome: Trigger direct zip download & copy key
+        showToast(`📦 Downloading Extension & copied Sync Key (${targetKey})!`, "success");
+        try {
+          const downloadUrl = `${API_BASE}/download_extension?key=${encodeURIComponent(targetKey)}`;
+          const link = document.createElement("a");
+          link.href = downloadUrl;
+          link.download = `Job_Finder_Extension_${targetKey}.zip`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } catch (e) {
+          console.error("Extension download trigger failed:", e);
+        }
+      }
+    }, 600);
   };
 
   const [user, setUser] = useState(null);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
   const [configStepActive, setConfigStepActive] = useState(true);
@@ -1756,26 +1772,104 @@ function App() {
             ?
           </button>
           {user && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ position: 'relative', display: 'inline-block', zIndex: 10000 }}>
               <button
-                className="btn"
+                className="btn btn-secondary"
                 style={{
-                  padding: '6px 14px', fontSize: '0.78rem', fontWeight: 700,
-                  background: 'linear-gradient(135deg, #0284c7 0%, #10b981 100%)',
-                  color: '#fff', border: 'none', borderRadius: '20px',
-                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
-                  display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'
+                  padding: '6px 14px', fontSize: '0.84rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  borderColor: profileDropdownOpen ? '#38bdf8' : 'rgba(255,255,255,0.15)',
+                  background: profileDropdownOpen ? 'rgba(56, 189, 248, 0.15)' : '#0f172a'
                 }}
-                onClick={() => handleOneClickExtensionSync(user.sync_code)}
-                title="1-Click Auto-Sync Chrome Extension with your Account"
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
               >
-                <span>⚡ 1-Click Extension Sync</span>
-                {user.sync_code && <span style={{ background: 'rgba(0,0,0,0.25)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem' }}>{user.sync_code}</span>}
+                <span>👤</span>
+                <span style={{ color: '#fff' }}>{user.email ? user.email.split("@")[0] : "Account"}</span>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{profileDropdownOpen ? "▲" : "▼"}</span>
               </button>
-              <span style={{ fontSize: '0.82rem', color: 'var(--accent-green)', fontWeight: 500 }}>{user.email}</span>
-              <button className="btn btn-secondary" style={{ padding: '5px 11px', fontSize: '0.76rem' }} onClick={handleLogout}>
-                Sign out
-              </button>
+
+              {profileDropdownOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 10px)', right: 0,
+                  width: '300px', background: 'rgba(15, 23, 42, 0.95)', border: '1px solid rgba(56, 189, 248, 0.3)',
+                  borderRadius: '18px', padding: '18px', zIndex: 99999,
+                  boxShadow: '0 24px 50px rgba(0, 0, 0, 0.85), 0 0 20px rgba(56, 189, 248, 0.15)',
+                  backdropFilter: 'blur(24px)', display: 'flex', flexDirection: 'column', gap: '14px'
+                }}>
+                  {/* User Profile Header Badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingBottom: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <div style={{
+                      width: '40px', height: '40px', borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #0284c7 0%, #10b981 100%)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 800, color: '#fff', fontSize: '1.1rem',
+                      boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)', flexShrink: 0
+                    }}>
+                      {user.email ? user.email.charAt(0).toUpperCase() : "U"}
+                    </div>
+                    <div style={{ overflow: 'hidden' }}>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Account</div>
+                      <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>
+                    </div>
+                  </div>
+
+                  {/* Sleek Sync Key Pill */}
+                  <div style={{
+                    background: 'rgba(2, 132, 199, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)' ,
+                    borderRadius: '14px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Chrome Sync Key</span>
+                      <span style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px' }}>Active</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0f172a', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '6px 12px', borderRadius: '10px' }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#38bdf8', fontSize: '1rem', letterSpacing: '0.08em' }}>{user.sync_code || "GABY48"}</span>
+                      <button
+                        style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, padding: 0 }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(user.sync_code || "");
+                          showToast("📋 Sync Key copied to clipboard!", "success");
+                        }}
+                        title="Copy Sync Key"
+                      >
+                        📋 Copy
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Subtle Action Button */}
+                  <button
+                    className="btn btn-secondary"
+                    style={{
+                      padding: '9px 14px', fontSize: '0.8rem', fontWeight: 700,
+                      borderColor: 'rgba(56, 189, 248, 0.4)', color: '#38bdf8',
+                      background: 'rgba(2, 132, 199, 0.12)', borderRadius: '10px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer'
+                    }}
+                    onClick={() => {
+                      handleOneClickExtensionSync(user.sync_code);
+                      setProfileDropdownOpen(false);
+                    }}
+                  >
+                    <span>⚡ 1-Click Auto-Sync Extension</span>
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    style={{
+                      padding: '8px', fontSize: '0.8rem', width: '100%',
+                      color: '#f87171', borderColor: 'rgba(239, 68, 68, 0.25)',
+                      borderRadius: '10px', background: 'rgba(239, 68, 68, 0.05)'
+                    }}
+                    onClick={() => {
+                      setProfileDropdownOpen(false);
+                      handleLogout();
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

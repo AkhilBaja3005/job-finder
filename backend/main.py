@@ -1388,6 +1388,45 @@ async def parse_job_details_endpoint(request: ExtensionParseJobRequest):
     }
 
 
+@app.get("/download_extension")
+async def download_extension(key: Optional[str] = None):
+    """Dynamically package Chrome Extension ZIP with pre-filled Sync Key for 1-click installation."""
+
+    ext_dir = os.path.join(BASE_DIR, "extension")
+    if not os.path.exists(ext_dir):
+        raise HTTPException(status_code=404, detail="Extension directory not found")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for root, dirs, files in os.walk(ext_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, ext_dir)
+                
+                # Pre-fill sync key inside popup.js if key param is provided
+                if key and file == "popup.js":
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        js_content = f.read()
+                    # Inject default user token key into popup.js
+                    injection = f'chrome.storage.local.set({{ userToken: "{key}" }});\n  chrome.storage.local.get(["userToken"], (items) => {{'
+                    js_content = js_content.replace(
+                        'chrome.storage.local.get(["userToken"], (items) => {',
+                        injection
+                    )
+                    zip_file.writestr(arcname, js_content)
+                else:
+                    zip_file.write(file_path, arcname)
+
+    zip_buffer.seek(0)
+    filename = f"Job_Finder_Extension_{key or 'latest'}.zip"
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+
 @app.post("/analyze_job")
 async def analyze_job(request: JobAnalysisRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
     # Rate limit check for analyze_job

@@ -1,10 +1,7 @@
 // content.js - Job Finder ATS Tailor Content Script (v2.5.0 Failsafe)
 
 (function () {
-  const host = window.location.hostname || "";
-  if (host === "localhost" || host === "127.0.0.1" || host.includes("127.0.0.1") || host.includes("localhost")) {
-    return;
-  }
+  // Allow content script execution on web application origins for 1-Click Extension Auto-Sync
 
   function isRuntimeValid() {
     try {
@@ -111,3 +108,14 @@
     }
   } catch (e) {}
 })();
+
+  // Relay 1-Click Sync Key from web application window to extension storage
+  window.addEventListener("message", (event) => {
+    if (event.data && event.data.type === "SYNC_JOB_FINDER_KEY" && event.data.syncKey) {
+      if (isRuntimeValid()) {
+        chrome.storage.local.set({ userToken: event.data.syncKey }, () => {
+          window.postMessage({ type: "SYNC_JOB_FINDER_KEY_SUCCESS", syncKey: event.data.syncKey }, "*");
+        });
+      }
+    }
+  });
