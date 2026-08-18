@@ -30,6 +30,36 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnEmailTailor = document.getElementById("btn-email-tailor");
   const userTokenInput = document.getElementById("user-token");
   const toast = document.getElementById("popup-toast");
+  const btnSettingsUrl = document.getElementById("btn-settings-url");
+  const settingsUrlBox = document.getElementById("settings-url-box");
+  const inputBackendUrl = document.getElementById("input-backend-url");
+  const btnSaveUrl = document.getElementById("btn-save-url");
+
+  if (btnSettingsUrl && settingsUrlBox) {
+    btnSettingsUrl.addEventListener("click", () => {
+      const isHidden = settingsUrlBox.style.display === "none";
+      settingsUrlBox.style.display = isHidden ? "block" : "none";
+      if (isHidden && inputBackendUrl) {
+        inputBackendUrl.value = API_BASE_URL;
+      }
+    });
+  }
+
+  if (btnSaveUrl && inputBackendUrl) {
+    btnSaveUrl.addEventListener("click", () => {
+      const newUrl = inputBackendUrl.value.trim().replace(/\/+$/, "");
+      if (newUrl && (newUrl.startsWith("http://") || newUrl.startsWith("https://"))) {
+        chrome.storage.local.set({ backendUrl: newUrl }, () => {
+          API_BASE_URL = newUrl;
+          showToast("✅ Server Endpoint updated & saved!");
+          settingsUrlBox.style.display = "none";
+          if (currentJobInfo) fetchAtsScore(currentJobInfo);
+        });
+      } else {
+        showToast("⚠️ Enter a valid URL starting with http:// or https://");
+      }
+    });
+  }
 
   const userInfoCard = document.getElementById("user-info-card");
   const userNameDisplay = document.getElementById("user-name-display");
