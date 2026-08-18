@@ -879,13 +879,13 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
         path = file_path
         
         # If uploaded file is a PDF/DOCX, generate and save a canonical .tex version
-        # so master_latex always has the correct \name and \address blocks
+        # so master_latex always has the correct \name and \address blocks.
+        # If user uploaded .tex, KEEP THAT EXACT FILE AS MASTER TEX (DO NOT MODIFY IT).
         if not file_path.endswith(".tex"):
             canonical_tex_path = os.path.join(user_up_dir, f"{uuid.uuid4().hex}_master.tex")
             canonical_tex = generate_latex_from_json(data)
             with open(canonical_tex_path, "w", encoding="utf-8") as f:
                 f.write(canonical_tex)
-            # Use this as the master going forward
             path = canonical_tex_path
 
         # Compile baseline PDF immediately after upload so Before PDF is ready for first Auto-Apply
@@ -899,37 +899,48 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
                 _shutil.copy2(cls_source, os.path.join(user_up_dir, "resume.cls"))
                 _shutil.copy2(cls_source, os.path.join(user_out_dir, "resume.cls"))
 
-            # Read canonical tex and apply full hotfix + page-fit pipeline
+            # Read canonical tex
             with open(path, "r", encoding="utf-8") as _f:
                 canonical_tex_content = _f.read()
 
-            pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex_content, 1.0, 1.0, None)
-            opt_scale = 1.0
-            opt_ls = 1.0
-            if pages > 1:
-                for ls in [0.95, 0.91, 0.88, 0.82, 0.78]:
-                    p, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex_content, 1.0, ls, None)
-                    if p == 1:
-                        opt_ls = ls
-                        pages = 1
-                        break
-            if pages > 1:
-                for scale in [0.85, 0.75, 0.65]:
-                    p, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex_content, scale, opt_ls, None)
-                    if p == 1:
-                        opt_scale = scale
-                        break
+            if file_path.endswith(".tex"):
+                # For user-uploaded .tex: Keep the user's master file 100% pristine and unmodified.
+                # Compile baseline PDF directly from user's original .tex
+                await asyncio.to_thread(
+                    subprocess.run,
+                    ["tectonic", path, "--outdir", user_out_dir],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                )
+                print(f"[upload_resume] User-uploaded .tex kept 100% pristine as master for token={token or 'guest'}")
+            else:
+                # For generated canonical .tex (from PDF/DOCX): apply page-fit optimization
+                pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex_content, 1.0, 1.0, None)
+                opt_scale = 1.0
+                opt_ls = 1.0
+                if pages > 1:
+                    for ls in [0.95, 0.91, 0.88, 0.82, 0.78]:
+                        p, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex_content, 1.0, ls, None)
+                        if p == 1:
+                            opt_ls = ls
+                            pages = 1
+                            break
+                if pages > 1:
+                    for scale in [0.85, 0.75, 0.65]:
+                        p, _ = await asyncio.to_thread(compile_and_check_page_metrics, canonical_tex_content, scale, opt_ls, None)
+                        if p == 1:
+                            opt_scale = scale
+                            break
 
-            fixed_baseline_tex = apply_latex_hotfix(canonical_tex_content, opt_scale, opt_ls, None)
-            with open(path, "w", encoding="utf-8") as _f:
-                _f.write(fixed_baseline_tex)
+                fixed_baseline_tex = apply_latex_hotfix(canonical_tex_content, opt_scale, opt_ls, None)
+                with open(path, "w", encoding="utf-8") as _f:
+                    _f.write(fixed_baseline_tex)
 
-            await asyncio.to_thread(
-                subprocess.run,
-                ["tectonic", path, "--outdir", user_out_dir],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-            )
-            print(f"[upload_resume] Baseline PDF compiled (scale={opt_scale}, ls={opt_ls}) for token={token or 'guest'}")
+                await asyncio.to_thread(
+                    subprocess.run,
+                    ["tectonic", path, "--outdir", user_out_dir],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                )
+                print(f"[upload_resume] Baseline PDF compiled (scale={opt_scale}, ls={opt_ls}) for token={token or 'guest'}")
         except Exception as baseline_err:
             print(f"[upload_resume] Warning: Baseline PDF compilation failed: {baseline_err}")
 
