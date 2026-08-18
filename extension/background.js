@@ -1,4 +1,4 @@
-const DEFAULT_BACKEND_URL = "http://127.0.0.1:8000";
+const DEFAULT_BACKEND_URL = "https://www.job-finder.space";
 let BACKEND_URL = DEFAULT_BACKEND_URL;
 
 chrome.storage.local.get(["backendUrl"], (items) => {

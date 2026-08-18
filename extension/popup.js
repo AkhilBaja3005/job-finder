@@ -1,7 +1,7 @@
 // popup.js - ATS Tailor Extension Controller (v2.6.0 Parametric Production Ready)
 
 // Parameterized API Base URL (Configurable via chrome.storage.local key "backendUrl")
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const DEFAULT_API_BASE_URL = "https://www.job-finder.space";
 let API_BASE_URL = DEFAULT_API_BASE_URL;
 
 chrome.storage.local.get(["backendUrl"], (items) => {

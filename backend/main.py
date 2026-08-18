@@ -482,6 +482,8 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ── Rate Limiter & CORS Security Configuration ────────────────────────────
 ALLOWED_ORIGINS = [
+    "https://www.job-finder.space",
+    "https://job-finder.space",
     "http://localhost:5173",
     "http://localhost:3000",
     "http://127.0.0.1:5173",
