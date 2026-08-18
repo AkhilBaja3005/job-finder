@@ -188,6 +188,7 @@ function App() {
 
   const [user, setUser] = useState(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [showExtensionGuide, setShowExtensionGuide] = useState(false);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
   const [configStepActive, setConfigStepActive] = useState(true);
@@ -1804,30 +1805,6 @@ function App() {
                     </div>
                   </div>
 
-                  {/* Sleek Sync Key Pill */}
-                  <div style={{
-                    background: 'rgba(2, 132, 199, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)' ,
-                    borderRadius: '14px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Chrome Sync Key</span>
-                      <span style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px' }}>Active</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0f172a', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '6px 12px', borderRadius: '10px' }}>
-                      <span style={{ fontFamily: 'monospace', fontWeight: 800, color: '#38bdf8', fontSize: '1rem', letterSpacing: '0.08em' }}>{user.sync_code || "GABY48"}</span>
-                      <button
-                        style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, padding: 0 }}
-                        onClick={() => {
-                          navigator.clipboard.writeText(user.sync_code || "");
-                          showToast("📋 Sync Key copied to clipboard!", "success");
-                        }}
-                        title="Copy Sync Key"
-                      >
-                        📋 Copy
-                      </button>
-                    </div>
-                  </div>
-
                   {/* Subtle Action Button */}
                   <button
                     className="btn btn-secondary"
@@ -1839,10 +1816,22 @@ function App() {
                     }}
                     onClick={() => {
                       handleOneClickExtensionSync(user.sync_code);
+                      setShowExtensionGuide(true);
                       setProfileDropdownOpen(false);
                     }}
                   >
-                    <span>⚡ 1-Click Auto-Sync Extension</span>
+                    <span>⚡ 1-Click Auto-Sync & Download</span>
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '7px 10px', fontSize: '0.76rem', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
+                    onClick={() => {
+                      setShowExtensionGuide(true);
+                      setProfileDropdownOpen(false);
+                    }}
+                  >
+                    <span>📖 Setup Instructions</span>
                   </button>
 
                   <button
