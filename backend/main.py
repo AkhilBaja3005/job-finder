@@ -1569,7 +1569,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         
                         # Task-wrapped check to drain logs concurrently
                         review_task = asyncio.create_task(
-                            asyncio.to_thread(review_tailored_resume, analysis.latex_code, session_resume_data, job_title, jd_text, active_api_key, on_log=log_callback)
+                            asyncio.to_thread(review_tailored_resume, analysis.latex_code, session_resume_data, job_title, jd_text, active_api_key, on_log=log_callback, user_selected_skills=getattr(request, 'user_selected_skills', None))
                         )
                         while not review_task.done():
                             for msg in drain_llm_logs():
@@ -1719,7 +1719,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             dumped = analysis.model_dump()
             set_cached_analysis(token, job_title, jd_text, dumped)
-            company_name = request.company if (request.company and request.company not in ["Target Company", "Hiring Company", "Detecting company..."]) else None
+            req_comp = getattr(request, "company", None)
+            company_name = req_comp if (req_comp and req_comp not in ["Target Company", "Hiring Company", "Detecting company..."]) else None
             if not company_name and "scraped" in locals() and scraped.get("company"):
                 company_name = scraped.get("company")
             if not company_name:
