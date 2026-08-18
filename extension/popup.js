@@ -53,7 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
           API_BASE_URL = newUrl;
           showToast("✅ Server Endpoint updated & saved!");
           settingsUrlBox.style.display = "none";
-          if (currentJobInfo) fetchAtsScore(currentJobInfo);
+          if (typeof currentJobInfo !== "undefined" && currentJobInfo) fetchAtsScore(currentJobInfo);
         });
       } else {
         showToast("⚠️ Enter a valid URL starting with http:// or https://");
@@ -82,9 +82,17 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     const cleanKey = syncKey.trim();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
     fetch(`${API_BASE_URL}/user/me`, {
+      signal: controller.signal,
       headers: { "Authorization": `Bearer ${cleanKey}` }
     })
+      .then((res) => {
+        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
       .then((res) => res.json())
       .then((data) => {
         if (data && (data.email || data.id)) {
