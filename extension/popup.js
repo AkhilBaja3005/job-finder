@@ -45,6 +45,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  let currentJobInfo = null;
+  let activePreviewText = "";
+
   if (btnSaveUrl && inputBackendUrl) {
     btnSaveUrl.addEventListener("click", () => {
       const newUrl = inputBackendUrl.value.trim().replace(/\/+$/, "");
@@ -53,7 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
           API_BASE_URL = newUrl;
           showToast("✅ Server Endpoint updated & saved!");
           settingsUrlBox.style.display = "none";
-          if (typeof currentJobInfo !== "undefined" && currentJobInfo) fetchAtsScore(currentJobInfo);
+          if (currentJobInfo) fetchAtsScore(currentJobInfo);
         });
       } else {
         showToast("⚠️ Enter a valid URL starting with http:// or https://");
@@ -64,10 +67,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const userInfoCard = document.getElementById("user-info-card");
   const userNameDisplay = document.getElementById("user-name-display");
   const userEmailDisplay = document.getElementById("user-email-display");
-
-  let currentJobInfo = null;
-  let activePreviewText = "";
-
   function showToast(msg) {
     if (!toast) return;
     toast.textContent = msg;
