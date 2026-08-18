@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Job Finder AutoFill - Instant Application Assistant",
+  "name": "Job Finder ATS Tailor - Instant Application & Resume Assistant",
   "version": "1.1.0",
-  "description": "Auto-fill and batch apply across Greenhouse, Lever, Workday, Indeed, and LinkedIn Easy Apply with AI precision.",
+  "description": "In-page ATS Match scoring, Resume tailoring, Cover letter & outreach generator across LinkedIn, Indeed, Workday, Greenhouse, Lever, Micron, and all career sites.",
   "permissions": [
     "activeTab",
     "storage",
@@ -11,14 +11,8 @@
   "host_permissions": [
     "http://127.0.0.1:8000/*",
     "http://localhost:8000/*",
-    "https://*.greenhouse.io/*",
-    "https://*.lever.co/*",
-    "https://*.workday.com/*",
-    "https://*.myworkdayjobs.com/*",
-    "https://*.bamboohr.com/*",
-    "https://*.ashbyhq.com/*",
-    "https://*.indeed.com/*",
-    "https://*.linkedin.com/*"
+    "https://*/*",
+    "http://*/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -34,7 +28,14 @@
   "content_scripts": [
     {
       "matches": [
-        "<all_urls>"
+        "https://*/*",
+        "http://*/*"
+      ],
+      "exclude_matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://localhost/*",
+        "https://127.0.0.1/*"
       ],
       "js": ["content.js"],
       "css": ["content.css"],

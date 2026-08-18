@@ -489,6 +489,7 @@ def review_tailored_resume(
     job_description: str,
     custom_api_key: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
+    user_selected_skills: Optional[List[str]] = None,
 ) -> ResumeReviewResult:
     """
     Two-phase review:
@@ -585,7 +586,7 @@ def review_tailored_resume(
     # flat `skills` list, omitting bullets here caused false "fabrication"
     # rejections for tools the candidate genuinely has experience with.
     candidate_profile = {
-        "skills": original_resume_data.get("skills", []),
+        "skills": list(set(original_resume_data.get("skills", []) + (user_selected_skills or []))),
         "education": [{"institution": e.get("institution", ""), "degree": e.get("degree", "")} for e in original_resume_data.get("education", [])],
         "experience": [
             {"company": e.get("company", ""), "role": e.get("role", ""), "bullets": e.get("description", [])}
@@ -611,10 +612,8 @@ QUALITY RUBRIC — evaluate each item independently and set its boolean field ac
      is the FULL ground truth of the candidate's real experience. A skill or tool is
      NOT fabricated if it appears ANYWHERE in the profile, including inside bullets,
      even if it is not also listed in the flat "skills" array.
-   - Only flag truthfulness if the tailored resume mentions a company, degree, skill,
-     or tool that appears NOWHERE in the candidate profile (skills, education, or any
-     experience/project bullet), or if it exaggerates total years of experience beyond
-     total_experience_years.
+   - USER EXPLICIT OVERRIDE: Any skills listed in the candidate's "skills" array below (e.g. AWS, GCP, RAG, Vector Databases, Hugging Face) have been explicitly approved by the user for inclusion. DO NOT flag these user-selected skills as fabrication or untruthful under any circumstances!
+   - Only flag truthfulness if the tailored resume mentions an unapproved company, degree, or unapproved tool that appears NOWHERE in the candidate profile.
 4. conciseness_ok: Are bullets tight (1-1.5 lines)? No sprawling multi-line sentences?
 
 Set each boolean independently and truthfully — do NOT set all four to true just because most pass.

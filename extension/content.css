@@ -34,18 +34,190 @@
   border-color: #38bdf8;
 }
 
-.jf-floating-badge .jf-icon {
-  font-size: 16px;
+/* --- In-Page ATS Tailor Button (LinkedIn/Indeed/Workday styling) --- */
+.jf-tailor-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 0 0 8px !important;
+  vertical-align: middle !important;
+  background: #0a66c2 !important;
+  background: linear-gradient(135deg, #0a66c2 0%, #0284c7 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid #0a66c2 !important;
+  border-radius: 20px !important;
+  padding: 0 14px !important;
+  cursor: pointer !important;
+  font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  gap: 6px !important;
+  user-select: none !important;
+  line-height: 1 !important;
+  letter-spacing: normal !important;
+  height: 40px !important;
+  min-width: auto !important;
+  transition: all 0.2s ease-in-out !important;
+  box-shadow: 0 2px 6px rgba(10, 102, 194, 0.3) !important;
+  position: relative !important;
+  z-index: 99999 !important;
 }
 
-.jf-floating-badge .jf-btn-fill {
-  background: linear-[#0284c7], #0369a1;
-  background: linear-gradient(135deg, #38bdf8, #0284c7);
-  color: #fff;
-  border: none;
-  padding: 5px 12px;
-  border-radius: 14px;
+.jf-tailor-btn:hover {
+  background: #004182 !important;
+  background: linear-gradient(135deg, #004182 0%, #0369a1 100%) !important;
+  box-shadow: 0 4px 12px rgba(10, 102, 194, 0.45) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Tooltip Popover on Hover */
+.jf-tailor-btn .jf-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  width: 260px;
+  background-color: #0f172a;
+  color: #f8fafc;
+  text-align: left;
+  border-radius: 10px;
+  padding: 10px 12px;
+  position: absolute;
+  z-index: 100000;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+  border: 1px solid rgba(56, 189, 248, 0.3);
   font-size: 12px;
-  font-weight: 700;
+  line-height: 1.4;
+  font-weight: 500;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  pointer-events: none;
+}
+
+.jf-tailor-btn:hover .jf-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* In-Page Side-Sheet Drawer Modal */
+.jf-drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(9, 13, 26, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 2147483647;
+  display: flex;
+  justify-content: flex-end;
+  animation: jfFadeIn 0.2s ease both;
+}
+
+.jf-drawer-container {
+  width: 440px;
+  max-width: 90vw;
+  height: 100%;
+  background: #0f172a;
+  border-left: 1px solid rgba(56, 189, 248, 0.25);
+  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  color: #f8fafc;
+  font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  animation: jfSlideLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.jf-drawer-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.jf-drawer-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #38bdf8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jf-drawer-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 18px;
   cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.jf-drawer-close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.jf-drawer-body {
+  padding: 20px 24px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.jf-score-card {
+  background: rgba(56, 189, 248, 0.06);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.jf-score-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.15);
+  border: 3px solid #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: #38bdf8;
+}
+
+.jf-missing-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.jf-skill-chip {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+@keyframes jfFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes jfSlideLeft {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }

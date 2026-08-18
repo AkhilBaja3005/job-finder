@@ -819,6 +819,8 @@ class JobAnalysisRequest(BaseModel):
     job_description: Optional[str] = Field(default=None, max_length=20000)
     skip_tailoring: bool = False
     force_tailoring: bool = False
+    send_email: bool = False
+    source_mode: Optional[str] = "website"  # "website" | "extension" 
 
 class ApplyRequest(BaseModel):
     job_url: str
@@ -1147,7 +1149,7 @@ def _extract_company_from_jd(jd_text: str, job_url: str = None) -> str:
         if m:
             name = m.group(1).strip().rstrip('.,;')
             # Filter out generic words and frameworks
-            if name.lower() not in {'the', 'a', 'an', 'we', 'our', 'this', 'you', 'your', 'us', 'etl', 'api', 'sdk', 'framework', 'platform', 'tool', 'system', 'devops', 'mlops', 'data', 'engineering'}:
+            if name.lower() not in {'the', 'a', 'an', 'we', 'our', 'this', 'you', 'your', 'us', 'etl', 'api', 'sdk', 'framework', 'platform', 'tool', 'system', 'devops', 'mlops', 'data', 'engineering'} and 'premium' not in name.lower():
                 print(f"[_extract_company_from_jd] ✓ Regex extracted company: {name}")
                 return name
 
@@ -1243,17 +1245,22 @@ class RunContext:
     def get_summary(self) -> str:
         return f"Trace {self.run_id} finished in {time.time() - self.start:.2f}s across {len(self.steps)} steps."
 
-async def _send_website_tailoring_email(token: Optional[str], session_resume_data: dict, dumped_analysis: dict, job_title: str, company_name: str, job_url: Optional[str], overleaf_url: Optional[str], persistent_pdf_path: str):
+async def _send_website_tailoring_email(token: Optional[str], session_resume_data: dict, dumped_analysis: dict, job_title: str, company_name: str, job_url: Optional[str], overleaf_url: Optional[str], persistent_pdf_path: str, request_send_email: bool = False, source_mode: str = "website"):
     """Helper to check user preference and dispatch website tailoring emails with PDF attachment."""
     print(f"[analyze_job] _send_website_tailoring_email called. token={bool(token)}, pdf_path={persistent_pdf_path}, exists={os.path.exists(persistent_pdf_path) if persistent_pdf_path else False}")
-    if not token or not persistent_pdf_path or not os.path.exists(persistent_pdf_path):
-        print(f"[analyze_job] Skipping website tailoring email: token or persistent_pdf_path invalid.")
+    if not token:
+        print(f"[analyze_job] Skipping website tailoring email: token invalid.")
         return
+    
+    pdf_attachment = persistent_pdf_path if (persistent_pdf_path and os.path.exists(persistent_pdf_path)) else None
     try:
         user_obj = await async_get_user_by_token(token)
         should_email = False
         if user_obj:
             should_email = user_obj.get("send_tailored_email", False)
+
+        if request_send_email:
+            should_email = True
 
         print(f"[analyze_job] Tailored email check: user={user_obj.get('email') if user_obj else None}, should_email={should_email}")
 
@@ -1272,10 +1279,14 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
             score_suffix = f" [{ats_score_val}% Match]" if ats_score_val is not None else ""
             ats_display = f"{ats_score_val}% Match" if ats_score_val is not None else "100% Match"
             
-            email_subj = f"📄 [Website Tailoring] Resume Tailored{score_suffix}: {job_title} at {company_name}"
+            is_ext = (source_mode == "extension") or request_send_email
+            mode_title = "Extension Tailoring" if is_ext else "Website Tailoring"
+            mode_detail = "Extension 1-Click Tailoring" if is_ext else "Website Interactive Tailoring"
+            
+            email_subj = f"🎯 [{mode_title}] Resume Tailored{score_suffix}: {job_title} at {company_name}"
             email_text = (
                 f"Hello {cand_name},\n\n"
-                f"Your website resume tailoring for '{job_title}' at '{company_name}' has completed successfully!\n\n"
+                f"Your {mode_title} for '{job_title}' at '{company_name}' has completed successfully!\n\n"
                 f"We have attached your compiled PDF resume directly to this email.\n\n"
                 f"View the job listing and apply here:\n{job_url or ''}\n\n"
                 f"Want to edit or customize it online? Open it in Overleaf:\n{overleaf_url or ''}\n\n"
@@ -1285,7 +1296,7 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
             <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
                 <div style="text-align: center; margin-bottom: 24px;">
                     <span style="font-size: 3rem;">📄</span>
-                    <span style="display: inline-block; background-color: #0284C7; color: #FFFFFF; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Website Tailoring</span>
+                    <span style="display: inline-block; background-color: #0284C7; color: #FFFFFF; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">{mode_title}</span>
                     <h2 style="color: #0284C7; margin: 6px 0 5px; font-weight: 800; font-size: 1.6rem;">Tailoring Completed!</h2>
                     <p style="color: #64748B; font-size: 0.9rem; margin: 0;">For your application at <strong>{company_name}</strong></p>
                 </div>
@@ -1301,7 +1312,7 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
                         </tr>
                         <tr>
                             <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">Mode:</td>
-                            <td style="padding: 6px 0; color: #0284C7; font-size: 0.9rem; font-weight: 600;">Website Interactive Tailoring</td>
+                            <td style="padding: 6px 0; color: #0284C7; font-size: 0.9rem; font-weight: 600;">{mode_detail}</td>
                         </tr>
                         <tr>
                             <td style="padding: 6px 0; color: #64748B; font-size: 0.85rem;">ATS Score:</td>
@@ -1310,7 +1321,7 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
                     </table>
                 </div>
                 <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin: 0 0 20px;">
-                    Hello {cand_name}, your website resume tailoring has finished successfully. Your experience bullet points and technical keywords have been optimized, and your compiled PDF resume is attached directly to this email.
+                    Hello {cand_name}, your {mode_detail.lower()} has finished successfully. Your experience bullet points and technical keywords have been optimized, and your compiled PDF resume is attached directly to this email.
                 </p>
                 <div style="text-align: center; margin: 30px 0 20px;">
                     {"<a href='" + job_url + "' target='_blank' style='display: inline-block; background-color: #10B981; color: #FFFFFF; text-decoration: none; padding: 12px 30px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; margin-bottom: 12px;'>🚀 View Job & Apply</a><br/>" if job_url else ""}
@@ -1318,7 +1329,7 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
                 </div>
                 <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 30px 0 20px;" />
                 <p style="font-size: 0.8rem; color: #94A3B8; text-align: center; margin: 0;">
-                    Sent automatically by your Resume Tailor Assistant (Website Tailoring Mode).
+                    Sent automatically by your Resume Tailor Assistant ({mode_title} Mode).
                 </p>
             </div>
             """
@@ -1328,7 +1339,7 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
                 subject=email_subj,
                 text_body=email_text,
                 html_body=email_html,
-                attachment_path=persistent_pdf_path,
+                attachment_path=pdf_attachment,
                 attachment_name=f"Tailored_Resume_{company_name.replace(' ', '_')}.pdf"
             )
             print(f"[analyze_job] Tailored PDF email delivery result: {email_sent}")
@@ -1361,7 +1372,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 cached["latex_code"] = ""
             elif not request.skip_tailoring:
                 try:
-                    entry_company = await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
+                    entry_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company', 'Detecting company...']) else await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
                     safe_key = _safe_key(token)
                     _, user_out_dir = _get_user_storage_dirs(safe_key)
                     tex_path, temp_pdf_path = _user_output_paths(token)
@@ -1376,10 +1387,11 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         "job_url": request.job_url or "",
                         "score": cached.get("match_analysis", {}).get("overall_score"),
                         "status": "tailored",
+                        "source_mode": getattr(request, "source_mode", "website"),
                         "pdf_url": cached_pdf_url,
                         "overleaf_url": cached_overleaf
                     })
-                    await _send_website_tailoring_email(token, session_resume_data, cached, request.job_title, entry_company, request.job_url, cached_overleaf, cached_pdf)
+                    await _send_website_tailoring_email(token, session_resume_data, cached, request.job_title, entry_company, request.job_url, cached_overleaf, cached_pdf, request_send_email=request.send_email, source_mode=getattr(request, 'source_mode', 'website'))
                 except Exception as hist_err:
                     print(f"[analyze_job] Failed to record application history / email on cache hit: {hist_err}")
             async def cached_event_generator():
@@ -1413,6 +1425,27 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 scraped = await scrape_job_description(request.job_url)
                 jd_text = scraped["description"]
                 job_title = scraped["title"]
+                
+                # Guard: Reject bot-blocked / Cloudflare verification challenge pages
+                _bot_block_phrases = [
+                    "cloudflare security verification",
+                    "anti-bot challenge",
+                    "security verification page",
+                    "verify you are human",
+                    "checking your browser",
+                    "enable javascript and cookies",
+                    "access denied",
+                    "just a moment",
+                    "error processing your request"
+                ]
+                if scraped.get("is_bot_blocked") or any(p in jd_text.lower() for p in _bot_block_phrases):
+                    yield json.dumps({"type": "log", "percent": 100, "message": "⚠️ Security challenge detected: The job board returned an anti-bot verification page."}) + "\n"
+                    yield json.dumps({
+                        "type": "error",
+                        "message": "The job posting URL returned a security verification / anti-bot challenge page (e.g. Cloudflare). Please copy and paste the raw job description text directly into the text area."
+                    }) + "\n"
+                    return
+
                 ctx.log_step("scrape_job", time.time() - t0)
                 yield json.dumps({"type": "log", "percent": 20, "message": f"✅ Scraped job details for: {job_title}"}) + "\n"
                 yield json.dumps({"type": "scraped_data", "job_title": job_title, "job_description": jd_text}) + "\n"
@@ -1426,7 +1459,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         cached["latex_code"] = ""
                     elif not request.skip_tailoring:
                         try:
-                            entry_company = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
+                            entry_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company', 'Detecting company...']) else await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
                             safe_key = _safe_key(token)
                             tex_path, temp_pdf_path = _user_output_paths(token)
                             cached_pdf = temp_pdf_path if os.path.exists(temp_pdf_path) else tex_path.replace(".tex", ".pdf")
@@ -1440,6 +1473,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                                 "job_url": request.job_url or "",
                                 "score": cached.get("match_analysis", {}).get("overall_score"),
                                 "status": "tailored",
+                                "source_mode": getattr(request, "source_mode", "website"),
                                 "pdf_url": cached_pdf_url,
                                 "overleaf_url": cached_overleaf
                             })
@@ -1535,7 +1569,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         
                         # Task-wrapped check to drain logs concurrently
                         review_task = asyncio.create_task(
-                            asyncio.to_thread(review_tailored_resume, analysis.latex_code, session_resume_data, job_title, jd_text, active_api_key, on_log=log_callback)
+                            asyncio.to_thread(review_tailored_resume, analysis.latex_code, session_resume_data, job_title, jd_text, active_api_key, on_log=log_callback, user_selected_skills=getattr(request, 'user_selected_skills', None))
                         )
                         while not review_task.done():
                             for msg in drain_llm_logs():
@@ -1679,15 +1713,18 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         else:
                             break
     
-                analysis.latex_code = apply_latex_hotfix(analysis.latex_code, optimal_scale, optimal_linespread, master_latex)
+                analysis.latex_code = apply_latex_hotfix(analysis.latex_code, optimal_scale, optimal_linespread, master_latex, user_selected_skills=getattr(request, 'user_selected_skills', None))
             else:
-                analysis.latex_code = apply_latex_hotfix(analysis.latex_code, 1.0, 1.0, master_latex)
+                analysis.latex_code = apply_latex_hotfix(analysis.latex_code, 1.0, 1.0, master_latex, user_selected_skills=getattr(request, 'user_selected_skills', None))
 
             dumped = analysis.model_dump()
             set_cached_analysis(token, job_title, jd_text, dumped)
-            company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
-            if (not company_name or company_name == "Target Hiring Company") and "scraped" in locals() and scraped.get("company"):
+            req_comp = getattr(request, "company", None)
+            company_name = req_comp if (req_comp and req_comp not in ["Target Company", "Hiring Company", "Detecting company..."]) else None
+            if not company_name and "scraped" in locals() and scraped.get("company"):
                 company_name = scraped.get("company")
+            if not company_name:
+                company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
             recruiter_name = None
             recruiter_profile_url = None
             if request.job_url:
@@ -1757,7 +1794,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                             except Exception as post_calc_err:
                                 print(f"[analyze_job] Post-tailoring score computation exception: {post_calc_err}")
 
-                            await _send_website_tailoring_email(token, session_resume_data, dumped, job_title, company_name, request.job_url, overleaf_url, persistent_pdf_path)
+                            await _send_website_tailoring_email(token, session_resume_data, dumped, job_title, company_name, request.job_url, overleaf_url, persistent_pdf_path, request_send_email=request.send_email, source_mode=getattr(request, 'source_mode', 'website'))
                 except Exception as pdf_compile_err:
                     print(f"[analyze_job] Failed to compile persistent PDF copy: {pdf_compile_err}")
 
@@ -1768,6 +1805,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     "job_url": request.job_url or "",
                     "score": dumped.get("match_analysis", {}).get("overall_score"),
                     "status": "tailored",
+                    "source_mode": getattr(request, "source_mode", "website"),
                     "recruiter_name": recruiter_name,
                     "recruiter_profile_url": recruiter_profile_url,
                     "overleaf_url": overleaf_url,
@@ -2519,11 +2557,12 @@ async def generate_recruiter_outreach_endpoint(
 
     if request.send_email and request.recruiter_email:
         from services.email_service import async_send_notification_email
+        html_formatted_body = outreach.email_body.replace("\n", "<br>")
         await async_send_notification_email(
             to_email=request.recruiter_email,
             subject=outreach.email_subject,
             text_body=outreach.email_body,
-            html_body=f"<div style='font-family:sans-serif;line-height:1.6;'>{outreach.email_body.replace('\n', '<br>')}</div>"
+            html_body=f"<div style='font-family:sans-serif;line-height:1.6;'>{html_formatted_body}</div>"
         )
 
     return {
@@ -3784,3 +3823,52 @@ if __name__ == "__main__":
         timeout_keep_alive=30,
         log_level="warning",
     )
+
+class ExtensionParseRequest(BaseModel):
+    page_text: str
+    page_url: Optional[str] = None
+    page_title: Optional[str] = None
+
+@app.post("/extension/parse_job_details")
+async def extension_parse_job_details(request: ExtensionParseRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+    """Dedicated isolated endpoint for Chrome Extension: uses user LLM key to extract exact company and job title from page text/source."""
+    user_api_key = x_gemini_api_key
+    if not user_api_key and authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        user = await async_get_user_by_token(token)
+        if user and user.get("gemini_api_key"):
+            user_api_key = user.get("gemini_api_key")
+
+    if not user_api_key:
+        user_api_key = os.getenv("GEMINI_API_KEY")
+
+    try:
+        from services.gemini_client import generate_content_with_fallback
+        prompt = f"""Analyze this job page content and URL.
+Extract:
+1. The exact hiring company name (e.g. Goldman Sachs, Micron, Google, Apple).
+2. The exact clean job title (e.g. Associate, Senior Software Engineer).
+
+Job URL: {request.page_url or 'N/A'}
+Page Title / Header: {request.page_title or 'N/A'}
+
+Page Text / Job Description:
+{request.page_text[:3000]}
+
+Return JSON strictly in this exact format:
+{{"company": "Company Name", "job_title": "Clean Job Title"}}"""
+
+        res = generate_content_with_fallback(prompt, custom_api_key=user_api_key).strip()
+        if "```json" in res:
+            res = res.split("```json")[1].split("```")[0].strip()
+        elif "```" in res:
+            res = res.split("```")[1].split("```")[0].strip()
+
+        import json
+        parsed = json.loads(res)
+        company = parsed.get("company", "").strip()
+        job_title = parsed.get("job_title", "").strip()
+        return {"company": company, "job_title": job_title}
+    except Exception as e:
+        print(f"[/extension/parse_job_details] LLM parse error: {e}")
+        return {"company": "", "job_title": request.page_title or ""}

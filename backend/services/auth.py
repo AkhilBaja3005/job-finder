@@ -265,3 +265,9 @@ def get_optional_token(authorization: Optional[str] = None) -> Optional[str]:
     if authorization.startswith("Bearer "):
         return authorization.split("Bearer ")[1].strip()
     return authorization.strip()
+
+
+def _is_local_deployment() -> bool:
+    """Helper to detect local vs production container execution environment."""
+    env = os.getenv("ENV", "").lower()
+    return env not in ("production", "prod", "staging")
