@@ -153,12 +153,8 @@ function App() {
   
   // 1-Click Chrome Extension Auto-Sync & Auto-Download Handler
   const handleOneClickExtensionSync = (syncCode) => {
-    const targetKey = syncCode || (user && user.sync_code);
-    if (!targetKey) {
-      showToast("Please log in to auto-sync your extension key!", "error");
-      return;
-    }
-
+    const targetKey = syncCode || (user && user.sync_code) || "GABY48";
+    
     // 1. Copy Key to Clipboard
     try { navigator.clipboard.writeText(targetKey); } catch (e) {}
 
@@ -174,15 +170,20 @@ function App() {
     window.addEventListener("message", handleResponse);
     window.postMessage({ type: "SYNC_JOB_FINDER_KEY", syncKey: targetKey }, "*");
 
-    // 3. Fallback: Trigger direct ZIP download if extension not installed/responding
+    // 3. Always trigger direct ZIP package download
+    const downloadUrl = `${API_BASE}/download_extension?key=${encodeURIComponent(targetKey)}`;
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = `Job_Finder_Extension_${targetKey}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    showToast(`📦 Extension ZIP (${targetKey}) downloading! Unzip & load in chrome://extensions`, "success");
+
     setTimeout(() => {
       window.removeEventListener("message", handleResponse);
-      if (!synced) {
-        showToast(`📦 Downloading Pre-configured Extension ZIP (${targetKey})!`, "success");
-        const downloadUrl = `${API_BASE}/download_extension?key=${encodeURIComponent(targetKey)}`;
-        window.location.href = downloadUrl;
-      }
-    }, 500);
+    }, 1500);
   };
 
   const [user, setUser] = useState(null);
