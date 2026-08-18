@@ -61,7 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const cleanKey = syncKey.trim();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     fetch(`${API_BASE_URL}/user/me`, {
       signal: controller.signal,
       headers: { "Authorization": `Bearer ${cleanKey}` }
@@ -209,7 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const token = items ? items.userToken || "guest" : "guest";
         if (jobInfo.description && jobInfo.description.length > 30) {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
           fetch(`${API_BASE_URL}/analyze_job`, {
             signal: controller.signal,
             method: "POST",

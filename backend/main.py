@@ -1525,7 +1525,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     pass
 
             recruiter_name = None
-            if request.job_url:
+            if request.job_url and not request.skip_tailoring:
                 try:
                     rec_info = await extract_recruiter(request.job_url, None)
                     recruiter_name = rec_info.get("recruiter_name")
