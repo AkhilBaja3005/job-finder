@@ -4981,6 +4981,8 @@ function App() {
         </div>
       )}
 
+    </div>
+
       {/* Extension Installation Setup Guide Modal */}
       {showExtensionGuide && (
         <div className="modal-overlay" style={{ pointerEvents: 'auto' }}>
@@ -5066,8 +5068,6 @@ function App() {
           </div>
         </div>
       )}
-
-    </div>
     </>
   );
 }

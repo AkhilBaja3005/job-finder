@@ -991,12 +991,14 @@ textarea:focus-visible {
     border-radius: 10px !important;
   }
 
-  /* Modals on mobile: full screen sheet style */
+  /* Modals on mobile: centered modal with full backdrop blur */
   .modal-overlay {
-    padding: 0 !important;
-    align-items: flex-end !important;
-    background: rgba(0, 0, 0, 0.75) !important;
-    backdrop-filter: blur(8px) !important;
+    padding: 16px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(4, 7, 14, 0.88) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
   }
 
   .modal-content, [role="dialog"] {
