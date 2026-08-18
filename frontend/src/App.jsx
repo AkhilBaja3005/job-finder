@@ -4980,6 +4980,96 @@ function App() {
         </div>
       )}
 
+      {/* Extension Installation Setup Guide Modal */}
+      {showExtensionGuide && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(9, 13, 26, 0.88)', backdropFilter: 'blur(12px)',
+          zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }}>
+          <div className="card" style={{
+            maxWidth: '540px', width: '100%', border: '1px solid rgba(56, 189, 248, 0.4)',
+            padding: '28px', background: '#0F172A', boxShadow: '0 25px 60px rgba(0,0,0,0.85)',
+            display: 'flex', flexDirection: 'column', gap: '18px', borderRadius: '20px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+              <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🎯 Chrome Extension Setup Guide</span>
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                onClick={() => setShowExtensionGuide(false)}
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+              <div style={{ background: 'rgba(2, 132, 199, 0.12)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase' }}>Your Personal Sync Key</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: 800, color: '#34d399', marginTop: '2px' }}>{user ? user.sync_code : "GABY48"}</div>
+                </div>
+                <button
+                  className="btn"
+                  style={{ padding: '6px 12px', fontSize: '0.76rem', background: '#0284c7', color: '#fff' }}
+                  onClick={() => {
+                    handleOneClickExtensionSync(user ? user.sync_code : "GABY48");
+                  }}
+                >
+                  📥 Re-Download ZIP
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>1</span>
+                  <div>
+                    <strong style={{ color: '#fff' }}>Download & Unzip</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Click <strong>1-Click Auto-Sync & Download</strong> to download your pre-configured ZIP package (e.g. <code>Job_Finder_Extension_GABY48.zip</code>). Double-click to unzip the folder.</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>2</span>
+                  <div>
+                    <strong style={{ color: '#fff' }}>Open Extensions Page</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>In Google Chrome, open a new tab and go to <code style={{ color: '#38bdf8' }}>chrome://extensions</code></div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>3</span>
+                  <div>
+                    <strong style={{ color: '#fff' }}>Enable Developer Mode</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Toggle the <strong>Developer mode</strong> switch in the top-right corner of Chrome Extensions page.</div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>4</span>
+                  <div>
+                    <strong style={{ color: '#fff' }}>Load Unpacked Extension</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Click <strong>Load unpacked</strong> button at top-left and select the unzipped <code>extension</code> folder.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px', textAlign: 'center' }}>
+              <button
+                className="btn"
+                style={{ width: '100%', padding: '10px', fontSize: '0.86rem', fontWeight: 700, background: 'linear-gradient(135deg, #0284c7 0%, #10b981 100%)', color: '#fff' }}
+                onClick={() => setShowExtensionGuide(false)}
+              >
+                ✓ Got it! Start Tailoring Jobs
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
