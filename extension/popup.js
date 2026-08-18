@@ -184,6 +184,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 currentJobInfo.title = data.job_title;
                 activeRoleTitle.textContent = data.job_title;
               }
+              if (data && data.job_description && data.job_description.length > currentJobInfo.description.length) {
+                currentJobInfo.description = data.job_description;
+              }
               fetchAtsScore(currentJobInfo);
             })
             .catch(() => {

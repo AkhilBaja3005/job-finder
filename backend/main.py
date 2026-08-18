@@ -1354,14 +1354,38 @@ class ExtensionParseJobRequest(BaseModel):
 
 @app.post("/extension/parse_job_details")
 async def parse_job_details_endpoint(request: ExtensionParseJobRequest):
-    """Extract exact Company & Job Title via regex and Gemini LLM for Chrome Extension popup."""
+    """Extract exact Company, Job Title & full JD via LinkedIn/Indeed Guest API for Chrome Extension popup."""
     title = request.page_title or ""
     company = ""
-    if request.page_url:
-        company = await asyncio.to_thread(_extract_company_from_jd, request.page_text or "", request.page_url)
-    if not company and request.page_text:
-        company = await asyncio.to_thread(_extract_company_from_jd, request.page_text, None)
-    return {"job_title": title, "company": company or "Hiring Company"}
+    description = request.page_text or ""
+    
+    # 1. Try fast LinkedIn / Indeed Guest REST API if URL is provided
+    if request.page_url and ("linkedin.com/jobs" in request.page_url or "indeed.com" in request.page_url):
+        try:
+            from services.scraper import scrape_job_url
+            scraped = await scrape_job_url(request.page_url)
+            if scraped and scraped.get("description"):
+                if scraped.get("title") and scraped.get("title") != "LinkedIn Job":
+                    title = scraped.get("title")
+                if scraped.get("company"):
+                    company = scraped.get("company")
+                if scraped.get("description") and len(scraped.get("description")) > 100:
+                    description = scraped.get("description")
+                print(f"[/extension/parse_job_details] ⚡ Enriched via Guest API: {company} - {title}")
+        except Exception as e:
+            print(f"[/extension/parse_job_details] Guest API enrichment warning: {e}")
+
+    # 2. Fallback to URL regex / LLM company extraction if guest API did not find company
+    if not company and request.page_url:
+        company = await asyncio.to_thread(_extract_company_from_jd, description, request.page_url)
+    if not company and description:
+        company = await asyncio.to_thread(_extract_company_from_jd, description, None)
+        
+    return {
+        "job_title": title,
+        "company": company or "Hiring Company",
+        "job_description": description
+    }
 
 
 @app.post("/analyze_job")
