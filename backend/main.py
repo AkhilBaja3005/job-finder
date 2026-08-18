@@ -2285,6 +2285,10 @@ def upload_zip_to_tmpfiles(latex_code: str, candidate_name: str = "", job_title:
         fixed_code = apply_latex_hotfix(latex_code)
         zip_file.writestr("main.tex", fixed_code)
         
+        # Add latexmkrc file so Overleaf automatically sets the compiler engine to XeLaTeX
+        latexmkrc_content = '$pdf_mode = 5;\n$postscript_mode = $dvi_mode = 0;\n$xelatex = "xelatex -synctex=1 -interaction=nonstopmode %O %S";\n'
+        zip_file.writestr("latexmkrc", latexmkrc_content)
+
         # Load resume.cls (use default tracked version as fallback if uploads doesn't contain a custom copy)
         cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
         if not os.path.exists(cls_path):
