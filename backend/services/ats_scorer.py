@@ -16,7 +16,7 @@ import re
 import datetime
 import json
 from dataclasses import dataclass, field
-from typing import List, Tuple, Dict, Set, Optional
+from typing import List, Tuple, Dict, Set, Optional, Any
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. ENHANCED TAXONOMY & GLOBAL LOCALIZATION DICTIONARIES
@@ -280,6 +280,20 @@ class ATSScoreResult:
     candidate_years: float
     required_years: int
     score_breakdown: Dict[str, str]
+
+def _flatten_resume_skills(raw_skills: Any) -> str:
+    """Safely flattens dictionary or list skills into a single string for taxonomy extraction."""
+    if isinstance(raw_skills, dict):
+        all_skills = []
+        for v in raw_skills.values():
+            if isinstance(v, list):
+                all_skills.extend([str(item) for item in v])
+            elif isinstance(v, str):
+                all_skills.append(v)
+        return " ".join(all_skills)
+    elif isinstance(raw_skills, list):
+        return " ".join([str(s) for s in raw_skills])
+    return str(raw_skills or "")
 
 def _extract_taxonomy_skills(text: str) -> Set[str]:
     """
@@ -634,7 +648,7 @@ def compute_skills_score(
     config: ScoringConfig = DEFAULT_SCORING_CONFIG
 ) -> SkillMatchResult:
     """Evaluates keyword matches using location weighting and a stuffing-prevention cap."""
-    skills_sec_canon = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
+    skills_sec_canon = _extract_taxonomy_skills(_flatten_resume_skills(resume_data.get("skills", [])))
 
     job_profiles: List[Tuple[Set[str], float]] = []
     for exp in resume_data.get("experience", []):
@@ -822,7 +836,7 @@ def estimate_role_fit_score(resume_data: dict, jd_text: str) -> int:
 
     required_skills, preferred_skills = extract_jd_skills(jd_text)
     jd_skills = set(required_skills) | set(preferred_skills)
-    resume_skills = _extract_taxonomy_skills(" ".join(resume_data.get("skills", [])))
+    resume_skills = _extract_taxonomy_skills(_flatten_resume_skills(resume_data.get("skills", [])))
     overlap_ratio = (len(jd_skills & resume_skills) / len(jd_skills)) if jd_skills else 0.5
 
     base = 90 - (tier_gap * 15)
@@ -858,9 +872,7 @@ def evaluate_master_resume(resume_data: dict, config: ScoringConfig = DEFAULT_SC
         suggestions.append("📊 Quantify more achievements: Only " + str(round(quant_ratio*100)) + "% of bullet points contain measurable metrics (e.g. %, £/$, latency cut, user count). Aim for 60%+.")
         
     # 2. Skill Taxonomy Audit
-    skills_list = resume_data.get("skills", [])
-    skills_text = " ".join(skills_list) if isinstance(skills_list, list) else str(skills_list)
-    found_skills = _extract_taxonomy_skills(skills_text)
+    found_skills = _extract_taxonomy_skills(_flatten_resume_skills(resume_data.get("skills", [])))
     
     tech_score = min(100, max(40, len(found_skills) * 8))
     if len(found_skills) < 8:

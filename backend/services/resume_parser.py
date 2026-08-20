@@ -104,6 +104,32 @@ KNOWN_SKILL_CATEGORY_MAP = {
     "jira": "Methodologies & Process", "confluence": "Methodologies & Process", "agile / scrum": "Methodologies & Process"
 }
 
+def _split_skills_preserving_groups(skills_str: str) -> List[str]:
+    """
+    Splits a comma-separated skills line while respecting parentheses, brackets,
+    and multi-word grouped phrases (e.g. 'Computer Vision (U-Net, DenseNet)').
+    """
+    if not skills_str:
+        return []
+    raw_items = [s.strip() for s in skills_str.split(",") if s.strip()]
+    clean_items: List[str] = []
+    temp = ""
+    for it in raw_items:
+        if temp:
+            temp += ", " + it
+            if ")" in it or "]" in it or "}" in it:
+                clean_items.append(temp.strip())
+                temp = ""
+        elif (("(" in it and ")" not in it) or 
+              ("[" in it and "]" not in it) or 
+              ("{" in it and "}" not in it)):
+            temp = it
+        else:
+            clean_items.append(it.strip())
+    if temp:
+        clean_items.append(temp.strip())
+    return [c for c in clean_items if c]
+
 def categorize_skills_with_llm(raw_skills: Union[str, List[str]]) -> Dict[str, List[str]]:
     """
     Hybrid Skill Categorization Engine:
@@ -256,21 +282,7 @@ def parse_resume(file_path: str) -> StructuredResume:
                 if cat_match:
                     cat_name = cat_match.group(1).replace(":", "").replace(r"\&", "&").replace(r"\%", "%").strip()
                     skills_part = cat_match.group(2).replace(r"\\", "").strip()
-                    raw_items = [s.strip() for s in skills_part.split(",") if s.strip()]
-                    clean_items = []
-                    temp = ""
-                    for it in raw_items:
-                        if temp:
-                            temp += ", " + it
-                            if ")" in it or "]" in it:
-                                clean_items.append(temp)
-                                temp = ""
-                        elif ("(" in it and ")" not in it) or ("[" in it and "]" not in it):
-                            temp = it
-                        else:
-                            clean_items.append(it)
-                    if temp:
-                        clean_items.append(temp)
+                    clean_items = _split_skills_preserving_groups(skills_part)
                     if cat_name and clean_items:
                         direct_skills[cat_name] = clean_items
             if direct_skills:
@@ -297,21 +309,7 @@ def parse_resume(file_path: str) -> StructuredResume:
 
             parsed_res = {}
             for cat_name, full_str in text_skills.items():
-                raw_items = [s.strip() for s in full_str.split(",") if s.strip()]
-                clean_items = []
-                temp = ""
-                for it in raw_items:
-                    if temp:
-                        temp += ", " + it
-                        if ")" in it or "]" in it:
-                            clean_items.append(temp)
-                            temp = ""
-                    elif ("(" in it and ")" not in it) or ("[" in it and "]" not in it):
-                        temp = it
-                    else:
-                        clean_items.append(it)
-                if temp:
-                    clean_items.append(temp)
+                clean_items = _split_skills_preserving_groups(full_str)
                 if cat_name and clean_items:
                     parsed_res[cat_name] = clean_items
 

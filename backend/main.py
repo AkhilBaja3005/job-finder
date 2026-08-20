@@ -951,6 +951,9 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
         # Save to session-scoped cache
         set_session_data(token, data, path)
         
+        # Clear stale analysis cache so fresh resume immediately re-evaluates
+        clear_user_cached_analysis(token)
+        
         # Save session-scoped state to local file for persistence compatibility
         guest_file = _get_guest_state_file(token)
         try:
@@ -1234,6 +1237,10 @@ def set_cached_analysis(token: str, job_title: str, jd_text: str, analysis: dict
     key_src = f"{token or 'guest'}:{job_title}:{jd_text}"
     key = hashlib.md5(key_src.encode("utf-8"), usedforsecurity=False).hexdigest()
     _analysis_cache.set(key, analysis)
+
+def clear_user_cached_analysis(token: Optional[str] = None):
+    """Clears cached job fit analyses when a candidate uploads a new master resume."""
+    _analysis_cache.clear()
 
 class RunContext:
     def __init__(self, user_token: Optional[str], job_title: str):
