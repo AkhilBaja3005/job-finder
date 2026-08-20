@@ -10,116 +10,146 @@ pinned: false
 
 # AI Job Finder Agent
 
-An AI-powered job search and application assistant. Upload a resume once, then let it discover matching job postings, score your fit against a job description, tailor a one-page LaTeX resume and cover letter for a specific role, and (optionally) auto-fill the job application form in a real browser.
+An AI-powered job search, resume tailoring, and application assistant. Upload a resume once (in `.pdf`, `.docx`, or `.tex`), then let it discover matching job postings, score your ATS fit against job descriptions, tailor a pixel-perfect one-page LaTeX resume and cover letter for specific roles, generate personalized recruiter outreach messages, and auto-fill applications directly on the web.
 
-The app is a single FastAPI backend serving a React (Vite) single-page frontend, packaged together in one Docker image.
+The project includes:
+1. **Full-Stack Web App** — FastAPI backend + React (Vite) dashboard.
+2. **Chrome Extension (`Job Finder ATS Tailor`)** — In-browser sidebar to score jobs, tailor resumes, and generate cover letters on LinkedIn, Indeed, Greenhouse, Lever, Workday, etc.
 
-## Features
+---
 
-- **Resume parsing** — upload a PDF/DOCX/TEX resume and extract structured data (contact info, skills, experience, education, projects, GPA) via an LLM.
-- **ATS fit scoring** — deterministic skills/experience matching (`ats_scorer.py`) combined with an LLM-based semantic "role fit" score, blended into an overall match percentage. Job discovery uses the same deterministic engine (real job description fetch + `compute_ats_score`) for the top-ranked postings, so discovery scores and post-tailoring ATS scores are directly comparable; postings beyond that cap fall back to a lighter title-only estimate, clearly marked "EST." in the UI.
-- **Resume tailoring** — rewrites the candidate's master LaTeX resume for a specific job description, enforces a one-page layout (mechanical spacing adjustments first, LLM condensation as a last resort), and runs an automated "recruiter review" loop that scores 4 independent rubric criteria (ATS fit, impact metrics, truthfulness, conciseness) and can reject and retry the tailoring before it's shown to the user. The truthfulness check compares against the candidate's full original experience/project bullets (not just company+role), so real skills mentioned only in bullet text aren't flagged as fabricated.
-- **Cover letter generation** — produced alongside the tailored resume.
-- **Job discovery** — searches LinkedIn and Indeed for postings matching the candidate's resume, dedupes, ranks by a lightweight title-based pre-score, fetches the real job description for the top matches (shared Playwright browser instance, bounded concurrency), and scores them with the same ATS engine used elsewhere.
-- **Export to Overleaf** — one-click export of the tailored (or original) resume as a LaTeX project opened directly in Overleaf.
-- **Google OAuth login** — with a guest mode and per-browser guest token for unauthenticated use.
-- **Multi-provider LLM support** — Gemini (default), Anthropic Claude, Groq, or OpenRouter, selected automatically from the shape of a user-supplied API key, with automatic model fallback, a pinned low temperature across all providers for consistent scoring, and jittered 429/rate-limit backoff.
+## Key Features
 
-## Architecture
+### 📄 1. Multi-Format Master Resume Parsing & Category Preservation
+- Supports **PDF**, **DOCX**, and native **LaTeX (`.tex`)** uploads.
+- **Deterministic Category Preservation**: Automatically extracts and locks candidate-defined skill categories (`Languages`, `AI/ML & GenAI`, `Data & Platforms`, `Software & Infrastructure`) and protects against unwanted AI re-categorization or truncation.
+- Accurately captures multi-line wrapped text, parentheses, grades/CPI, and nested project/experience structures.
+
+### 🎯 2. Deterministic ATS Scoring & Semantic Fit Analysis
+- **Dual-Engine Evaluation**: Combines deterministic keyword & experience matching (`ats_scorer.py`) with semantic LLM role-fit analysis.
+- **Context Density & Time-Decay**: Weighted scoring based on skill recency, timeline flattening, and anti-keyword stuffing controls.
+- **Matched vs. Missing Keywords Breakdown**: Identifies exact hard skills and qualification gaps.
+
+### ✍️ 3. One-Page LaTeX Resume & Cover Letter Tailoring
+- **Strict One-Page Budgeting**: Automatically scales fonts, line spreads, and margins via Tectonic PDF compilation to produce a single-page document.
+- **Automated Recruiter Review Loop**: Multi-attempt validation loop evaluating 4 criteria: ATS fit, measurable impact metrics, strict truthfulness against original experience, and conciseness.
+- **Overleaf Integration**: One-click direct export to Overleaf for both tailored and original master resumes.
+
+### 🌐 4. Automated Job Discovery & Application Assistant
+- **Live Scraping & Scoring**: Discovers jobs across LinkedIn and Indeed, scrapes full descriptions, and ranks them by ATS fit score.
+- **Browser Autofill Assistant**: Integrated Playwright browser agent for automated application form filling with interactive Q&A solving.
+
+---
+
+## 🧩 Chrome Extension (`Job Finder ATS Tailor`)
+
+The project includes a Manifest V3 Chrome Extension located in the `/extension` directory for instant in-page analysis while browsing job boards.
+
+### Extension Features
+- **In-Page Job Extraction**: Auto-detects Job Title, Company Name, and Full Description on **LinkedIn**, **Indeed**, **Workday**, **Greenhouse**, **Lever**, **Oracle Cloud HCM**, and custom career sites.
+- **Instant ATS Match Check**: Computes your ATS score and lists matched vs. missing keywords right in the extension popup.
+- **1-Click Resume Tailoring & Download**: Tailors your resume to the open job page and triggers instant LaTeX/PDF compilation & download.
+- **Cover Letter & Recruiter Outreach Generator**: Drafts tailored cover letters (<300 words) and personalized LinkedIn cold outreach messages.
+- **1-Click Sync**: Automatically syncs your active session, resume data, and custom API keys with the local or hosted Job Finder web app.
+
+### Installing the Chrome Extension
+1. Open Google Chrome (or any Chromium browser like Brave / Edge / Arc).
+2. Navigate to `chrome://extensions/`.
+3. Enable **Developer mode** in the top-right corner.
+4. Click **Load unpacked** and select the [`extension/`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/extension) directory from this repository.
+5. In the extension popup, configure your backend URL (e.g., `http://127.0.0.1:8000` for local dev or your hosted domain).
+
+---
+
+## 🏗️ Architecture
 
 ```
-frontend/   React 19 + Vite SPA — single-page dashboard (App.jsx)
-backend/
-  main.py               FastAPI app, HTTP endpoints, session store, streaming pipelines
-  services/
-    resume_parser.py    PDF/DOCX/TEX -> structured resume JSON (LLM)
-    ats_scorer.py        Deterministic skills/experience scoring (no LLM)
-    llm_agent.py          Job-fit analysis, cover letter, LaTeX tailoring, recruiter review
-    gemini_client.py     Multi-provider LLM client with model fallback + retry
-    job_searcher.py       LinkedIn/Indeed scraping + job ranking
-    scraper.py             Single job-posting page scraper (Playwright)
-    resume_generator.py  Structured JSON -> PDF (Jinja2 + Playwright), used for autofill uploads
-    auth.py                Supabase-backed users/sessions + Google OAuth
-    log_queue.py          Thread-safe log relay for streaming LLM progress to the client
-  utils/
-    latex_utils.py       LaTeX post-processing/hotfixes and JSON->LaTeX generation
-    ssl_utils.py           Shared certifi-backed verified TLS context for outbound HTTPS calls
+Job Finder/
+├── frontend/             # React 19 + Vite SPA — Single-page interactive dashboard
+├── backend/              # FastAPI application & microservices
+│   ├── main.py           # FastAPI app, SSE streaming endpoints, session management
+│   ├── services/
+│   │   ├── resume_parser.py    # Multi-format resume parsing & deterministic category extractor
+│   │   ├── ats_scorer.py       # Deterministic ATS scoring & timeline analysis engine
+│   │   ├── llm_agent.py        # Resume tailoring, cover letter writer, recruiter reviewer
+│   │   ├── gemini_client.py    # Multi-LLM provider client (Gemini, Claude, Groq, OpenRouter)
+│   │   ├── job_searcher.py     # LinkedIn & Indeed job scraper and ranking pipeline
+│   │   ├── scraper.py          # Playwright headless page scraper
+│   │   ├── resume_generator.py # HTML/PDF template renderer
+│   │   ├── outreach_generator.py # Recruiter outreach message composer
+│   │   └── auth.py             # Supabase & Google OAuth session handlers
+│   └── utils/
+│       ├── latex_utils.py      # LaTeX sanitization, macro hotfixes, Tectonic metric compilation
+│       └── ssl_utils.py        # Verified TLS context handler
+└── extension/            # Chrome Extension (Manifest V3)
+    ├── manifest.json     # Extension permissions, host rules, and metadata
+    ├── popup.html / js   # Popup interface for ATS scoring, tailoring & cover letters
+    ├── content.js        # Universal job page text and metadata extractor
+    └── background.js     # Service worker handling storage sync and backend communication
 ```
 
-The backend streams progress (NDJSON) to the frontend for long-running operations (job analysis, tailoring, job search) so the UI can show a live log.
+---
 
-## Prerequisites
+## ⚙️ Prerequisites
 
-- Python 3.11+
-- Node.js 20+
-- [Tectonic](https://tectonic-typesetting.github.io/) (LaTeX compiler) on `PATH` — used to compile tailored resumes to PDF
-- Playwright browsers (`playwright install chromium`) — used for scraping, and PDF generation
-- A Gemini API key (or Anthropic/Groq/OpenRouter key) for the LLM features
+- **Python**: 3.11+
+- **Node.js**: 20+
+- **Tectonic**: [Tectonic LaTeX compiler](https://tectonic-typesetting.github.io/) installed on system `PATH` (used for compiling resumes to PDF).
+  - macOS: `brew install tectonic`
+  - Linux: `sudo apt-get install tectonic` or download release binary.
+- **Playwright**: `playwright install chromium` (for scraping and headless autofill).
+- **API Key**: Gemini API key (default) or Anthropic/Groq/OpenRouter keys.
 
-## Environment variables
+---
 
-No `.env.example` is checked in; create a `backend/.env` with whichever of these you need:
+## 🚀 Running Locally
 
-| Variable | Required | Purpose |
-|---|---|---|
-| `GEMINI_API_KEY` | Yes (for default provider) | Gemini API key used for parsing, scoring, tailoring, autofill Q&A. Users can also supply their own key (Gemini/Anthropic/Groq/OpenRouter) at runtime via the frontend settings screen. |
-| `SUPABASE_URL` | No | Supabase project URL, for persisting user accounts/sessions/resumes. Without it, everything falls back to in-memory/guest sessions. |
-| `SUPABASE_KEY` | No | Supabase API key. |
-| `GOOGLE_CLIENT_ID` | No | Google OAuth client ID, for "Sign in with Google". |
-| `GOOGLE_CLIENT_SECRET` | No | Google OAuth client secret. |
-| `GOOGLE_REDIRECT_URI` | No | OAuth redirect URI (default `http://localhost:8000/auth/callback`). |
-| `FRONTEND_URL` | No | Frontend origin used for the post-login redirect (default `http://localhost:5173`). |
-| `PORT` | No | Backend port (default `8000`). |
-
-On localhost, the frontend also offers a "Mock Dev Login" that bypasses Google OAuth entirely.
-
-## Running locally
-
-**Backend:**
+### 1. Backend Setup
 ```bash
 cd backend
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium
 uvicorn main:app --reload --port 8000
 ```
 
-**Frontend:**
+### 2. Frontend Setup
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+The frontend will run at `http://localhost:5173` and automatically proxy API calls to `http://127.0.0.1:8000`.
 
-The frontend dev server auto-detects `http://127.0.0.1:8000` as the API base when run on localhost.
+### 3. Environment Variables
+Create a `backend/.env` file:
+```env
+GEMINI_API_KEY=your_gemini_api_key
+# Optional integrations:
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your_supabase_anon_key
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+PORT=8000
+```
 
-## Running with Docker
+---
+
+## 🐳 Running with Docker
 
 ```bash
 docker build -t job-finder .
 docker run -p 8000:8000 --env-file backend/.env job-finder
 ```
 
-The Dockerfile builds the frontend, then serves the built static assets directly from the FastAPI backend (single container, single port).
+The Docker container builds the frontend, packages the Tectonic LaTeX compiler, installs Playwright Chromium, and serves the complete application from a single port (`8000`).
 
-## Key API endpoints
+---
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /upload_resume` | Upload and parse a resume (PDF/DOCX/TEX) |
-| `POST /scrape_job` | Scrape a job posting URL into title + description |
-| `POST /analyze_job` | Streamed: ATS scoring, and (unless skipped) full resume tailoring + cover letter |
-| `POST /generate_tailored_resume` | Render tailored resume JSON to PDF |
-| `POST /compile_latex` / `POST /download_latex` | Compile or download tailored LaTeX |
-| `POST /open_in_overleaf` / `POST /open_original_in_overleaf` | Export LaTeX project to Overleaf |
-| `POST /search_matching_jobs` | Streamed: search + rank matching jobs from LinkedIn/Indeed |
-| `POST /apply` / `GET /apply/status/{task_id}` | Kick off and poll the browser autofill agent |
-| `GET /auth/url`, `GET /auth/callback`, `POST /auth/mock` | Google OAuth / mock login |
-| `POST /clear_cache` | Reset in-memory caches and temporary files |
+## 🧪 Testing
 
-## Notes
-
-- Uploaded files and generated output live in `backend/uploads/` and `backend/output/`, which are purged on startup and periodically (every 30 minutes) to avoid unbounded growth on long-running deployments.
-- LinkedIn/Indeed job search relies on scraping (no official API), so selectors may need maintenance if those sites change their markup.
-- The autofill agent opens a real, visible browser window and persists its session in `backend/user_data/` so logins to job sites/portals survive across runs.
-- `/scrape_job`, `/search_matching_jobs`, and `/apply` are per-IP rate limited (in-memory, single-process) since each triggers a Playwright browser launch and/or LLM call chain.
-- All outbound HTTPS calls use a shared certifi-backed verified TLS context (`utils/ssl_utils.py`) rather than skipping certificate verification, with one narrow, logged fallback for the Overleaf export upload (tmpfiles.org) to accommodate a known certificate issue on that specific host.
+Run backend unit and pipeline test suites:
+```bash
+pytest backend/tests/test_ats_scorer.py backend/tests/test_resume_pipeline.py -v
+```
