@@ -244,7 +244,81 @@ def parse_resume(file_path: str) -> StructuredResume:
     if not parsed_data.get("achievements"):
         parsed_data["achievements"] = []
 
-    # Auto-categorize skills using dedicated LLM call
+    # If input is a .tex file, deterministically extract pre-categorized Technical Skills directly
+    if ext == '.tex':
+        match = re.search(r"\\begin\{rSection\}\{Technical\s+Skills\}(.*?)\\end\{rSection\}", raw_text, re.DOTALL)
+        if match:
+            sec = match.group(1)
+            direct_skills = {}
+            for line in sec.split("\n"):
+                line = line.strip()
+                cat_match = re.search(r"\\textbf\{([^}]+?):?\}\s*:?\s*(.*)", line)
+                if cat_match:
+                    cat_name = cat_match.group(1).replace(":", "").replace(r"\&", "&").replace(r"\%", "%").strip()
+                    skills_part = cat_match.group(2).replace(r"\\", "").strip()
+                    raw_items = [s.strip() for s in skills_part.split(",") if s.strip()]
+                    clean_items = []
+                    temp = ""
+                    for it in raw_items:
+                        if temp:
+                            temp += ", " + it
+                            if ")" in it or "]" in it:
+                                clean_items.append(temp)
+                                temp = ""
+                        elif ("(" in it and ")" not in it) or ("[" in it and "]" not in it):
+                            temp = it
+                        else:
+                            clean_items.append(it)
+                    if temp:
+                        clean_items.append(temp)
+                    if cat_name and clean_items:
+                        direct_skills[cat_name] = clean_items
+            if direct_skills:
+                parsed_data["skills"] = direct_skills
+    elif ext in ['.pdf', '.docx', '.doc']:
+        # For PDF / DOCX: check if the document text already has labeled skill categories (e.g. "Languages: ...", "AI/ML & GenAI: ...")
+        skills_match = re.search(r"(?:TECHNICAL\s+SKILLS|Technical\s+Skills|SKILLS|Skills)\s*\n+(.*?)(?=\n+[A-Z\s]{4,}|\Z)", raw_text, re.DOTALL)
+        if skills_match:
+            sec_text = skills_match.group(1)
+            text_skills = {}
+            current_cat = None
+            for line in sec_text.split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
+                cat_m = re.match(r"^([A-Za-z0-9\s/&,+-]+?):\s*(.*)$", line)
+                if cat_m:
+                    current_cat = cat_m.group(1).strip()
+                    skills_str = cat_m.group(2).strip()
+                    text_skills[current_cat] = skills_str
+                elif current_cat:
+                    # Wrapped line continuation from the previous category
+                    text_skills[current_cat] += " " + line
+
+            parsed_res = {}
+            for cat_name, full_str in text_skills.items():
+                raw_items = [s.strip() for s in full_str.split(",") if s.strip()]
+                clean_items = []
+                temp = ""
+                for it in raw_items:
+                    if temp:
+                        temp += ", " + it
+                        if ")" in it or "]" in it:
+                            clean_items.append(temp)
+                            temp = ""
+                    elif ("(" in it and ")" not in it) or ("[" in it and "]" not in it):
+                        temp = it
+                    else:
+                        clean_items.append(it)
+                if temp:
+                    clean_items.append(temp)
+                if cat_name and clean_items:
+                    parsed_res[cat_name] = clean_items
+
+            if parsed_res and len(parsed_res) >= 2:
+                parsed_data["skills"] = parsed_res
+
+    # Auto-categorize skills using dedicated LLM call ONLY if no structured categories exist
     raw_skills = parsed_data.get("skills")
     if not isinstance(raw_skills, dict) or len(raw_skills) == 0 or sum(len(v) for v in raw_skills.values() if isinstance(v, list)) == 0:
         if raw_skills and not isinstance(raw_skills, dict):
