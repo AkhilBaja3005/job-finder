@@ -2363,7 +2363,10 @@ async def open_in_overleaf(request: OverleafRequest):
 
 
 def _build_original_latex(resume_data: dict, master_path: Optional[str] = None) -> str:
-    """Build canonical Master LaTeX resume using the exact resume.cls template and font formatting."""
+    """Build canonical Master LaTeX resume using original .tex if uploaded, or generate from JSON."""
+    if master_path and master_path.endswith(".tex") and os.path.exists(master_path):
+        with open(master_path, "r", encoding="utf-8") as f:
+            return f.read()
     return apply_latex_hotfix(generate_latex_from_json(resume_data))
 
 
