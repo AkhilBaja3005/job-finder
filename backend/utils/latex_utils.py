@@ -79,6 +79,13 @@ def apply_latex_hotfix(
             else:
                 fixed = fixed.replace("\\begin{document}", name_block + "\n\\begin{document}", 1)
 
+        if address_block:
+            gen_addr = extract_latex_command(fixed, "\\address")
+            if gen_addr:
+                fixed = fixed.replace(gen_addr, address_block, 1)
+            else:
+                fixed = fixed.replace("\\begin{document}", address_block + "\n\\begin{document}", 1)
+
         # If master resume has a categorized Technical Skills section, extract and preserve its exact structure
         master_skills_match = re.search(r'(\\begin\{rSection\}\{Technical\s+Skills\}.*?\\end\{rSection\})', master_latex, re.DOTALL)
         if master_skills_match:
