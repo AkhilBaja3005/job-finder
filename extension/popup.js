@@ -152,7 +152,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const token = items ? items.userToken || "guest" : "guest";
         if (currentJobInfo.description && currentJobInfo.description.length > 20) {
           const controllerParse = new AbortController();
-          const timeoutParseId = setTimeout(() => controllerParse.abort(), 4000);
+          const timeoutParseId = setTimeout(() => controllerParse.abort(), 6000);
           fetch(`${API_BASE_URL}/extension/parse_job_details`, {
             signal: controllerParse.signal,
             method: "POST",
@@ -210,7 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const token = items ? items.userToken || "guest" : "guest";
         if (jobInfo.description && jobInfo.description.length > 30) {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const timeoutId = setTimeout(() => controller.abort(), 25000);
           fetch(`${API_BASE_URL}/analyze_job`, {
             signal: controller.signal,
             method: "POST",
