@@ -587,8 +587,21 @@ def review_tailored_resume(
     # text (e.g. "Used Cloudera and Azure OpenAI for...") rather than in the
     # flat `skills` list, omitting bullets here caused false "fabrication"
     # rejections for tools the candidate genuinely has experience with.
+    orig_skills = original_resume_data.get("skills", [])
+    if isinstance(orig_skills, dict):
+        flat_skills = []
+        for v in orig_skills.values():
+            if isinstance(v, list):
+                flat_skills.extend(v)
+            elif isinstance(v, str):
+                flat_skills.append(v)
+    elif isinstance(orig_skills, list):
+        flat_skills = list(orig_skills)
+    else:
+        flat_skills = [str(orig_skills)]
+
     candidate_profile = {
-        "skills": list(set(original_resume_data.get("skills", []) + (user_selected_skills or []))),
+        "skills": list(set(flat_skills + (user_selected_skills or []))),
         "education": [{"institution": e.get("institution", ""), "degree": e.get("degree", "")} for e in original_resume_data.get("education", [])],
         "experience": [
             {"company": e.get("company", ""), "role": e.get("role", ""), "bullets": e.get("description", [])}
