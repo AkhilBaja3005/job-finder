@@ -107,15 +107,18 @@
       });
     }
   } catch (e) {}
-})();
 
   // Relay 1-Click Sync Key from web application window to extension storage
   window.addEventListener("message", (event) => {
-    if (event.data && event.data.type === "SYNC_JOB_FINDER_KEY" && event.data.syncKey) {
-      if (isRuntimeValid()) {
-        chrome.storage.local.set({ userToken: event.data.syncKey }, () => {
-          window.postMessage({ type: "SYNC_JOB_FINDER_KEY_SUCCESS", syncKey: event.data.syncKey }, "*");
-        });
+    try {
+      if (event.data && event.data.type === "SYNC_JOB_FINDER_KEY" && event.data.syncKey) {
+        if (isRuntimeValid() && chrome.storage && chrome.storage.local) {
+          chrome.storage.local.set({ userToken: event.data.syncKey }, () => {
+            if (chrome.runtime.lastError) return;
+            window.postMessage({ type: "SYNC_JOB_FINDER_KEY_SUCCESS", syncKey: event.data.syncKey }, "*");
+          });
+        }
       }
-    }
+    } catch (e) {}
   });
+})();
