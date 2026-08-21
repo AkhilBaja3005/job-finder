@@ -26,20 +26,31 @@ class SubscriptionRequest(BaseModel):
 
 @router.get("/auth/google")
 @router.get("/auth/url")
-async def auth_google():
-    auth_url = get_google_auth_url()
+async def auth_google(request: Request):
+    custom_redirect = None
+    if not os.getenv("GOOGLE_REDIRECT_URI"):
+        custom_redirect = f"{str(request.base_url).rstrip('/')}/auth/callback"
+    auth_url = get_google_auth_url(redirect_uri=custom_redirect)
     if not auth_url:
         raise HTTPException(status_code=500, detail="Google OAuth client ID is not configured.")
     return {"url": auth_url}
 
 @router.get("/auth/callback")
-async def auth_callback(code: str):
+async def auth_callback(code: str, request: Request):
     try:
-        email, picture_url = exchange_google_code_for_email(code)
+        custom_redirect = None
+        if not os.getenv("GOOGLE_REDIRECT_URI"):
+            custom_redirect = f"{str(request.base_url).rstrip('/')}/auth/callback"
+        email, picture_url = exchange_google_code_for_email(code, redirect_uri=custom_redirect)
         user = create_or_get_user(email, picture_url)
         token = create_session(user["id"])
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
-        return RedirectResponse(url=f"{frontend_url}?token={token}")
+        
+        frontend_url = os.getenv("FRONTEND_URL")
+        if not frontend_url:
+            # Infer from request url scheme and host header
+            base = str(request.base_url).rstrip("/")
+            frontend_url = base
+        return RedirectResponse(url=f"{frontend_url.rstrip('/')}?token={token}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"OAuth verification failed: {str(e)}")
 

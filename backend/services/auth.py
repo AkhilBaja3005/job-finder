@@ -224,9 +224,10 @@ def update_user_resume_data(user_id, resume_data: dict, master_latex: str = None
     supabase_request(f"users?id=eq.{user_id}", "PATCH", payload)
 
 # Google OAuth Parameters (dynamic lookup helpers)
-def get_google_auth_url() -> str:
+def get_google_auth_url(redirect_uri: Optional[str] = None) -> str:
     client_id = os.getenv("GOOGLE_CLIENT_ID", "")
-    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback")
+    if not redirect_uri:
+        redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback")
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -237,10 +238,11 @@ def get_google_auth_url() -> str:
     }
     return f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
 
-def exchange_google_code_for_email(code: str) -> tuple[str, Optional[str]]:
+def exchange_google_code_for_email(code: str, redirect_uri: Optional[str] = None) -> tuple[str, Optional[str]]:
     client_id = os.getenv("GOOGLE_CLIENT_ID", "")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
-    redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback")
+    if not redirect_uri:
+        redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback")
     
     token_url = "https://oauth2.googleapis.com/token"
     data = urllib.parse.urlencode({
