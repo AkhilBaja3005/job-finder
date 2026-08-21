@@ -1912,13 +1912,17 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                                 final_post_score = max(pre_score, calc_post_score)
                                 dumped["match_analysis"]["overall_score"] = final_post_score
                                 set_cached_analysis(token, job_title, jd_text, dumped)
-                                print(f"[analyze_job] Pre-tailored score: {pre_score}%, Compiled PDF ATS score: {calc_post_score}%. Final score: {final_post_score}%")
-                            except Exception as post_calc_err:
-                                print(f"[analyze_job] Post-tailoring score computation exception: {post_calc_err}")
-
-                            await _send_website_tailoring_email(token, session_resume_data, dumped, job_title, company_name, request.job_url, overleaf_url, persistent_pdf_path, request_send_email=request.send_email, source_mode=getattr(request, 'source_mode', 'website'))
+                            print(f"[analyze_job] Pre-tailored score: {pre_score}%, Compiled PDF ATS score: {calc_post_score}%. Final score: {final_post_score}%")
+                        except Exception as post_calc_err:
+                            print(f"[analyze_job] Post-tailoring score computation exception: {post_calc_err}")
                 except Exception as pdf_compile_err:
                     print(f"[analyze_job] Failed to compile persistent PDF copy: {pdf_compile_err}")
+
+                try:
+                    pdf_to_send = persistent_pdf_path if "persistent_pdf_path" in locals() else None
+                    await _send_website_tailoring_email(token, session_resume_data, dumped, job_title, company_name, request.job_url, overleaf_url, pdf_to_send, request_send_email=request.send_email, source_mode=getattr(request, 'source_mode', 'website'))
+                except Exception as email_dispatch_err:
+                    print(f"[analyze_job] Error calling _send_website_tailoring_email: {email_dispatch_err}")
 
             try:
                 await asyncio.to_thread(record_application, token, {

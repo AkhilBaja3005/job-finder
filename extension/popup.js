@@ -151,10 +151,7 @@ document.addEventListener("DOMContentLoaded", () => {
       chrome.storage.local.get(["userToken"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
         if (currentJobInfo.description && currentJobInfo.description.length > 20) {
-          const controllerParse = new AbortController();
-          const timeoutParseId = setTimeout(() => controllerParse.abort(), 6000);
           fetch(`${API_BASE_URL}/extension/parse_job_details`, {
-            signal: controllerParse.signal,
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -166,10 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
               page_title: currentJobInfo.title
             })
           })
-            .then(res => {
-              clearTimeout(timeoutParseId);
-              return res.json();
-            })
+            .then(res => res.json())
             .then(data => {
               if (data && data.company) {
                 currentJobInfo.company = data.company;
@@ -188,7 +182,6 @@ document.addEventListener("DOMContentLoaded", () => {
               fetchAtsScore(currentJobInfo);
             })
             .catch(() => {
-              clearTimeout(timeoutParseId);
               if (!currentJobInfo.company || currentJobInfo.company === "Detecting company...") {
                 currentJobInfo.company = "Hiring Company";
                 activeCompanyName.textContent = "Hiring Company";
@@ -209,10 +202,7 @@ document.addEventListener("DOMContentLoaded", () => {
       chrome.storage.local.get(["userToken"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
         if (jobInfo.description && jobInfo.description.length > 30) {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 25000);
           fetch(`${API_BASE_URL}/analyze_job`, {
-            signal: controller.signal,
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -276,7 +266,7 @@ document.addEventListener("DOMContentLoaded", () => {
                           let totalBoost = 0;
                           window.selectedUserSkills.forEach(s => {
                             const w = skillWeights[s] || (1 / (missing.length || 5));
-                            // Boost = 0.40 (skills weight) * 85 (mandatory weight) * importance weight
+                            // Boost = 0.40 (skills weight) * 85.0 * w
                             totalBoost += (0.40 * 85.0 * w);
                           });
                           const addedCount = window.selectedUserSkills.size;
@@ -291,11 +281,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 } catch (e) {}
               }
             })
-            .then(() => clearTimeout(timeoutId))
             .catch((err) => {
-              clearTimeout(timeoutId);
               scoreCircle.textContent = "⚠️";
-              scoreSub.textContent = err.name === "AbortError" ? "Timeout: Server took too long" : "Offline / Server non-responsive";
+              scoreSub.textContent = "Offline / Server non-responsive";
             });
         }
       });
