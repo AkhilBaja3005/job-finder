@@ -1631,7 +1631,16 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             # Run fit analysis in a background task so we can drain log messages concurrently
             import asyncio
             fit_task = asyncio.create_task(
-                analyze_job_fit(session_resume_data, job_title, jd_text, master_latex if not request.skip_tailoring else None, recruiter_name, active_api_key, on_log=log_callback)
+                analyze_job_fit(
+                    session_resume_data,
+                    job_title,
+                    jd_text,
+                    master_latex if not request.skip_tailoring else None,
+                    recruiter_name,
+                    active_api_key,
+                    on_log=log_callback,
+                    user_selected_skills=getattr(request, 'user_selected_skills', None)
+                )
             )
 
             # Poll and yield log queue events in real-time while the LLM call is running
@@ -1902,6 +1911,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                                 pre_score = dumped.get("match_analysis", {}).get("overall_score", 0)
                                 final_post_score = max(pre_score, calc_post_score)
                                 dumped["match_analysis"]["overall_score"] = final_post_score
+                                set_cached_analysis(token, job_title, jd_text, dumped)
                                 print(f"[analyze_job] Pre-tailored score: {pre_score}%, Compiled PDF ATS score: {calc_post_score}%. Final score: {final_post_score}%")
                             except Exception as post_calc_err:
                                 print(f"[analyze_job] Post-tailoring score computation exception: {post_calc_err}")

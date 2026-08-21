@@ -313,6 +313,7 @@ async def analyze_job_fit(
     recruiter_name: Optional[str] = None,
     custom_api_key: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
+    user_selected_skills: Optional[List[str]] = None,
 ) -> AnalysisResponse:
     """
     Hybrid ATS scoring pipeline:
@@ -324,8 +325,23 @@ async def analyze_job_fit(
     jd_truncated = _truncate_jd(job_description)
 
     # ── Phase 1: Deterministic ATS scoring ──────────────────────────────────
-    # ── Phase 1: Deterministic ATS scoring ──────────────────────────────────
-    ats = compute_ats_score(resume_data, jd_truncated)
+    # If user selected added skills, incorporate them into a copy of resume_data so score reflects tailored profile
+    scoring_resume_data = resume_data
+    if user_selected_skills and len(user_selected_skills) > 0:
+        import copy
+        scoring_resume_data = copy.deepcopy(resume_data)
+        raw_s = scoring_resume_data.get("skills", [])
+        if isinstance(raw_s, dict):
+            # Add to first list or dedicated list
+            for cat, items in raw_s.items():
+                if isinstance(items, list):
+                    items.extend([s for s in user_selected_skills if s not in items])
+                    break
+        elif isinstance(raw_s, list):
+            raw_s.extend([s for s in user_selected_skills if s not in raw_s])
+            scoring_resume_data["skills"] = raw_s
+
+    ats = compute_ats_score(scoring_resume_data, jd_truncated)
 
     # Use getattr to prevent crashes if fields are missing from ATSScoreResult
     matched_count = getattr(ats, "matched_required_count", 0)
