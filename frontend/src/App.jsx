@@ -552,7 +552,11 @@ function App() {
     try {
       const res = await fetch(`${API_BASE}/auth/url`);
       const data = await res.json();
-      window.location.href = data.url;
+      if (data && data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error(data.detail || 'Google OAuth is not configured on this server.');
+      }
     } catch (err) {
       setStatusMessage(`OAuth failed: ${err.message}`);
       setLoading(false);

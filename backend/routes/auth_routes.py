@@ -25,8 +25,12 @@ class SubscriptionRequest(BaseModel):
     send_tailored_email: Optional[bool] = True
 
 @router.get("/auth/google")
+@router.get("/auth/url")
 async def auth_google():
-    return {"url": get_google_auth_url()}
+    auth_url = get_google_auth_url()
+    if not auth_url:
+        raise HTTPException(status_code=500, detail="Google OAuth client ID is not configured.")
+    return {"url": auth_url}
 
 @router.get("/auth/callback")
 async def auth_callback(code: str):
