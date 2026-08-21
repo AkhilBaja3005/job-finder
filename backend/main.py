@@ -1474,15 +1474,15 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
     if not session_resume_data:
         raise HTTPException(status_code=400, detail="Please upload a resume first.")
         
-    # Check cache early before starting the generator
-    if request.job_description:
+    # Check cache early before starting the generator (only if not forcing fresh tailoring)
+    if request.job_description and not request.force_tailoring:
         cached = get_cached_analysis(token, request.job_title, request.job_description)
         if cached:
             # Strip latex code if user requested skip_tailoring
             if request.skip_tailoring:
                 cached = dict(cached)
                 cached["latex_code"] = ""
-            elif not request.skip_tailoring:
+            elif not request.skip_tailoring and cached.get("latex_code"):
                 try:
                     entry_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company', 'Detecting company...']) else await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
                     safe_key = _safe_key(token)
@@ -1506,17 +1506,20 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     await _send_website_tailoring_email(token, session_resume_data, cached, request.job_title, entry_company, request.job_url, cached_overleaf, cached_pdf, request_send_email=request.send_email, source_mode=getattr(request, 'source_mode', 'website'))
                 except Exception as hist_err:
                     print(f"[analyze_job] Failed to record application history / email on cache hit: {hist_err}")
-            async def cached_event_generator():
-                yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
-                company_name = await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
-                yield json.dumps({
-                    "type": "result",
-                    "job_title": request.job_title,
-                    "job_description": request.job_description,
-                    "company": company_name,
-                    "analysis": cached
-                }) + "\n"
-            return StreamingResponse(cached_event_generator(), media_type="text/event-stream")
+
+            # Only short-circuit from cache if we were skipping tailoring OR if we actually have the compiled LaTeX code
+            if request.skip_tailoring or cached.get("latex_code"):
+                async def cached_event_generator():
+                    yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
+                    company_name = await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
+                    yield json.dumps({
+                        "type": "result",
+                        "job_title": request.job_title,
+                        "job_description": request.job_description,
+                        "company": company_name,
+                        "analysis": cached
+                    }) + "\n"
+                return StreamingResponse(cached_event_generator(), media_type="text/event-stream")
 
 
     async def event_generator():
