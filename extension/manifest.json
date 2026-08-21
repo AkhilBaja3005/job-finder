@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Job Finder ATS Tailor - Instant Application & Resume Assistant",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "In-page ATS Match scoring, Resume tailoring, Cover letter & outreach generator across LinkedIn, Indeed, Workday, Greenhouse, Lever, Micron, and all career sites.",
   "permissions": [
     "activeTab",

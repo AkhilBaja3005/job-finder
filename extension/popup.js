@@ -368,6 +368,10 @@ document.addEventListener("DOMContentLoaded", () => {
           })
         })
           .then(async (res) => {
+            if (!res.ok) {
+              const errJson = await res.json().catch(() => ({}));
+              throw new Error(errJson.detail || `Server error (${res.status})`);
+            }
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let buf = "";
@@ -415,7 +419,11 @@ document.addEventListener("DOMContentLoaded", () => {
             job_url: currentJobInfo.url
           })
         })
-          .then(res => res.json())
+          .then(async (res) => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || `Server error (${res.status})`);
+            return data;
+          })
           .then(data => {
             if (data.cover_letter) {
               activePreviewText = data.cover_letter;
@@ -450,7 +458,11 @@ document.addEventListener("DOMContentLoaded", () => {
             job_url: currentJobInfo.url || ""
           })
         })
-          .then(res => res.json())
+          .then(async (res) => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || `Server error (${res.status})`);
+            return data;
+          })
           .then(data => {
             const msg = data.message?.email_body || data.message?.linkedin_message || "Outreach generated!";
             activePreviewText = msg;
