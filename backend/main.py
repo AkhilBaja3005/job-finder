@@ -1265,7 +1265,7 @@ class RunContext:
     def get_summary(self) -> str:
         return f"Trace {self.run_id} finished in {time.time() - self.start:.2f}s across {len(self.steps)} steps."
 
-async def _send_website_tailoring_email(token: Optional[str], session_resume_data: dict, dumped_analysis: dict, job_title: str, company_name: str, job_url: Optional[str], overleaf_url: Optional[str], persistent_pdf_path: str, request_send_email: bool = False, source_mode: str = "website"):
+async def _send_website_tailoring_email(token: Optional[str], session_resume_data: dict, dumped_analysis: dict, job_title: str, company_name: str, job_url: Optional[str], overleaf_url: Optional[str], persistent_pdf_path: str, request_send_email: bool = False, source_mode: str = "website", pre_score: Optional[int] = None):
     """Helper to check user preference and dispatch website tailoring emails with PDF attachment."""
     print(f"[analyze_job] _send_website_tailoring_email called. token={bool(token)}, pdf_path={persistent_pdf_path}, exists={os.path.exists(persistent_pdf_path) if persistent_pdf_path else False}")
     if not token:
@@ -1296,8 +1296,13 @@ async def _send_website_tailoring_email(token: Optional[str], session_resume_dat
                 if ats_score_val is None:
                     ats_score_val = dumped_analysis.get("overall_score") or dumped_analysis.get("score")
             
-            score_suffix = f" [{ats_score_val}% Match]" if ats_score_val is not None else ""
-            ats_display = f"{ats_score_val}% Match" if ats_score_val is not None else "100% Match"
+            # Format ATS score with Before vs After comparison if increased
+            if pre_score is not None and ats_score_val is not None and ats_score_val > pre_score:
+                score_suffix = f" [{pre_score}% ➔ {ats_score_val}% Match (+{ats_score_val - pre_score}%)]"
+                ats_display = f"<span style='color: #64748B; text-decoration: line-through;'>{pre_score}%</span> ➔ <strong style='color: #10B981;'>{ats_score_val}% Match</strong> <span style='background: #DCFCE7; color: #15803D; font-size: 0.8rem; font-weight: 700; padding: 2px 6px; border-radius: 6px;'>+{ats_score_val - pre_score}% Boost</span>"
+            else:
+                score_suffix = f" [{ats_score_val}% Match]" if ats_score_val is not None else ""
+                ats_display = f"{ats_score_val}% Match" if ats_score_val is not None else "100% Match"
             
             is_ext = (source_mode == "extension") or request_send_email
             mode_title = "Extension Tailoring" if is_ext else "Website Tailoring"
@@ -1923,7 +1928,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
                 try:
                     pdf_to_send = persistent_pdf_path if "persistent_pdf_path" in locals() else None
-                    await _send_website_tailoring_email(token, session_resume_data, dumped, job_title, company_name, request.job_url, overleaf_url, pdf_to_send, request_send_email=request.send_email, source_mode=getattr(request, 'source_mode', 'website'))
+                    initial_score = pre_score if "pre_score" in locals() else None
+                    await _send_website_tailoring_email(token, session_resume_data, dumped, job_title, company_name, request.job_url, overleaf_url, pdf_to_send, request_send_email=request.send_email, source_mode=getattr(request, 'source_mode', 'website'), pre_score=initial_score)
                 except Exception as email_dispatch_err:
                     print(f"[analyze_job] Error calling _send_website_tailoring_email: {email_dispatch_err}")
 

@@ -205,8 +205,12 @@ RULE 2 — GPA / CPI / GRADES & EDUCATION HIGHLIGHTS (ZERO TOLERANCE):
   • Example: {{\\textit{{B.Tech in Engineering Science}}}} \\hfill {{\\em CPI: 8.04}} \\\\
   • EDUCATION LEADERSHIP & HIGHLIGHTS: Any leadership line under an education entry (e.g., "\\textit{{\\textbf{{Internship and Placement Cell Coordinator}} — Managed corporate outreach...}}") MUST be kept directly inside the Education section under that degree. Do NOT move it to Achievements or drop it.
 
-RULE 3 — SECTION & CONTENT COMPLETENESS & NESTED ITEMIZE FOR SUB-PROJECTS:
+RULE 3 — SECTION & CONTENT COMPLETENESS & FACTUAL PRESERVATION (ZERO TOLERANCE):
   • Preserve EVERY school, job, and project. Do NOT delete, rename, or merge any.
+  • PRESERVE ORIGINAL FACTUAL ACCOMPLISHMENTS & METRICS: 
+    - The candidate's original work experience bullets contain real quantified achievements and proprietary metrics (e.g. AST-based dependency extraction across Java/Python/C++, 46% accuracy boost, RabbitMQ async queues, 84% deployment failure cut, Isolation Forest £30M+ portfolio loss exposure, Dynamic Risk Rating).
+    - NEVER replace these specific technical achievements with vague generic summaries (e.g., do NOT turn "Isolation Forest anomaly detection model for Gold Loans flagging branch-level risk £30M+" into generic "Built anomaly detection models").
+    - Tailoring means emphasizing relevant technologies and naturally aligning terminology to the target role while KEEPING the specific facts, metrics, awards, and technical depths intact!
   • ABSOLUTE CRITICAL FOR SUB-PROJECTS (e.g. Quartz, DMAP, Argus): When a company experience entry has sub-projects/modules (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), NEVER duplicate the parent title on multiple \\item bullets!
   • You MUST render sub-projects using a nested itemize structure with dot bullets (e.g. \\begin{{itemize}}[label=\\textbullet]):
     \\item \\textbf{{Quartz (Context-as-a-Service \\& LLM Engineering):}}
@@ -216,14 +220,15 @@ RULE 3 — SECTION & CONTENT COMPLETENESS & NESTED ITEMIZE FOR SUB-PROJECTS:
     \\end{{itemize}}
   • NEVER output repeated standalone \\item bullets with duplicate sub-project title prefixes.
 
-RULE 4 — ONE-PAGE BUDGET, BOLDING & DEGREE TIMELINE ACCURACY (CRITICAL):
-  • DATE-AWARE DEGREE STATUS: Check the candidate's Education dates against current timeline.
-    - If an education entry has an ongoing/future end date (e.g. "Sept 2026 – Sept 2027"), the candidate is an ENROLLED CANDIDATE / PURSUING the degree.
-    - You MUST phrase it as: "MSc Candidate in Artificial Intelligence at Imperial College London" or "Currently pursuing an MSc in...".
-    - NEVER write "Holds an MSc" or "Graduated with an MSc" for an ongoing/future degree.
-    - Use "Holds a [Degree]" or "B.Tech from [Institution]" ONLY for degrees with completed past dates (e.g. "Aug 2019 – May 2023").
-  • Professional Summary MUST be placed at the top (below header), kept to 2-3 lines visually, avoiding weak phrases like "Strong foundation in...". Position primarily based on the candidate's actual master experience, domain, and target role.
-  • BOLDING RULES: You MUST automatically bold key technical models/frameworks, metrics (e.g. `\\textbf{{40\\%}}`), awards, and key institutions explicitly present in the candidate's text.
+RULE 4 — ONE-PAGE BUDGET, BOLDING & STUDENT/DEGREE TIMELINE ACCURACY (CRITICAL):
+  • STUDENT / DEGREE TIMELINE STATUS (ABSOLUTE TRUTHFULNESS):
+    - Check the candidate's Education timeline:
+      * Ongoing / Future Education (e.g. "Sept 2026 – Sept 2027" or "Oct 2024 – Present"): The candidate is currently a **Student / MSc Candidate / Postgraduate Scholar**.
+      * In the Professional Summary, NEVER write "Holds an MSc" or "Graduated with an MSc".
+      * ALWAYS phrase ongoing degrees as: "MSc Candidate in Artificial Intelligence at Imperial College London" or "Postgraduate Researcher in AI at Imperial College London".
+      * Completed Past Education (e.g. "Aug 2019 – May 2023"): Use "B.Tech graduate from IIT Hyderabad" or "B.Tech in Engineering Science from IIT Hyderabad".
+  • Professional Summary MUST be placed at the top (below header), kept to 2-3 lines visually, reflecting their exact student/graduate standing, actual professional years, and targeted domain skills.
+  • BOLDING RULES: You MUST automatically bold key technical models/frameworks, metrics (e.g. `\\textbf{{40\\%}}`, `\\textbf{{60\\%}}`, `\\textbf{{£30M+}}`), awards (e.g. `\\textbf{{[BIU Star Award]}}`), and key institutions explicitly present in the candidate's text.
   • The entire tailored resume MUST fit on exactly ONE page.
   • Write concise bullets using the Playbook formula: Action + Technology + Problem + Measurable Metric. Each bullet MUST occupy between 70% and 150% of one line.
   • Do NOT add extra \\vspace or \\newline commands.
