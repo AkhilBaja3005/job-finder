@@ -133,19 +133,22 @@ def apply_latex_hotfix(
     fixed = re.sub(r'\\usepackage\{(lmodern|helvet|palatino|charter|bookman|courier|marvosym)\}', '', fixed)
     fixed = re.sub(r'\\usepackage\[T1\]\{fontenc\}', '', fixed)
     fixed = re.sub(r'\\usepackage\{times\}', '', fixed)
-    if '\\usepackage{fontspec}' not in fixed:
-        doc_class_end = fixed.find('\n', fixed.find('\\documentclass'))
-        fontspec_preamble = (
-            "\\usepackage{fontspec}\n"
-            "\\IfFontExistsTF{Times New Roman}{\n"
-            "  \\setmainfont{Times New Roman}\n"
-            "}{\n"
-            "  \\IfFontExistsTF{Liberation Serif}{\n"
-            "    \\setmainfont{Liberation Serif}\n"
-            "  }{\\IfFontExistsTF{TeX Gyre Termes}{\\setmainfont{TeX Gyre Termes}}{}}\n"
-            "}\n"
-        )
-        fixed = fixed[:doc_class_end + 1] + fontspec_preamble + fixed[doc_class_end + 1:]
+    # Strip any existing or legacy fontspec blocks that might have referenced raw .otf files
+    fixed = re.sub(r'\\usepackage\{fontspec\}[\s\S]*?\\setmainfont\{[^\}]*\}(\[[^\]]*\])?(\{.*?\})?', '', fixed)
+    fixed = re.sub(r'\\IfFontExistsTF\{[^\}]+\}\{[\s\S]*?\}\{[\s\S]*?\}', '', fixed)
+    
+    doc_class_end = fixed.find('\n', fixed.find('\\documentclass'))
+    fontspec_preamble = (
+        "\\usepackage{fontspec}\n"
+        "\\IfFontExistsTF{Times New Roman}{\n"
+        "  \\setmainfont{Times New Roman}\n"
+        "}{\n"
+        "  \\IfFontExistsTF{Liberation Serif}{\n"
+        "    \\setmainfont{Liberation Serif}\n"
+        "  }{\\IfFontExistsTF{TeX Gyre Termes}{\\setmainfont{TeX Gyre Termes}}{}}\n"
+        "}\n"
+    )
+    fixed = fixed[:doc_class_end + 1] + fontspec_preamble + fixed[doc_class_end + 1:]
     if '\\usepackage{fontawesome}' not in fixed:
         fixed = fixed.replace('\\usepackage{fontspec}', '\\usepackage{fontspec}\n\\usepackage{fontawesome}')
     if '\\usepackage{xcolor}' not in fixed:
