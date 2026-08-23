@@ -1926,7 +1926,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                             shutil.copy2(compiled_pdf, persistent_pdf_path)
                             pdf_url = f"/download_application_pdf/{safe_key}/{persistent_filename}"
 
-                            # ── Recalculate post-tailoring PDF ATS score guarantee ──
+                            # ── Recalculate and validate post-tailoring PDF ATS score & skills guarantee ──
                             try:
                                 from services.resume_parser import parse_resume
                                 from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
@@ -1938,8 +1938,13 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                                 pre_score = dumped.get("match_analysis", {}).get("overall_score", 0)
                                 final_post_score = max(pre_score, calc_post_score)
                                 dumped["match_analysis"]["overall_score"] = final_post_score
+                                dumped["match_analysis"]["skills_score"] = max(dumped.get("match_analysis", {}).get("skills_score", 0), post_ats_res.skills_score)
+                                dumped["match_analysis"]["experience_score"] = max(dumped.get("match_analysis", {}).get("experience_score", 0), post_ats_res.experience_score)
+                                dumped["match_analysis"]["matched_skills"] = list(post_ats_res.matched_skills)
+                                dumped["match_analysis"]["missing_skills"] = list(post_ats_res.missing_skills)
                                 set_cached_analysis(token, job_title, jd_text, dumped)
                                 print(f"[analyze_job] Pre-tailored score: {pre_score}%, Compiled PDF ATS score: {calc_post_score}%. Final score: {final_post_score}%")
+                                print(f"[analyze_job] Validated Matched Skills in PDF: {post_ats_res.matched_skills}")
                             except Exception as post_calc_err:
                                 print(f"[analyze_job] Post-tailoring score computation exception: {post_calc_err}")
                 except Exception as pdf_compile_err:
