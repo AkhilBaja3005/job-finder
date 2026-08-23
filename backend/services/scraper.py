@@ -87,6 +87,108 @@ async def close_shared_browser():
         except Exception: pass
         _shared_playwright = None
 # ───────────────────────────────────────────────────────────────────────────
+# oc-style Semantic DOM Distillation Engine (Python)
+# ───────────────────────────────────────────────────────────────────────────
+
+def oc_distill_html(html_str: str, base_url: str = "") -> dict:
+    """
+    Distills raw HTML into a clean, noise-free Markdown job description
+    by pruning boilerplate (scripts, styles, SVGs, nav, headers, footers, cookie banners)
+    and isolating the high-density article/main job content.
+    """
+    if not html_str:
+        return {"title": "", "company": "", "description": "", "markdown": ""}
+
+    soup = BeautifulSoup(html_str, "html.parser")
+
+    # 1. Extract Title & Company from OpenGraph / Metadata before pruning
+    title = ""
+    company = ""
+
+    og_title = soup.find("meta", property="og:title") or soup.find("meta", attrs={"name": "twitter:title"})
+    if og_title and og_title.get("content"):
+        title = og_title["content"].split(" | ")[0].split(" - ")[0].strip()
+
+    og_site = soup.find("meta", property="og:site_name")
+    if og_site and og_site.get("content"):
+        company = og_site["content"].strip()
+
+    # 2. Prune junk tags
+    for junk in soup(["script", "style", "svg", "noscript", "iframe", "header", "footer", "nav", "meta", "link"]):
+        junk.decompose()
+
+    if not title:
+        h1 = soup.find("h1")
+        if h1:
+            title = h1.get_text().strip()
+
+    # 3. Locate Main Job Container
+    main_elem = None
+    target_selectors = [
+        "#job-details",
+        ".jobs-description__content",
+        "#jobDescriptionText",
+        "[data-automation-id='jobPostingDescription']",
+        "[data-ph-at-id='job-description']",
+        ".job-description",
+        ".job-details-description",
+        "article",
+        "main",
+        "[role='main']"
+    ]
+    for sel in target_selectors:
+        found = soup.select_one(sel)
+        if found and len(found.get_text(strip=True)) > 150:
+            main_elem = found
+            break
+
+    if not main_elem:
+        # Score content density among div/section candidates
+        best_elem = soup.body or soup
+        max_score = 0
+        for candidate in soup.find_all(["div", "section"]):
+            c_text = candidate.get_text(strip=True)
+            c_len = len(c_text)
+            if 300 < c_len < 25000:
+                p_count = len(candidate.find_all(["p", "li"]))
+                score = c_len * (1 + p_count * 0.1)
+                if score > max_score:
+                    max_score = score
+                    best_elem = candidate
+        main_elem = best_elem
+
+    # 4. Convert DOM to clean Markdown
+    lines = []
+    for elem in main_elem.descendants:
+        if elem.name in ["h1", "h2", "h3", "h4", "h5", "h6"]:
+            lvl = int(elem.name[1])
+            txt = elem.get_text().strip()
+            if txt:
+                lines.append(f"\n\n{'#' * lvl} {txt}\n")
+        elif elem.name == "li":
+            txt = elem.get_text().strip()
+            if txt:
+                lines.append(f"\n• {txt}")
+        elif elem.name == "p":
+            txt = elem.get_text().strip()
+            if txt:
+                lines.append(f"\n\n{txt}\n")
+        elif elem.name == "br":
+            lines.append("\n")
+
+    if lines:
+        distilled = "".join(lines)
+    else:
+        distilled = main_elem.get_text(separator="\n")
+
+    cleaned_md = re.sub(r'\n{3,}', '\n\n', distilled).strip()
+    return {
+        "title": title or "Target Job",
+        "company": company or "",
+        "description": cleaned_md,
+        "markdown": cleaned_md
+    }
+
 
 async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     """
@@ -256,9 +358,10 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                                 jdata = json.loads(raw_data)
                                 if isinstance(jdata, dict) and jk in jdata:
                                     html_desc = jdata[jk]
-                                    parsed_text = BeautifulSoup(html_desc, "html.parser").get_text(separator="\n").strip()
+                                    distilled = oc_distill_html(html_desc, url)
+                                    parsed_text = distilled["description"] or BeautifulSoup(html_desc, "html.parser").get_text(separator="\n").strip()
                                     if len(parsed_text) > 50:
-                                        log_ist(f"[Scraper] ⚡ Instantly fetched Indeed JD via Mobile API for JK: {jk}")
+                                        log_ist(f"[Scraper] ⚡ Instantly distilled Indeed JD via oc-engine for JK: {jk}")
                                         return {
                                             "title": "Indeed Job",
                                             "description": parsed_text,

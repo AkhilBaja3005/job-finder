@@ -1379,33 +1379,48 @@ class ExtensionParseJobRequest(BaseModel):
 
 @app.post("/extension/parse_job_details")
 async def parse_job_details_endpoint(request: ExtensionParseJobRequest):
-    """Extract exact Company, Job Title & full JD via LinkedIn/Indeed Guest API for Chrome Extension popup."""
+    """Extract exact Company, Job Title & full JD for Chrome Extension popup without redundant re-scraping."""
     title = request.page_title or ""
     company = ""
     description = request.page_text or ""
     
-    # 1. Try fast LinkedIn / Indeed Guest REST API if URL is provided
-    if request.page_url and ("linkedin.com/jobs" in request.page_url or "indeed.com" in request.page_url):
+    # Only scrape on the backend if frontend extraction was empty
+    if not description and request.page_url and ("linkedin.com/jobs" in request.page_url or "indeed.com" in request.page_url):
         try:
             from services.scraper import scrape_job_description
             scraped = await scrape_job_description(request.page_url)
             if scraped and scraped.get("description"):
-                if scraped.get("title") and scraped.get("title") != "LinkedIn Job":
+                if scraped.get("title") and scraped.get("title") not in ["LinkedIn Job", "Indeed Job"]:
                     title = scraped.get("title")
                 if scraped.get("company"):
                     company = scraped.get("company")
                 if scraped.get("description") and len(scraped.get("description")) > 100:
                     description = scraped.get("description")
-                print(f"[/extension/parse_job_details] ⚡ Enriched via Guest API: {company} - {title}")
+                print(f"[/extension/parse_job_details] ⚡ Enriched via Backend Scraper: {company} - {title}")
         except Exception as e:
-            print(f"[/extension/parse_job_details] Guest API enrichment warning: {e}")
+            print(f"[/extension/parse_job_details] Backend Scraper enrichment warning: {e}")
 
-    # 2. Fallback to URL regex / LLM company extraction if guest API did not find company
+    # Extract company from URL / JD text if not yet identified
     if not company and request.page_url:
         company = await asyncio.to_thread(_extract_company_from_jd, description, request.page_url)
     if not company and description:
         company = await asyncio.to_thread(_extract_company_from_jd, description, None)
         
+    # Filter out invalid titles falsely captured from auth buttons
+    invalid_titles = {"sign in", "log in", "login", "register", "apply now", "menu", "search", "indeed", "linkedin", "apple"}
+    if title.lower() in invalid_titles or not title.strip():
+        # Fallback: extract title from URL or description
+        if request.page_url and "indeed.com" in request.page_url:
+            from services.scraper import scrape_job_description
+            try:
+                scraped = await scrape_job_description(request.page_url)
+                if scraped and scraped.get("title") and scraped.get("title").lower() not in invalid_titles:
+                    title = scraped.get("title")
+            except Exception:
+                pass
+        if title.lower() in invalid_titles:
+            title = "Target Role"
+
     return {
         "job_title": title,
         "company": company or "Hiring Company",
@@ -1877,8 +1892,9 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 # Compile LaTeX to PDF and store persistent copy for Application History viewing/downloading
                 try:
                     tex_path, temp_pdf_path = _user_output_paths(token)
+                    fixed_latex = apply_latex_hotfix(analysis.latex_code)
                     with open(tex_path, "w", encoding="utf-8") as f:
-                        f.write(analysis.latex_code)
+                        f.write(fixed_latex)
                     
                     safe_key = _safe_key(token)
                     _, user_out_dir = _get_user_storage_dirs(safe_key)
@@ -1896,13 +1912,15 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     )
                     print(f"[analyze_job] Tectonic compilation returncode={comp_res.returncode}. temp_pdf_path={temp_pdf_path} exists={os.path.exists(temp_pdf_path)}")
                     if comp_res.returncode == 0:
+                        compiled_pdf = None
                         if os.path.exists(temp_pdf_path):
                             compiled_pdf = temp_pdf_path
-                        else:
-                            # Fallback if tectonic generated expected filename
+                        elif os.path.exists(tex_path.replace(".tex", ".pdf")):
                             compiled_pdf = tex_path.replace(".tex", ".pdf")
+                        elif os.path.exists(os.path.join(user_out_dir, os.path.basename(tex_path).replace(".tex", ".pdf"))):
+                            compiled_pdf = os.path.join(user_out_dir, os.path.basename(tex_path).replace(".tex", ".pdf"))
 
-                        if os.path.exists(compiled_pdf):
+                        if compiled_pdf and os.path.exists(compiled_pdf):
                             persistent_filename = f"tailored_{safe_key}_{int(time.time())}.pdf"
                             persistent_pdf_path = os.path.join(user_out_dir, persistent_filename)
                             shutil.copy2(compiled_pdf, persistent_pdf_path)

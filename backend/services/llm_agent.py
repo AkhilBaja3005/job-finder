@@ -71,10 +71,17 @@ def _strip_latex_commands(text: str) -> str:
     return text
 
 def _truncate_jd(jd: str, max_chars: int = 3000) -> str:
-    """Truncate job description to avoid ballooning prompt size from scraped HTML noise."""
+    """
+    Truncate and clean job description using oc-style distillation rules
+    to avoid ballooning prompt tokens from scraped boilerplate.
+    """
     if not jd:
         return ""
-    return jd[:max_chars] if len(jd) > max_chars else jd
+    # Strip common boilerplate tracking strings, cookie notices, and excessive whitespace
+    cleaned = re.sub(r'data:image/[^;]+;base64,[A-Za-z0-9+/=]+', '', jd)
+    cleaned = re.sub(r'(?:Cookie Policy|Privacy Notice|Manage Preferences|Terms and Conditions|All rights reserved).*$', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
+    return cleaned[:max_chars] if len(cleaned) > max_chars else cleaned
 
 def _parse_llm_json(raw_text: str, label: str = "LLM JSON") -> dict:
     """

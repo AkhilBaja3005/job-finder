@@ -166,28 +166,6 @@ def send_notification_email(
             print(f"[Mailer] Cloudflare API failed with status {resp.status_code}: {resp.text}")
         except Exception as e:
             print(f"[Mailer] Cloudflare API exception: {e}")
-        try:
-            url = "https://api.brevo.com/v3/smtp/email"
-            headers = {
-                "api-key": brevo_api_key,
-                "Content-Type": "application/json"
-            }
-            from_addr = os.getenv("EMAIL_FROM", os.getenv("SMTP_USER", "noreply@jobfinder.app"))
-            payload = {
-                "sender": {"email": from_addr, "name": "Job Finder"},
-                "to": [{"email": to_email}],
-                "subject": subject,
-                "textContent": text_body
-            }
-            if html_body:
-                payload["htmlContent"] = html_body
-            resp = requests.post(url, headers=headers, json=payload, timeout=15)
-            if resp.status_code in (200, 201):
-                print("[Mailer] Sent successfully via Brevo REST API.")
-                return True
-            print(f"[Mailer] Brevo API failed with status {resp.status_code}: {resp.text}")
-        except Exception as e:
-            print(f"[Mailer] Brevo API exception: {e}")
 
     # 4. Standard SMTP Fallback (Gmail App Password)
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
