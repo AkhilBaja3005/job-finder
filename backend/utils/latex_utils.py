@@ -127,15 +127,11 @@ def apply_latex_hotfix(
         fixed,
     )
 
-    # ── Fontspec + FontAwesome Setup with System Font Fallback ─────────────
-    # Allows \faEnvelope, \faLinkedinSquare, \faMapMarker, \faPhone, \faGithub
-    # while preserving Times Roman bold. Uses \IfFontExistsTF so it never fails on Linux/HF.
-    fixed = re.sub(r'\\usepackage\{(lmodern|helvet|palatino|charter|bookman|courier|marvosym)\}', '', fixed)
-    fixed = re.sub(r'\\usepackage\[T1\]\{fontenc\}', '', fixed)
-    fixed = re.sub(r'\\usepackage\{times\}', '', fixed)
-    # Strip any existing or legacy fontspec blocks that might have referenced raw .otf files
-    fixed = re.sub(r'\\usepackage\{fontspec\}[\s\S]*?\\setmainfont\{[^\}]*\}(\[[^\]]*\])?(\{.*?\})?', '', fixed)
-    fixed = re.sub(r'\\IfFontExistsTF\{[^\}]+\}\{[\s\S]*?\}\{[\s\S]*?\}', '', fixed)
+    # ── Clean Preamble Font Packages ───────────────────────────────────────
+    # Remove any existing font packages and old fontspec/IfFontExistsTF configurations cleanly
+    fixed = re.sub(r'\\usepackage\{(lmodern|helvet|palatino|charter|bookman|courier|marvosym|times|fontspec|fontawesome|xcolor|hyperref)\}', '', fixed)
+    fixed = re.sub(r'\\usepackage\[[^\]]*\]\{(fontenc|geometry|hyperref)\}', '', fixed)
+    fixed = re.sub(r'\\IfFontExistsTF\{[^\}]+\}\s*\{[^{}]*(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}[^{}]*)*\}\s*\{[^{}]*(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}[^{}]*)*\}', '', fixed)
     
     doc_class_end = fixed.find('\n', fixed.find('\\documentclass'))
     fontspec_preamble = (
