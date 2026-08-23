@@ -95,12 +95,17 @@ def apply_latex_hotfix(
                     flags=re.DOTALL
                 )
 
-    # ── Ensure \address{...} is converted to \printaddress{...} inside \begin{document} to prevent Tectonic compilation errors ──
+    # ── Ensure \name and \address render cleanly with \printaddress inside \begin{document} ──
     addr_block = extract_latex_command(fixed, "\\address")
     if addr_block:
-        print_addr_str = addr_block.replace("\\address{", "\\printaddress{")
+        clean_addr = addr_block.replace("\\address{", "\\printaddress{")
         fixed = fixed.replace(addr_block, "")
-        fixed = fixed.replace("\\begin{document}", "\\begin{document}\n" + print_addr_str, 1)
+        fixed = fixed.replace("\\begin{document}", "\\begin{document}\n" + clean_addr, 1)
+
+    name_block = extract_latex_command(fixed, "\\name")
+    if name_block and fixed.find(name_block) > fixed.find("\\begin{document}"):
+        fixed = fixed.replace(name_block, "")
+        fixed = fixed.replace("\\begin{document}", name_block + "\n\\begin{document}", 1)
 
     # ── Strip any existing spacing def overrides (we re-inject below) ────────
     for pattern in [
@@ -143,6 +148,16 @@ def apply_latex_hotfix(
         fixed = fixed[:doc_class_end + 1] + fontspec_preamble + fixed[doc_class_end + 1:]
     if '\\usepackage{fontawesome}' not in fixed:
         fixed = fixed.replace('\\usepackage{fontspec}', '\\usepackage{fontspec}\n\\usepackage{fontawesome}')
+    if '\\usepackage{xcolor}' not in fixed:
+        fixed = fixed.replace('\\usepackage{fontawesome}', '\\usepackage{fontawesome}\n\\usepackage{xcolor}')
+    if '\\usepackage{hyperref}' not in fixed and '\\usepackage[hidelinks]{hyperref}' not in fixed:
+        fixed = fixed.replace('\\usepackage{xcolor}', '\\usepackage{xcolor}\n\\usepackage[hidelinks]{hyperref}')
+    if '\\newcommand\\mybar' not in fixed:
+        mybar_def = "\\newcommand\\mybar{\\kern1pt\\rule[-\\dp\\strutbox]{.8pt}{\\baselineskip}\\kern1pt}\n"
+        fixed = fixed.replace('\\begin{document}', mybar_def + '\\begin{document}')
+    if '\\renewcommand{\\labelitemi}' not in fixed:
+        bullet_def = "\\renewcommand{\\labelitemi}{$\\bullet$}\n\\renewcommand{\\labelitemii}{$\\bullet$}\n"
+        fixed = fixed.replace('\\begin{document}', bullet_def + '\\begin{document}')
     # Standardize marvosym fallback back to FontAwesome
     fixed = re.sub(r'\\Letter\\\s*', r'\\faEnvelope\ ', fixed)
     fixed = re.sub(r'\\Telefon\\\s*', r'\\faPhone\ ', fixed)
