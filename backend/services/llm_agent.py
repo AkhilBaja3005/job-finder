@@ -607,6 +607,7 @@ def review_tailored_resume(
 
     computed_years, avg_tenure, weighted_segments, _ = calculate_flattened_experience(original_resume_data)
     
+    approved_user_skills_str = ", ".join(user_selected_skills) if user_selected_skills else "None"
 
     # Formulate a clean profile snapshot for validation. Include full
     # experience/project bullets (not just company+role) — the reviewer's
@@ -646,12 +647,15 @@ def review_tailored_resume(
 The resume has already passed all structural checks (grades, schools, companies, projects all present).
 Evaluate the QUALITY of the tailored resume by comparing it against both the target Job Description (JD) and the candidate's original Profile.
 
+USER EXPLICITLY APPROVED SKILLS: [{approved_user_skills_str}]
+(The candidate has manually selected and authorized these skills for inclusion. You MUST ACCEPT these skills as authentic and NEVER flag them as untruthful or fabricated!)
+
 QUALITY RUBRIC — evaluate each item independently and set its boolean field accordingly:
 1. ats_fit_ok: Are the top 3-5 job keywords from the JD naturally integrated into experience/skill bullets?
    (Check for contextual use, NOT verbatim copy-paste from JD. NOTE: If the JD excerpt below is empty or not provided, automatically set ats_fit_ok = true.)
 2. impact_metrics_ok: Do the majority of bullets contain at least one quantified result (%, numbers, scale)?
 3. truthfulness_ok: Does tailored content stay within the candidate's real background?
-   - The CANDIDATE ORIGINAL PROFILE below — including each job's/project's "bullets" field —
+   - The CANDIDATE ORIGINAL PROFILE below — including each job's/project's "bullets" field and the USER EXPLICITLY APPROVED SKILLS list above —
      is the FULL ground truth of the candidate's real experience. A skill or tool is
      NOT fabricated if it appears ANYWHERE in the profile, including inside bullets,
      even if it is not also listed in the flat "skills" array.
