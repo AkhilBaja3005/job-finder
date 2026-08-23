@@ -29,6 +29,11 @@ SKILL_ALIASES: Dict[str, List[str]] = {
     "computer vision":     ["computer vision", "image recognition", "object detection"],
     "generative ai":       ["generative ai", "gen ai", "genai", "diffusion model"],
     "rag":                 ["rag", "retrieval augmented generation", "retrieval-augmented"],
+    "agentic ai":          ["agentic ai", "ai agents", "agentic workflows", "multi-agent"],
+    "vector databases":    ["vector database", "vector databases", "vector db", "pinecone", "weaviate", "qdrant", "chromadb", "faiss", "milvus"],
+    "semantic search":     ["semantic search", "embedding", "embeddings", "vector search"],
+    "openai":              ["openai", "chatgpt", "gpt-4", "gpt-4o", "gpt-3.5"],
+    "claude":              ["claude", "anthropic"],
     "fine-tuning":         ["fine-tuning", "finetuning", "lora", "qlora", "peft"],
     "pytorch":             ["pytorch", "torch"],
     "tensorflow":          ["tensorflow", "tf", "keras"],
@@ -92,7 +97,7 @@ SKILL_ALIASES: Dict[str, List[str]] = {
     "figma":                ["figma"],
     "sketch":               ["sketch"],
     "adobe creative suite": ["adobe creative suite", "photoshop", "illustrator", "indesign", "adobe xd"],
-    "wireframing":          ["wireframing", "wireframes", "prototyping", "prototype"],
+    "wireframing":          ["wireframing", "wireframes", "wireframe"],
     "design systems":       ["design system", "design systems", "component library"],
 
     # ── Marketing ────────────────────────────────────────────────────────

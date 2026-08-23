@@ -133,18 +133,10 @@ def apply_latex_hotfix(
         fontspec_preamble = (
             "\\usepackage{fontspec}\n"
             "\\IfFontExistsTF{Times New Roman}{\n"
-            "  \\setmainfont{Times New Roman}[\n"
-            "    BoldFont={Times New Roman Bold},\n"
-            "    ItalicFont={Times New Roman Italic},\n"
-            "    BoldItalicFont={Times New Roman Bold Italic}\n"
-            "  ]\n"
+            "  \\setmainfont{Times New Roman}\n"
             "}{\n"
-            "  \\IfFontExistsTF{texgyretermes-regular.otf}{\n"
-            "    \\setmainfont{texgyretermes-regular.otf}[\n"
-            "      BoldFont={texgyretermes-bold.otf},\n"
-            "      ItalicFont={texgyretermes-italic.otf},\n"
-            "      BoldItalicFont={texgyretermes-bolditalic.otf}\n"
-            "    ]\n"
+            "  \\IfFontExistsTF{Liberation Serif}{\n"
+            "    \\setmainfont{Liberation Serif}\n"
             "  }{\\IfFontExistsTF{TeX Gyre Termes}{\\setmainfont{TeX Gyre Termes}}{}}\n"
             "}\n"
         )
@@ -397,18 +389,10 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
     latex.append("\\documentclass[12pt]{resume}")
     latex.append("\\usepackage{fontspec}")
     latex.append("\\IfFontExistsTF{Times New Roman}{")
-    latex.append("  \\setmainfont{Times New Roman}[")
-    latex.append("    BoldFont={Times New Roman Bold},")
-    latex.append("    ItalicFont={Times New Roman Italic},")
-    latex.append("    BoldItalicFont={Times New Roman Bold Italic}")
-    latex.append("  ]")
+    latex.append("  \\setmainfont{Times New Roman}")
     latex.append("}{")
-    latex.append("  \\IfFontExistsTF{texgyretermes-regular.otf}{")
-    latex.append("    \\setmainfont{texgyretermes-regular.otf}[")
-    latex.append("      BoldFont={texgyretermes-bold.otf},")
-    latex.append("      ItalicFont={texgyretermes-italic.otf},")
-    latex.append("      BoldItalicFont={texgyretermes-bolditalic.otf}")
-    latex.append("    ]")
+    latex.append("  \\IfFontExistsTF{Liberation Serif}{")
+    latex.append("    \\setmainfont{Liberation Serif}")
     latex.append("  }{\\IfFontExistsTF{TeX Gyre Termes}{\\setmainfont{TeX Gyre Termes}}{}}")
     latex.append("}")
     latex.append("\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{geometry}")
