@@ -1866,6 +1866,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             overleaf_url = None
             pdf_url = None
+            persistent_pdf_path = None
             if analysis.latex_code:
                 try:
                     candidate_name = session_resume_data.get("name", "") if isinstance(session_resume_data, dict) else ""

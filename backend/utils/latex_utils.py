@@ -55,10 +55,6 @@ def apply_latex_hotfix(
     """
     fixed = code
 
-    # ── Ensure Overleaf defaults to XeLaTeX compiler automatically ──────────────
-    if "% !TEX program = xelatex" not in fixed:
-        fixed = "% !TEX program = xelatex\n" + fixed
-
     # ── Strip conversational intro/outro ─────────────────────────────────────
     doc_class_idx = fixed.find("\\documentclass")
     if doc_class_idx != -1:
@@ -66,6 +62,12 @@ def apply_latex_hotfix(
     end_doc_idx = fixed.find("\\end{document}")
     if end_doc_idx != -1:
         fixed = fixed[:end_doc_idx + len("\\end{document}")]
+
+    # ── Ensure Overleaf & TeX engines default to XeLaTeX compiler automatically ──
+    # Magic comments like % !TEX TS-program = xelatex MUST be on line 1 before \documentclass
+    magic_comment = "% !TEX TS-program = xelatex\n% !TEX program = xelatex\n% !TEX encoding = UTF-8 Unicode\n"
+    if "% !TEX TS-program = xelatex" not in fixed:
+        fixed = magic_comment + fixed
 
     # ── Restore \\name, \\address, and categorized Technical Skills from master verbatim ────────────────────
     if master_latex:
