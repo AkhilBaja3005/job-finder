@@ -86,7 +86,7 @@ SKILL_ALIASES: Dict[str, List[str]] = {
     "product management":  ["product management", "product manager", "product owner"],
     "roadmapping":          ["roadmapping", "product roadmap", "product strategy"],
     "user research":        ["user research", "usability testing", "customer interviews"],
-    "rapid prototyping":    ["rapid prototyping", "proof of concept", "poc development"],
+    "rapid prototyping":    ["rapid prototyping", "prototyping", "prototype", "prototypes", "proof of concept", "poc development", "prototype development"],
     "a/b testing":          ["a/b testing", "ab testing", "split testing", "experimentation"],
     "jira":                 ["jira", "confluence"],
     "product analytics":    ["product analytics", "amplitude", "mixpanel", "pendo"],
