@@ -135,6 +135,7 @@ def apply_latex_hotfix(
     
     doc_class_end = fixed.find('\n', fixed.find('\\documentclass'))
     fontspec_preamble = (
+        "\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.20in]{geometry}\n"
         "\\usepackage{fontspec}\n"
         "\\IfFontExistsTF{Times New Roman}{\n"
         "  \\setmainfont{Times New Roman}\n"
@@ -166,14 +167,14 @@ def apply_latex_hotfix(
     if linespread != 1.0:
         spacing_overrides.append(f"\\linespread{{{linespread:.2f}}}\\selectfont")
     if spacing_scale != 1.0:
-        sec_skip = max(0.2, 0.45 * spacing_scale)
-        sec_line_skip = max(0.1, 0.25 * spacing_scale)
-        name_sk = max(0.2, 0.45 * spacing_scale)
-        addr_sk = max(0.2, 0.45 * spacing_scale)
-        spacing_overrides.append(f"\\def\\sectionskip{{{sec_skip:.2f}em}}")
-        spacing_overrides.append(f"\\def\\sectionlineskip{{{sec_line_skip:.2f}em}}")
-        spacing_overrides.append(f"\\def\\nameskip{{{name_sk:.2f}em}}")
-        spacing_overrides.append(f"\\def\\addressskip{{{addr_sk:.2f}em}}")
+        sec_skip = max(0.15, 0.35 * spacing_scale)
+        sec_line_skip = max(0.08, 0.18 * spacing_scale)
+        name_sk = max(0.15, 0.30 * spacing_scale)
+        addr_sk = max(0.10, 0.20 * spacing_scale)
+        spacing_overrides.append(f"\\def\\sectionskip{{\\vspace{{{sec_skip:.2f}em}}}}")
+        spacing_overrides.append(f"\\def\\sectionlineskip{{\\vspace{{{sec_line_skip:.2f}em}}}}")
+        spacing_overrides.append(f"\\def\\nameskip{{\\vspace{{{name_sk:.2f}em}}}}")
+        spacing_overrides.append(f"\\def\\addressskip{{\\vspace{{{addr_sk:.2f}em}}}}")
 
     if spacing_overrides:
         fixed = fixed.replace("\\begin{document}", "\\begin{document}\n" + "\n".join(spacing_overrides), 1)
@@ -266,9 +267,6 @@ def apply_latex_hotfix(
     ach_sec_pattern = r'\\begin\{rSection\}\{Achievements\s*\\?&\s*Leadership\}\s*\\begin\{itemize\}.*?\\end\{itemize\}\s*\\end\{rSection\}'
     fixed = re.sub(ach_sec_pattern, '', fixed, flags=re.DOTALL)
 
-    # ── Replace bare tildes (~40% → \textasciitilde40%) ───────────────────────
-    fixed = re.sub(r'~\s*(?=\d|\\textbf|\{\\bf)', r'\\textasciitilde ', fixed)
-
     # ── Auto-bold Inline Awards, Honors & Certificates generically if LLM missed \textbf{} ──
     award_patterns = [
         r'(?<!\\textbf\{)([A-Z][A-Za-z0-9\s]{2,40}\s+Award\b)(?!\})',
@@ -279,6 +277,23 @@ def apply_latex_hotfix(
     ]
     for pat in award_patterns:
         fixed = re.sub(pat, r'\\textbf{\1}', fixed)
+
+    # ── Auto-bold metrics, percentages, currencies and quantified figures ──────
+    def _bold_metrics_in_body(match):
+        block = match.group(0)
+        # Avoid bolding inside command arguments or environments that should not be touched
+        parts = re.split(r'(\\textbf\{[^{}]*\}|\\href\{[^{}]*\}\{[^{}]*\}|\\begin\{rSection\}\{Technical\s+Skills\}.*?\\end\{rSection\})', block, flags=re.DOTALL)
+        for i in range(len(parts)):
+            if not parts[i].startswith(('\\textbf{', '\\href{', '\\begin{rSection}{Technical Skills}')):
+                # Bold percentages: 60%, 46%, ~40%, \sim40%, +12%
+                parts[i] = re.sub(r'(?<!\\textbf\{)(?<!\w)((\~|\\sim\s*|\+)?\d+(?:\.\d+)?\\%)(?!\})', r'\\textbf{\1}', parts[i])
+                # Bold currencies and scale amounts: £30M+, $10M+, 2M+, 1,000+, 200+, 5,000+
+                parts[i] = re.sub(r'(?<!\\textbf\{)(?<!\w)([£\$]\d+(?:\.\d+)?[MKB]?\+?|\b\d+(?:,\d{3})+\+?|\b\d+[MKB]\+?)(?!\w)(?!\})', r'\\textbf{\1}', parts[i])
+        return "".join(parts)
+
+    doc_start = fixed.find('\\begin{document}')
+    if doc_start != -1:
+        fixed = fixed[:doc_start] + _bold_metrics_in_body(re.search(r'\\begin\{document\}.*', fixed, re.DOTALL))
 
     # ── Inject user-selected skills directly into Technical Skills section (bypassing LLM review) ──
     if user_selected_skills and len(user_selected_skills) > 0:
