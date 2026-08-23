@@ -278,17 +278,37 @@ def apply_latex_hotfix(
     for pat in award_patterns:
         fixed = re.sub(pat, r'\\textbf{\1}', fixed)
 
-    # ── Auto-bold metrics, percentages, currencies and quantified figures ──────
+    # ── Auto-bold metrics, percentages, currencies, dynamic companies & schools ──
     def _bold_metrics_in_body(match):
         block = match.group(0)
         # Avoid bolding inside command arguments or environments that should not be touched
         parts = re.split(r'(\\textbf\{[^{}]*\}|\\href\{[^{}]*\}\{[^{}]*\}|\\begin\{rSection\}\{Technical\s+Skills\}.*?\\end\{rSection\})', block, flags=re.DOTALL)
+        
+        # Dynamically discover candidate employers & institutions from the resume itself
+        dynamic_entities = set()
+        if master_latex:
+            # Extract employer names from {\bf Company} \hfill
+            for emp in re.findall(r'\{\\bf\s+([^{}\\]+)\}\s*\\mybar|\{\\bf\s+([^{}\\]+)\}\s*\\hfill', master_latex):
+                for name in emp:
+                    if name and len(name.strip()) > 2 and not name.strip().lower().startswith(('software', 'data', 'engineer', 'lead', 'senior')):
+                        dynamic_entities.add(name.strip())
+        
+        # Also extract employers and schools present in this LaTeX block
+        for emp in re.findall(r'\{\\bf\s+([^{}\\]+)\}\s*\\mybar|\{\\bf\s+([^{}\\]+)\}\s*\\hfill', fixed):
+            for name in emp:
+                if name and len(name.strip()) > 2 and not name.strip().lower().startswith(('software', 'data', 'engineer', 'lead', 'senior')):
+                    dynamic_entities.add(name.strip())
+
         for i in range(len(parts)):
             if not parts[i].startswith(('\\textbf{', '\\href{', '\\begin{rSection}{Technical Skills}')):
                 # Bold percentages: 60%, 46%, ~40%, \sim40%, +12%
                 parts[i] = re.sub(r'(?<!\\textbf\{)(?<!\w)((\~|\\sim\s*|\+)?\d+(?:\.\d+)?\\%)(?!\})', r'\\textbf{\1}', parts[i])
                 # Bold currencies and scale amounts: £30M+, $10M+, 2M+, 1,000+, 200+, 5,000+
                 parts[i] = re.sub(r'(?<!\\textbf\{)(?<!\w)([£\$]\d+(?:\.\d+)?[MKB]?\+?|\b\d+(?:,\d{3})+\+?|\b\d+[MKB]\+?)(?!\w)(?!\})', r'\\textbf{\1}', parts[i])
+                # Bold dynamically extracted candidate employers & schools
+                for entity in sorted(dynamic_entities, key=len, reverse=True):
+                    pat = r'(?<!\\textbf\{)(?<!\w)(' + re.escape(entity) + r')(?!\w)(?!\})'
+                    parts[i] = re.sub(pat, r'\\textbf{\1}', parts[i])
         return "".join(parts)
 
     doc_start = fixed.find('\\begin{document}')
@@ -363,16 +383,9 @@ def _format_bullet_bolding(text: str, dynamic_skills: Optional[List[str]] = None
     parts = re.split(r'(\\textbf\{[^{}]*\})', t)
     for i in range(len(parts)):
         if not parts[i].startswith('\\textbf{'):
-            # Bold percentage metrics, currencies, scale numbers
-            parts[i] = re.sub(r'(?<!\w)(\d+(?:\.\d+)?%|\$[\d\.]+[MKB]?\+?|£[\d\.]+[MKB]?\+?|\b\d+(?:,\d{3})+\+?|\b\d+[MK]|\b\d+Cr\+?|\b\d+\+)(?!\w)', r'\\textbf{\1}', parts[i])
-            # Bold explicit key models, regulatory bodies, and frameworks requested in system rules
-            explicit_bold_terms = ["RBI", "Reserve Bank of India", "XGBoost", "Naive Bayes", "Isolation Forest", "Azure OpenAI", "Cloudera ML"]
-            for term in sorted(explicit_bold_terms, key=len, reverse=True):
-                pattern = r'(?<!\\textbf\{)(?<!\w)(' + re.escape(term) + r')(?!\w)(?!\})'
-                parts[i] = re.sub(pattern, r'\\textbf{\1}', parts[i])
             # Bold dynamic skills extracted from candidate profile
-            for kw in keywords_to_bold:
-                pattern = r'(?<!\w)(' + re.escape(kw) + r')(?!\w)'
+            for kw in sorted(keywords_to_bold, key=len, reverse=True):
+                pattern = r'(?<!\\textbf\{)(?<!\w)(' + re.escape(kw) + r')(?!\w)(?!\})'
                 parts[i] = re.sub(pattern, r'\\textbf{\1}', parts[i])
     t = "".join(parts)
 
