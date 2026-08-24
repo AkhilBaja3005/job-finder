@@ -510,7 +510,9 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
     url_cache_key = f"jd_scrape_{hashlib.md5(job.url.encode('utf-8')).hexdigest()}"
     cached_scraped = _job_search_cache.get(url_cache_key)
 
-    if cached_scraped:
+    if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 50:
+        scraped = {"description": job.full_description, "title": job.title, "company": job.company}
+    elif cached_scraped:
         scraped = cached_scraped
     else:
         async with semaphore:
@@ -683,13 +685,37 @@ async def find_matching_jobs(
 
     # Determine target country for clean user status logs
     target_country = resolve_location_country(location)
-    platform_label = "LinkedIn, Indeed & Reed.co.uk" if target_country == "GB" else "LinkedIn & Indeed"
+    platform_label = "LinkedIn, Indeed, Reed, Greenhouse, Ashby & Lever"
+
+    # Concurrently scan configured target portals (Greenhouse, Ashby, Lever)
+    yield json.dumps({"type": "log", "message": "🌐 Scanning target ATS Portals (Greenhouse, Ashby, Lever)..."}) + " " * 2048 + "\n"
+    portal_jobs_raw = []
+    try:
+        from services.portal_scanner import PortalScanner
+        scanner = PortalScanner()
+        portal_results = await scanner.scan_all_portals(target_keywords=queries)
+        for pj in portal_results:
+            p_obj = JobSearchResult(
+                title=pj.get("title", ""),
+                company=pj.get("company", ""),
+                location=pj.get("location", "Remote/Unspecified"),
+                url=pj.get("url", ""),
+                platform=pj.get("portal", "Portal").title(),
+                post_date_raw="Active",
+                job_id=pj.get("id", hashlib.md5(pj.get("url", "").encode()).hexdigest()[:10])
+            )
+            # Store full description directly so no browser fetch is needed!
+            p_obj.full_description = pj.get("description", "")
+            portal_jobs_raw.append(p_obj)
+        yield json.dumps({"type": "log", "message": f"✓ Discovered {len(portal_jobs_raw)} direct ATS portal openings (Greenhouse/Ashby/Lever)"}) + " " * 2048 + "\n"
+    except Exception as pe:
+        print(f"[find_matching_jobs] PortalScanner error: {pe}")
 
     # Execute search queries sequentially across queries, but fetch platforms in parallel per query
-    raw_jobs = []
+    raw_jobs = list(portal_jobs_raw)
     indeed_jobs_for_est = []
     for query in queries:
-        yield_msg = f"🌐 Fetching listings from {platform_label} ({timeframe}) for '{query}'..."
+        yield_msg = f"🌐 Fetching listings from LinkedIn, Indeed & Reed for '{query}'..."
         log_ist(yield_msg)
         yield json.dumps({"type": "log", "message": yield_msg}) + " " * 2048 + "\n"
         
@@ -723,14 +749,14 @@ async def find_matching_jobs(
 
     yield json.dumps({"type": "log", "message": f"📊 Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + " " * 2048 + "\n"
 
-    # Separate Reed jobs (which use instant API fast-path) from web-scraped jobs (LinkedIn/Indeed)
-    reed_jd_jobs = [j for j in deduped_jobs if j.platform == "Reed"]
-    other_jobs = [j for j in deduped_jobs if j.platform != "Reed"]
+    # Separate instant API jobs (Reed, Greenhouse, Ashby, Lever) from web-scraped jobs (LinkedIn/Indeed)
+    api_fast_jobs = [j for j in deduped_jobs if j.platform in ("Reed", "Greenhouse", "Ashby", "Lever")]
+    scraped_jobs = [j for j in deduped_jobs if j.platform not in ("Reed", "Greenhouse", "Ashby", "Lever")]
     
-    other_jobs.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
+    scraped_jobs.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
 
-    # All fresh Reed jobs get real JD ATS scoring via API fast-path; cap web-scraped jobs to top 15
-    jd_scored_batch = reed_jd_jobs + other_jobs[:DISCOVERY_JD_FETCH_CAP]
+    # All API fast-path jobs get instant deterministic ATS scoring; cap web-scraped jobs to top 15
+    jd_scored_batch = api_fast_jobs + scraped_jobs[:DISCOVERY_JD_FETCH_CAP]
     title_only_batch = [j for j in deduped_jobs if j not in jd_scored_batch]
 
     scored_jobs = []
