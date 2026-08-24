@@ -261,6 +261,20 @@ document.addEventListener("DOMContentLoaded", () => {
                       activeRoleTitle.textContent = ev.job_title;
                     }
 
+                    const alignCard = document.getElementById("alignment-report-card");
+                    const alignSen = document.getElementById("align-seniority");
+                    const alignDom = document.getElementById("align-domain");
+                    const alignVer = document.getElementById("align-verdict");
+
+                    if (ma.alignment_report && alignCard && alignSen && alignDom && alignVer) {
+                      alignSen.textContent = ma.alignment_report.seniority || "Direct Alignment";
+                      alignDom.textContent = ma.alignment_report.domain || "High Alignment";
+                      alignVer.textContent = ma.alignment_report.verdict || "Strong Match";
+                      alignCard.style.display = "block";
+                    } else if (alignCard) {
+                      alignCard.style.display = "none";
+                    }
+
                     if (missing.length > 0) {
                       window.selectedUserSkills = window.selectedUserSkills || new Set();
                       missingSkillsContainer.innerHTML = missing.slice(0, 8).map(s => {
