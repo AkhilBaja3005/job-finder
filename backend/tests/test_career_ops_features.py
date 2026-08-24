@@ -78,6 +78,16 @@ def test_portal_scanner_configuration_and_scoring():
     assert scored[0]["company"] == "Anthropic"
     assert scored[0]["ats_score"] >= 60
 
+    # Verify timeframe filter logic
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    recent_ts = int((now - timedelta(hours=12)).timestamp() * 1000)
+    old_ts = int((now - timedelta(days=10)).timestamp() * 1000)
+
+    assert scanner._is_within_timeframe(recent_ts, "24h") is True
+    assert scanner._is_within_timeframe(old_ts, "24h") is False
+    assert scanner._is_within_timeframe(old_ts, "14d") is True
+
 
 def test_html_resume_renderer():
     """Verify HTML resume renderer generates well-formed HTML with all core sections."""
