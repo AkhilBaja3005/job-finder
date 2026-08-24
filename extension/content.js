@@ -106,18 +106,21 @@
       title = (
         document.querySelector(".job-details-jobs-unified-top-card__job-title") ||
         document.querySelector(".jobs-unified-top-card__job-title") ||
+        document.querySelector(".jobs-details__main-content h1") ||
         document.querySelector(".jobs-search__job-details--container h1") ||
         document.querySelector("h1")
       )?.innerText?.trim() || "";
 
       company = (
+        document.querySelector(".job-details-jobs-unified-top-card__company-name a") ||
         document.querySelector(".job-details-jobs-unified-top-card__company-name") ||
         document.querySelector(".jobs-unified-top-card__company-name") ||
         document.querySelector(".jobs-unified-top-card__subtitle-primary-grouping a") ||
         document.querySelector(".job-details-jobs-unified-top-card__primary-description a") ||
         document.querySelector(".jobs-search__job-details--container .job-details-jobs-unified-top-card__company-name") ||
-        document.querySelector(".jobs-unified-top-card__primary-description") ||
-        document.querySelector("a[href*='/company/']")
+        document.querySelector(".jobs-details__main-content a[href*='/company/']") ||
+        document.querySelector(".job-details-jobs-unified-top-card a[href*='/company/']") ||
+        document.querySelector(".jobs-unified-top-card a[href*='/company/']")
       )?.innerText?.trim() || "";
     } else if (url.includes("indeed.com")) {
       title = (
