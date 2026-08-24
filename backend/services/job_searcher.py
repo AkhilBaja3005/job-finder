@@ -761,7 +761,7 @@ async def find_matching_jobs(
 
     scored_jobs = []
     if jd_scored_batch:
-        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(jd_scored_batch)} matches ({len(reed_jd_jobs)} Reed API fast-path) to compute accurate ATS scores..."}) + " " * 2048 + "\n"
+        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(jd_scored_batch)} matches ({len(api_fast_jobs)} direct ATS API fast-path) to compute accurate ATS scores..."}) + " " * 2048 + "\n"
         semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
         
         async def _score_and_stream(job, log_queue_stream):
