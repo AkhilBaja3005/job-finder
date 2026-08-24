@@ -5,6 +5,7 @@ Generates personalized recruiter outreach messages using LLM.
 
 import json
 from typing import Optional, Dict
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 
 from services.gemini_client import generate_content_with_fallback

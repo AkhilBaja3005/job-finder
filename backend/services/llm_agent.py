@@ -28,6 +28,7 @@ class MatchScoreDetails(BaseModel):
     # Metadata
     score_breakdown: Dict[str, Any] = Field(default_factory=dict, description="Human-readable detail per dimension")
     keyword_stats: Dict[str, str] = Field(default_factory=dict, description="Keyword match counts and year stats")
+    alignment_report: Dict[str, str] = Field(default_factory=dict, description="Executive A-H career-ops style rubric breakdown (Seniority, Tech, Domain, Verdict)")
 
 class SectionUpdate(BaseModel):
     summary: Optional[str] = Field(default=None, description="Tailored professional summary")
@@ -308,6 +309,22 @@ class _SemanticScoreResult(BaseModel):
         description="0-100: How well does the candidate's domain, seniority, and industry background "
                     "semantically match the target role? 100=perfect match, 0=completely wrong domain."
     )
+    seniority_alignment: str = Field(
+        default="Direct Alignment",
+        description="Brief (2-5 words) assessment of seniority fit, e.g., 'Target Mid-Senior vs 3.1y Profile', 'Overqualified', or 'Direct Level Match'."
+    )
+    domain_industry_fit: str = Field(
+        default="High Alignment",
+        description="Brief (2-5 words) assessment of domain/industry fit, e.g., 'GenAI / Systems Match', 'FinTech Overlap', or 'Slight Domain Shift'."
+    )
+    alignment_verdict: str = Field(
+        default="Strong Match",
+        description="Brief (2-4 words) executive verdict, e.g., 'Recommended Apply', 'Strong Candidate', or 'Key Skills Gap'."
+    )
+    red_flags: List[str] = Field(
+        default_factory=list,
+        description="1-3 critical gaps or red flags (e.g., 'Requires active SC Clearance', 'Mandatory 5d/wk on-site in Berlin', 'Requires 5+ yrs Go'). Empty if none."
+    )
     tailoring_suggestions: List[str] = Field(
         description="3-5 specific, actionable suggestions to better tailor the resume for this role."
     )
@@ -401,7 +418,11 @@ Focus ONLY on:
      - 50-69:  Transferable skills but domain mismatch
      - 30-49:  Significant domain/seniority gap
      - 0-29:   Wrong domain entirely
-  2. tailoring_suggestions: 3-5 specific resume improvements for this role.
+  2. seniority_alignment: 2-5 words describing the seniority level comparison (e.g. "Target Mid-Senior vs 3y Exp", "Level Match", "High Seniority").
+  3. domain_industry_fit: 2-5 words describing domain fit (e.g. "Direct GenAI Match", "FinTech / Systems Match", "Adjacent Engineering").
+  4. alignment_verdict: 2-4 words executive decision (e.g. "Recommended Apply", "Strong Match", "Transferable Fit").
+  5. red_flags: List of 0-3 critical constraints or blockers (e.g. "Requires on-site in NYC", "Requires Top Secret Clearance", "Must know Rust"). Empty list [] if none.
+  6. tailoring_suggestions: 3-5 specific resume improvements for this role.
 """
 
     bullet_counts = {
@@ -476,6 +497,14 @@ RULES:
         "required_years":    str(getattr(ats, "required_years", "not specified")),
     }
 
+    alignment_report = {
+        "seniority": getattr(semantic, "seniority_alignment", "Direct Alignment") or "Direct Alignment",
+        "tech_stack": f"{getattr(ats, 'matched_required_count', 0)}/{getattr(ats, 'total_required_count', 0)} Required Skills Matched",
+        "domain": getattr(semantic, "domain_industry_fit", "High Alignment") or "High Alignment",
+        "verdict": getattr(semantic, "alignment_verdict", "Strong Match") or "Strong Match",
+        "red_flags": ", ".join(getattr(semantic, "red_flags", [])) if getattr(semantic, "red_flags", []) else "None detected",
+    }
+
     match_analysis = MatchScoreDetails(
         overall_score=overall,
         skills_score=ats.skills_score,
@@ -486,6 +515,7 @@ RULES:
         tailoring_suggestions=semantic.tailoring_suggestions,
         score_breakdown=ats.score_breakdown,
         keyword_stats=keyword_stats,
+        alignment_report=alignment_report,
     )
 
     response_obj = AnalysisResponse(

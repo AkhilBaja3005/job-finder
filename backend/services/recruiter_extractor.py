@@ -24,6 +24,7 @@ def _clean_text(s):
 
 def _parse_recruiter_html(html: str) -> Dict[str, Optional[str]]:
     """Parses a LinkedIn job posting page's HTML for recruiter + company info."""
+    # pyrefly: ignore [missing-import]
     from bs4 import BeautifulSoup
 
     soup = BeautifulSoup(html, "html.parser")
@@ -167,6 +168,7 @@ async def extract_recruiter_from_linkedin(job_url: str, html: Optional[str] = No
             }
 
     try:
+        # pyrefly: ignore [missing-import]
         from playwright.async_api import async_playwright
         from services.log_queue import log_ist
         log_ist(f"[extract_recruiter_from_linkedin] Scraping: {job_url}")
