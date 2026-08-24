@@ -11,6 +11,7 @@ import re
 from typing import Dict, Any, Optional
 
 try:
+    # pyrefly: ignore [missing-import]
     from playwright.async_api import async_playwright
 except ImportError:
     async_playwright = None

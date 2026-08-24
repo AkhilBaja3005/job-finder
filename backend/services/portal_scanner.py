@@ -8,6 +8,7 @@ and auto-scores matches deterministically against the candidate's profile.
 import os
 import yaml
 import asyncio
+# pyrefly: ignore [missing-import]
 import httpx
 from typing import List, Dict, Any, Optional
 
@@ -40,6 +41,34 @@ class PortalScanner:
             }
         }
 
+    def _format_age(self, dt_str: Optional[str], timestamp_ms: Optional[int] = None) -> str:
+        """Helper to convert API date strings or timestamps into a human-friendly age (e.g. '2d ago', 'Today')."""
+        try:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            if timestamp_ms:
+                dt = datetime.fromtimestamp(timestamp_ms / 1000.0, timezone.utc)
+            elif dt_str:
+                # Replace trailing 'Z' with +00:00 for fromisoformat compatibility
+                clean_dt = dt_str.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(clean_dt)
+            else:
+                return "Active"
+
+            diff = now - dt
+            days = diff.days
+            if days <= 0:
+                hours = int(diff.total_seconds() // 3600)
+                return f"{hours}h ago" if hours > 0 else "Just now"
+            elif days == 1:
+                return "1d ago"
+            elif days < 30:
+                return f"{days}d ago"
+            else:
+                return f"{days // 30}mo ago"
+        except Exception:
+            return "Active"
+
     async def scan_greenhouse_company(self, client: httpx.AsyncClient, company_slug: str, company_name: str) -> List[Dict[str, Any]]:
         """Fetch active jobs from Greenhouse public Board API."""
         url = f"https://boards-api.greenhouse.io/v1/boards/{company_slug}/jobs?content=true"
@@ -50,6 +79,7 @@ class PortalScanner:
                 data = res.json()
                 raw_jobs = data.get("jobs", [])
                 for rj in raw_jobs:
+                    updated_at = rj.get("updated_at")
                     jobs.append({
                         "id": f"gh_{rj.get('id')}",
                         "title": rj.get("title", ""),
@@ -57,7 +87,9 @@ class PortalScanner:
                         "url": rj.get("absolute_url", ""),
                         "location": rj.get("location", {}).get("name", "Remote/Unspecified"),
                         "description": rj.get("content", ""),
-                        "portal": "greenhouse"
+                        "portal": "greenhouse",
+                        "posted_at": updated_at,
+                        "age": self._format_age(updated_at)
                     })
         except Exception as e:
             print(f"[PortalScanner] Greenhouse scrape error for {company_slug}: {e}")
@@ -73,6 +105,7 @@ class PortalScanner:
                 data = res.json()
                 raw_jobs = data.get("jobs", [])
                 for rj in raw_jobs:
+                    pub_at = rj.get("publishedAt")
                     jobs.append({
                         "id": f"ashby_{rj.get('id')}",
                         "title": rj.get("title", ""),
@@ -80,7 +113,9 @@ class PortalScanner:
                         "url": rj.get("jobUrl", f"https://jobs.ashbyhq.com/{company_slug}/{rj.get('id')}"),
                         "location": rj.get("location", "Remote/Unspecified"),
                         "description": rj.get("descriptionHtml", rj.get("descriptionPlain", "")),
-                        "portal": "ashby"
+                        "portal": "ashby",
+                        "posted_at": pub_at,
+                        "age": self._format_age(pub_at)
                     })
         except Exception as e:
             print(f"[PortalScanner] Ashby scrape error for {company_slug}: {e}")
@@ -95,6 +130,7 @@ class PortalScanner:
             if res.status_code == 200:
                 raw_jobs = res.json()
                 for rj in raw_jobs:
+                    created_at_ms = rj.get("createdAt")
                     jobs.append({
                         "id": f"lever_{rj.get('id')}",
                         "title": rj.get("text", ""),
@@ -102,14 +138,47 @@ class PortalScanner:
                         "url": rj.get("hostedUrl", ""),
                         "location": rj.get("categories", {}).get("location", "Remote/Unspecified"),
                         "description": rj.get("descriptionPlain", "") or rj.get("description", ""),
-                        "portal": "lever"
+                        "portal": "lever",
+                        "posted_at": created_at_ms,
+                        "age": self._format_age(None, timestamp_ms=created_at_ms)
                     })
         except Exception as e:
             print(f"[PortalScanner] Lever scrape error for {company_slug}: {e}")
         return jobs
 
-    async def scan_all_portals(self, target_keywords: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """Scans all configured target portals concurrently."""
+    def _is_within_timeframe(self, posted_at: Any, timeframe: str) -> bool:
+        """Filter jobs based on requested timeframe (24h, 48h, 7d, 14d, 30d, all)."""
+        if not posted_at or timeframe in ("all", "any"):
+            return True
+        try:
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone.utc)
+            
+            # Resolve cutoff timedelta
+            tf_map = {
+                "24h": timedelta(hours=24),
+                "48h": timedelta(hours=48),
+                "7d": timedelta(days=7),
+                "14d": timedelta(days=14),
+                "30d": timedelta(days=30),
+            }
+            cutoff_delta = tf_map.get(timeframe, timedelta(hours=48))
+            cutoff_dt = now - cutoff_delta
+
+            if isinstance(posted_at, (int, float)):
+                dt = datetime.fromtimestamp(posted_at / 1000.0, timezone.utc)
+            elif isinstance(posted_at, str):
+                clean_dt = posted_at.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(clean_dt)
+            else:
+                return True
+
+            return dt >= cutoff_dt
+        except Exception:
+            return True
+
+    async def scan_all_portals(self, target_keywords: Optional[List[str]] = None, timeframe: str = "48h") -> List[Dict[str, Any]]:
+        """Scans all configured target portals concurrently with keyword & timeframe filtering."""
         portals_def = self.config.get("portals", {})
         keywords = target_keywords or self.config.get("config", {}).get("roles_keywords", [])
         keywords_lower = [k.lower() for k in keywords]
@@ -133,7 +202,11 @@ class PortalScanner:
                 if isinstance(r, list):
                     all_jobs.extend(r)
 
-        # Keyword filtering
+        # Apply Timeframe Filter
+        if timeframe and timeframe not in ("all", "any"):
+            all_jobs = [j for j in all_jobs if self._is_within_timeframe(j.get("posted_at"), timeframe)]
+
+        # Apply Keyword Filter
         if keywords_lower:
             filtered = [
                 j for j in all_jobs

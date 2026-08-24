@@ -693,7 +693,7 @@ async def find_matching_jobs(
     try:
         from services.portal_scanner import PortalScanner
         scanner = PortalScanner()
-        portal_results = await scanner.scan_all_portals(target_keywords=queries)
+        portal_results = await scanner.scan_all_portals(target_keywords=queries, timeframe=timeframe)
         for pj in portal_results:
             p_obj = JobSearchResult(
                 title=pj.get("title", ""),
@@ -701,7 +701,7 @@ async def find_matching_jobs(
                 location=pj.get("location", "Remote/Unspecified"),
                 url=pj.get("url", ""),
                 platform=pj.get("portal", "Portal").title(),
-                post_date_raw="Active",
+                post_date_raw=pj.get("age", "Active"),
                 job_id=pj.get("id", hashlib.md5(pj.get("url", "").encode()).hexdigest()[:10])
             )
             # Store full description directly so no browser fetch is needed!
