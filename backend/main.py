@@ -1867,17 +1867,11 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             company_name = req_comp if (req_comp and req_comp not in ["Target Company", "Hiring Company", "Detecting company..."]) else None
             if not company_name and "scraped" in locals() and scraped.get("company"):
                 company_name = scraped.get("company")
-            if not company_name:
-                company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
-            recruiter_name = None
+            # Use recruiter info already resolved before tailoring (or extract fast if missing)
             recruiter_profile_url = None
-            if request.job_url:
-                try:
-                    rec_info = await extract_recruiter(request.job_url, None)
-                    recruiter_name = rec_info.get("recruiter_name")
-                    recruiter_profile_url = rec_info.get("recruiter_profile_url")
-                except Exception:
-                    pass
+            if "rec_info" in locals() and rec_info:
+                recruiter_name = rec_info.get("recruiter_name")
+                recruiter_profile_url = rec_info.get("recruiter_profile_url")
 
             overleaf_url = None
             pdf_url = None

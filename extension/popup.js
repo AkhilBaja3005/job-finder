@@ -96,13 +96,35 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
-  // Load saved sync key on popup boot
-  chrome.storage.local.get(["userToken"], (items) => {
+  const backendUrlInput = document.getElementById("backend-url-input");
+
+  // Load saved sync key and custom backend URL on popup boot
+  chrome.storage.local.get(["userToken", "backendUrl"], (items) => {
+    if (items.backendUrl && backendUrlInput) {
+      backendUrlInput.value = items.backendUrl;
+      API_BASE_URL = items.backendUrl.trim().replace(/\/+$/, "");
+    } else if (backendUrlInput) {
+      backendUrlInput.value = DEFAULT_API_BASE_URL;
+    }
     if (items.userToken && userTokenInput) {
       userTokenInput.value = items.userToken;
       fetchUserInfo(items.userToken);
     }
   });
+
+  if (backendUrlInput) {
+    backendUrlInput.addEventListener("change", (e) => {
+      const url = e.target.value.trim().replace(/\/+$/, "");
+      if (url) {
+        API_BASE_URL = url;
+        chrome.storage.local.set({ backendUrl: url }, () => {
+          showToast("✓ Server endpoint updated!");
+          const syncKey = userTokenInput ? userTokenInput.value.trim() : "";
+          if (syncKey) fetchUserInfo(syncKey);
+        });
+      }
+    });
+  }
 
   if (userTokenInput) {
     userTokenInput.addEventListener("input", (e) => {
