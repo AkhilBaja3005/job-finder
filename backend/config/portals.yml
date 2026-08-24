@@ -1,0 +1,46 @@
+# portals.yml - Target ATS Portals & Company Endpoints for Automated Discovery
+# Supports Greenhouse, Ashby, and Lever public career APIs
+
+portals:
+  greenhouse:
+    - company_slug: "anthropic"
+      name: "Anthropic"
+    - company_slug: "openai"
+      name: "OpenAI"
+    - company_slug: "scaleai"
+      name: "Scale AI"
+    - company_slug: "stripe"
+      name: "Stripe"
+    - company_slug: "datadog"
+      name: "Datadog"
+    - company_slug: "figma"
+      name: "Figma"
+
+  ashby:
+    - company_slug: "cohere"
+      name: "Cohere"
+    - company_slug: "mistral"
+      name: "Mistral AI"
+    - company_slug: "cursor"
+      name: "Cursor"
+    - company_slug: "replicate"
+      name: "Replicate"
+
+  lever:
+    - company_slug: "palantir"
+      name: "Palantir"
+    - company_slug: "databricks"
+      name: "Databricks"
+    - company_slug: "spotify"
+      name: "Spotify"
+
+config:
+  min_ats_score_to_notify: 75
+  roles_keywords:
+    - "AI"
+    - "Machine Learning"
+    - "ML"
+    - "GenAI"
+    - "Data Engineer"
+    - "Software Engineer"
+    - "Systems"

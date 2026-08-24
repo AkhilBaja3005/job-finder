@@ -1428,6 +1428,42 @@ async def parse_job_details_endpoint(request: ExtensionParseJobRequest):
     }
 
 
+class ScanPortalsRequest(BaseModel):
+    keywords: Optional[List[str]] = None
+    min_ats_score: Optional[int] = 70
+
+@app.post("/portals/scan")
+async def scan_portals_endpoint(request: ScanPortalsRequest, authorization: Optional[str] = Header(None)):
+    """Automated ATS Portal Scanner (Greenhouse, Ashby, Lever) for discovery."""
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    session = get_session_data(token)
+    session_resume = session.get("data") or {}
+
+    from services.portal_scanner import PortalScanner
+    scanner = PortalScanner()
+    raw_jobs = await scanner.scan_all_portals(target_keywords=request.keywords)
+    
+    if session_resume:
+        scored = scanner.score_portal_jobs_for_candidate(raw_jobs, session_resume, min_score=request.min_ats_score or 70)
+        return {"total_found": len(raw_jobs), "matching_jobs": scored}
+    
+    return {"total_found": len(raw_jobs), "matching_jobs": raw_jobs[:20]}
+
+
+@app.get("/render_html_resume")
+async def render_html_resume_endpoint(authorization: Optional[str] = Header(None)):
+    """Render and preview candidate resume as responsive HTML."""
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    session = get_session_data(token)
+    session_resume = session.get("data")
+    if not session_resume:
+        raise HTTPException(status_code=400, detail="Please upload a resume first.")
+
+    from services.html_resume_renderer import render_html_resume
+    html = render_html_resume(session_resume)
+    return Response(content=html, media_type="text/html")
+
+
 @app.get("/download_extension")
 async def download_extension(key: Optional[str] = None):
     """Dynamically package Chrome Extension ZIP with pre-filled Sync Key for 1-click installation."""

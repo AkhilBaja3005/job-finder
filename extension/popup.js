@@ -265,11 +265,20 @@ document.addEventListener("DOMContentLoaded", () => {
                     const alignSen = document.getElementById("align-seniority");
                     const alignDom = document.getElementById("align-domain");
                     const alignVer = document.getElementById("align-verdict");
+                    const alignFlagsBox = document.getElementById("align-flags-box");
+                    const alignFlags = document.getElementById("align-flags");
 
                     if (ma.alignment_report && alignCard && alignSen && alignDom && alignVer) {
                       alignSen.textContent = ma.alignment_report.seniority || "Direct Alignment";
                       alignDom.textContent = ma.alignment_report.domain || "High Alignment";
                       alignVer.textContent = ma.alignment_report.verdict || "Strong Match";
+                      const rf = ma.alignment_report.red_flags;
+                      if (rf && rf !== "None detected" && alignFlagsBox && alignFlags) {
+                        alignFlags.textContent = rf;
+                        alignFlagsBox.style.display = "block";
+                      } else if (alignFlagsBox) {
+                        alignFlagsBox.style.display = "none";
+                      }
                       alignCard.style.display = "block";
                     } else if (alignCard) {
                       alignCard.style.display = "none";

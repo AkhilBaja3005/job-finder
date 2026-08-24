@@ -321,6 +321,10 @@ class _SemanticScoreResult(BaseModel):
         default="Strong Match",
         description="Brief (2-4 words) executive verdict, e.g., 'Recommended Apply', 'Strong Candidate', or 'Key Skills Gap'."
     )
+    red_flags: List[str] = Field(
+        default_factory=list,
+        description="1-3 critical gaps or red flags (e.g., 'Requires active SC Clearance', 'Mandatory 5d/wk on-site in Berlin', 'Requires 5+ yrs Go'). Empty if none."
+    )
     tailoring_suggestions: List[str] = Field(
         description="3-5 specific, actionable suggestions to better tailor the resume for this role."
     )
@@ -417,7 +421,8 @@ Focus ONLY on:
   2. seniority_alignment: 2-5 words describing the seniority level comparison (e.g. "Target Mid-Senior vs 3y Exp", "Level Match", "High Seniority").
   3. domain_industry_fit: 2-5 words describing domain fit (e.g. "Direct GenAI Match", "FinTech / Systems Match", "Adjacent Engineering").
   4. alignment_verdict: 2-4 words executive decision (e.g. "Recommended Apply", "Strong Match", "Transferable Fit").
-  5. tailoring_suggestions: 3-5 specific resume improvements for this role.
+  5. red_flags: List of 0-3 critical constraints or blockers (e.g. "Requires on-site in NYC", "Requires Top Secret Clearance", "Must know Rust"). Empty list [] if none.
+  6. tailoring_suggestions: 3-5 specific resume improvements for this role.
 """
 
     bullet_counts = {
@@ -497,6 +502,7 @@ RULES:
         "tech_stack": f"{getattr(ats, 'matched_required_count', 0)}/{getattr(ats, 'total_required_count', 0)} Required Skills Matched",
         "domain": getattr(semantic, "domain_industry_fit", "High Alignment") or "High Alignment",
         "verdict": getattr(semantic, "alignment_verdict", "Strong Match") or "Strong Match",
+        "red_flags": ", ".join(getattr(semantic, "red_flags", [])) if getattr(semantic, "red_flags", []) else "None detected",
     }
 
     match_analysis = MatchScoreDetails(
