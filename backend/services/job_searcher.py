@@ -696,7 +696,7 @@ async def find_matching_jobs(
     try:
         from services.portal_scanner import PortalScanner
         scanner = PortalScanner()
-        portal_results = await scanner.scan_all_portals(target_keywords=queries, timeframe=timeframe)
+        portal_results = await scanner.scan_all_portals(target_keywords=queries, timeframe=timeframe, location=location)
         gh_cnt = sum(1 for pj in portal_results if pj.get("portal") == "greenhouse")
         ash_cnt = sum(1 for pj in portal_results if pj.get("portal") == "ashby")
         lev_cnt = sum(1 for pj in portal_results if pj.get("portal") == "lever")

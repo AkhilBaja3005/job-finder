@@ -177,8 +177,43 @@ class PortalScanner:
         except Exception:
             return True
 
-    async def scan_all_portals(self, target_keywords: Optional[List[str]] = None, timeframe: str = "48h") -> List[Dict[str, Any]]:
-        """Scans all configured target portals concurrently with keyword & timeframe filtering."""
+    def _matches_location(self, job_loc: str, target_loc: Optional[str]) -> bool:
+        """Helper to match job location against target user location."""
+        if not target_loc or target_loc.lower() in ("all", "any", "worldwide", "global"):
+            return True
+        t_lower = target_loc.lower().strip()
+        j_lower = (job_loc or "").lower()
+
+        # If job is remote/remote-friendly, it matches any location
+        if "remote" in j_lower or "anywhere" in j_lower:
+            return True
+
+        # Check direct substring matching (e.g. 'london' in 'london, uk')
+        if t_lower in j_lower:
+            return True
+
+        # Common city / country aliases
+        aliases = {
+            "london": ["london", "united kingdom", "uk", "great britain", "england"],
+            "uk": ["london", "united kingdom", "uk", "manchester", "birmingham", "edinburgh", "cambridge", "oxford", "bristol"],
+            "united kingdom": ["london", "united kingdom", "uk", "manchester", "cambridge", "oxford"],
+            "us": ["united states", "usa", "san francisco", "new york", "seattle", "austin", "boston"],
+            "united states": ["united states", "usa", "san francisco", "new york", "seattle", "austin", "boston"],
+            "san francisco": ["san francisco", "sf", "bay area", "california", "ca"],
+            "new york": ["new york", "nyc", "ny"]
+        }
+        for alias in aliases.get(t_lower, []):
+            if alias in j_lower:
+                return True
+        return False
+
+    async def scan_all_portals(
+        self,
+        target_keywords: Optional[List[str]] = None,
+        timeframe: str = "48h",
+        location: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Scans all configured target portals concurrently with keyword, timeframe & location filtering."""
         portals_def = self.config.get("portals", {})
         keywords = target_keywords or self.config.get("config", {}).get("roles_keywords", [])
         keywords_lower = [k.lower() for k in keywords]
@@ -206,11 +241,23 @@ class PortalScanner:
         if timeframe and timeframe not in ("all", "any"):
             all_jobs = [j for j in all_jobs if self._is_within_timeframe(j.get("posted_at"), timeframe)]
 
+        # Apply Location Filter (if specified)
+        if location and location.lower() not in ("all", "any", "worldwide", "global"):
+            all_jobs = [j for j in all_jobs if self._matches_location(j.get("location", ""), location)]
+
         # Apply Keyword Filter
         if keywords_lower:
+            # Flatten sub-terms if queries contain commas (e.g. ['AI Engineer', 'Machine Learning'])
+            terms = set()
+            for kw in keywords_lower:
+                for sub in kw.split(","):
+                    sub_clean = sub.strip()
+                    if sub_clean:
+                        terms.add(sub_clean)
+
             filtered = [
                 j for j in all_jobs
-                if any(kw in j["title"].lower() for kw in keywords_lower)
+                if any(t in j["title"].lower() or t in j.get("description", "").lower() for t in terms)
             ]
             return filtered
         return all_jobs
