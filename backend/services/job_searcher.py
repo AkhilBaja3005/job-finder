@@ -689,12 +689,18 @@ async def find_matching_jobs(
     platform_label = "LinkedIn, Indeed, Reed, Greenhouse, Ashby & Lever"
 
     # Concurrently scan configured target portals (Greenhouse, Ashby, Lever)
-    yield json.dumps({"type": "log", "message": "🌐 Scanning target ATS Portals (Greenhouse, Ashby, Lever)..."}) + " " * 2048 + "\n"
+    portal_start_msg = "🌐 Scanning target ATS Portals (Greenhouse, Ashby & Lever)..."
+    log_ist(portal_start_msg)
+    yield json.dumps({"type": "log", "message": portal_start_msg}) + " " * 2048 + "\n"
     portal_jobs_raw = []
     try:
         from services.portal_scanner import PortalScanner
         scanner = PortalScanner()
         portal_results = await scanner.scan_all_portals(target_keywords=queries, timeframe=timeframe)
+        gh_cnt = sum(1 for pj in portal_results if pj.get("portal") == "greenhouse")
+        ash_cnt = sum(1 for pj in portal_results if pj.get("portal") == "ashby")
+        lev_cnt = sum(1 for pj in portal_results if pj.get("portal") == "lever")
+        
         for pj in portal_results:
             p_obj = JobSearchResult(
                 title=pj.get("title", ""),
@@ -707,9 +713,13 @@ async def find_matching_jobs(
                 full_description=pj.get("description", "")
             )
             portal_jobs_raw.append(p_obj)
-        yield json.dumps({"type": "log", "message": f"✓ Discovered {len(portal_jobs_raw)} direct ATS portal openings (Greenhouse/Ashby/Lever)"}) + " " * 2048 + "\n"
+        portal_done_msg = f"✓ Found {gh_cnt} Greenhouse, {ash_cnt} Ashby & {lev_cnt} Lever direct portal postings ({len(portal_jobs_raw)} total)"
+        log_ist(portal_done_msg)
+        yield json.dumps({"type": "log", "message": portal_done_msg}) + " " * 2048 + "\n"
     except Exception as pe:
-        print(f"[find_matching_jobs] PortalScanner error: {pe}")
+        err_msg = f"[find_matching_jobs] PortalScanner error: {pe}"
+        log_ist(err_msg)
+        print(err_msg)
 
     # Execute search queries sequentially across queries, but fetch platforms in parallel per query
     raw_jobs = list(portal_jobs_raw)
