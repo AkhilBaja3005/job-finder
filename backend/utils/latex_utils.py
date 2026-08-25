@@ -232,8 +232,36 @@ def apply_latex_hotfix(
 
     fixed = re.sub(r'\\begin\{rSection\}\{Technical\s+Skills\}(.*?)\\end\{rSection\}', _categorize_skills_sec, fixed, flags=re.DOTALL)
 
-    # ── Remove stray tabular environment tags inserted by LLM or regex ───────
-    fixed = re.sub(r'\\begin\{tabular\}\{[^{}]*\}', '', fixed)
+    # ── Clean up any tabular environments inserted by LLM inside rSection ───────
+    def _convert_tabular_to_clean_lines(match):
+        body = match.group(1)
+        clean_lines = []
+        # Split by LaTeX line break \\
+        for raw_line in re.split(r'\\{2,}', body):
+            line = raw_line.strip()
+            if not line:
+                continue
+            # If the line contains table column separator '&'
+            if '&' in line:
+                parts = line.split('&', 1)
+                col1 = parts[0].strip()
+                col2 = parts[1].strip()
+                # Clean up any \bfseries or bold markup from label
+                col1_clean = re.sub(r'\\(?:bfseries|textbf)\{?([^}]*)\}?', r'\1', col1).strip().rstrip(':')
+                clean_lines.append(f"\\textbf{{{col1_clean}:}} {col2} \\\\")
+            else:
+                clean_lines.append(line + " \\\\")
+        return "\n".join(clean_lines)
+
+    # Match \begin{tabular}... \end{tabular} including any complex column specs like @{} >{\bfseries}l @{\hspace{6ex}} l
+    fixed = re.sub(
+        r'\\begin\{tabular\}(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\{[^{}]*\})?(.*?)\\end\{tabular\}',
+        _convert_tabular_to_clean_lines,
+        fixed,
+        flags=re.DOTALL
+    )
+    # Also strip any leftover lone \begin{tabular...} or \end{tabular}
+    fixed = re.sub(r'\\begin\{tabular\}(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\{[^{}]*\})?', '', fixed)
     fixed = re.sub(r'\\end\{tabular\}', '', fixed)
 
     # ── Strip \textbf{} from skill values in Technical Skills (LLM sometimes bolds individual skills) ──
