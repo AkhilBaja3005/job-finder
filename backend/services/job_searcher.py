@@ -44,6 +44,7 @@ class JobSearchResult(BaseModel):
     platform: str
     post_date_raw: str
     job_id: str
+    full_description: Optional[str] = None
 
 # ─── Query Generation from Resume ─────────────────────────────────────────
 
@@ -702,10 +703,9 @@ async def find_matching_jobs(
                 url=pj.get("url", ""),
                 platform=pj.get("portal", "Portal").title(),
                 post_date_raw=pj.get("age", "Active"),
-                job_id=pj.get("id", hashlib.md5(pj.get("url", "").encode()).hexdigest()[:10])
+                job_id=pj.get("id", hashlib.md5(pj.get("url", "").encode()).hexdigest()[:10]),
+                full_description=pj.get("description", "")
             )
-            # Store full description directly so no browser fetch is needed!
-            p_obj.full_description = pj.get("description", "")
             portal_jobs_raw.append(p_obj)
         yield json.dumps({"type": "log", "message": f"✓ Discovered {len(portal_jobs_raw)} direct ATS portal openings (Greenhouse/Ashby/Lever)"}) + " " * 2048 + "\n"
     except Exception as pe:
@@ -768,17 +768,25 @@ async def find_matching_jobs(
             def _ui_logger(msg):
                 log_queue_stream.append(json.dumps({"type": "log", "message": msg}) + " " * 2048 + "\n")
             try:
+                # Fast path: if full JD is already available (Greenhouse, Ashby, Lever, Reed), score directly!
+                if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 50:
+                    return await _score_job_with_real_jd(job, resume_data, None, semaphore, on_log=_ui_logger)
+
                 if browser is not None:
                     res = await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
                 else:
                     # pyrefly: ignore [missing-import]
-                    from playwright.async_api import async_playwright
-                    async with async_playwright() as p:
-                        b = await p.chromium.launch(headless=True)
-                        try:
-                            res = await _score_job_with_real_jd(job, resume_data, b, semaphore, on_log=_ui_logger)
-                        finally:
-                            await b.close()
+                    try:
+                        from playwright.async_api import async_playwright
+                        async with async_playwright() as p:
+                            b = await p.chromium.launch(headless=True)
+                            try:
+                                res = await _score_job_with_real_jd(job, resume_data, b, semaphore, on_log=_ui_logger)
+                            finally:
+                                await b.close()
+                    except Exception as b_err:
+                        print(f"[Job Searcher] Headless browser unavailable for '{job.title}': {b_err}")
+                        res = await _score_job_with_real_jd(job, resume_data, None, semaphore, on_log=_ui_logger)
                 return res
             except Exception as e:
                 print(f"[Job Searcher] Error scoring job '{job.title}': {e}")
