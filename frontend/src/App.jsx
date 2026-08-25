@@ -1063,7 +1063,7 @@ function App() {
     setIsDiscoveryView(true);
     setDiscoveredJobs([]);
 
-    const initMsg = `🔎 Scanning LinkedIn and Reed for matching jobs posted in the last ${searchTimeframe === '24h' ? '24 hours' : searchTimeframe === '48h' ? '48 hours' : searchTimeframe === '1w' ? '1 week' : '1 month'}...`;
+    const initMsg = `🔎 Scanning LinkedIn, Indeed, Reed, Greenhouse, Ashby & Lever for matching jobs posted in the last ${searchTimeframe === '24h' ? '24 hours' : searchTimeframe === '48h' ? '48 hours' : searchTimeframe === '1w' ? '1 week' : '1 month'}...`;
     setStatusMessage(initMsg);
     setStatusLogs([{ message: initMsg, ts: nowTs() }]);
 
@@ -3948,8 +3948,18 @@ function App() {
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                                         <span style={{
                                           fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px', fontWeight: 700,
-                                          background: job.platform === 'LinkedIn' ? 'rgba(10,102,194,0.12)' : job.platform === 'Reed' ? 'rgba(236,72,153,0.15)' : 'rgba(255,111,0,0.12)',
-                                          color: job.platform === 'LinkedIn' ? '#0a66c2' : job.platform === 'Reed' ? '#ec4899' : '#ff6f00'
+                                          background: job.platform === 'LinkedIn' ? 'rgba(10,102,194,0.15)'
+                                                    : job.platform === 'Reed' ? 'rgba(236,72,153,0.15)'
+                                                    : job.platform === 'Greenhouse' ? 'rgba(34,197,94,0.15)'
+                                                    : job.platform === 'Ashby' ? 'rgba(168,85,247,0.15)'
+                                                    : job.platform === 'Lever' ? 'rgba(56,189,248,0.15)'
+                                                    : 'rgba(255,111,0,0.12)',
+                                          color: job.platform === 'LinkedIn' ? '#0a66c2'
+                                               : job.platform === 'Reed' ? '#ec4899'
+                                               : job.platform === 'Greenhouse' ? '#22c55e'
+                                               : job.platform === 'Ashby' ? '#c084fc'
+                                               : job.platform === 'Lever' ? '#38bdf8'
+                                               : '#ff6f00'
                                         }}>{job.platform}</span>
                                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{job.age}</span>
                                         {job.estimated && (
