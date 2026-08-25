@@ -37,13 +37,21 @@ async function* streamNdjson(response) {
 
   try {
     while (true) {
-      // Race stream read against a 120-second stall timeout (long discovery/scraping cycles)
+      // Race stream read against a fresh 120-second stall timer per chunk
+      let timerId;
       const readPromise = reader.read();
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Stream stalled: No response chunk received for 120s')), 120000)
-      );
+      const timeoutPromise = new Promise((_, reject) => {
+        timerId = setTimeout(() => reject(new Error('Stream stalled: No response chunk received for 120s')), 120000);
+      });
 
-      const { value, done } = await Promise.race([readPromise, timeoutPromise]);
+      let res;
+      try {
+        res = await Promise.race([readPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timerId);
+      }
+
+      const { value, done } = res;
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
