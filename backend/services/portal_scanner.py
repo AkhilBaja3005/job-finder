@@ -74,7 +74,7 @@ class PortalScanner:
         url = f"https://boards-api.greenhouse.io/v1/boards/{company_slug}/jobs?content=true"
         jobs = []
         try:
-            res = await client.get(url, timeout=10.0)
+            res = await client.get(url, timeout=5.0)
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("jobs", [])
@@ -91,8 +91,8 @@ class PortalScanner:
                         "posted_at": updated_at,
                         "age": self._format_age(updated_at)
                     })
-        except Exception as e:
-            print(f"[PortalScanner] Greenhouse scrape error for {company_slug}: {e}")
+        except Exception:
+            pass
         return jobs
 
     async def scan_ashby_company(self, client: httpx.AsyncClient, company_slug: str, company_name: str) -> List[Dict[str, Any]]:
@@ -100,7 +100,7 @@ class PortalScanner:
         url = f"https://api.ashbyhq.com/posting-api/job-board/{company_slug}"
         jobs = []
         try:
-            res = await client.get(url, timeout=10.0)
+            res = await client.get(url, timeout=5.0)
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("jobs", [])
@@ -117,8 +117,8 @@ class PortalScanner:
                         "posted_at": pub_at,
                         "age": self._format_age(pub_at)
                     })
-        except Exception as e:
-            print(f"[PortalScanner] Ashby scrape error for {company_slug}: {e}")
+        except Exception:
+            pass
         return jobs
 
     async def scan_lever_company(self, client: httpx.AsyncClient, company_slug: str, company_name: str) -> List[Dict[str, Any]]:
@@ -126,7 +126,7 @@ class PortalScanner:
         url = f"https://api.lever.co/v0/postings/{company_slug}?mode=json"
         jobs = []
         try:
-            res = await client.get(url, timeout=10.0)
+            res = await client.get(url, timeout=5.0)
             if res.status_code == 200:
                 raw_jobs = res.json()
                 for rj in raw_jobs:
@@ -142,8 +142,8 @@ class PortalScanner:
                         "posted_at": created_at_ms,
                         "age": self._format_age(None, timestamp_ms=created_at_ms)
                     })
-        except Exception as e:
-            print(f"[PortalScanner] Lever scrape error for {company_slug}: {e}")
+        except Exception:
+            pass
         return jobs
 
     def _is_within_timeframe(self, posted_at: Any, timeframe: str) -> bool:
@@ -221,7 +221,8 @@ class PortalScanner:
         all_jobs: List[Dict[str, Any]] = []
         tasks = []
         limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
-        async with httpx.AsyncClient(headers={"User-Agent": "JobFinder/1.0"}, limits=limits, timeout=5.0) as client:
+        ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        async with httpx.AsyncClient(headers={"User-Agent": ua}, limits=limits, timeout=5.0) as client:
             # Greenhouse
             for comp in portals_def.get("greenhouse", []):
                 tasks.append(self.scan_greenhouse_company(client, comp["company_slug"], comp["name"]))
