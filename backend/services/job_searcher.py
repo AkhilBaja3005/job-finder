@@ -765,27 +765,36 @@ async def find_matching_jobs(
     
     scraped_jobs.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
 
-    # All API fast-path jobs get instant deterministic ATS scoring; cap web-scraped jobs to top 15
-    jd_scored_batch = api_fast_jobs + scraped_jobs[:DISCOVERY_JD_FETCH_CAP]
-    title_only_batch = [j for j in deduped_jobs if j not in jd_scored_batch]
-
     scored_jobs = []
-    if jd_scored_batch:
-        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(jd_scored_batch)} matches ({len(api_fast_jobs)} direct ATS API fast-path) to compute accurate ATS scores..."}) + " " * 2048 + "\n"
+
+    # Phase A: Instant in-memory scoring for direct ATS API jobs (Greenhouse, Ashby, Lever, Reed with full JD)
+    if api_fast_jobs:
+        yield json.dumps({"type": "log", "message": f"⚡ Instantly computing ATS match scores for {len(api_fast_jobs)} direct ATS portal openings..."}) + " " * 2048 + "\n"
+        for job in api_fast_jobs:
+            try:
+                if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 50:
+                    r = await _score_job_with_real_jd(job, resume_data, None, asyncio.Semaphore(50))
+                    if r and r.get("score", 0) >= 55:
+                        scored_jobs.append(r)
+                        yield json.dumps({"type": "partial_result", "job": r}) + "\n"
+            except Exception as pe:
+                print(f"[find_matching_jobs] Direct portal scoring error for '{job.title}': {pe}")
+
+    # Phase B: Scrape and score top external web listings (LinkedIn / Indeed)
+    web_scored_batch = scraped_jobs[:DISCOVERY_JD_FETCH_CAP]
+    title_only_batch = scraped_jobs[DISCOVERY_JD_FETCH_CAP:]
+
+    if web_scored_batch:
+        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(web_scored_batch)} web listings (LinkedIn / Indeed)..."}) + " " * 2048 + "\n"
         semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
         
         async def _score_and_stream(job, log_queue_stream):
             def _ui_logger(msg):
                 log_queue_stream.append(json.dumps({"type": "log", "message": msg}) + " " * 2048 + "\n")
             try:
-                # Fast path: if full JD is already available (Greenhouse, Ashby, Lever, Reed), score directly!
-                if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 50:
-                    return await _score_job_with_real_jd(job, resume_data, None, semaphore, on_log=_ui_logger)
-
                 if browser is not None:
                     res = await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
                 else:
-                    # pyrefly: ignore [missing-import]
                     try:
                         from playwright.async_api import async_playwright
                         async with async_playwright() as p:
@@ -803,7 +812,7 @@ async def find_matching_jobs(
                 return None
 
         log_queue_stream = []
-        tasks = [asyncio.create_task(_score_and_stream(job, log_queue_stream)) for job in jd_scored_batch]
+        tasks = [asyncio.create_task(_score_and_stream(job, log_queue_stream)) for job in web_scored_batch]
         for completed_task in asyncio.as_completed(tasks):
             r = await completed_task
             while log_queue_stream:
@@ -813,7 +822,6 @@ async def find_matching_jobs(
                 yield json.dumps({"type": "log", "message": log_msg}) + " " * 2048 + "\n"
                 if r["score"] >= 55:
                     scored_jobs.append(r)
-                    # Yield partial progressive results stream so frontend renders card instantly
                     yield json.dumps({"type": "partial_result", "job": r}) + "\n"
 
     if title_only_batch:

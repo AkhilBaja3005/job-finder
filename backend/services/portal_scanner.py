@@ -220,8 +220,8 @@ class PortalScanner:
 
         all_jobs: List[Dict[str, Any]] = []
         tasks = []
-
-        async with httpx.AsyncClient(headers={"User-Agent": "JobFinder/1.0"}) as client:
+        limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+        async with httpx.AsyncClient(headers={"User-Agent": "JobFinder/1.0"}, limits=limits, timeout=5.0) as client:
             # Greenhouse
             for comp in portals_def.get("greenhouse", []):
                 tasks.append(self.scan_greenhouse_company(client, comp["company_slug"], comp["name"]))
