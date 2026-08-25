@@ -823,6 +823,9 @@ async def find_matching_jobs(
                 if r["score"] >= 55:
                     scored_jobs.append(r)
                     yield json.dumps({"type": "partial_result", "job": r}) + "\n"
+            else:
+                # Yield a progress heartbeat chunk to keep connection active
+                yield json.dumps({"type": "log", "message": "⏳ Processing web listings..."}) + " " * 2048 + "\n"
 
     if title_only_batch:
         yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + " " * 2048 + "\n"
