@@ -3837,6 +3837,13 @@ async def send_outreach_email(request: SendOutreachEmailRequest, authorization: 
             "recipient": request.recipient_email,
             "subject": request.subject
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class AnswerQuestionRequest(BaseModel):
     question: str
     company_name: Optional[str] = None
