@@ -74,7 +74,7 @@ def _extract_company_from_jd(jd_text: str, page_url: Optional[str] = None) -> st
                 return domain.replace("-", " ").title()
 
     if jd_text:
-        match = re.search(r'(?:about|at|join)\s+([A-Z][A-Za-z0-9\s&.,-]{2,30}?)(?:\s+(?:is|are|we|team|\.|\n|,))', jd_text)
+        match = re.search(r'(?:about|at|join)\s+([A-Z][A-Za-z0-9\s&.,-]{2,30}?)(?:\s+(?:is|are|we|team|to|for|where|who|\.|\n|,))', jd_text)
         if match:
             candidate = match.group(1).strip()
             if candidate.lower() not in ["the", "this", "our", "a", "an"]:

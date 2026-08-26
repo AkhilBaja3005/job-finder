@@ -19,14 +19,19 @@ from services.session_store import (
     USER_DATA_DIR,
     get_session_data,
     set_session_data,
-    LLMClientLogQueue
+    LLMClientLogQueue,
+    _get_user_storage_dirs,
+    _user_output_paths,
+    _safe_key
 )
 from services.cron_scheduler import background_cron_worker
 from routes.auth_routes import router as auth_router
 from routes.resume_routes import router as resume_router
-from routes.job_routes import router as job_router
+from routes.job_routes import router as job_router, _extract_company_from_jd
 from routes.ai_routes import router as ai_router
 from routes.admin_routes import router as admin_router
+from utils.latex_utils import compile_and_check_page_metrics, apply_latex_hotfix, generate_latex_from_json
+from services.overleaf import upload_zip_to_tmpfiles
 
 
 def _sync_fallback_resume_cls():
