@@ -513,41 +513,58 @@ _rate_limit_store: Dict[str, List[float]] = {}
 _RATE_LIMIT_WINDOW = 60.0  # seconds
 _RATE_LIMIT_MAX_REQUESTS = 15  # requests per window
 
-@app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    # Apply rate limiting to resource-intensive endpoints: /tailor, /discover, /upload_resume
-    path = request.url.path
-    if any(path.startswith(target) for target in ["/tailor", "/discover", "/upload_resume"]):
-        client_ip = request.client.host if request.client else "127.0.0.1"
-        now = time.time()
-        
-        # Clean expired timestamps
-        history = _rate_limit_store.get(client_ip, [])
-        history = [t for t in history if now - t < _RATE_LIMIT_WINDOW]
-        
-        if len(history) >= _RATE_LIMIT_MAX_REQUESTS:
-            return Response(
-                content=json.dumps({"detail": "Rate limit exceeded. Please wait a minute before making more requests."}),
-                status_code=429,
-                media_type="application/json"
-            )
-        
-        history.append(now)
-        _rate_limit_store[client_ip] = history
+class BypassNgrokMiddleware:
+    """Pure ASGI middleware to inject ngrok bypass headers safely without Starlette BaseHTTPMiddleware streaming stream-closure bugs."""
+    def __init__(self, app):
+        self.app = app
 
-    return await call_next(request)
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            custom_headers = dict(scope.get("headers", []))
+            custom_headers[b"user-agent"] = b"JobFinderApp/1.0 (Custom Tunnel Client)"
+            custom_headers[b"ngrok-skip-browser-warning"] = b"true"
+            scope["headers"] = [(k, v) for k, v in custom_headers.items()]
 
-@app.middleware("http")
-async def bypass_ngrok_browser_warning(request: Request, call_next):
-    # Overwrite incoming User-Agent to custom string (bypasses ngrok warning page for address bar URL visits)
-    custom_headers = dict(request.scope.get("headers", []))
-    custom_headers[b"user-agent"] = b"JobFinderApp/1.0 (Custom Tunnel Client)"
-    custom_headers[b"ngrok-skip-browser-warning"] = b"true"
-    request.scope["headers"] = [(k, v) for k, v in custom_headers.items()]
-    
-    response = await call_next(request)
-    response.headers["ngrok-skip-browser-warning"] = "true"
-    return response
+            async def send_with_ngrok_header(message):
+                if message["type"] == "http.response.start":
+                    headers = list(message.get("headers", []))
+                    headers.append((b"ngrok-skip-browser-warning", b"true"))
+                    message["headers"] = headers
+                await send(message)
+
+            await self.app(scope, receive, send_with_ngrok_header)
+        else:
+            await self.app(scope, receive, send)
+
+class RateLimitMiddleware:
+    """Pure ASGI rate limiter to protect sensitive endpoints without breaking streaming responses."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            if any(path.startswith(target) for target in ["/tailor", "/discover", "/upload_resume"]):
+                client = scope.get("client")
+                client_ip = client[0] if client else "127.0.0.1"
+                now = time.time()
+                history = _rate_limit_store.get(client_ip, [])
+                history = [t for t in history if now - t < _RATE_LIMIT_WINDOW]
+                if len(history) >= _RATE_LIMIT_MAX_REQUESTS:
+                    res = Response(
+                        content=json.dumps({"detail": "Rate limit exceeded. Please wait a minute before making more requests."}),
+                        status_code=429,
+                        media_type="application/json"
+                    )
+                    await res(scope, receive, send)
+                    return
+                history.append(now)
+                _rate_limit_store[client_ip] = history
+
+        await self.app(scope, receive, send)
+
+app.add_middleware(BypassNgrokMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 @app.get("/healthz")
 @app.get("/health")
