@@ -1019,7 +1019,9 @@
           if (!isRuntimeValid()) return false;
           if (request.action === "GET_JOB_DETAILS") {
             const details = extractJobDetails();
-            sendResponse(details);
+            if (window === window.top || (details.title && details.description && details.description.length > 200)) {
+              sendResponse(details);
+            }
           } else if (request.action === "TRIGGER_AUTOFILL") {
             runAutofill();
             sendResponse({ status: "ok" });
