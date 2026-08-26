@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   sync-to-hugingface:
@@ -18,6 +19,10 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::Secret HF_TOKEN is not set in GitHub repository settings!"
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote add hf https://AkhilBaja3005:${HF_TOKEN}@huggingface.co/spaces/abaja/job-finder
