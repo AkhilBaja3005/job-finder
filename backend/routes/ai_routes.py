@@ -119,6 +119,8 @@ class CoverLetterHistoryRequest(BaseModel):
     job_title: str
     company: str
     job_url: Optional[str] = None
+    job_description: Optional[str] = None
+    candidate_profile: Optional[dict] = None
 
 
 class GenerateOutreachRequest(BaseModel):
@@ -406,12 +408,12 @@ async def generate_tailored_resume(request: TailorResumeRequest, authorization: 
 async def generate_cover_letter_history(request: CoverLetterHistoryRequest, authorization: Optional[str] = Header(None)):
     token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else "guest"
     session = get_session_data(token)
-    resume = session.get("data")
+    resume = request.candidate_profile or session.get("data")
     if not resume:
         raise HTTPException(status_code=400, detail="No candidate resume found. Upload a resume first.")
 
-    jd_text = ""
-    if request.job_url:
+    jd_text = request.job_description or ""
+    if not jd_text and request.job_url:
         try:
             scraped = await scrape_job_description(request.job_url)
             jd_text = scraped.get("description", "")

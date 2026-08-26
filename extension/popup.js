@@ -275,7 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ----------------------------------------------------
   // Load Storage Initialization
   // ----------------------------------------------------
-  chrome.storage.local.get(["backendUrl", "userToken", "resumeData", "eeoProfile", "noticePeriod", "salaryExpectations"], (items) => {
+  chrome.storage.local.get(["backendUrl", "userToken", "resumeData", "eeoProfile", "noticePeriod", "salaryExpectations", "customJdState", "lastPreviewState"], (items) => {
     if (items && items.backendUrl && items.backendUrl.trim()) {
       API_BASE_URL = items.backendUrl.trim().replace(/\/+$/, "");
       if (backendUrlInput) backendUrlInput.value = API_BASE_URL;
@@ -295,6 +295,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (items?.noticePeriod && profNotice) profNotice.value = items.noticePeriod;
     if (items?.salaryExpectations && profSalary) profSalary.value = items.salaryExpectations;
+
+    // Restore cached Custom/Pasted JD
+    if (items?.customJdState) {
+      if (customJdTitle && items.customJdState.title) customJdTitle.value = items.customJdState.title;
+      if (customJdCompany && items.customJdState.company) customJdCompany.value = items.customJdState.company;
+      if (customJdText && items.customJdState.text) customJdText.value = items.customJdState.text;
+    }
+
+    // Restore cached Cover Letter or Outreach Preview
+    if (items?.lastPreviewState && items.lastPreviewState.text) {
+      activePreviewText = items.lastPreviewState.text;
+      if (previewTitle && items.lastPreviewState.title) previewTitle.textContent = items.lastPreviewState.title;
+      if (previewContent) previewContent.textContent = items.lastPreviewState.text;
+      if (previewWrapper) previewWrapper.style.display = "block";
+    }
 
     checkHealth();
     scanActiveTab();
@@ -482,40 +497,54 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      chrome.tabs.sendMessage(activeTab.id, { action: "GET_JOB_DETAILS" }, (response) => {
-        const err = chrome.runtime.lastError;
-        if (!err && response && response.title) {
-          handleJobDetails(response);
-        } else {
-          try {
-            chrome.scripting.executeScript({
-              target: { tabId: activeTab.id },
-              func: () => {
-                const url = window.location.href;
-                let phenomTitle = document.querySelector(".job-title, h1.job-title, [data-ph-at-id='job-title']")?.innerText?.trim();
-                let title = phenomTitle || document.querySelector(".job-details-jobs-unified-top-card__job-title, .jobs-unified-top-card__job-title, .jobsearch-JobInfoHeader-title, h1")?.innerText?.trim() || document.title;
-                if (title) {
-                  if (title.includes(" - Single Position")) title = title.replace(" - Single Position", "");
-                  title = title.split(" | ")[0].split(" - Careers")[0].trim();
-                }
-                let phenomCompany = document.querySelector(".company-name, .org-name, [data-ph-at-id='company-name']")?.innerText?.trim();
-                let company = phenomCompany || document.querySelector(".job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name, [data-company-name='true']")?.innerText?.trim() || "";
-                let description = document.querySelector("#job-details, .jobs-description__content, #jobDescriptionText, .job-description, [data-ph-at-id='job-description'], main")?.innerText?.trim() || document.body.innerText.slice(0, 4000);
-                const pageSource = document.body ? document.body.innerText.slice(0, 15000) : description;
-                return { title, company, description, url, pageSource };
-              }
-            }, (results) => {
-              const scriptErr = chrome.runtime.lastError;
-              if (!scriptErr && results && results[0] && results[0].result) {
-                handleJobDetails(results[0].result);
-              } else {
-                handleJobDetails(null);
-              }
-            });
-          } catch (e) {
-            handleJobDetails(null);
-          }
+      chrome.storage.local.get(["customJdState"], (st) => {
+        const cachedJd = st?.customJdState;
+        if (cachedJd && cachedJd.url === tabUrl && cachedJd.text && cachedJd.text.length > 50) {
+          handleJobDetails({
+            title: cachedJd.title || "Custom Role",
+            company: cachedJd.company || "Target Company",
+            description: cachedJd.text,
+            pageSource: cachedJd.text,
+            url: tabUrl
+          });
+          return;
         }
+
+        chrome.tabs.sendMessage(activeTab.id, { action: "GET_JOB_DETAILS" }, (response) => {
+          const err = chrome.runtime.lastError;
+          if (!err && response && response.title) {
+            handleJobDetails(response);
+          } else {
+            try {
+              chrome.scripting.executeScript({
+                target: { tabId: activeTab.id },
+                func: () => {
+                  const url = window.location.href;
+                  let phenomTitle = document.querySelector(".job-title, h1.job-title, [data-ph-at-id='job-title']")?.innerText?.trim();
+                  let title = phenomTitle || document.querySelector(".job-details-jobs-unified-top-card__job-title, .jobs-unified-top-card__job-title, .jobsearch-JobInfoHeader-title, h1")?.innerText?.trim() || document.title;
+                  if (title) {
+                    if (title.includes(" - Single Position")) title = title.replace(" - Single Position", "");
+                    title = title.split(" | ")[0].split(" - Careers")[0].trim();
+                  }
+                  let phenomCompany = document.querySelector(".company-name, .org-name, [data-ph-at-id='company-name']")?.innerText?.trim();
+                  let company = phenomCompany || document.querySelector(".job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name, [data-company-name='true']")?.innerText?.trim() || "";
+                  let description = document.querySelector("#job-details, .jobs-description__content, #jobDescriptionText, .job-description, [data-ph-at-id='job-description'], main")?.innerText?.trim() || document.body.innerText.slice(0, 4000);
+                  const pageSource = document.body ? document.body.innerText.slice(0, 15000) : description;
+                  return { title, company, description, url, pageSource };
+                }
+              }, (results) => {
+                const scriptErr = chrome.runtime.lastError;
+                if (!scriptErr && results && results[0] && results[0].result) {
+                  handleJobDetails(results[0].result);
+                } else {
+                  handleJobDetails(null);
+                }
+              });
+            } catch (e) {
+              handleJobDetails(null);
+            }
+          }
+        });
       });
     });
   }
@@ -577,6 +606,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (activeCompanyName) activeCompanyName.textContent = company;
       if (jdMissingAlert) jdMissingAlert.style.display = "none";
       toggleCustomJd(false);
+
+      chrome.storage.local.set({
+        customJdState: {
+          title,
+          company,
+          text: desc,
+          url: updatedDetails.url
+        }
+      });
 
       showToast("🎯 Analyzing & re-scoring with pasted JD...");
       handleJobDetails(updatedDetails);
@@ -762,16 +800,19 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnCoverLetter) {
     btnCoverLetter.addEventListener("click", () => {
       if (!currentJobInfo) return;
-      chrome.storage.local.get(["userToken"], (items) => {
+      chrome.storage.local.get(["userToken", "resumeData", "candidateProfile"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
+        const candidateProfile = (items && (items.resumeData || items.candidateProfile)) || null;
         showToast("⏳ Generating Cover Letter...");
         fetch(`${API_BASE_URL}/generate_cover_letter_history`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
           body: JSON.stringify({
-            job_title: currentJobInfo.title,
-            company: currentJobInfo.company,
-            job_url: currentJobInfo.url
+            job_title: currentJobInfo.title || "Target Role",
+            company: currentJobInfo.company || "Target Company",
+            job_description: currentJobInfo.description || currentJobInfo.title || "",
+            job_url: currentJobInfo.url || "",
+            candidate_profile: candidateProfile
           })
         })
           .then((res) => res.json())
@@ -781,6 +822,12 @@ document.addEventListener("DOMContentLoaded", () => {
               previewTitle.textContent = "📝 Generated Cover Letter";
               previewContent.textContent = data.cover_letter;
               previewWrapper.style.display = "block";
+              chrome.storage.local.set({
+                lastPreviewState: {
+                  text: data.cover_letter,
+                  title: "📝 Generated Cover Letter"
+                }
+              });
               showToast("📝 Cover letter generated! Preview below.");
             }
           })
@@ -793,8 +840,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnOutreach) {
     btnOutreach.addEventListener("click", () => {
       if (!currentJobInfo) return;
-      chrome.storage.local.get(["userToken"], (items) => {
+      chrome.storage.local.get(["userToken", "resumeData", "candidateProfile"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
+        const candidateProfile = (items && (items.resumeData || items.candidateProfile)) || null;
         showToast("⏳ Generating Recruiter Outreach...");
         fetch(`${API_BASE_URL}/generate_outreach`, {
           method: "POST",
@@ -803,7 +851,8 @@ document.addEventListener("DOMContentLoaded", () => {
             job_title: currentJobInfo.title || "Target Role",
             company_name: currentJobInfo.company || "Target Company",
             job_description: currentJobInfo.description || currentJobInfo.title || "Target Role",
-            job_url: currentJobInfo.url || ""
+            job_url: currentJobInfo.url || "",
+            candidate_profile: candidateProfile
           })
         })
           .then((res) => res.json())
@@ -813,6 +862,12 @@ document.addEventListener("DOMContentLoaded", () => {
             previewTitle.textContent = "✉️ Generated Outreach Message";
             previewContent.textContent = msg;
             previewWrapper.style.display = "block";
+            chrome.storage.local.set({
+              lastPreviewState: {
+                text: msg,
+                title: "✉️ Generated Outreach Message"
+              }
+            });
             showToast("✉️ Outreach generated! Preview below.");
           })
           .catch((err) => showToast("❌ Error: " + err.message));
