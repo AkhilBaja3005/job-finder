@@ -3895,12 +3895,12 @@ Instructions:
             db_api_key = user.get("gemini_api_key")
     active_api_key = x_gemini_api_key or db_api_key
 
-    from services.gemini_client import generate_content_with_fallback, JSON_FALLBACK_MODELS
+    from services.gemini_client import generate_content_with_fallback
     try:
         answer_text = generate_content_with_fallback(
             prompt=prompt,
             custom_api_key=active_api_key,
-            model_list=JSON_FALLBACK_MODELS
+            model_tier="strong"
         )
         return {"status": "success", "answer": answer_text.strip()}
     except Exception as e:

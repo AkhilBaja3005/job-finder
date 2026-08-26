@@ -1,4 +1,4 @@
-// content.js - Job Finder ATS Tailor & Multimodal AI AutoFill Content Script (v3.1.0)
+// content.js - Job Finder ATS Tailor & Multimodal AI AutoFill Content Script (v3.2.0)
 
 (function () {
   function isRuntimeValid() {
@@ -277,7 +277,7 @@
       label = clone.textContent.replace(/\s+/g, " ").trim();
     }
 
-    if (!label || label.length < 5) {
+    if (!label || label.length < 3) {
       label = el.getAttribute("aria-label") || el.getAttribute("placeholder") || parentBlock?.innerText?.slice(0, 250) || "";
     }
     return label.trim();
@@ -388,18 +388,33 @@
         } catch (err) {}
       }
 
+      if (!resume || !resume.name) {
+        try {
+          const sessResp = await fetch(`${baseUrl}/get_session_resume`, {
+            headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" }
+          });
+          if (sessResp.ok) {
+            const sessData = await sessResp.json();
+            if (sessData && sessData.data && sessData.data.name) {
+              resume = sessData.data;
+              chrome.storage.local.set({ resumeData: resume });
+            }
+          }
+        } catch (err) {}
+      }
+
       const eeo = storage.eeoProfile || { workAuth: "Yes", sponsorship: "No" };
-      const fullName = (resume.name || "").trim();
+      const fullName = (resume.name || "Akhil Baja").trim();
       const nameParts = fullName.split(/\s+/);
-      const firstName = nameParts[0] || "";
-      const lastName = nameParts.slice(1).join(" ") || "";
-      const email = resume.email || "";
-      const phone = resume.phone || "";
-      const location = resume.location || "";
+      const firstName = nameParts[0] || "Akhil";
+      const lastName = nameParts.slice(1).join(" ") || "Baja";
+      const email = resume.email || "akhilbaja.work@gmail.com";
+      const phone = resume.phone || "+91 9948083135";
+      const location = resume.location || "London, UK or Remote";
       const links = Array.isArray(resume.links) ? resume.links : [];
-      const linkedin = links.find((l) => l.toLowerCase().includes("linkedin")) || resume.linkedin || "";
-      const github = links.find((l) => l.toLowerCase().includes("github")) || resume.github || "";
-      const portfolio = links.find((l) => !l.toLowerCase().includes("linkedin") && !l.toLowerCase().includes("github")) || resume.portfolio || github || "";
+      const linkedin = links.find((l) => l.toLowerCase().includes("linkedin")) || resume.linkedin || "https://linkedin.com/in/akhilkumarbaja";
+      const github = links.find((l) => l.toLowerCase().includes("github")) || resume.github || "https://github.com/AkhilBaja3005";
+      const portfolio = links.find((l) => !l.toLowerCase().includes("linkedin") && !l.toLowerCase().includes("github")) || resume.portfolio || github;
 
       const jobInfo = extractJobDetails();
       let filledCount = 0;
@@ -455,39 +470,50 @@
         const key = `${id} ${nameAttr} ${placeholder} ${ariaLabel} ${questionText} ${type}`.toLowerCase();
 
         let val = null;
+        let isProfileField = false;
 
         // Name
         if (/\b(first.?name|given.?name|firstname|fname)\b/i.test(key)) {
           val = firstName;
+          isProfileField = true;
         } else if (/\b(last.?name|family.?name|lastname|lname|surname)\b/i.test(key)) {
           val = lastName;
+          isProfileField = true;
         } else if (/\b(full.?name|your.?name|candidate.?name|legal.?name|\bname\b)\b/i.test(key) && !/company|file|domain|user|login|user_name|sur/i.test(key)) {
-          val = fullName || `${firstName} ${lastName}`.trim();
+          val = fullName;
+          isProfileField = true;
         }
         // Contact info
         else if (/email|e-mail|emailaddress/i.test(key) || type === "email") {
           val = email;
+          isProfileField = true;
         } else if (/phone|mobile|cell|tel|phonenumber|contact\s*number/i.test(key) || type === "tel") {
           val = phone;
+          isProfileField = true;
         }
         // Links
         else if (/linkedin/i.test(key)) {
           val = linkedin;
+          isProfileField = true;
         } else if (/github|portfolio|personal\s*website|website/i.test(key)) {
           if (/github/i.test(key) && github) val = github;
           else val = portfolio || github || linkedin;
+          isProfileField = true;
         } else if (/city|location|address/i.test(key)) {
           val = location;
+          isProfileField = true;
         }
         // EEO
         else if (/authorized|work in the us|work in the uk|work authorization|legally authorized/i.test(key)) {
           val = eeo.workAuth || "Yes";
+          isProfileField = true;
         } else if (/sponsor|visa|require.*sponsorship/i.test(key)) {
           val = eeo.sponsorship || "No";
+          isProfileField = true;
         }
 
         // ── 4. AI Screening Question Generator for Open Textareas & Inputs ─
-        if (!val && (el.tagName === "TEXTAREA" || el.getAttribute("contenteditable") === "true" || type === "text" || !type)) {
+        if (!isProfileField && !val && (el.tagName === "TEXTAREA" || el.getAttribute("contenteditable") === "true" || type === "text" || !type)) {
           if (questionText && questionText.length > 5 && !el.value) {
             logMsg(`🤖 Generating AI answer for: "${questionText.slice(0, 60)}..."`);
             val = await generateAIAnswer(questionText, resume, jobInfo, baseUrl, token);
