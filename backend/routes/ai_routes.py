@@ -377,23 +377,44 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     from services.email_service import async_send_notification_email
                     cand_name = session_resume_data.get("name", "").strip() or "Candidate" if isinstance(session_resume_data, dict) else "Candidate"
                     ats_score = dumped.get("match_analysis", {}).get("overall_score") or 85
-                    email_subj = f"📄 [Resume Delivery] Tailored Resume [{ats_score}% Match]: {job_title} at {extracted_company}"
+                    ats_display = f"{ats_score}% Match"
+                    email_subj = f"📄 [Resume Delivery] Tailored Resume [{ats_display}]: {job_title} at {extracted_company}"
                     email_text = (
-                        f"Hello {cand_name},\n\n"
-                        f"Here is your requested tailored resume PDF for '{job_title}' at '{extracted_company}' (ATS Score: {ats_score}% Match)!\n\n"
-                        f"View the job listing and apply here:\n{request.job_url or ''}\n\n"
-                        f"Open it in Overleaf:\n{overleaf_url or ''}\n\n"
-                        f"Best of luck with your application!"
+                        f"On-Demand Resume Delivery: Tailored Resume PDF\n"
+                        f"For your application at {extracted_company}\n\n"
+                        f"Target Role: {job_title}\n"
+                        f"Company: {extracted_company}\n"
+                        f"ATS Score: {ats_display}\n\n"
+                        f"Hello {cand_name}, your compiled PDF resume (ATS Match Score: {ats_display}) is attached directly to this email.\n\n"
+                        f"{'View Job & Apply: ' + request.job_url + chr(10) if request.job_url else ''}"
+                        f"{'Open & Edit in Overleaf: ' + overleaf_url + chr(10) if overleaf_url else ''}\n"
+                        f"Sent automatically by your Resume Tailor Assistant."
                     )
                     email_html = f"""
-                    <div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 12px; background-color: #FAFAFA;">
-                        <h2 style="color: #0284C7;">Tailored Resume PDF</h2>
-                        <p>For your application at <strong>{extracted_company}</strong> ({job_title})</p>
-                        <p>ATS Match Score: <strong>{ats_score}% Match</strong></p>
-                        <div style="text-align: center; margin: 25px 0;">
-                            {"<a href='" + request.job_url + "' style='display:inline-block; background-color:#10B981; color:#fff; padding:10px 20px; border-radius:6px; text-decoration:none; margin-right:10px;'>View Job & Apply</a>" if request.job_url else ""}
-                            {"<a href='" + overleaf_url + "' style='display:inline-block; background-color:#0284C7; color:#fff; padding:10px 20px; border-radius:6px; text-decoration:none;'>Open in Overleaf</a>" if overleaf_url else ""}
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1e293b;">
+                        <div style="border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 16px;">
+                            <span style="font-size: 11px; font-weight: 700; color: #0284c7; text-transform: uppercase; letter-spacing: 0.05em;">On-Demand Resume Delivery</span>
+                            <h2 style="margin: 4px 0 0 0; color: #0f172a; font-size: 20px; font-weight: 800;">Tailored Resume PDF</h2>
+                            <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">For your application at <strong>{extracted_company}</strong></p>
                         </div>
+
+                        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 18px; font-size: 13px; line-height: 1.6;">
+                            <div style="margin-bottom: 6px;"><strong>Target Role:</strong> {job_title}</div>
+                            <div style="margin-bottom: 6px;"><strong>Company:</strong> {extracted_company}</div>
+                            <div><strong>ATS Score:</strong> <span style="color: #059669; font-weight: 700;">{ats_display}</span></div>
+                        </div>
+
+                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 20px;">
+                            Hello <strong>{cand_name}</strong>, your compiled PDF resume (ATS Match Score: <strong>{ats_display}</strong>) is attached directly to this email.
+                        </p>
+
+                        <div style="margin: 22px 0; text-align: left;">
+                            {"<a href='" + request.job_url + "' style='display: inline-block; background-color: #10b981; color: #ffffff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: 700; font-size: 13px; margin-right: 10px; margin-bottom: 8px;'>View Job & Apply</a>" if request.job_url else ""}
+                            {"<a href='" + overleaf_url + "' style='display: inline-block; background-color: #0284c7; color: #ffffff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: 700; font-size: 13px; margin-bottom: 8px;'>Open & Edit in Overleaf</a>" if overleaf_url else ""}
+                        </div>
+
+                        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0 12px 0;" />
+                        <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent automatically by your Resume Tailor Assistant.</p>
                     </div>
                     """
                     try:
@@ -825,26 +846,44 @@ async def send_application_pdf_email(request: SendApplicationPdfEmailRequest, au
     from services.email_service import async_send_notification_email
     dest_email = user["email"]
     cand_name = session_resume_data.get("name", "").strip() or "Candidate" if isinstance(session_resume_data, dict) else "Candidate"
-    score_suffix = f" [{request.score}% Match]" if request.score is not None else ""
     ats_display = f"{request.score}% Match" if request.score is not None else "Tailored"
-
-    email_subj = f"📄 [Resume Delivery] Tailored Resume{score_suffix}: {request.job_title} at {request.company}"
+    email_subj = f"📄 [Resume Delivery] Tailored Resume [{ats_display}]: {request.job_title} at {request.company}"
     email_text = (
-        f"Hello {cand_name},\n\n"
-        f"Here is your requested tailored resume PDF for '{request.job_title}' at '{request.company}' (ATS Score: {ats_display})!\n\n"
-        f"View the job listing and apply here:\n{request.job_url or ''}\n\n"
-        f"Open it in Overleaf:\n{request.overleaf_url or ''}\n\n"
-        f"Best of luck with your application!"
+        f"On-Demand Resume Delivery: Tailored Resume PDF\n"
+        f"For your application at {request.company}\n\n"
+        f"Target Role: {request.job_title}\n"
+        f"Company: {request.company}\n"
+        f"ATS Score: {ats_display}\n\n"
+        f"Hello {cand_name}, your compiled PDF resume (ATS Match Score: {ats_display}) is attached directly to this email.\n\n"
+        f"{'View Job & Apply: ' + request.job_url + chr(10) if request.job_url else ''}"
+        f"{'Open & Edit in Overleaf: ' + request.overleaf_url + chr(10) if request.overleaf_url else ''}\n"
+        f"Sent automatically by your Resume Tailor Assistant."
     )
     email_html = f"""
-    <div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 12px; background-color: #FAFAFA;">
-        <h2 style="color: #0284C7;">Tailored Resume PDF</h2>
-        <p>For your application at <strong>{request.company}</strong> ({request.job_title})</p>
-        <p>ATS Match Score: <strong>{ats_display}</strong></p>
-        <div style="text-align: center; margin: 25px 0;">
-            {"<a href='" + request.job_url + "' style='display:inline-block; background-color:#10B981; color:#fff; padding:10px 20px; border-radius:6px; text-decoration:none; margin-right:10px;'>View Job & Apply</a>" if request.job_url else ""}
-            {"<a href='" + request.overleaf_url + "' style='display:inline-block; background-color:#0284C7; color:#fff; padding:10px 20px; border-radius:6px; text-decoration:none;'>Open in Overleaf</a>" if request.overleaf_url else ""}
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1e293b;">
+        <div style="border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 16px;">
+            <span style="font-size: 11px; font-weight: 700; color: #0284c7; text-transform: uppercase; letter-spacing: 0.05em;">On-Demand Resume Delivery</span>
+            <h2 style="margin: 4px 0 0 0; color: #0f172a; font-size: 20px; font-weight: 800;">Tailored Resume PDF</h2>
+            <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">For your application at <strong>{request.company}</strong></p>
         </div>
+
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 18px; font-size: 13px; line-height: 1.6;">
+            <div style="margin-bottom: 6px;"><strong>Target Role:</strong> {request.job_title}</div>
+            <div style="margin-bottom: 6px;"><strong>Company:</strong> {request.company}</div>
+            <div><strong>ATS Score:</strong> <span style="color: #059669; font-weight: 700;">{ats_display}</span></div>
+        </div>
+
+        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 20px;">
+            Hello <strong>{cand_name}</strong>, your compiled PDF resume (ATS Match Score: <strong>{ats_display}</strong>) is attached directly to this email.
+        </p>
+
+        <div style="margin: 22px 0; text-align: left;">
+            {"<a href='" + request.job_url + "' style='display: inline-block; background-color: #10b981; color: #ffffff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: 700; font-size: 13px; margin-right: 10px; margin-bottom: 8px;'>View Job & Apply</a>" if request.job_url else ""}
+            {"<a href='" + request.overleaf_url + "' style='display: inline-block; background-color: #0284c7; color: #ffffff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: 700; font-size: 13px; margin-bottom: 8px;'>Open & Edit in Overleaf</a>" if request.overleaf_url else ""}
+        </div>
+
+        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0 12px 0;" />
+        <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent automatically by your Resume Tailor Assistant.</p>
     </div>
     """
 
