@@ -426,10 +426,29 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function isRestrictedUrl(url) {
+    if (!url) return true;
+    return (
+      url.startsWith("chrome://") ||
+      url.startsWith("chrome-extension://") ||
+      url.startsWith("edge://") ||
+      url.startsWith("about:") ||
+      url.startsWith("devtools://") ||
+      url.startsWith("view-source:") ||
+      url.startsWith("chrome-search://")
+    );
+  }
+
   function scanActiveTab() {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (!tabs || !tabs[0]) return;
       const activeTab = tabs[0];
+      const tabUrl = activeTab.url || "";
+      if (isRestrictedUrl(tabUrl)) {
+        handleJobDetails(null);
+        return;
+      }
+
       chrome.tabs.sendMessage(activeTab.id, { action: "GET_JOB_DETAILS" }, (response) => {
         const err = chrome.runtime.lastError;
         if (!err && response && response.title) {
@@ -453,7 +472,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 return { title, company, description, url, pageSource };
               }
             }, (results) => {
-              if (results && results[0] && results[0].result) {
+              const scriptErr = chrome.runtime.lastError;
+              if (!scriptErr && results && results[0] && results[0].result) {
                 handleJobDetails(results[0].result);
               } else {
                 handleJobDetails(null);
