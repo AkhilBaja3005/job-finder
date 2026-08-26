@@ -1,12 +1,12 @@
 {
-  "name": "zero-autofill",
+  "name": "job-finder-ats-tailor-extension",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",
     "dev:firefox": "wxt -b firefox",
-    "build": "wxt build",
+    "build": "wxt build && cp -r .output/chrome-mv3/* ../extension/",
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",

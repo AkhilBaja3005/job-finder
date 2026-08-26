@@ -5,9 +5,9 @@ export default defineConfig({
   extensionApi: 'chrome',
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    name: 'Zero-Autofill: AI Job Application Copilot',
-    description: '100% Client-Side, Zero-Backend Job Application Autofill & Tracker Chrome Extension',
-    version: '1.0.0',
+    name: 'Job Finder ATS Tailor & AutoFill Copilot',
+    description: 'AI ATS AutoFill (Greenhouse, Lever, Ashby, Workday, LinkedIn) + Batch Auto-Apply & Job Fit Analyzer',
+    version: '2.0.0',
     permissions: [
       'storage',
       'activeTab',
@@ -17,7 +17,7 @@ export default defineConfig({
     ],
     host_permissions: ['<all_urls>'],
     action: {
-      default_title: 'Open Zero-Autofill Sidepanel'
+      default_title: 'Open Job Finder ATS Sidepanel'
     },
     side_panel: {
       default_path: 'sidepanel.html'

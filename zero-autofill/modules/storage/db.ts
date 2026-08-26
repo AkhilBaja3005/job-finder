@@ -12,6 +12,14 @@ export interface CandidateProfile {
     github: string;
     portfolio: string;
   };
+  eeo?: {
+    workAuth: string;
+    sponsorship: string;
+    gender?: string;
+    race?: string;
+    veteran?: string;
+    disability?: string;
+  };
   workExperience: Array<{
     company: string;
     title: string;
@@ -20,10 +28,11 @@ export interface CandidateProfile {
     description: string;
   }>;
   education: Array<{
-    institution: string;
+    institution?: string;
+    school?: string;
     degree: string;
-    fieldOfStudy: string;
-    graduationYear: string;
+    fieldOfStudy?: string;
+    graduationYear?: string;
   }>;
   skills: string[];
   customQA: Array<{
@@ -31,6 +40,7 @@ export interface CandidateProfile {
     answer: string;
   }>;
   rawResumeText: string;
+  pdfBase64?: string;
 }
 
 export interface JobApplication {
@@ -52,6 +62,8 @@ export interface AISettings {
   localModel?: string;
   backendBaseUrl?: string;
   backendAuthToken?: string;
+  maxYears?: number;
+  blacklistKeywords?: string;
 }
 
 export class ZeroAutofillDB extends Dexie {
@@ -79,14 +91,15 @@ export async function getProfile(): Promise<CandidateProfile | undefined> {
 
   try {
     const settings = await getSettings();
-    const baseUrl = (settings.backendBaseUrl || 'https://www.job-finder.space').replace(/\/+$/, '');
+    const baseUrl = (settings.backendBaseUrl || 'http://127.0.0.1:8000').replace(/\/+$/, '');
     const headers: Record<string, string> = {};
     if (settings.backendAuthToken) {
       const token = settings.backendAuthToken.trim();
       headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
     }
     const res = await fetch(`${baseUrl}/get_session_resume`, { headers });
-    if (res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
       const data = await res.json();
       if (data && data.data) {
         const d = data.data;
@@ -105,6 +118,7 @@ export async function getProfile(): Promise<CandidateProfile | undefined> {
 
         const education = Array.isArray(d.education) ? d.education.map((edu: any) => ({
           institution: edu.institution || edu.school || '',
+          school: edu.institution || edu.school || '',
           degree: edu.degree || '',
           fieldOfStudy: edu.field_of_study || edu.fieldOfStudy || '',
           graduationYear: edu.graduation_date || edu.graduationYear || ''
@@ -121,18 +135,27 @@ export async function getProfile(): Promise<CandidateProfile | undefined> {
             github: githubUrl,
             portfolio: portfolioUrl
           },
+          eeo: {
+            workAuth: 'Yes',
+            sponsorship: 'No',
+            gender: 'Decline to self-identify',
+            race: 'Decline to self-identify',
+            veteran: 'No',
+            disability: 'No'
+          },
           workExperience,
           education,
           skills: Array.isArray(d.skills) ? d.skills : Object.values(d.skills || {}).flat() as string[],
           customQA: [],
-          rawResumeText: JSON.stringify(d)
+          rawResumeText: JSON.stringify(d, null, 2),
+          pdfBase64: d.pdf_base64 || ''
         };
         await saveProfile(fetchedProfile);
         return fetchedProfile;
       }
     }
   } catch (e) {
-    console.log('Backend profile sync unavailable:', e);
+    console.log('Backend profile sync notice:', e);
   }
 
   return undefined;
@@ -152,10 +175,12 @@ export async function getSettings(): Promise<AISettings> {
   const s = await db.settings.get(1);
   return s || {
     provider: 'backend',
-    apiKey: '',
-    backendBaseUrl: 'http://localhost:8000',
+    backendBaseUrl: 'http://127.0.0.1:8000',
+    backendAuthToken: '',
     localEndpoint: 'http://localhost:11434',
-    localModel: 'llama3.2'
+    localModel: 'llama3.2',
+    maxYears: 5,
+    blacklistKeywords: 'Senior, Lead, Manager, Director'
   };
 }
 
