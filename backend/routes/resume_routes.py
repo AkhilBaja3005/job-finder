@@ -7,8 +7,8 @@ import asyncio
 import subprocess
 import traceback
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Header, UploadFile, File, Response
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import APIRouter, HTTPException, Header, UploadFile, File, Response, Request
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from services.session_store import (
@@ -543,18 +543,61 @@ async def render_html_resume_endpoint(authorization: Optional[str] = Header(None
 
 
 @router.get("/download_extension")
-async def download_extension():
+async def download_extension(
+    request: Request,
+    token: Optional[str] = None,
+    key: Optional[str] = None,
+    authorization: Optional[str] = Header(None)
+):
+    import io
     import zipfile
-    ext_dir = os.path.abspath(os.path.join(BASE_DIR, "../extension"))
-    zip_path = os.path.join(OUTPUT_DIR, "job_finder_extension.zip")
+    auth_token = key or token or (authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None)
+    user = await async_get_user_by_token(auth_token) if auth_token else None
 
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+    sync_code = "GABY48"
+    if user and user.get("sync_code"):
+        sync_code = str(user["sync_code"]).strip().upper()
+    elif auth_token and len(auth_token.strip()) == 6 and auth_token.strip().isalnum():
+        sync_code = auth_token.strip().upper()
+
+    proto = request.headers.get("x-forwarded-proto", "https")
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "www.job-finder.space")
+    server_url = f"{proto}://{host}" if host else "https://www.job-finder.space"
+
+    ext_dir = os.path.abspath(os.path.join(BASE_DIR, "../extension"))
+    zip_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
         for root, dirs, files in os.walk(ext_dir):
             dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ["__pycache__", "node_modules"]]
             for file in files:
                 if not file.startswith("."):
                     full_path = os.path.join(root, file)
                     rel_path = os.path.relpath(full_path, ext_dir)
-                    zipf.write(full_path, rel_path)
+                    if file == "popup.js":
+                        with open(full_path, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        content = content.replace(
+                            'const DEFAULT_API_BASE_URL = "https://www.job-finder.space";',
+                            f'const DEFAULT_API_BASE_URL = "{server_url}";'
+                        ).replace(
+                            'const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";',
+                            f'const DEFAULT_API_BASE_URL = "{server_url}";'
+                        )
+                        content = content.replace(
+                            'const DEFAULT_SYNC_KEY = "";',
+                            f'const DEFAULT_SYNC_KEY = "{sync_code}";'
+                        ).replace(
+                            'const DEFAULT_SYNC_KEY = "GABY48";',
+                            f'const DEFAULT_SYNC_KEY = "{sync_code}";'
+                        )
+                        zipf.writestr(rel_path, content)
+                    else:
+                        zipf.write(full_path, rel_path)
 
-    return FileResponse(zip_path, filename="job_finder_extension.zip", media_type="application/zip")
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="job_finder_extension.zip"'}
+    )

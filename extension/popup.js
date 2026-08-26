@@ -1,6 +1,5 @@
-// popup.js - Job Finder ATS Tailor Controller (v2.9.0 Fast JSON Sync Edition)
-
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const DEFAULT_API_BASE_URL = "https://www.job-finder.space";
+const DEFAULT_SYNC_KEY = "GABY48";
 let API_BASE_URL = DEFAULT_API_BASE_URL;
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -330,16 +329,17 @@ document.addEventListener("DOMContentLoaded", () => {
       "backendUrl", "userToken", "resumeData", "eeoProfile", "noticePeriod",
       "salaryExpectations", "customJdState", "lastPreviewState", "lastAtsAnalysis"
     ], (items) => {
-      if (items && items.backendUrl && items.backendUrl.trim()) {
-        API_BASE_URL = items.backendUrl.trim().replace(/\/+$/, "");
-        if (backendUrlInput) backendUrlInput.value = API_BASE_URL;
-      } else if (backendUrlInput) {
-        backendUrlInput.value = DEFAULT_API_BASE_URL;
-      }
+      const effectiveUrl = (items && items.backendUrl && items.backendUrl.trim()) ? items.backendUrl.trim().replace(/\/+$/, "") : DEFAULT_API_BASE_URL;
+      API_BASE_URL = effectiveUrl;
+      if (backendUrlInput) backendUrlInput.value = API_BASE_URL;
 
-      if (items && items.userToken) {
-        if (userTokenInput) userTokenInput.value = items.userToken;
-        fetchUserInfo(items.userToken);
+      const effectiveToken = (items && items.userToken && items.userToken.trim()) ? items.userToken.trim().toUpperCase() : (DEFAULT_SYNC_KEY || "");
+      if (effectiveToken) {
+        if (userTokenInput) userTokenInput.value = effectiveToken;
+        if (!items || !items.userToken) {
+          chrome.storage.local.set({ userToken: effectiveToken, backendUrl: API_BASE_URL });
+        }
+        fetchUserInfo(effectiveToken);
       }
       if (items && items.resumeData) populateProfileUI(items.resumeData);
 
