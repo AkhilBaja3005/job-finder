@@ -8,9 +8,17 @@ from typing import Optional, Tuple, Any, Dict, List
 from services.auth import get_user_by_token
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
-USER_DATA_DIR = os.path.join(BASE_DIR, "user_data")
+
+# Hugging Face Persistent Storage Mount Support:
+# When Persistent Storage is enabled in Space settings, HF mounts disk volume at /data
+if os.path.exists("/data") and os.access("/data", os.W_OK):
+    STORAGE_ROOT = "/data"
+else:
+    STORAGE_ROOT = BASE_DIR
+
+UPLOAD_DIR = os.path.join(STORAGE_ROOT, "uploads")
+OUTPUT_DIR = os.path.join(STORAGE_ROOT, "output")
+USER_DATA_DIR = os.path.join(STORAGE_ROOT, "user_data")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
