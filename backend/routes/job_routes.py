@@ -33,9 +33,11 @@ _background_tasks: Dict[str, asyncio.Task] = {}
 _registry_lock = threading.Lock()
 
 
-def _check_rate_limit(request: Request, endpoint: str, max_requests: int = 5, window_seconds: int = 60):
+def _check_rate_limit(request: Request, endpoint: str, max_requests: int = 60, window_seconds: int = 60, token: Optional[str] = None):
     client_ip = request.client.host if request.client else "unknown"
-    key = f"{endpoint}:{client_ip}"
+    if client_ip in ("127.0.0.1", "localhost", "::1"):
+        return  # Exclude local client / Chrome extension calls from restrictive rate limits
+    key = f"{endpoint}:{token or client_ip}"
     now = time.time()
     with _rate_limit_lock:
         timestamps = _rate_limits.get(key, [])

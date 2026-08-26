@@ -180,8 +180,8 @@ class GeneratePromptQueryRequest(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/analyze_job")
 async def analyze_job(request: JobAnalysisRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
-    _check_rate_limit(http_request, "analyze_job", max_requests=10, window_seconds=300)
     token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    _check_rate_limit(http_request, "analyze_job", max_requests=60, window_seconds=60, token=token)
 
     session = get_session_data(token)
     session_resume_data = request.candidate_profile or session.get("data")
