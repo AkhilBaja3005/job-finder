@@ -39,6 +39,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  // Live Toolbar ATS Match Badge
+  if (request.action === "SET_BADGE") {
+    const tabId = sender.tab ? sender.tab.id : request.tabId;
+    const score = request.score;
+    if (score !== undefined && score !== null && tabId) {
+      const text = `${Math.round(score)}%`;
+      chrome.action.setBadgeText({ text, tabId });
+      let color = "#64748B"; // default gray
+      if (score >= 80) color = "#10B981"; // green
+      else if (score >= 65) color = "#F59E0B"; // amber
+      else if (score > 0) color = "#EF4444"; // red
+      chrome.action.setBadgeBackgroundColor({ color, tabId });
+    } else if (tabId) {
+      chrome.action.setBadgeText({ text: "", tabId });
+    }
+    sendResponse({ success: true });
+    return true;
+  }
+
   // Relay logs or state updates from content.js to popup or storage
   if (request.type === "LOG_EVENT") {
     chrome.storage.local.get(["appLogs"], (items) => {

@@ -114,3 +114,50 @@ def test_download_extension_personalized_zip():
         popup_js_content = zf.read("popup.js").decode("utf-8")
         assert 'const DEFAULT_SYNC_KEY = "GABY48";' in popup_js_content
 
+
+def test_user_archetypes_lifecycle():
+    auth_headers = {"Authorization": "Bearer test_archetype_user_token"}
+    
+    # 1. Initial list
+    res = client.get("/user/archetypes", headers=auth_headers)
+    assert res.status_code == 200
+    assert "archetypes" in res.json()
+
+    # 2. Save GenAI Archetype
+    res_save1 = client.post(
+        "/user/archetypes/save",
+        json={"archetype_name": "GenAI Systems Specialist", "latex_code": "% GenAI LaTeX"},
+        headers=auth_headers
+    )
+    assert res_save1.status_code == 200
+    assert res_save1.json()["active_archetype"] == "GenAI Systems Specialist"
+
+    # 3. Save Data Science Archetype
+    res_save2 = client.post(
+        "/user/archetypes/save",
+        json={"archetype_name": "Data Scientist", "latex_code": "% Data Science LaTeX"},
+        headers=auth_headers
+    )
+    assert res_save2.status_code == 200
+    assert res_save2.json()["active_archetype"] == "Data Scientist"
+
+    # 4. Switch back to GenAI Archetype
+    res_switch = client.post(
+        "/user/archetypes/switch",
+        json={"archetype_name": "GenAI Systems Specialist"},
+        headers=auth_headers
+    )
+    assert res_switch.status_code == 200
+    assert res_switch.json()["active_archetype"] == "GenAI Systems Specialist"
+
+
+def test_job_analysis_tailoring_intensity_schema():
+    from routes.ai_routes import JobAnalysisRequest, TailorResumeRequest
+    
+    req1 = JobAnalysisRequest(job_title="SWE", tailoring_intensity="impact")
+    assert req1.tailoring_intensity == "impact"
+
+    req2 = TailorResumeRequest(job_title="SWE", job_description="Python Docker", tailoring_intensity="conservative")
+    assert req2.tailoring_intensity == "conservative"
+
+

@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import time
 import uuid
 import shutil
 import asyncio
@@ -601,3 +602,146 @@ async def download_extension(
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="job_finder_extension.zip"'}
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-Archetype Master Resume Management
+# ─────────────────────────────────────────────────────────────────────────────
+class SaveArchetypeRequest(BaseModel):
+    archetype_name: str
+    latex_code: Optional[str] = None
+
+class SwitchArchetypeRequest(BaseModel):
+    archetype_name: str
+
+
+def _get_archetype_manifest_path(token: Optional[str]) -> str:
+    user_up_dir, _ = _get_user_storage_dirs(token or "guest")
+    return os.path.join(user_up_dir, "archetypes_manifest.json")
+
+
+@router.get("/user/archetypes")
+async def get_user_archetypes(authorization: Optional[str] = Header(None)):
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    manifest_path = _get_archetype_manifest_path(token)
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+                return {"status": "success", "archetypes": manifest.get("archetypes", []), "active_archetype": manifest.get("active_archetype", "Primary")}
+        except Exception:
+            pass
+    return {
+        "status": "success",
+        "archetypes": [{"name": "Primary", "description": "Default Master Profile", "skills_count": 0, "is_active": True}],
+        "active_archetype": "Primary"
+    }
+
+
+@router.post("/user/archetypes/save")
+async def save_user_archetype(request: SaveArchetypeRequest, authorization: Optional[str] = Header(None)):
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    name = request.archetype_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Archetype name cannot be empty.")
+
+    session = get_session_data(token)
+    session_data = session.get("data") or {}
+    session_tex_path = session.get("latex_path")
+
+    user_up_dir, _ = _get_user_storage_dirs(token or "guest")
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    arch_tex_path = os.path.join(user_up_dir, f"archetype_{safe_name}.tex")
+    arch_data_path = os.path.join(user_up_dir, f"archetype_{safe_name}.json")
+
+    latex_to_save = request.latex_code
+    if not latex_to_save and session_tex_path and os.path.exists(session_tex_path):
+        try:
+            with open(session_tex_path, "r", encoding="utf-8") as f:
+                latex_to_save = f.read()
+        except Exception:
+            pass
+
+    if latex_to_save:
+        with open(arch_tex_path, "w", encoding="utf-8") as f:
+            f.write(latex_to_save)
+
+    with open(arch_data_path, "w", encoding="utf-8") as f:
+        json.dump(session_data, f, indent=2)
+
+    # Update manifest
+    manifest_path = _get_archetype_manifest_path(token)
+    manifest = {"archetypes": [], "active_archetype": name}
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+        except Exception:
+            pass
+
+    archetypes = [a for a in manifest.get("archetypes", []) if a.get("name") != name]
+    eval_res = evaluate_master_resume(session_data) if session_data else {"skills_count": 0, "ats_score": 85}
+    archetypes.append({
+        "name": name,
+        "skills_count": eval_res.get("skills_count", 0),
+        "ats_score": eval_res.get("ats_score", 85),
+        "is_active": True,
+        "updated_at": time.strftime("%Y-%m-%d %H:%M")
+    })
+    for a in archetypes:
+        a["is_active"] = (a.get("name") == name)
+
+    manifest["archetypes"] = archetypes
+    manifest["active_archetype"] = name
+
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+    return {"status": "success", "message": f"Archetype '{name}' saved successfully!", "archetypes": archetypes, "active_archetype": name}
+
+
+@router.post("/user/archetypes/switch")
+async def switch_user_archetype(request: SwitchArchetypeRequest, authorization: Optional[str] = Header(None)):
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    name = request.archetype_name.strip()
+    user_up_dir, _ = _get_user_storage_dirs(token or "guest")
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    arch_tex_path = os.path.join(user_up_dir, f"archetype_{safe_name}.tex")
+    arch_data_path = os.path.join(user_up_dir, f"archetype_{safe_name}.json")
+
+    if not os.path.exists(arch_data_path):
+        raise HTTPException(status_code=404, detail=f"Archetype '{name}' not found.")
+
+    with open(arch_data_path, "r", encoding="utf-8") as f:
+        loaded_data = json.load(f)
+
+    set_session_data(token, loaded_data, arch_tex_path if os.path.exists(arch_tex_path) else None)
+    guest_file = _get_guest_state_file(token)
+    new_eval = evaluate_master_resume(loaded_data)
+    try:
+        with open(guest_file, "w") as f:
+            json.dump({"data": loaded_data, "path": arch_tex_path, "evaluation": new_eval}, f, indent=2)
+    except Exception:
+        pass
+
+    # Update manifest active status
+    manifest_path = _get_archetype_manifest_path(token)
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            for a in manifest.get("archetypes", []):
+                a["is_active"] = (a.get("name") == name)
+            manifest["active_archetype"] = name
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=2)
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "active_archetype": name,
+        "data": loaded_data,
+        "evaluation": new_eval
+    }
+

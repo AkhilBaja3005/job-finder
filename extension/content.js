@@ -1011,6 +1011,77 @@
     setInterval(injectInlineAIButtons, 2500);
   }
 
+  // ── Native ATS File Upload Injection (DataTransfer PDF Drop) ─────────
+  async function attachResumeFile(pdfBase64, fileName = "Tailored_Resume.pdf") {
+    try {
+      const byteCharacters = atob(pdfBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: "application/pdf" });
+      const file = new File([blob], fileName, { type: "application/pdf" });
+
+      const fileInputs = Array.from(
+        document.querySelectorAll(
+          "input[type='file'], input[accept*='pdf'], input[name*='resume'], input[id*='resume'], input[data-testid*='file'], [data-automation-id*='file-upload'] input"
+        )
+      );
+
+      let targetInput = fileInputs.find((inp) => {
+        const combined = (
+          (inp.name || "") + " " +
+          (inp.id || "") + " " +
+          (inp.getAttribute("aria-label") || "") + " " +
+          (inp.getAttribute("data-testid") || "")
+        ).toLowerCase();
+        return combined.includes("resume") || combined.includes("cv") || combined.includes("document") || combined.includes("file");
+      }) || fileInputs[0];
+
+      if (!targetInput) {
+        const dropzones = document.querySelectorAll("[class*='dropzone'], [class*='upload'], [data-testid*='upload'], [data-automation-id*='upload']");
+        for (const dz of dropzones) {
+          const innerInput = dz.querySelector("input[type='file']");
+          if (innerInput) {
+            targetInput = innerInput;
+            break;
+          }
+        }
+      }
+
+      if (!targetInput) {
+        showToast("⚠️ Could not find a resume file upload input on this page.");
+        return false;
+      }
+
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      targetInput.files = dataTransfer.files;
+
+      targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+      targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+      const parentContainer = targetInput.closest("form, [class*='upload'], [class*='dropzone'], label");
+      if (parentContainer) {
+        const dropEvent = new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer
+        });
+        parentContainer.dispatchEvent(dropEvent);
+      }
+
+      logMsg(`📎 Attached tailored PDF (${fileName}) into ATS file input!`);
+      showToast(`📎 ✅ Tailored resume (${fileName}) attached!`);
+      return true;
+    } catch (e) {
+      logMsg(`❌ File attachment failed: ${e.message}`);
+      showToast(`❌ Failed to attach PDF: ${e.message}`);
+      return false;
+    }
+  }
+
   // ── Message Listener ──────────────────────────────────────────────────
   try {
     if (isRuntimeValid() && chrome.runtime.onMessage) {
@@ -1025,6 +1096,11 @@
           } else if (request.action === "TRIGGER_AUTOFILL") {
             runAutofill();
             sendResponse({ status: "ok" });
+          } else if (request.action === "AUTO_ATTACH_RESUME") {
+            attachResumeFile(request.pdfBase64, request.fileName).then((success) => {
+              sendResponse({ success });
+            });
+            return true;
           }
         } catch (e) {}
         return true;

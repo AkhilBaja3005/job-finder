@@ -351,8 +351,21 @@
       <div id="text-preview-content" class="preview-box"></div>
     </div>
 
+    <!-- Tailoring Intensity Selector -->
+    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px;">
+      <span style="font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Tailoring Mode:</span>
+      <select id="sel-tailoring-intensity" style="background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; font-size: 10.5px; font-weight: 700; border-radius: 6px; padding: 3px 6px; cursor: pointer;">
+        <option value="balanced" selected>⚖️ Balanced</option>
+        <option value="conservative">🛡️ Conservative</option>
+        <option value="impact">🚀 Impact-Driven</option>
+      </select>
+    </div>
+
     <!-- Extension Action Buttons -->
-    <button id="btn-autofill" class="btn btn-primary">⚡ Fill Active Application</button>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
+      <button id="btn-autofill" class="btn btn-primary" style="margin-top: 0;">⚡ Auto-Fill Form</button>
+      <button id="btn-auto-attach" class="btn btn-primary" style="margin-top: 0; background: linear-gradient(135deg, #059669 0%, #047857 100%);">📎 Attach PDF</button>
+    </div>
     <button id="btn-email-tailor" class="btn btn-email">📧 1-Click Email Tailored Package</button>
     <button id="btn-cover-letter" class="btn btn-secondary">📝 Generate & Preview Cover Letter</button>
     <button id="btn-outreach" class="btn btn-secondary">✉️ Generate & Preview Recruiter Outreach</button>
