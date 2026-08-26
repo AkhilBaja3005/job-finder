@@ -120,11 +120,11 @@ app.include_router(ai_router)
 app.include_router(admin_router)
 
 # Mount Static Asset Directories
-if os.path.exists(os.path.join(BASE_DIR, "assets")):
-    app.mount("/assets", StaticFiles(directory=os.path.join(BASE_DIR, "assets")), name="assets")
-
 if os.path.exists(OUTPUT_DIR):
     app.mount("/output", StaticFiles(directory=OUTPUT_DIR), name="output")
+
+if os.path.exists(os.path.join(BASE_DIR, "assets")):
+    app.mount("/backend_assets", StaticFiles(directory=os.path.join(BASE_DIR, "assets")), name="backend_assets")
 
 # Mount Frontend Build & SPA Catch-All Route
 frontend_dist = os.path.abspath(os.path.join(BASE_DIR, "../frontend/dist"))
@@ -136,7 +136,7 @@ if not os.path.exists(frontend_dist):
 if os.path.exists(frontend_dist):
     assets_dir = os.path.join(frontend_dist, "assets")
     if os.path.exists(assets_dir):
-        app.mount("/dist_assets", StaticFiles(directory=assets_dir), name="dist_assets")
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
     @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
     async def serve_spa_frontend(rest_of_path: str):
