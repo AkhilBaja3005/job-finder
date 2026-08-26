@@ -1,7 +1,7 @@
 import os
 import json
 import urllib.parse
-from typing import Optional
+from typing import Optional, Any, Dict, List, Union
 from fastapi import APIRouter, HTTPException, Header, Request, BackgroundTasks
 from fastapi.responses import RedirectResponse, HTMLResponse
 from pydantic import BaseModel
@@ -32,6 +32,23 @@ class SubscriptionRequest(BaseModel):
 
 class SettingsRequest(BaseModel):
     gemini_api_key: str
+
+
+class ProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    portfolio: Optional[str] = None
+    linkedin: Optional[str] = None
+    github: Optional[str] = None
+    notice_period: Optional[str] = None
+    salary_expectations: Optional[str] = None
+    work_auth: Optional[str] = None
+    sponsorship: Optional[str] = None
+    skills: Optional[Any] = None
+    summary: Optional[str] = None
+    raw_resume_data: Optional[dict] = None
 
 
 @router.get("/auth/google")
@@ -136,6 +153,55 @@ async def user_settings(request: SettingsRequest, authorization: Optional[str] =
     update_user_api_key(user["id"], request.gemini_api_key)
     invalidate_token_cache(token)
     return {"status": "success"}
+
+
+@router.post("/user/profile")
+async def update_user_profile(request: ProfileUpdateRequest, authorization: Optional[str] = Header(None)):
+    """Cloud sync candidate profile (Notice period, salary, portfolio, location, EEO, links) to Supabase."""
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    user = await async_get_user_by_token(token) if token else None
+
+    from services.session_store import get_session_data, set_session_data
+    session = get_session_data(token)
+    existing_data = session.get("data") or {}
+
+    profile_dict = dict(request.raw_resume_data) if request.raw_resume_data else dict(existing_data)
+    if request.name: profile_dict["name"] = request.name
+    if request.email: profile_dict["email"] = request.email
+    if request.phone: profile_dict["phone"] = request.phone
+    if request.location: profile_dict["location"] = request.location
+    if request.portfolio: profile_dict["portfolio"] = request.portfolio
+    if request.linkedin: profile_dict["linkedin"] = request.linkedin
+    if request.github: profile_dict["github"] = request.github
+    if request.notice_period: profile_dict["notice_period"] = request.notice_period
+    if request.salary_expectations: profile_dict["salary_expectations"] = request.salary_expectations
+    if request.work_auth: profile_dict["work_auth"] = request.work_auth
+    if request.sponsorship: profile_dict["sponsorship"] = request.sponsorship
+    if request.skills: profile_dict["skills"] = request.skills
+    if request.summary: profile_dict["summary"] = request.summary
+
+    # Update in-memory session store
+    set_session_data(token or "guest", profile_dict, session.get("path", ""))
+
+    # Persist to Supabase if logged-in user exists
+    if user and user.get("id") and not str(user.get("id")).startswith("guest_"):
+        try:
+            user_id = user["id"]
+            existing_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+            payload = {
+                "user_id": user_id,
+                "resume_data": json.dumps(profile_dict),
+                "updated_at": "now()"
+            }
+            if existing_rows and len(existing_rows) > 0:
+                supabase_request(f"user_resumes?user_id=eq.{user_id}", "PATCH", payload)
+            else:
+                supabase_request("user_resumes", "POST", payload)
+            invalidate_token_cache(token)
+        except Exception as e:
+            print(f"Supabase profile cloud sync error: {e}")
+
+    return {"status": "success", "profile": profile_dict}
 
 
 @router.post("/user/subscription")

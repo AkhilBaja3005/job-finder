@@ -69,3 +69,28 @@ def test_applications_endpoint():
     response = client.get("/applications")
     assert response.status_code == 200
     assert "applications" in response.json()
+
+
+def test_user_profile_sync():
+    response = client.post(
+        "/user/profile",
+        headers={"Authorization": "Bearer test_sync_token"},
+        json={
+            "name": "Akhil Baja",
+            "email": "akhilbaja.work@gmail.com",
+            "location": "London, UK",
+            "portfolio": "https://akhilbaja.dev",
+            "notice_period": "1 month",
+            "salary_expectations": "Competitive market rate",
+            "work_auth": "Yes",
+            "sponsorship": "No"
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["profile"]["location"] == "London, UK"
+    assert data["profile"]["portfolio"] == "https://akhilbaja.dev"
+    assert data["profile"]["notice_period"] == "1 month"
+    assert data["profile"]["work_auth"] == "Yes"
+    assert data["profile"]["sponsorship"] == "No"

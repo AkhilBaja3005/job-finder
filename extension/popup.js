@@ -246,6 +246,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const salary = resume.salary_expectations || resume.salary || "";
     if (profSalary && (forceOverwrite || !profSalary.value)) profSalary.value = salary || "Competitive market rate";
 
+    const workAuth = resume.work_auth || resume.workAuth || (resume.eeo && resume.eeo.workAuth) || "";
+    if (eeoWorkAuth && (forceOverwrite || !eeoWorkAuth.value)) eeoWorkAuth.value = workAuth || "Yes";
+
+    const sponsorship = resume.sponsorship || (resume.eeo && resume.eeo.sponsorship) || "";
+    if (eeoSponsorship && (forceOverwrite || !eeoSponsorship.value)) eeoSponsorship.value = sponsorship || "No";
+
     if (profSummary && (forceOverwrite || !profSummary.value)) {
       if (typeof resume === "object") {
         profSummary.value = JSON.stringify(resume, null, 2);
@@ -781,7 +787,45 @@ document.addEventListener("DOMContentLoaded", () => {
 
       chrome.storage.local.set({ resumeData, eeoProfile, noticePeriod, salaryExpectations }, () => {
         if (profSummary) profSummary.value = JSON.stringify(resumeData, null, 2);
-        showToast("✅ Candidate Profile & Preferences Saved!");
+        showToast("💾 Saved locally! Syncing to cloud...");
+
+        // Cloud sync to Supabase backend
+        chrome.storage.local.get(["userToken"], (items) => {
+          const token = (items?.userToken || userTokenInput?.value || "").trim();
+          fetch(`${API_BASE_URL}/user/profile`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token || "guest"}`
+            },
+            body: JSON.stringify({
+              name: `${profFirstName.value} ${profLastName.value}`.trim(),
+              email: profEmail.value.trim(),
+              phone: profPhone.value.trim(),
+              location: profLocation.value.trim(),
+              portfolio: profPortfolio.value.trim(),
+              linkedin: profLinkedin.value.trim(),
+              github: profGithub.value.trim(),
+              notice_period: noticePeriod,
+              salary_expectations: salaryExpectations,
+              work_auth: eeoWorkAuth.value,
+              sponsorship: eeoSponsorship.value,
+              skills: profSkills.value.split(",").map((s) => s.trim()).filter(Boolean),
+              summary: profSummary.value.trim(),
+              raw_resume_data: resumeData
+            })
+          })
+            .then((res) => {
+              if (res.ok) {
+                showToast("☁️ ✅ Profile & Preferences Synced to Cloud!");
+              } else {
+                showToast("✅ Profile Saved locally!");
+              }
+            })
+            .catch(() => {
+              showToast("✅ Profile Saved locally!");
+            });
+        });
       });
     });
   }
