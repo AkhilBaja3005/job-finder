@@ -357,10 +357,58 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             pdf_download_url = f"/download_application_pdf/{safe_key}/{os.path.basename(temp_pdf_path)}" if os.path.exists(temp_pdf_path) else None
 
+            email_sent = False
+            dest_email = None
+            if request.send_email:
+                if token and token != "guest":
+                    user = await async_get_user_by_token(token)
+                    if user and user.get("email"):
+                        dest_email = user["email"]
+                if not dest_email and isinstance(session_resume_data, dict) and session_resume_data.get("email"):
+                    dest_email = session_resume_data["email"]
+
+                if dest_email and os.path.exists(temp_pdf_path):
+                    yield json.dumps({"type": "log", "percent": 95, "message": f"📧 Dispatching tailored resume PDF to {dest_email}..."}) + "\n"
+                    from services.email_service import async_send_notification_email
+                    cand_name = session_resume_data.get("name", "").strip() or "Candidate" if isinstance(session_resume_data, dict) else "Candidate"
+                    ats_score = dumped.get("match_analysis", {}).get("overall_score") or 85
+                    email_subj = f"📄 [Resume Delivery] Tailored Resume [{ats_score}% Match]: {job_title} at {extracted_company}"
+                    email_text = (
+                        f"Hello {cand_name},\n\n"
+                        f"Here is your requested tailored resume PDF for '{job_title}' at '{extracted_company}' (ATS Score: {ats_score}% Match)!\n\n"
+                        f"View the job listing and apply here:\n{request.job_url or ''}\n\n"
+                        f"Open it in Overleaf:\n{overleaf_url or ''}\n\n"
+                        f"Best of luck with your application!"
+                    )
+                    email_html = f"""
+                    <div style="font-family: 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 12px; background-color: #FAFAFA;">
+                        <h2 style="color: #0284C7;">Tailored Resume PDF</h2>
+                        <p>For your application at <strong>{extracted_company}</strong> ({job_title})</p>
+                        <p>ATS Match Score: <strong>{ats_score}% Match</strong></p>
+                        <div style="text-align: center; margin: 25px 0;">
+                            {"<a href='" + request.job_url + "' style='display:inline-block; background-color:#10B981; color:#fff; padding:10px 20px; border-radius:6px; text-decoration:none; margin-right:10px;'>View Job & Apply</a>" if request.job_url else ""}
+                            {"<a href='" + overleaf_url + "' style='display:inline-block; background-color:#0284C7; color:#fff; padding:10px 20px; border-radius:6px; text-decoration:none;'>Open in Overleaf</a>" if overleaf_url else ""}
+                        </div>
+                    </div>
+                    """
+                    try:
+                        email_sent = await async_send_notification_email(
+                            to_email=dest_email,
+                            subject=email_subj,
+                            text_body=email_text,
+                            html_body=email_html,
+                            attachment_path=temp_pdf_path,
+                            attachment_name=f"Tailored_Resume_{(extracted_company or 'Role').replace(' ', '_')}.pdf"
+                        )
+                    except Exception as e:
+                        print(f"[analyze_job] Email send error: {e}")
+
             dumped = analysis.model_dump()
             dumped["latex_code"] = final_latex
             dumped["overleaf_url"] = overleaf_url
             dumped["download_pdf_url"] = pdf_download_url
+            dumped["email_sent"] = email_sent
+            dumped["dest_email"] = dest_email
 
             set_cached_analysis(token, job_title, jd_text, dumped)
 
@@ -373,7 +421,9 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 "company": extracted_company,
                 "analysis": dumped,
                 "overleaf_url": overleaf_url,
-                "download_pdf_url": pdf_download_url
+                "download_pdf_url": pdf_download_url,
+                "email_sent": email_sent,
+                "dest_email": dest_email
             }) + "\n"
 
         except Exception as e:

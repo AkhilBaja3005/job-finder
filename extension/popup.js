@@ -275,7 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ----------------------------------------------------
   // Load Storage Initialization
   // ----------------------------------------------------
-  chrome.storage.local.get(["backendUrl", "userToken", "resumeData", "eeoProfile", "noticePeriod", "salaryExpectations", "customJdState", "lastPreviewState"], (items) => {
+  chrome.storage.local.get(["backendUrl", "userToken", "resumeData", "eeoProfile", "noticePeriod", "salaryExpectations", "customJdState", "lastPreviewState", "lastAtsAnalysis"], (items) => {
     if (items && items.backendUrl && items.backendUrl.trim()) {
       API_BASE_URL = items.backendUrl.trim().replace(/\/+$/, "");
       if (backendUrlInput) backendUrlInput.value = API_BASE_URL;
@@ -309,6 +309,24 @@ document.addEventListener("DOMContentLoaded", () => {
       if (previewTitle && items.lastPreviewState.title) previewTitle.textContent = items.lastPreviewState.title;
       if (previewContent) previewContent.textContent = items.lastPreviewState.text;
       if (previewWrapper) previewWrapper.style.display = "block";
+    }
+
+    // Restore cached ATS Score & Analysis
+    if (items?.lastAtsAnalysis) {
+      const an = items.lastAtsAnalysis;
+      if (scoreCircle && an.fit_score) scoreCircle.textContent = `${an.fit_score}%`;
+      if (scoreSub) scoreSub.textContent = an.fit_score >= 70 ? "Strong match profile" : "Missing key keywords";
+      if (activeRoleTitle && an.title) activeRoleTitle.textContent = an.title;
+      if (activeCompanyName && an.company) activeCompanyName.textContent = an.company;
+      if (alignSeniority && an.seniority) alignSeniority.textContent = an.seniority;
+      if (alignDomain && an.domain) alignDomain.textContent = an.domain;
+      if (alignVer && an.verdict) alignVer.textContent = an.verdict;
+      const alignCard = document.getElementById("alignment-report-card");
+      if (alignCard) alignCard.style.display = "block";
+      if (an.flags && an.flags !== "None detected" && alignFlagsBox && alignFlags) {
+        alignFlags.textContent = an.flags;
+        alignFlagsBox.style.display = "block";
+      }
     }
 
     checkHealth();
@@ -421,6 +439,21 @@ document.addEventListener("DOMContentLoaded", () => {
                     alignCard.style.display = "block";
                   }
 
+                  // Save ATS Analysis state to storage for persistent restoration across popup closures
+                  chrome.storage.local.set({
+                    lastAtsAnalysis: {
+                      fit_score: score,
+                      title: details.title,
+                      company: details.company,
+                      seniority: alignSen ? alignSen.textContent : "",
+                      domain: alignDom ? alignDom.textContent : "",
+                      verdict: alignVer ? alignVer.textContent : "",
+                      flags: alignFlags ? alignFlags.textContent : "",
+                      missingSkills: missing || [],
+                      url: details.url
+                    }
+                  });
+
                   if (missing.length > 0) {
                     window.selectedUserSkills = window.selectedUserSkills || new Set();
                     missingSkillsContainer.innerHTML = missing.slice(0, 8).map((s) => {
@@ -499,7 +532,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
       chrome.storage.local.get(["customJdState"], (st) => {
         const cachedJd = st?.customJdState;
-        if (cachedJd && cachedJd.url === tabUrl && cachedJd.text && cachedJd.text.length > 50) {
+        const normActive = tabUrl.split("?")[0].split("#")[0].toLowerCase();
+        const normCached = (cachedJd?.url || "").split("?")[0].split("#")[0].toLowerCase();
+        const isSamePage = cachedJd && cachedJd.text && cachedJd.text.length > 30 && (normCached === normActive || normActive.includes(normCached) || normCached.includes(normActive));
+
+        if (isSamePage) {
           handleJobDetails({
             title: cachedJd.title || "Custom Role",
             company: cachedJd.company || "Target Company",
