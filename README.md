@@ -8,7 +8,7 @@ app_port: 8000
 pinned: false
 ---
 
-# AI Job Finder Agent (v2.1.0)
+# AI Job Finder Agent (v2.2.0)
 
 An AI-powered job search, resume tailoring, and application assistant. Upload a resume once (in `.pdf`, `.docx`, or `.tex`), then let it discover matching job postings, score your ATS fit against job descriptions, tailor a pixel-perfect one-page LaTeX resume and cover letter for specific roles, generate personalized recruiter outreach messages, and auto-fill applications directly on the web.
 
