@@ -1,4 +1,4 @@
-// content.js - Job Finder ATS Tailor & Multimodal AI AutoFill Content Script (v3.2.0)
+// content.js - Job Finder ATS Tailor & Multimodal AI AutoFill Content Script (v3.3.0)
 
 (function () {
   function isRuntimeValid() {
@@ -364,6 +364,115 @@
     return `With my proven experience in engineering and product innovation, I am excited to bring direct value to ${jobInfo.company || "the team"}.`;
   }
 
+  // ── Inject Inline "✨ AI Answer" Buttons Beside Question Boxes ────────
+  function injectInlineAIButtons() {
+    const candidateInputs = document.querySelectorAll(
+      "textarea, input[type='text'], input:not([type]), [contenteditable='true']"
+    );
+
+    candidateInputs.forEach((el) => {
+      if (el.getAttribute("data-jf-ai-btn-injected") === "true" || !el.offsetParent) return;
+      const type = (el.type || "").toLowerCase();
+      if (["hidden", "submit", "button", "file", "checkbox", "radio", "password"].includes(type)) return;
+
+      const questionText = getQuestionTextForElement(el);
+      const isShortProfile = /email|phone|first.?name|last.?name|candidate.?name|legal.?name|resume/i.test(questionText);
+      if (isShortProfile && el.tagName !== "TEXTAREA") return;
+
+      el.setAttribute("data-jf-ai-btn-injected", "true");
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "jf-inline-ai-btn";
+      btn.innerHTML = "✨ AI Answer";
+      btn.title = "Generate tailored answer with AI";
+      Object.assign(btn.style, {
+        position: "absolute",
+        right: "8px",
+        top: el.tagName === "TEXTAREA" ? "8px" : "50%",
+        transform: el.tagName === "TEXTAREA" ? "none" : "translateY(-50%)",
+        background: "linear-gradient(135deg, #2563eb, #06b6d4)",
+        color: "#ffffff",
+        border: "none",
+        borderRadius: "6px",
+        padding: "3px 8px",
+        fontSize: "11px",
+        fontWeight: "600",
+        cursor: "pointer",
+        zIndex: "100",
+        boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        lineHeight: "1.4",
+        transition: "all 0.15s ease",
+        opacity: "0.85"
+      });
+
+      btn.addEventListener("mouseenter", () => {
+        btn.style.opacity = "1";
+        btn.style.transform = (el.tagName === "TEXTAREA" ? "none" : "translateY(-50%)") + " scale(1.04)";
+      });
+      btn.addEventListener("mouseleave", () => {
+        btn.style.opacity = "0.85";
+        btn.style.transform = el.tagName === "TEXTAREA" ? "none" : "translateY(-50%)";
+      });
+
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        btn.innerHTML = "⏳ Generating...";
+        btn.disabled = true;
+
+        chrome.storage.local.get(["userToken", "resumeData", "backendUrl"], async (storage) => {
+          let resume = storage.resumeData || {};
+          const token = (storage.userToken || "").trim();
+          const baseUrl = (storage.backendUrl || "http://127.0.0.1:8000").replace(/\/+$/, "");
+
+          if (!resume || !resume.name) {
+            try {
+              const resp = await fetch(`${baseUrl}/user/me`, {
+                headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" }
+              });
+              if (resp.ok) {
+                const userProfile = await resp.json();
+                if (userProfile && (userProfile.resume_data || userProfile.data)) {
+                  resume = userProfile.resume_data || userProfile.data;
+                  chrome.storage.local.set({ resumeData: resume });
+                }
+              }
+            } catch (err) {}
+          }
+
+          const jobInfo = extractJobDetails();
+          const qText = getQuestionTextForElement(el) || "Screening Question";
+
+          const answer = await generateAIAnswer(qText, resume, jobInfo, baseUrl, token);
+          if (answer) {
+            setNativeValue(el, answer);
+            el.style.outline = "2px solid #10b981";
+            el.style.background = "rgba(16, 185, 129, 0.05)";
+            btn.innerHTML = "✅ Filled";
+            showToast("✨ AI Answer Generated!");
+          } else {
+            btn.innerHTML = "⚠️ Retry";
+          }
+          setTimeout(() => {
+            btn.innerHTML = "✨ AI Answer";
+            btn.disabled = false;
+          }, 2000);
+        });
+      });
+
+      const parent = el.parentElement;
+      if (parent) {
+        const computedPos = window.getComputedStyle(parent).position;
+        if (computedPos === "static") {
+          parent.style.position = "relative";
+        }
+        parent.appendChild(btn);
+      }
+    });
+  }
+
   // ── Comprehensive AutoFill Master Function ────────────────────────────
   async function runAutofill() {
     showToast("⏳ Auto-filling application & generating AI answers...");
@@ -535,6 +644,9 @@
         } catch (e) {}
       }
 
+      // Inject / refresh inline AI buttons
+      injectInlineAIButtons();
+
       logMsg(`⚡ Auto-filled ${filledCount} field${filledCount !== 1 ? "s" : ""} (${aiQuestionsAnswered} AI answers generated).`);
       showToast(`✨ Auto-filled ${filledCount} fields (${aiQuestionsAnswered} AI answers generated)!`);
     });
@@ -558,6 +670,10 @@
     setTimeout(() => { toast.style.opacity = "0"; }, 2500);
     setTimeout(() => toast.remove(), 3000);
   }
+
+  // ── Auto-Inject Buttons on Mutation / Page Load ────────────────────────
+  setTimeout(injectInlineAIButtons, 1000);
+  setInterval(injectInlineAIButtons, 3000);
 
   // ── Message Listener ──────────────────────────────────────────────────
   try {
