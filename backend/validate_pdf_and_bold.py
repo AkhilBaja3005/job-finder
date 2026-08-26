@@ -24,44 +24,122 @@ def validate_resume_tailoring():
     print("=" * 60)
 
     # 1. Sample Master LaTeX template
-    master_latex = r"""\documentclass{resume}
-\usepackage[left=0.4in,top=0.4in,right=0.4in,bottom=0.4in]{geometry}
-\usepackage{hyperref}
-\hypersetup{hidelinks}
+    master_latex = r"""
+\documentclass[12pt]{resume}
 
-\name{BAJA AKHIL}
-\address{akhilkumarbaja@gmail.com | +91 9948083135 | github.com/akhilbaja}
+\usepackage[T1]{fontenc}
+\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{geometry}
+\usepackage{fontawesome}
+\usepackage{times}
+\usepackage{hyperref}
+
+\newcommand\mybar{\kern1pt\rule[-\dp\strutbox]{.8pt}{\baselineskip}\kern1pt}
+
+\hypersetup{
+    colorlinks=false,
+    pdfborder={0 0 0}
+}
+
+% Force black dots for all levels of itemize
+\renewcommand{\labelitemi}{$\bullet$}
+\renewcommand{\labelitemii}{$\bullet$}
+\frenchspacing
+
+\name{Akhil Baja}
+
+\address{
+\faEnvelope\ \href{mailto:akhilbaja.work@gmail.com}{akhilbaja.work@gmail.com}
+|
+\faPhone\ +91 9948083135
+|
+\href{https://www.linkedin.com/in/akhilbaja}{ \faLinkedinSquare\ linkedin.com/in/akhilbaja}
+|
+\href{https://github.com/AkhilBaja3005}{ \faGithub\ github.com/AkhilBaja3005 }
+}
 
 \begin{document}
+
+%----------------------------------------------------------------------------------------
+%	SUMMARY SECTION
+%----------------------------------------------------------------------------------------
+
+\vspace{-0.2em}
 \begin{rSection}{Professional Summary}
-Data Scientist with 3 years of experience in predictive modelling, large-scale data engineering, and machine learning. Proven track record in developing scalable data pipelines and deploying models using Python, PySpark, and SQL. Adept at applying statistical techniques to optimize ranking and recommendation systems.
+AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML and developer infrastructure at \textbf{Qualcomm} and \textbf{Axis Bank}. Engineered cross-language LLM context pipelines cutting retrieval latency by \textbf{60\%} and improving LLM accuracy by \textbf{46\%}, alongside enterprise GenAI systems serving \textbf{1,000+} users. Strong in Python, LLMs, RAG, machine learning, and distributed systems; MSc student in Artificial Intelligence Applications and Innovation at \textbf{Imperial College London}.
 \end{rSection}
 
+
+
+%----------------------------------------------------------------------------------------
+%	WORK EXPERIENCE
+%----------------------------------------------------------------------------------------
+
+\vspace{-0.3em}
+\begin{rSection}{Work Experience}
+{\bf Qualcomm \mybar \textnormal{Software Engineer (GenAI / Systems)}} \hfill {\em Dec 2024 -- Aug 2026} \\
+{\em Technologies: Python, C++, Jedi, Jenkins, RabbitMQ, Docker, Rancher, SQL, Git}
+\vspace{-0.35em}
+\begin{itemize}
+    \setlength{\itemsep}{-0.20em}
+    \setlength{\parsep}{0em}
+    \item Engineered a cross-language \textbf{LLM context engineering} pipeline using AST-based dependency extraction across Java, Python, C and C++, reducing retrieval latency by \textbf{60\%} and improving LLM accuracy by \textbf{46\%} — \textbf{Qualcomm Certificate of Recognition}.
+    \item Re-architected a central data-harvesting pipeline for \textbf{1,000+} users, cutting deployment failure rate by \textbf{84\%} by replacing legacy Jenkins workflows with asynchronous \textbf{RabbitMQ} queues and containerizing microservices via \textbf{Docker/Rancher} for cross-OS deployment stability.
+    \item Slashed static analysis parser execution latency by \textbf{93\%} and consolidated \textbf{200+} unit tests into a Linux-compatible test harness, cutting ongoing maintenance overhead by \textbf{60\%}.
+\end{itemize}
+
+{\bf Axis Bank \mybar \textnormal{Data Scientist (AI / ML)}} \hfill {\em July 2023 -- Dec 2024} \\
+{\em Technologies: Python, Azure OpenAI, PySpark, Cloudera ML, SAS EG, SQL, XGBoost}
+\vspace{-0.35em}
+\begin{itemize}
+    \setlength{\itemsep}{-0.20em}
+    \setlength{\parsep}{0em}
+    \item Built and deployed an enterprise GenAI assistant using \textbf{Azure OpenAI and Cloudera ML}, serving \textbf{1,000+} active employees and reducing internal query resolution time by \textbf{70\%}.
+    \item Engineered an \textbf{Isolation Forest} anomaly detection model for Gold Loans, flagging branch-level risk patterns tied to \textbf{\pounds30M+} in projected annual portfolio loss exposure and cutting manual review time by \textbf{80\%} — \textbf{BIU Star Award}.
+    \item Automated customer Dynamic Risk Rating via \textbf{XGBoost and Naive Bayes} pipelines, reducing manual processing effort by \textbf{\textasciitilde40\%} and aligning the automated risk-rating process with \textbf{RBI (Reserve Bank of India)} regulatory requirements.
+\end{itemize}
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	TECHNICAL SKILLS
+%----------------------------------------------------------------------------------------
+
+\vspace{-0.3em}
 \begin{rSection}{Technical Skills}
-\textbf{Languages:} Python, SQL, R, Scala \\
-\textbf{Frameworks:} PySpark, TensorFlow, PyTorch, scikit-learn \\
-\textbf{Cloud:} GCP, AWS, Azure \\
-\textbf{Tools:} Airflow, Docker, Kubernetes, Git
+\vspace{-0.1em}
+\textbf{Languages:} Python, SQL, C++, Java \\
+\textbf{AI/ML \& GenAI:} Generative AI, Large Language Models (LLMs), RAG, LLM Context Engineering, Machine Learning, Deep Learning, Anomaly Detection, XGBoost, Naive Bayes, Computer Vision (U-Net, DenseNet) \\
+\textbf{Data \& Platforms:} PySpark, Azure OpenAI, Cloudera ML, PostgreSQL, SAS EG \\
+\textbf{Software \& Infrastructure:} Docker, Rancher, RabbitMQ, Jenkins, Git, AST Parsing, Static Analysis, Distributed Systems, Microservices, CI/CD, Unit Testing
+
 \end{rSection}
 
-\begin{rSection}{Professional Experience}
-\begin{rSubsection}{Nexus Corporation}{June 2023 -- Present}{Senior Data Scientist}{Remote}
-\item Developed and deployed scalable recommendation model serving 50M+ daily active users, improving engagement by 35%
-\item Built automated ETL data pipelines with PySpark and Airflow on GCP, reducing processing latency by 40%
-\item Implemented A/B testing framework across key product flows, increasing conversions by 18%
-\item Mentored junior engineers and led technical architecture reviews for data engineering infrastructure
-\end{rSubsection}
+%----------------------------------------------------------------------------------------
+%	EDUCATION SECTION
+%----------------------------------------------------------------------------------------
 
-\begin{rSubsection}{TechCorp Global}{January 2021 -- May 2023}{Data Scientist}{Hyderabad, India}
-\item Formulated customer churn predictive models achieving 92% ROC-AUC score using XGBoost
-\item Created real-time anomaly detection pipelines processing 10K events/sec using Kafka and PySpark
-\item Optimized SQL database queries and indexes, improving dashboard load times by 50%
-\end{rSubsection}
-\end{rSection}
-
+\vspace{-0.3em}
 \begin{rSection}{Education}
-\textbf{IIT Hyderabad} \hfill May 2023 \\
-B.Tech in Engineering Science \hfill {\em CPI: 8.04}
+{\bf Imperial College London} \hfill {\em Sept 2026 -- Sept 2027} \\
+{\textit{MSc in Artificial Intelligence Applications and Innovation}} \hfill {\em London, UK} \\
+{\bf IIT Hyderabad} \hfill {\em Aug 2019 -- May 2023} \\
+{\textit{B.Tech in Engineering Science}} \hfill {\em CPI: 8.04 / 10.0} \\
+\textit{\textbf{Internship and Placement Cell Coordinator} — Managed corporate outreach and recruitment operations for \textbf{100+} technology and engineering firms.}
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	PROJECTS
+%----------------------------------------------------------------------------------------
+
+\vspace{-0.3em}
+\begin{rSection}{Projects}
+\vspace{-0.2em}
+\begin{itemize}
+    \setlength{\itemsep}{-0.25em}
+    \setlength{\parsep}{0em}
+    \item \textbf{Cosmic Ray Segmentation (Deep Learning):} Enhanced the \textbf{deepCR} model for cosmic-ray detection in astronomical images; evaluated \textbf{U-Net} and implemented residual connections, improving pixel-level segmentation precision by \textbf{15\%}.
+    \item \textbf{Tuberculosis Detection Pipeline (Computer Vision):} Implemented a transfer-learning pipeline combining \textbf{U-Net} segmentation and \textbf{DenseNet} classification across \textbf{5,000+} chest X-rays (\textbf{+12\%} accuracy over baseline).
+    \item \textbf{Scientific Publications Database (Data Infrastructure):} Designed and optimized a \textbf{PostgreSQL} database and custom ER schema for 2M+ research papers, accelerating query execution time by \textbf{45\%} via targeted indexing.
+\end{itemize}
 \end{rSection}
 \end{document}
 """
@@ -88,6 +166,9 @@ B.Tech in Engineering Science \hfill {\em CPI: 8.04}
 
     tex_path = os.path.join(output_dir, "validation_test.tex")
     pdf_path = os.path.join(output_dir, "validation_test.pdf")
+
+    print(f"pdf-path: {pdf_path}")
+    print(f"latex-path: {tex_path}")
 
     print("\n2️⃣  Applying Hotfix & Geometry Constraints...")
     fixed_code = apply_latex_hotfix(tailored_latex)
