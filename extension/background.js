@@ -59,3 +59,24 @@ chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => 
     return true;
   }
 });
+
+// ── Development Auto-Reload / Hot-Reload Watcher ──────────────────────────
+let lastExtHash = null;
+async function checkHotReload() {
+  try {
+    const res = await fetch("http://127.0.0.1:8000/extension_version_hash");
+    if (res.ok) {
+      const data = await res.json();
+      if (lastExtHash && data.hash && data.hash !== lastExtHash) {
+        console.log("[AutoReload] Extension file changes detected on disk! Auto-reloading extension...");
+        chrome.runtime.reload();
+        return;
+      }
+      lastExtHash = data.hash;
+    }
+  } catch (e) {
+    // Backend offline or running in pure remote mode, ignore silently
+  }
+}
+setInterval(checkHotReload, 2000);
+checkHotReload();

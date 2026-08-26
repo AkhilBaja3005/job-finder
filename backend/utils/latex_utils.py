@@ -343,6 +343,22 @@ def apply_latex_hotfix(
     if doc_start != -1:
         fixed = fixed[:doc_start] + _bold_metrics_in_body(re.search(r'\\begin\{document\}.*', fixed, re.DOTALL))
 
+    def categorize_skill(skill: str) -> str:
+        s = skill.strip().lower()
+        languages = {"python", "sql", "c++", "c", "java", "javascript", "typescript", "golang", "go", "rust", "c#", "scala", "r", "bash", "shell", "ruby", "php", "swift", "kotlin", "html", "css"}
+        if s in languages or any(s == f"{l} programming" for l in languages):
+            return "Languages"
+        
+        data_platforms = {"spark", "pyspark", "hadoop", "kafka", "postgresql", "postgres", "mongodb", "redis", "snowflake", "bigquery", "databricks", "azure", "aws", "gcp", "cloudera", "sas", "mysql", "elasticsearch", "cassandra", "dynamodb", "airflow"}
+        if any(k in s for k in data_platforms):
+            return "Data & Platforms"
+
+        software_infra = {"docker", "kubernetes", "k8s", "rancher", "jenkins", "rabbitmq", "git", "ci/cd", "cicd", "microservices", "linux", "distributed systems", "unit testing", "ast", "static analysis", "rapid prototyping", "agile", "scrum", "system design", "grpc", "rest", "graphql"}
+        if any(k in s for k in software_infra):
+            return "Software & Infrastructure"
+        
+        return "AI/ML & GenAI"
+
     # ── Inject user-selected skills directly into Technical Skills section (bypassing LLM review) ──
     if user_selected_skills and len(user_selected_skills) > 0:
         clean_user_skills = [s.strip() for s in user_selected_skills if s and s.strip()]
@@ -354,20 +370,40 @@ def apply_latex_hotfix(
                     return match.group(0)
                 
                 lines = sec_body.split('\n')
-                injected = False
                 new_lines = []
+                categorized = {}
+                for s in missing_to_add:
+                    cat = categorize_skill(s)
+                    categorized.setdefault(cat, []).append(s)
+
                 for line in lines:
-                    if not injected and line.strip().startswith('\\textbf{'):
-                        if line.strip().endswith('\\\\'):
-                            new_line = line[:-2].rstrip() + ", " + ", ".join(missing_to_add) + " \\\\"
+                    stripped = line.strip()
+                    matched_cat = None
+                    if stripped.startswith('\\textbf{'):
+                        s_lower = stripped.lower()
+                        if 'language' in s_lower and 'Languages' in categorized and categorized['Languages']:
+                            matched_cat = 'Languages'
+                        elif any(w in s_lower for w in ['ai', 'ml', 'genai', 'machine learning', 'learning']) and 'AI/ML & GenAI' in categorized and categorized['AI/ML & GenAI']:
+                            matched_cat = 'AI/ML & GenAI'
+                        elif any(w in s_lower for w in ['data', 'platform', 'database', 'cloud']) and 'Data & Platforms' in categorized and categorized['Data & Platforms']:
+                            matched_cat = 'Data & Platforms'
+                        elif any(w in s_lower for w in ['software', 'infra', 'tool', 'framework']) and 'Software & Infrastructure' in categorized and categorized['Software & Infrastructure']:
+                            matched_cat = 'Software & Infrastructure'
+                    
+                    if matched_cat:
+                        to_inject = categorized.pop(matched_cat)
+                        if stripped.endswith('\\\\'):
+                            new_line = stripped[:-2].rstrip() + ", " + ", ".join(to_inject) + " \\\\"
                         else:
-                            new_line = line + ", " + ", ".join(missing_to_add)
+                            new_line = stripped + ", " + ", ".join(to_inject)
                         new_lines.append(new_line)
-                        injected = True
                     else:
                         new_lines.append(line)
-                if not injected:
-                    new_lines.append(f"\\textbf{{Additional Skills:}} {', '.join(missing_to_add)}")
+
+                for remaining_cat, skills_list in categorized.items():
+                    if skills_list:
+                        new_lines.append(f"\\textbf{{{remaining_cat}:}} {', '.join(skills_list)} \\\\")
+
                 return f"\\begin{{rSection}}{{Technical Skills}}\n" + "\n".join(new_lines) + f"\n\\end{{rSection}}"
 
             fixed = re.sub(
@@ -424,7 +460,11 @@ def _format_bullet_bolding(text: str, dynamic_skills: Optional[List[str]] = None
     return t
 
 
-def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> str:
+def generate_latex_from_json(
+    data: dict,
+    master_latex: Optional[str] = None,
+    user_selected_skills: Optional[List[str]] = None,
+) -> str:
     """
     Generate a canonical LaTeX resume from structured JSON data.
     If master_latex is provided, \\name and \\address are copied verbatim from it.
@@ -491,6 +531,43 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
         latex.append(f"\\printaddress{{{address_line}}}")
 
     skills = data.get("skills", [])
+    if user_selected_skills and len(user_selected_skills) > 0:
+        clean_user_skills = [s.strip() for s in user_selected_skills if s and s.strip()]
+        if clean_user_skills:
+            if isinstance(skills, dict):
+                import copy
+                skills = copy.deepcopy(skills)
+                for s in clean_user_skills:
+                    cat = categorize_skill(s)
+                    matched_key = None
+                    for k in skills.keys():
+                        k_low = k.lower()
+                        if cat == "Languages" and "lang" in k_low:
+                            matched_key = k
+                            break
+                        elif cat == "AI/ML & GenAI" and any(w in k_low for w in ["ai", "ml", "genai", "learning"]):
+                            matched_key = k
+                            break
+                        elif cat == "Data & Platforms" and any(w in k_low for w in ["data", "platform", "cloud", "database"]):
+                            matched_key = k
+                            break
+                        elif cat == "Software & Infrastructure" and any(w in k_low for w in ["software", "infra", "tool", "framework"]):
+                            matched_key = k
+                            break
+                    if not matched_key:
+                        matched_key = next((k for k in skills.keys() if any(w in k.lower() for w in ["ai", "ml", "software", "infra"])), next(iter(skills), cat))
+                    if matched_key not in skills:
+                        skills[matched_key] = []
+                    cur = skills[matched_key]
+                    if isinstance(cur, list):
+                        if s not in cur:
+                            cur.append(s)
+                    elif isinstance(cur, str):
+                        if s.lower() not in cur.lower():
+                            skills[matched_key] = f"{cur}, {s}"
+            elif isinstance(skills, list):
+                skills = list(set(skills + [s for s in clean_user_skills if s not in skills]))
+
     skills_list = skills if isinstance(skills, list) else []
 
     # Professional Summary
@@ -643,3 +720,70 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
 
     latex.append("\\end{document}")
     return "\n".join(latex)
+
+
+def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, linespread: float = 1.0, master_latex: Optional[str] = None) -> tuple:
+    import uuid
+    import shutil
+    import subprocess
+    from pypdf import PdfReader
+    from services.session_store import BASE_DIR, UPLOAD_DIR, OUTPUT_DIR
+
+    try:
+        unique_id = uuid.uuid4().hex[:10]
+        temp_tex = os.path.join(OUTPUT_DIR, f"temp_check_{unique_id}.tex")
+        temp_pdf = os.path.join(OUTPUT_DIR, f"temp_check_{unique_id}.pdf")
+
+        fixed_code = apply_latex_hotfix(latex_code, spacing_scale, linespread, master_latex)
+        with open(temp_tex, "w", encoding="utf-8") as f:
+            f.write(fixed_code)
+
+        cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
+        if not os.path.exists(cls_source):
+            cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
+        if os.path.exists(cls_source):
+            shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
+
+        result = subprocess.run(
+            ["tectonic", temp_tex, "--outdir", OUTPUT_DIR],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if result.returncode != 0:
+            print(f"Tectonic check failed: {result.stderr}")
+            return 999, 0.0
+
+        reader = PdfReader(temp_pdf)
+        pages = len(reader.pages)
+
+        filled_height = 0.0
+        if pages > 0:
+            page = reader.pages[0]
+            min_y = 9999.0
+            max_y = -9999.0
+
+            def visitor(text, cm, tm, font_dict, font_size):
+                nonlocal min_y, max_y
+                if text.strip():
+                    y = tm[4] * cm[1] + tm[5] * cm[3] + cm[5]
+                    if y < min_y:
+                        min_y = y
+                    if y > max_y:
+                        max_y = y
+            try:
+                page.extract_text(visitor_text=visitor)
+                if min_y < 9999.0:
+                    filled_height = max_y - min_y
+            except Exception as ex:
+                print(f"Error extracting baseline coordinates: {ex}")
+
+        if os.path.exists(temp_tex):
+            os.remove(temp_tex)
+        if os.path.exists(temp_pdf):
+            os.remove(temp_pdf)
+
+        return pages, filled_height
+    except Exception as e:
+        print(f"Error checking page metrics: {e}")
+        return 999, 0.0

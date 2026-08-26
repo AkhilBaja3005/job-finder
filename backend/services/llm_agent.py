@@ -172,6 +172,7 @@ def tailor_latex_code(
     custom_api_key: Optional[str] = None,
     reviewer_feedback: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
+    user_selected_skills: Optional[List[str]] = None,
 ) -> str:
     """
     Step 2: Directly tailors the master LaTeX code for a target job.
@@ -185,6 +186,8 @@ def tailor_latex_code(
         if reviewer_feedback else ""
     )
 
+    approved_skills_str = ", ".join(user_selected_skills) if user_selected_skills else "None"
+
     prompt = f"""You are an expert LaTeX CV typesetter and ATS optimizer.
 Take the candidate's MASTER LaTeX resume code below and tailor it for the target job: "{job_title}".
 {feedback_str}
@@ -192,6 +195,10 @@ TARGET JOB DESCRIPTION (excerpt):
 ---
 {jd_truncated}
 ---
+
+USER EXPLICITLY APPROVED SKILLS (MANDATORY TO INCLUDE IN TECHNICAL SKILLS & BULLETS):
+[{approved_skills_str}]
+(The candidate has manually selected and authorized these skills for inclusion. You MUST add these skills to the Technical Skills section under their appropriate category and weave them naturally into relevant experience/project bullets!)
 
 ATS KEYWORDS TO INTEGRATE (weave naturally — do NOT copy-paste verbatim from JD):
 {", ".join(missing_skills)}
@@ -236,6 +243,7 @@ RULE 4 — ONE-PAGE BUDGET, BOLDING & STUDENT/DEGREE TIMELINE ACCURACY (CRITICAL
       * ALWAYS phrase ongoing degrees as: "MSc Candidate in Artificial Intelligence at Imperial College London" or "Postgraduate Researcher in AI at Imperial College London".
       * Completed Past Education (e.g. "Aug 2019 – May 2023"): Use "B.Tech graduate from IIT Hyderabad" or "B.Tech in Engineering Science from IIT Hyderabad".
   • Professional Summary MUST be placed at the top (below header), kept to 2-3 lines visually, reflecting their exact student/graduate standing, actual professional years, and targeted domain skills.
+  • PROFESSIONAL SUMMARY NATURAL FLOW: Keep the summary fluid, factual, and high-impact. Never pack arbitrary keywords into awkward run-on clauses (e.g. avoid awkward phrasing like "leveraging rapid prototyping and semantic search capabilities to optimize..."). Place technical keywords into their appropriate Technical Skills category and experience bullets.
   • BOLDING RULES: You MUST automatically bold key technical models/frameworks, metrics (e.g. `\\textbf{{40\\%}}`, `\\textbf{{60\\%}}`, `\\textbf{{£30M+}}`), awards (e.g. `\\textbf{{[BIU Star Award]}}`), and key institutions explicitly present in the candidate's text.
   • The entire tailored resume MUST fit on exactly ONE page.
   • Write concise bullets using the Playbook formula: Action + Technology + Problem + Measurable Metric. Each bullet MUST occupy between 70% and 150% of one line.
@@ -532,7 +540,8 @@ RULES:
         tailored_latex = await asyncio.to_thread(
             tailor_latex_code,
             master_latex, job_title, job_description, suggestions,
-            ats.missing_skills, custom_api_key, on_log=on_log
+            ats.missing_skills, custom_api_key, on_log=on_log,
+            user_selected_skills=user_selected_skills
         )
         response_obj.latex_code = tailored_latex
     return response_obj
