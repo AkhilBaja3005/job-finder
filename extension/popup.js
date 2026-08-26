@@ -28,6 +28,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const previewContent = document.getElementById("text-preview-content");
   const btnCopyPreview = document.getElementById("btn-copy-preview");
 
+  // Custom JD Paste & Edit Elements
+  const linkEditJd = document.getElementById("link-edit-jd");
+  const jdMissingAlert = document.getElementById("jd-missing-alert");
+  const btnToggleCustomJd = document.getElementById("btn-toggle-custom-jd");
+  const customJdBox = document.getElementById("custom-jd-box");
+  const btnCloseCustomJd = document.getElementById("btn-close-custom-jd");
+  const customJdTitle = document.getElementById("custom-jd-title");
+  const customJdCompany = document.getElementById("custom-jd-company");
+  const customJdText = document.getElementById("custom-jd-text");
+  const btnSubmitCustomJd = document.getElementById("btn-submit-custom-jd");
+
   const btnFill = document.getElementById("btn-autofill");
   const btnTailorPdf = document.getElementById("btn-tailor-pdf");
   const btnEmailTailor = document.getElementById("btn-email-tailor");
@@ -298,12 +309,28 @@ document.addEventListener("DOMContentLoaded", () => {
       if (activeCompanyName) activeCompanyName.textContent = "Open LinkedIn, Indeed, or Greenhouse";
       if (scoreCircle) scoreCircle.textContent = "—";
       if (scoreSub) scoreSub.textContent = "Navigate to a job posting tab";
+      if (jdMissingAlert) jdMissingAlert.style.display = "block";
       return;
     }
 
     currentJobInfo = details;
     if (activeRoleTitle) activeRoleTitle.textContent = details.title || "Detected Job Posting";
     if (activeCompanyName) activeCompanyName.textContent = details.company || "Hiring Company";
+
+    if (customJdTitle && (!customJdTitle.value || customJdTitle.value === "Detected Job Posting")) customJdTitle.value = details.title || "";
+    if (customJdCompany && (!customJdCompany.value || customJdCompany.value === "Hiring Company")) customJdCompany.value = details.company || "";
+    if (customJdText && (!customJdText.value || customJdText.value.length < 50) && details.description) {
+      customJdText.value = details.description;
+    }
+
+    const descLen = (details.description || "").trim().length;
+    const titleLower = (details.title || "").toLowerCase();
+    const descLower = (details.description || "").toLowerCase();
+    const isJdMissing = descLen < 150 || titleLower === "careers" || descLower.includes("job description is missing") || descLower.includes("unspecified job description");
+
+    if (jdMissingAlert) {
+      jdMissingAlert.style.display = isJdMissing ? "block" : "none";
+    }
 
     chrome.storage.local.get(["userToken", "resumeData", "candidateProfile"], (items) => {
       const token = items ? items.userToken || "guest" : "guest";
@@ -496,6 +523,66 @@ document.addEventListener("DOMContentLoaded", () => {
   // ----------------------------------------------------
   // Action Handlers
   // ----------------------------------------------------
+  function toggleCustomJd(show) {
+    if (!customJdBox) return;
+    const isVisible = customJdBox.style.display === "block";
+    const nextState = typeof show === "boolean" ? show : !isVisible;
+    customJdBox.style.display = nextState ? "block" : "none";
+    if (nextState) {
+      if (currentJobInfo) {
+        if (customJdTitle && (!customJdTitle.value || customJdTitle.value === "Detected Job Posting")) customJdTitle.value = currentJobInfo.title || "";
+        if (customJdCompany && (!customJdCompany.value || customJdCompany.value === "Hiring Company")) customJdCompany.value = currentJobInfo.company || "";
+        if (customJdText && (!customJdText.value || customJdText.value.length < 50)) customJdText.value = currentJobInfo.description || "";
+      }
+      customJdText?.focus();
+    }
+  }
+
+  if (linkEditJd) {
+    linkEditJd.addEventListener("click", (e) => {
+      e.preventDefault();
+      toggleCustomJd();
+    });
+  }
+
+  if (btnToggleCustomJd) {
+    btnToggleCustomJd.addEventListener("click", () => toggleCustomJd(true));
+  }
+
+  if (btnCloseCustomJd) {
+    btnCloseCustomJd.addEventListener("click", () => toggleCustomJd(false));
+  }
+
+  if (btnSubmitCustomJd) {
+    btnSubmitCustomJd.addEventListener("click", () => {
+      const title = (customJdTitle?.value || "").trim() || (currentJobInfo?.title || "Target Role");
+      const company = (customJdCompany?.value || "").trim() || (currentJobInfo?.company || "Hiring Company");
+      const desc = (customJdText?.value || "").trim();
+
+      if (!desc || desc.length < 20) {
+        showToast("⚠️ Please paste the job description text!");
+        return;
+      }
+
+      const updatedDetails = {
+        title,
+        company,
+        description: desc,
+        pageSource: desc,
+        url: currentJobInfo?.url || window.location.href
+      };
+
+      currentJobInfo = updatedDetails;
+      if (activeRoleTitle) activeRoleTitle.textContent = title;
+      if (activeCompanyName) activeCompanyName.textContent = company;
+      if (jdMissingAlert) jdMissingAlert.style.display = "none";
+      toggleCustomJd(false);
+
+      showToast("🎯 Analyzing & re-scoring with pasted JD...");
+      handleJobDetails(updatedDetails);
+    });
+  }
+
   // Single-Page Auto-Fill Trigger
   if (btnFill) {
     btnFill.addEventListener("click", () => {

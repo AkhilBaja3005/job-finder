@@ -261,9 +261,44 @@
   <div id="tab-ats" class="tab-pane active">
     <!-- Detected Active Job Card -->
     <div id="job-active-card" class="card">
-      <div style="font-size: 9.5px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.05em;">Detected Active Job:</div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+        <span style="font-size: 9.5px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;">Detected Active Job:</span>
+        <a id="link-edit-jd" href="#" style="font-size: 9.5px; color: #38bdf8; text-decoration: none; font-weight: 700;">✏️ Edit / Paste JD</a>
+      </div>
       <div id="active-role-title" style="font-size: 12.5px; font-weight: 700; color: #fff; line-height: 1.35;">Detecting job page...</div>
       <div id="active-company-name" style="font-size: 10.5px; color: #94a3b8; margin-top: 2px; font-weight: 500;">Open LinkedIn, Indeed, Greenhouse, or Lever</div>
+    </div>
+
+    <!-- Alert prompt when JD is short or missing -->
+    <div id="jd-missing-alert" style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px;">
+      <div style="font-size: 10px; font-weight: 700; color: #fbbf24; display: flex; justify-content: space-between; align-items: center;">
+        <span>⚠️ Job description text missing or incomplete</span>
+        <button id="btn-toggle-custom-jd" style="background: #f59e0b; color: #000; border: none; border-radius: 4px; padding: 3px 8px; font-size: 9px; font-weight: 700; cursor: pointer;">📝 Paste JD</button>
+      </div>
+      <div style="font-size: 9px; color: #cbd5e1; margin-top: 3px;">Paste the full job posting to get an accurate 100% ATS score and tailored package.</div>
+    </div>
+
+    <!-- Collapsible / Editable Custom JD Card -->
+    <div id="custom-jd-box" style="display: none; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase;">📝 Paste / Edit Job Description</span>
+        <button id="btn-close-custom-jd" style="background: transparent; border: none; color: #94a3b8; font-size: 11px; cursor: pointer;">✕</button>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px;">
+        <div>
+          <label style="font-size: 9px; color: #94a3b8; font-weight: 600;">Job Title:</label>
+          <input type="text" id="custom-jd-title" class="form-control" placeholder="e.g. AI Engineer" style="padding: 5px 8px; font-size: 11px;">
+        </div>
+        <div>
+          <label style="font-size: 9px; color: #94a3b8; font-weight: 600;">Company:</label>
+          <input type="text" id="custom-jd-company" class="form-control" placeholder="e.g. Waymo / Granola" style="padding: 5px 8px; font-size: 11px;">
+        </div>
+      </div>
+      <div>
+        <label style="font-size: 9px; color: #94a3b8; font-weight: 600;">Full Job Description Text:</label>
+        <textarea id="custom-jd-text" class="form-control" rows="4" placeholder="Paste the complete job description, requirements, and responsibilities here..." style="font-size: 10px; padding: 6px;"></textarea>
+      </div>
+      <button id="btn-submit-custom-jd" class="btn btn-primary" style="margin-top: 6px;">🎯 Analyze & Re-Score Pasted JD</button>
     </div>
 
     <!-- ATS Match Score Section -->
