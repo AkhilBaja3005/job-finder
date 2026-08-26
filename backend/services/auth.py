@@ -286,5 +286,8 @@ def get_optional_token(authorization: Optional[str] = None) -> Optional[str]:
 
 def _is_local_deployment() -> bool:
     """Helper to detect local vs production container execution environment."""
+    if any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")):
+        return False
     env = os.getenv("ENV", "").lower()
     return env not in ("production", "prod", "staging")
+
