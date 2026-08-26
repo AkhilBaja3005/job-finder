@@ -172,6 +172,7 @@ def tailor_latex_code(
     custom_api_key: Optional[str] = None,
     reviewer_feedback: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
+    user_selected_skills: Optional[List[str]] = None,
 ) -> str:
     """
     Step 2: Directly tailors the master LaTeX code for a target job.
@@ -185,6 +186,8 @@ def tailor_latex_code(
         if reviewer_feedback else ""
     )
 
+    approved_skills_str = ", ".join(user_selected_skills) if user_selected_skills else "None"
+
     prompt = f"""You are an expert LaTeX CV typesetter and ATS optimizer.
 Take the candidate's MASTER LaTeX resume code below and tailor it for the target job: "{job_title}".
 {feedback_str}
@@ -192,6 +195,10 @@ TARGET JOB DESCRIPTION (excerpt):
 ---
 {jd_truncated}
 ---
+
+USER EXPLICITLY APPROVED SKILLS (MANDATORY TO INCLUDE IN TECHNICAL SKILLS & BULLETS):
+[{approved_skills_str}]
+(The candidate has manually selected and authorized these skills for inclusion. You MUST add these skills to the Technical Skills section under their appropriate category and weave them naturally into relevant experience/project bullets!)
 
 ATS KEYWORDS TO INTEGRATE (weave naturally — do NOT copy-paste verbatim from JD):
 {", ".join(missing_skills)}
@@ -532,7 +539,8 @@ RULES:
         tailored_latex = await asyncio.to_thread(
             tailor_latex_code,
             master_latex, job_title, job_description, suggestions,
-            ats.missing_skills, custom_api_key, on_log=on_log
+            ats.missing_skills, custom_api_key, on_log=on_log,
+            user_selected_skills=user_selected_skills
         )
         response_obj.latex_code = tailored_latex
     return response_obj

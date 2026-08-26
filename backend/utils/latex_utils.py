@@ -424,7 +424,11 @@ def _format_bullet_bolding(text: str, dynamic_skills: Optional[List[str]] = None
     return t
 
 
-def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> str:
+def generate_latex_from_json(
+    data: dict,
+    master_latex: Optional[str] = None,
+    user_selected_skills: Optional[List[str]] = None,
+) -> str:
     """
     Generate a canonical LaTeX resume from structured JSON data.
     If master_latex is provided, \\name and \\address are copied verbatim from it.
@@ -491,6 +495,22 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
         latex.append(f"\\printaddress{{{address_line}}}")
 
     skills = data.get("skills", [])
+    if user_selected_skills and len(user_selected_skills) > 0:
+        clean_user_skills = [s.strip() for s in user_selected_skills if s and s.strip()]
+        if clean_user_skills:
+            if isinstance(skills, dict):
+                import copy
+                skills = copy.deepcopy(skills)
+                target_cat = next((k for k in skills if any(w in k.lower() for w in ["ai", "ml", "genai", "data", "software", "infrastructure"])), next(iter(skills), None))
+                if target_cat:
+                    cur = skills[target_cat]
+                    if isinstance(cur, list):
+                        cur.extend([s for s in clean_user_skills if s not in cur])
+                    elif isinstance(cur, str):
+                        skills[target_cat] = cur + ", " + ", ".join([s for s in clean_user_skills if s not in cur])
+            elif isinstance(skills, list):
+                skills = list(set(skills + [s for s in clean_user_skills if s not in skills]))
+
     skills_list = skills if isinstance(skills, list) else []
 
     # Professional Summary

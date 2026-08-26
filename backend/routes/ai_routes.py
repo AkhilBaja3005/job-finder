@@ -246,12 +246,13 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             yield json.dumps({"type": "log", "percent": 40, "message": "🤖 Calculating ATS fit score & career-ops analysis..."}) + "\n"
 
+            user_selected_skills = getattr(request, 'user_selected_skills', None)
             master_latex = None
             if session_resume_path and session_resume_path.endswith(".tex") and os.path.exists(session_resume_path):
                 with open(session_resume_path, "r", encoding="utf-8") as f:
                     master_latex = f.read()
             else:
-                master_latex = generate_latex_from_json(session_resume_data)
+                master_latex = generate_latex_from_json(session_resume_data, user_selected_skills=user_selected_skills)
 
             def log_callback(msg_json: str):
                 try:
@@ -332,7 +333,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         opt_ls = ls
                         break
 
-            final_latex = apply_latex_hotfix(raw_tailored_latex, opt_scale, opt_ls, None)
+            final_latex = apply_latex_hotfix(raw_tailored_latex, opt_scale, opt_ls, master_latex, user_selected_skills=user_selected_skills)
             with open(tex_path, "w", encoding="utf-8") as f:
                 f.write(final_latex)
 
