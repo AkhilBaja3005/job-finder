@@ -94,3 +94,23 @@ def test_user_profile_sync():
     assert data["profile"]["notice_period"] == "1 month"
     assert data["profile"]["work_auth"] == "Yes"
     assert data["profile"]["sponsorship"] == "No"
+
+
+def test_download_extension_personalized_zip():
+    import io
+    import zipfile
+    response = client.get("/download_extension?key=GABY48")
+    assert response.status_code == 200
+    assert response.headers.get("content-type") == "application/zip"
+    
+    zip_bytes = io.BytesIO(response.content)
+    with zipfile.ZipFile(zip_bytes, "r") as zf:
+        namelist = zf.namelist()
+        assert "manifest.json" in namelist
+        assert "popup.html" in namelist
+        assert "popup.js" in namelist
+        assert "content.js" in namelist
+        
+        popup_js_content = zf.read("popup.js").decode("utf-8")
+        assert 'const DEFAULT_SYNC_KEY = "GABY48";' in popup_js_content
+
