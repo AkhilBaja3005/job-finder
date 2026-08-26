@@ -582,6 +582,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function isRestrictedUrl(url) {
     if (!url) return true;
+    const uLow = url.toLowerCase();
     return (
       url.startsWith("chrome://") ||
       url.startsWith("chrome-extension://") ||
@@ -589,13 +590,18 @@ document.addEventListener("DOMContentLoaded", () => {
       url.startsWith("about:") ||
       url.startsWith("devtools://") ||
       url.startsWith("view-source:") ||
-      url.startsWith("chrome-search://")
+      url.startsWith("chrome-search://") ||
+      uLow.includes("gemini.google.com") ||
+      uLow.includes("chatgpt.com") ||
+      uLow.includes("claude.ai") ||
+      uLow.includes("mail.google.com") ||
+      uLow.includes("youtube.com")
     );
   }
 
   function scanActiveTab() {
     getActiveTab((activeTab) => {
-      if (!activeTab) {
+      if (!activeTab || !activeTab.id) {
         handleJobDetails(null);
         return;
       }
@@ -630,24 +636,20 @@ document.addEventListener("DOMContentLoaded", () => {
             try {
               chrome.scripting.executeScript({
                 target: { tabId: activeTab.id },
-                func: () => {
-                  const url = window.location.href;
-                  let phenomTitle = document.querySelector(".job-title, h1.job-title, [data-ph-at-id='job-title']")?.innerText?.trim();
-                  let title = phenomTitle || document.querySelector(".job-details-jobs-unified-top-card__job-title, .jobs-unified-top-card__job-title, .jobsearch-JobInfoHeader-title, h1")?.innerText?.trim() || document.title;
-                  if (title) {
-                    if (title.includes(" - Single Position")) title = title.replace(" - Single Position", "");
-                    title = title.split(" | ")[0].split(" - Careers")[0].trim();
-                  }
-                  let phenomCompany = document.querySelector(".company-name, .org-name, [data-ph-at-id='company-name']")?.innerText?.trim();
-                  let company = phenomCompany || document.querySelector(".job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name, [data-company-name='true']")?.innerText?.trim() || "";
-                  let description = document.querySelector("#job-details, .jobs-description__content, #jobDescriptionText, .job-description, [data-ph-at-id='job-description'], main")?.innerText?.trim() || document.body.innerText.slice(0, 4000);
-                  const pageSource = document.body ? document.body.innerText.slice(0, 15000) : description;
-                  return { title, company, description, url, pageSource };
-                }
-              }, (results) => {
+                files: ["content.js"]
+              }, () => {
                 const scriptErr = chrome.runtime.lastError;
-                if (!scriptErr && results && results[0] && results[0].result) {
-                  handleJobDetails(results[0].result);
+                if (!scriptErr) {
+                  setTimeout(() => {
+                    chrome.tabs.sendMessage(activeTab.id, { action: "GET_JOB_DETAILS" }, (resp2) => {
+                      const msgErr = chrome.runtime.lastError;
+                      if (!msgErr && resp2 && resp2.title) {
+                        handleJobDetails(resp2);
+                      } else {
+                        handleJobDetails(null);
+                      }
+                    });
+                  }, 150);
                 } else {
                   handleJobDetails(null);
                 }

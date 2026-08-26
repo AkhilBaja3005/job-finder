@@ -139,8 +139,39 @@
         document.querySelector("[data-testid='inlineHeader-companyName']") ||
         document.querySelector(".jobsearch-InlineCompanyRating-companyHeader")
       )?.innerText?.trim() || "";
+    } else if (url.includes("ashbyhq.com")) {
+      title = (
+        document.querySelector("h1, [class*='jobPostingTitle'], [class*='JobTitle']")
+      )?.innerText?.trim() || "";
+      const pathParts = window.location.pathname.split("/").filter(Boolean);
+      const slug = pathParts[0] || "";
+      const metaSite = document.querySelector("meta[property='og:site_name'], meta[name='author']")?.content;
+      company = (
+        document.querySelector("[class*='companyName'], [class*='CompanyName'], [data-testid='company-name']")?.innerText?.trim() ||
+        (metaSite && !metaSite.toLowerCase().includes("ashby") ? metaSite : "") ||
+        slug.replace(/[-_]/g, ' ')
+      );
+      const ashbyDesc = document.querySelector("[class*='jobPostingDescription'], [class*='JobPostingDescription'], [class*='description__'], [data-testid='job-description'], .ashby-job-posting-description");
+      if (ashbyDesc && ashbyDesc.innerText.trim().length > 100) {
+        description = distillSemanticNode(ashbyDesc);
+      }
+    } else if (url.includes("greenhouse.io") || url.includes("gh_jid=")) {
+      title = document.querySelector("h1.app-title, .job-title, h1")?.innerText?.trim() || "";
+      const slug = window.location.pathname.split("/").filter(Boolean)[0] || "";
+      company = document.querySelector(".company-name, #header .company-name, .logo a")?.innerText?.trim() || document.querySelector("meta[property='og:site_name']")?.content || slug.replace(/[-_]/g, ' ');
+      const ghDesc = document.querySelector("#content, #job_description, .job-description");
+      if (ghDesc && ghDesc.innerText.trim().length > 100) description = distillSemanticNode(ghDesc);
+    } else if (url.includes("lever.co")) {
+      title = document.querySelector(".posting-headline h2, h2, h1")?.innerText?.trim() || "";
+      const slug = window.location.pathname.split("/").filter(Boolean)[0] || "";
+      company = document.querySelector(".main-header-logo, .company-name")?.innerText?.trim() || slug.replace(/[-_]/g, ' ');
+      const levDesc = document.querySelector(".posting-page-content, .section-wrapper, .content");
+      if (levDesc && levDesc.innerText.trim().length > 100) description = distillSemanticNode(levDesc);
     } else if (url.includes("workday") || url.includes("myworkdayjobs.com")) {
       title = document.querySelector("[data-automation-id='jobPostingHeader'], h2, h1")?.innerText?.trim() || "";
+      company = document.querySelector("[data-automation-id='companyName'], .company-name, meta[property='og:site_name']")?.content || window.location.hostname.split(".")[0].replace(/[-_]/g, ' ');
+      const wdDesc = document.querySelector("[data-automation-id='jobPostingDescription']");
+      if (wdDesc && wdDesc.innerText.trim().length > 100) description = distillSemanticNode(wdDesc);
     } else {
       title = (
         document.querySelector(".job-details-title, [data-ph-at-id='job-title']") ||
@@ -152,10 +183,12 @@
       )?.content || document.querySelector(".org-name, .company-name")?.innerText?.trim() || "";
     }
 
-    const mainElem = findMainContentElement();
-    description = distillSemanticNode(mainElem).replace(/\n{3,}/g, "\n\n").trim();
     if (!description || description.length < 50) {
-      description = mainElem ? mainElem.innerText.trim() : (document.body ? document.body.innerText.slice(0, 5000) : "");
+      const mainElem = findMainContentElement();
+      description = distillSemanticNode(mainElem).replace(/\n{3,}/g, "\n\n").trim();
+      if (!description || description.length < 50) {
+        description = mainElem ? mainElem.innerText.trim() : (document.body ? document.body.innerText.slice(0, 5000) : "");
+      }
     }
 
     const invalidTitles = ["sign in", "log in", "login", "register", "apply now", "menu", "search", "indeed", "linkedin"];
@@ -176,13 +209,23 @@
       if (title.includes(" - Single Position")) title = title.replace(" - Single Position", "");
       title = title.split(" | ")[0].split(" - Careers")[0].split(" at ")[0].trim();
     }
+    
+    // Clean company name
+    if (company && typeof company === "string") {
+      company = company.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\.(ashbyhq|greenhouse|lever|myworkdayjobs|workday|smartrecruiters)\.com/i, "").trim();
+      if (["jobs.ashbyhq", "ashby", "greenhouse", "lever", "workday", "smartrecruiters", "indeed", "linkedin"].includes(company.toLowerCase())) {
+        const pathParts = window.location.pathname.split("/").filter(Boolean);
+        company = pathParts[0] ? pathParts[0].replace(/[-_]/g, ' ') : "";
+      }
+      if (company) {
+        company = company.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
+      }
+    }
+
     if (!company && url) {
       const bodyText = document.body ? document.body.innerText : "";
-      const brandMatch = bodyText.match(/(Granola|Goldman Sachs|Google|Amazon|Microsoft|Meta|Apple|Netflix|Micron|Oracle|JPMorgan|Bloomberg|Stripe|Uber|Airbnb|Coinbase|Palantir)/i);
+      const brandMatch = bodyText.match(/(Trainline|Granola|Goldman Sachs|Google|Amazon|Microsoft|Meta|Apple|Netflix|Micron|Oracle|JPMorgan|Bloomberg|Stripe|Uber|Airbnb|Coinbase|Palantir)/i);
       if (brandMatch) company = brandMatch[1];
-    }
-    if (company && typeof company === "string") {
-      company = company.trim().charAt(0).toUpperCase() + company.trim().slice(1);
     }
 
     return { title, company, description, url, pageSource: description };
