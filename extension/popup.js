@@ -1,4 +1,4 @@
-// popup.js - Job Finder ATS Tailor Controller (v2.8.0 Fast Sync Edition)
+// popup.js - Job Finder ATS Tailor Controller (v2.9.0 Fast JSON Sync Edition)
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 let API_BASE_URL = DEFAULT_API_BASE_URL;
@@ -72,6 +72,44 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ----------------------------------------------------
+  // Helper: Recursive Skill Extractor
+  // ----------------------------------------------------
+  function extractSkillsList(skills) {
+    if (!skills) return [];
+    if (typeof skills === "string") {
+      return skills.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    if (Array.isArray(skills)) {
+      const list = [];
+      skills.forEach((item) => {
+        if (typeof item === "string") {
+          list.push(item.trim());
+        } else if (item && typeof item === "object") {
+          if (item.skill) list.push(String(item.skill).trim());
+          else if (item.name) list.push(String(item.name).trim());
+          else if (Array.isArray(item.skills)) list.push(...extractSkillsList(item.skills));
+          else {
+            Object.values(item).forEach((v) => {
+              if (typeof v === "string") list.push(v.trim());
+              else if (Array.isArray(v)) list.push(...extractSkillsList(v));
+            });
+          }
+        }
+      });
+      return Array.from(new Set(list)).filter(Boolean);
+    }
+    if (typeof skills === "object") {
+      const list = [];
+      Object.values(skills).forEach((val) => {
+        if (typeof val === "string") list.push(val.trim());
+        else if (Array.isArray(val)) list.push(...extractSkillsList(val));
+      });
+      return Array.from(new Set(list)).filter(Boolean);
+    }
+    return [];
+  }
+
+  // ----------------------------------------------------
   // Tab Switching
   // ----------------------------------------------------
   navTabs.forEach((tab) => {
@@ -129,17 +167,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const ct = res.headers.get("content-type") || "";
 
       let resume = null;
+      let userEmail = "";
+      let userName = "";
+
       if (res.ok && ct.includes("application/json")) {
         const data = await res.json();
-        if (data && (data.email || data.id)) {
-          const email = data.email || "User Account";
-          const name = email.split("@")[0];
-          if (userNameDisplay) userNameDisplay.textContent = `👤 Synced: ${name.charAt(0).toUpperCase() + name.slice(1)}`;
-          if (userEmailDisplay) userEmailDisplay.textContent = `📧 ${email}`;
-          if (userInfoCard) userInfoCard.style.display = "flex";
-
+        if (data) {
+          userEmail = data.email || "";
+          userName = data.resume_name || "";
           if (data.resume_data) {
             resume = data.resume_data;
+            if (resume.name) userName = resume.name;
           }
         }
       }
@@ -154,15 +192,21 @@ document.addEventListener("DOMContentLoaded", () => {
             const sessData = await sessRes.json();
             if (sessData && sessData.data && sessData.data.name) {
               resume = sessData.data;
+              if (resume.name) userName = resume.name;
             }
           }
         } catch (e) {}
       }
 
+      const displayName = userName || (userEmail ? userEmail.split("@")[0] : "Candidate Profile");
+      if (userNameDisplay) userNameDisplay.textContent = `👤 Synced: ${displayName}`;
+      if (userEmailDisplay && userEmail) userEmailDisplay.textContent = `📧 ${userEmail}`;
+      if (userInfoCard) userInfoCard.style.display = "flex";
+
       if (resume) {
         populateProfileUI(resume, true);
         chrome.storage.local.set({ resumeData: resume, userToken: key });
-        if (showAlert) showToast("⚡ Synced profile & resume from backend!");
+        if (showAlert) showToast("⚡ Synced profile & resume from web app!");
       } else {
         if (showAlert) showToast("⚡ Connected! No resume uploaded yet in web app.");
       }
@@ -190,9 +234,17 @@ document.addEventListener("DOMContentLoaded", () => {
     if (profGithub && (forceOverwrite || !profGithub.value)) profGithub.value = github;
     if (profPortfolio && (forceOverwrite || !profPortfolio.value)) profPortfolio.value = portfolio;
 
-    const skillsStr = Array.isArray(resume.skills) ? resume.skills.join(", ") : resume.skills || "";
+    const skillsList = extractSkillsList(resume.skills);
+    const skillsStr = skillsList.join(", ");
     if (profSkills && (forceOverwrite || !profSkills.value)) profSkills.value = skillsStr;
-    if (profSummary && (forceOverwrite || !profSummary.value)) profSummary.value = resume.summary || "";
+
+    if (profSummary && (forceOverwrite || !profSummary.value)) {
+      if (typeof resume === "object") {
+        profSummary.value = JSON.stringify(resume, null, 2);
+      } else {
+        profSummary.value = String(resume || "");
+      }
+    }
   }
 
   // ----------------------------------------------------
@@ -609,21 +661,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnSaveProfile) {
     btnSaveProfile.addEventListener("click", () => {
+      let parsedResumeObj = {};
+      try {
+        parsedResumeObj = JSON.parse(profSummary.value);
+      } catch (e) {
+        parsedResumeObj = {};
+      }
+
       const resumeData = {
-        name: `${profFirstName.value} ${profLastName.value}`.trim(),
-        email: profEmail.value.trim(),
-        phone: profPhone.value.trim(),
-        location: profLocation.value.trim(),
+        ...parsedResumeObj,
+        name: `${profFirstName.value} ${profLastName.value}`.trim() || parsedResumeObj.name || "",
+        email: profEmail.value.trim() || parsedResumeObj.email || "",
+        phone: profPhone.value.trim() || parsedResumeObj.phone || "",
+        location: profLocation.value.trim() || parsedResumeObj.location || "",
         links: [profLinkedin.value.trim(), profGithub.value.trim(), profPortfolio.value.trim()].filter(Boolean),
         skills: profSkills.value.split(",").map((s) => s.trim()).filter(Boolean),
-        summary: profSummary.value.trim()
+        summary: parsedResumeObj.summary || profSummary.value.trim()
       };
+
       const eeoProfile = {
         workAuth: eeoWorkAuth.value,
         sponsorship: eeoSponsorship.value
       };
+
       chrome.storage.local.set({ resumeData, eeoProfile }, () => {
-        showToast("✅ Candidate Profile & Preferences Saved!");
+        if (profSummary) profSummary.value = JSON.stringify(resumeData, null, 2);
+        showToast("✅ Candidate Profile & Full Resume JSON Saved!");
       });
     });
   }
