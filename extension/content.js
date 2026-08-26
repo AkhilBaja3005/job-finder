@@ -1,4 +1,4 @@
-// content.js - Job Finder ATS Tailor & Multimodal AI AutoFill Content Script (v3.0.0)
+// content.js - Job Finder ATS Tailor & Multimodal AI AutoFill Content Script (v3.1.0)
 
 (function () {
   function isRuntimeValid() {
@@ -25,7 +25,7 @@
     } catch (e) {}
   }
 
-  // ── oc-style Semantic DOM Distillation Engine ─────────────────────────
+  // ── Semantic DOM Distillation Engine ──────────────────────────────────
   function distillSemanticNode(node) {
     if (!node) return "";
     if (node.nodeType === Node.TEXT_NODE) {
@@ -188,7 +188,7 @@
     return { title, company, description, url, pageSource: description };
   }
 
-  // ── Native Form Value Setters (Framework Safe) ─────────────────────────
+  // ── Native Form Value Setters (Framework Safe: React 18/19, Vue, Svelte) ───
   function setNativeValue(element, value) {
     if (!element || value === undefined || value === null) return;
     const stringVal = String(value);
@@ -220,7 +220,7 @@
   function setSelectValue(select, valueOrText) {
     if (!select || !valueOrText) return false;
     const options = Array.from(select.options);
-    const lowerTarget = valueOrText.toLowerCase();
+    const lowerTarget = String(valueOrText).toLowerCase();
 
     const target = options.find(
       (opt) =>
@@ -265,12 +265,12 @@
     }
   }
 
-  // ── Extract Question Text for Given Element ───────────────────────────
+  // ── Extract Exact Question Prompt Text for Any Form Element ────────────
   function getQuestionTextForElement(el) {
     const parentBlock = el.closest('[class*="field"], [class*="formField"], [class*="question"], .application-question, .form-group, fieldset, li, tr, div');
     let label = "";
 
-    const labelEl = parentBlock?.querySelector('label, [class*="label"], legend, h2, h3, h4, h5, [class*="title"], [class*="prompt"]');
+    const labelEl = parentBlock?.querySelector('label, [class*="label"], legend, h2, h3, h4, h5, [class*="title"], [class*="prompt"], [class*="heading"], p');
     if (labelEl && labelEl !== el) {
       const clone = labelEl.cloneNode(true);
       clone.querySelectorAll("input, textarea, select, button, script, style").forEach((c) => c.remove());
@@ -278,12 +278,46 @@
     }
 
     if (!label || label.length < 5) {
-      label = el.getAttribute("aria-label") || el.getAttribute("placeholder") || parentBlock?.innerText?.slice(0, 200) || "";
+      label = el.getAttribute("aria-label") || el.getAttribute("placeholder") || parentBlock?.innerText?.slice(0, 250) || "";
     }
     return label.trim();
   }
 
-  // ── AI Answer Generator (Calls Backend LLM Agent) ──────────────────────
+  // ── Click Yes / No Option on Button Cards or Radio Elements ───────────
+  function clickChoiceInContainer(container, targetChoice) {
+    if (!container || !targetChoice) return false;
+    const lowerChoice = targetChoice.toLowerCase();
+
+    // 1. Radio Inputs
+    const radios = container.querySelectorAll("input[type='radio']");
+    for (const radio of radios) {
+      const label = radio.closest("label")?.innerText?.toLowerCase() || radio.value.toLowerCase();
+      if (label.includes(lowerChoice) || (lowerChoice === "yes" && label.includes("authorized")) || (lowerChoice === "no" && label.includes("no"))) {
+        if (!radio.checked) {
+          radio.click();
+          radio.dispatchEvent(new Event("change", { bubbles: true }));
+          radio.setAttribute("data-jf-filled", "true");
+          return true;
+        }
+      }
+    }
+
+    // 2. Button Cards / Div Options (Ashby, Greenhouse cards)
+    const buttons = Array.from(container.querySelectorAll("button, [role='radio'], [role='button'], [class*='option'], [class*='choice'], label, div"));
+    for (const btn of buttons) {
+      const txt = (btn.innerText || "").trim().toLowerCase();
+      if (txt === lowerChoice || txt === `${lowerChoice}\n` || (lowerChoice === "yes" && txt.startsWith("yes")) || (lowerChoice === "no" && txt.startsWith("no"))) {
+        if (!btn.classList.contains("active") && !btn.getAttribute("aria-checked")) {
+          btn.click();
+          btn.setAttribute("data-jf-filled", "true");
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // ── AI Answer Generator (Calls Backend /answer_question LLM Agent) ──────
   async function generateAIAnswer(question, profile, jobInfo, baseUrl, token) {
     try {
       const res = await fetch(`${baseUrl}/answer_question`, {
@@ -296,7 +330,7 @@
         body: JSON.stringify({
           question,
           company_name: jobInfo.company || "Granola",
-          job_title: jobInfo.title || "Target Position",
+          job_title: jobInfo.title || "AI Engineer",
           candidate_profile: profile
         })
       });
@@ -304,22 +338,33 @@
         const data = await res.json();
         if (data.answer) return data.answer;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("[Job Finder AI] Backend answer_question request error:", e);
+    }
 
-    // Fallback heuristic if backend non-responsive
+    // Smart Fallback Heuristic
     const qLower = question.toLowerCase();
     if (qLower.includes("one line") || qLower.includes("one-line") || qLower.includes("condensed cover letter")) {
-      const skills = Array.isArray(profile.skills) ? profile.skills.slice(0, 4).join(", ") : "full-stack development and scalable systems";
-      return `Experienced engineer skilled in ${skills} with a focus on building high-impact products.`;
+      const skills = Array.isArray(profile.skills) ? profile.skills.slice(0, 4).join(", ") : "AI engineering and full-stack systems";
+      return `Driven engineer specializing in ${skills} with a focus on building high-performance, user-centric AI products.`;
     }
     if (qLower.includes("why") && (qLower.includes("granola") || qLower.includes("company") || qLower.includes("team"))) {
       const company = jobInfo.company || "Granola";
-      return `I am deeply inspired by ${company}'s focus on product elegance and empowering workflows. With my technical foundation in delivering fast, reliable software, I am eager to contribute directly to your team's mission and growth.`;
+      return `I am deeply inspired by ${company}'s mission to build intuitive, high-velocity AI products that transform how people work. With my background in full-stack AI and scalable systems, I am excited to contribute directly to your product innovation and user growth.`;
     }
-    return `With my strong background in software engineering, I am excited to bring my technical skills and ownership mindset to ${jobInfo.company || "the team"}.`;
+    if (qLower.includes("salary") || qLower.includes("compensation")) {
+      return "Competitive market rate / Open to discuss based on the full scope and responsibilities of the role.";
+    }
+    if (qLower.includes("notice period") || qLower.includes("how soon") || qLower.includes("start date")) {
+      return "Available immediately / 2 weeks notice.";
+    }
+    if (qLower.includes("hear about us") || qLower.includes("how did you hear")) {
+      return "Company website / Job board.";
+    }
+    return `With my proven experience in engineering and product innovation, I am excited to bring direct value to ${jobInfo.company || "the team"}.`;
   }
 
-  // ── Universal & Form Auto-fill Logic ──────────────────────────────────
+  // ── Comprehensive AutoFill Master Function ────────────────────────────
   async function runAutofill() {
     showToast("⏳ Auto-filling application & generating AI answers...");
 
@@ -344,8 +389,8 @@
       }
 
       const eeo = storage.eeoProfile || { workAuth: "Yes", sponsorship: "No" };
-      const fullName = resume.name || "";
-      const nameParts = fullName.trim().split(/\s+/);
+      const fullName = (resume.name || "").trim();
+      const nameParts = fullName.split(/\s+/);
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
       const email = resume.email || "";
@@ -354,7 +399,7 @@
       const links = Array.isArray(resume.links) ? resume.links : [];
       const linkedin = links.find((l) => l.toLowerCase().includes("linkedin")) || resume.linkedin || "";
       const github = links.find((l) => l.toLowerCase().includes("github")) || resume.github || "";
-      const portfolio = links.find((l) => !l.toLowerCase().includes("linkedin") && !l.toLowerCase().includes("github")) || resume.portfolio || "";
+      const portfolio = links.find((l) => !l.toLowerCase().includes("linkedin") && !l.toLowerCase().includes("github")) || resume.portfolio || github || "";
 
       const jobInfo = extractJobDetails();
       let filledCount = 0;
@@ -365,7 +410,7 @@
       );
       const scope = modal || document;
 
-      // 1. File Upload (Resume PDF)
+      // ── 1. File Upload (Resume PDF) ──────────────────────────────────
       if (resume.pdf_base64) {
         const fileInputs = scope.querySelectorAll("input[type='file']");
         const pdfFile = base64ToFile(resume.pdf_base64, `${firstName || "Candidate"}_Resume.pdf`);
@@ -380,66 +425,88 @@
         }
       }
 
-      // 2. Standard Input & Dropdown Scan
-      const inputs = scope.querySelectorAll(
-        "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='file']), select"
+      // ── 2. Clickable Yes / No Option Cards & Radios (Ashby, Workday, etc.) ──
+      const questionBlocks = scope.querySelectorAll('[class*="field"], [class*="formField"], [class*="question"], [class*="Container"], fieldset');
+      questionBlocks.forEach((block) => {
+        const blockText = (block.innerText || "").toLowerCase();
+        if (blockText.includes("office") || blockText.includes("old street") || blockText.includes("in person") || blockText.includes("5 days") || blockText.includes("relocate")) {
+          if (clickChoiceInContainer(block, "yes")) filledCount++;
+        } else if (blockText.includes("sponsorship") || blockText.includes("visa")) {
+          if (clickChoiceInContainer(block, eeo.sponsorship || "no")) filledCount++;
+        } else if (blockText.includes("authorized") || blockText.includes("legally")) {
+          if (clickChoiceInContainer(block, eeo.workAuth || "yes")) filledCount++;
+        }
+      });
+
+      // ── 3. Standard & Screening Inputs, Textareas, and Dropdowns ─────
+      const formElements = scope.querySelectorAll(
+        "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='file']), textarea, select, [contenteditable='true']"
       );
 
-      for (const inp of inputs) {
-        if (!inp.offsetParent || inp.getAttribute("data-jf-filled") || inp.disabled || inp.readOnly) continue;
+      for (const el of formElements) {
+        if (!el.offsetParent || el.getAttribute("data-jf-filled") || el.disabled || el.readOnly) continue;
 
-        const id = (inp.id || "").toLowerCase();
-        const nameAttr = (inp.name || "").toLowerCase();
-        const placeholder = (inp.placeholder || "").toLowerCase();
-        const ariaLabel = (inp.getAttribute("aria-label") || "").toLowerCase();
-        const dataAutomationId = (inp.getAttribute("data-automation-id") || "").toLowerCase();
-        const type = (inp.type || "").toLowerCase();
-        const labelText = (inp.closest("div,li,fieldset,tr,td,.form-group,.fb-form-element")?.innerText || "").slice(0, 150).toLowerCase();
-        const key = `${id} ${nameAttr} ${placeholder} ${ariaLabel} ${dataAutomationId} ${labelText} ${type}`;
+        const id = (el.id || "").toLowerCase();
+        const nameAttr = (el.name || "").toLowerCase();
+        const placeholder = (el.getAttribute("placeholder") || "").toLowerCase();
+        const ariaLabel = (el.getAttribute("aria-label") || "").toLowerCase();
+        const type = (el.type || "").toLowerCase();
+        const questionText = getQuestionTextForElement(el);
+        const key = `${id} ${nameAttr} ${placeholder} ${ariaLabel} ${questionText} ${type}`.toLowerCase();
 
         let val = null;
-        if (/first.?name|given.?name|firstname|fname/.test(key)) val = firstName;
-        else if (/last.?name|family.?name|lastname|lname|surname/.test(key)) val = lastName;
-        else if (/email|e-mail|emailaddress/.test(key) || type === "email") val = email;
-        else if (/phone|mobile|cell|tel|phonenumber/.test(key) || type === "tel") val = phone;
-        else if (/linkedin/.test(key)) val = linkedin;
-        else if (/github/.test(key)) val = github;
-        else if (/portfolio|website/.test(key)) val = portfolio || github;
-        else if (/city|location|address/.test(key)) val = location;
-        else if (/authorized|work in the us|work authorization|legally authorized/.test(key)) val = eeo.workAuth || "Yes";
-        else if (/sponsor|visa|require.*sponsorship/.test(key)) val = eeo.sponsorship || "No";
+
+        // Name
+        if (/\b(first.?name|given.?name|firstname|fname)\b/i.test(key)) {
+          val = firstName;
+        } else if (/\b(last.?name|family.?name|lastname|lname|surname)\b/i.test(key)) {
+          val = lastName;
+        } else if (/\b(full.?name|your.?name|candidate.?name|legal.?name|\bname\b)\b/i.test(key) && !/company|file|domain|user|login|user_name|sur/i.test(key)) {
+          val = fullName || `${firstName} ${lastName}`.trim();
+        }
+        // Contact info
+        else if (/email|e-mail|emailaddress/i.test(key) || type === "email") {
+          val = email;
+        } else if (/phone|mobile|cell|tel|phonenumber|contact\s*number/i.test(key) || type === "tel") {
+          val = phone;
+        }
+        // Links
+        else if (/linkedin/i.test(key)) {
+          val = linkedin;
+        } else if (/github|portfolio|personal\s*website|website/i.test(key)) {
+          if (/github/i.test(key) && github) val = github;
+          else val = portfolio || github || linkedin;
+        } else if (/city|location|address/i.test(key)) {
+          val = location;
+        }
+        // EEO
+        else if (/authorized|work in the us|work in the uk|work authorization|legally authorized/i.test(key)) {
+          val = eeo.workAuth || "Yes";
+        } else if (/sponsor|visa|require.*sponsorship/i.test(key)) {
+          val = eeo.sponsorship || "No";
+        }
+
+        // ── 4. AI Screening Question Generator for Open Textareas & Inputs ─
+        if (!val && (el.tagName === "TEXTAREA" || el.getAttribute("contenteditable") === "true" || type === "text" || !type)) {
+          if (questionText && questionText.length > 5 && !el.value) {
+            logMsg(`🤖 Generating AI answer for: "${questionText.slice(0, 60)}..."`);
+            val = await generateAIAnswer(questionText, resume, jobInfo, baseUrl, token);
+            aiQuestionsAnswered++;
+          }
+        }
 
         if (!val) continue;
 
         try {
-          if (inp.tagName === "SELECT") {
-            setSelectValue(inp, val);
+          if (el.tagName === "SELECT") {
+            setSelectValue(el, val);
           } else {
-            setNativeValue(inp, val);
+            setNativeValue(el, val);
           }
-          inp.style.outline = "2px solid #38bdf8";
+          el.style.outline = "2px solid #10b981";
+          el.style.background = "rgba(16, 185, 129, 0.05)";
           filledCount++;
         } catch (e) {}
-      }
-
-      // 3. AI Textarea & Screening Question Answering
-      const textareas = scope.querySelectorAll("textarea, [contenteditable='true']");
-      for (const ta of textareas) {
-        if (!ta.offsetParent || ta.getAttribute("data-jf-filled") || ta.disabled || ta.readOnly) continue;
-
-        const question = getQuestionTextForElement(ta);
-        if (question && question.length > 5) {
-          logMsg(`🤖 Generating AI answer for: "${question.slice(0, 60)}..."`);
-          const aiAnswer = await generateAIAnswer(question, resume, jobInfo, baseUrl, token);
-
-          if (aiAnswer) {
-            setNativeValue(ta, aiAnswer);
-            ta.style.outline = "2px solid #10b981";
-            ta.style.background = "rgba(16, 185, 129, 0.05)";
-            filledCount++;
-            aiQuestionsAnswered++;
-          }
-        }
       }
 
       logMsg(`⚡ Auto-filled ${filledCount} field${filledCount !== 1 ? "s" : ""} (${aiQuestionsAnswered} AI answers generated).`);
