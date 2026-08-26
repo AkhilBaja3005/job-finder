@@ -276,7 +276,21 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!url || typeof url !== "string") return "";
     try {
       const u = new URL(url);
-      return `${u.origin}${u.pathname}`.toLowerCase().replace(/\/+$/, "");
+      const originPath = `${u.origin}${u.pathname}`.toLowerCase().replace(/\/+$/, "");
+      const ID_PARAMS = ["currentjobid", "jobid", "job_id", "jk", "vjk", "gh_jid", "gh_src", "token", "id", "req_id", "requisition_id"];
+      const keptParams = [];
+      u.searchParams.forEach((val, key) => {
+        const kLow = key.toLowerCase();
+        if (ID_PARAMS.includes(kLow) && val) {
+          keptParams.push(`${kLow}=${encodeURIComponent(val)}`);
+        }
+      });
+      keptParams.sort();
+      let hashPart = "";
+      if (u.hash && u.hash.length > 2 && !u.hash.startsWith("#/apply")) {
+        hashPart = u.hash.toLowerCase().split("?")[0];
+      }
+      return keptParams.length > 0 ? `${originPath}?${keptParams.join("&")}${hashPart}` : `${originPath}${hashPart}`;
     } catch (e) {
       return url.split("?")[0].split("#")[0].toLowerCase().replace(/\/+$/, "");
     }
@@ -899,7 +913,8 @@ document.addEventListener("DOMContentLoaded", () => {
               chrome.storage.local.set({
                 lastPreviewState: {
                   text: data.cover_letter,
-                  title: "📝 Generated Cover Letter"
+                  title: "📝 Generated Cover Letter",
+                  url: currentJobInfo.url || ""
                 }
               });
               showToast("📝 Cover letter generated! Preview below.");
@@ -939,7 +954,8 @@ document.addEventListener("DOMContentLoaded", () => {
             chrome.storage.local.set({
               lastPreviewState: {
                 text: msg,
-                title: "✉️ Generated Outreach Message"
+                title: "✉️ Generated Outreach Message",
+                url: currentJobInfo.url || ""
               }
             });
             showToast("✉️ Outreach generated! Preview below.");
