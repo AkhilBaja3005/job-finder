@@ -325,14 +325,21 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             if os.path.exists(cls_source):
                 shutil.copy2(cls_source, os.path.join(user_out_dir, "resume.cls"))
 
-            pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, raw_tailored_latex, 1.0, 1.0, None)
+            pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, raw_tailored_latex, 1.0, 1.0, master_latex)
             opt_scale, opt_ls = 1.0, 1.0
             if pages > 1:
+                p = pages
                 for ls in [0.95, 0.91, 0.88, 0.82, 0.78]:
-                    p, _ = await asyncio.to_thread(compile_and_check_page_metrics, raw_tailored_latex, 1.0, ls, None)
+                    p, _ = await asyncio.to_thread(compile_and_check_page_metrics, raw_tailored_latex, 1.0, ls, master_latex)
                     if p == 1:
                         opt_ls = ls
                         break
+                if p > 1:
+                    for scale in [0.95, 0.90, 0.85, 0.80]:
+                        p, _ = await asyncio.to_thread(compile_and_check_page_metrics, raw_tailored_latex, scale, opt_ls, master_latex)
+                        if p == 1:
+                            opt_scale = scale
+                            break
 
             final_latex = apply_latex_hotfix(raw_tailored_latex, opt_scale, opt_ls, master_latex, user_selected_skills=user_selected_skills)
             with open(tex_path, "w", encoding="utf-8") as f:

@@ -13,7 +13,7 @@ sys.path.insert(0, backend_dir)
 from dotenv import load_dotenv
 load_dotenv()
 
-from utils.latex_utils import apply_latex_hotfix
+from utils.latex_utils import apply_latex_hotfix, compile_and_check_page_metrics
 from services.llm_agent import tailor_latex_code
 # pyrefly: ignore [missing-import]
 import fitz  # PyMuPDF
@@ -59,20 +59,10 @@ def validate_resume_tailoring():
 
 \begin{document}
 
-%----------------------------------------------------------------------------------------
-%	SUMMARY SECTION
-%----------------------------------------------------------------------------------------
-
 \vspace{-0.2em}
 \begin{rSection}{Professional Summary}
 AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML and developer infrastructure at \textbf{Qualcomm} and \textbf{Axis Bank}. Engineered cross-language LLM context pipelines cutting retrieval latency by \textbf{60\%} and improving LLM accuracy by \textbf{46\%}, alongside enterprise GenAI systems serving \textbf{1,000+} users. Strong in Python, LLMs, RAG, machine learning, and distributed systems; MSc student in Artificial Intelligence Applications and Innovation at \textbf{Imperial College London}.
 \end{rSection}
-
-
-
-%----------------------------------------------------------------------------------------
-%	WORK EXPERIENCE
-%----------------------------------------------------------------------------------------
 
 \vspace{-0.3em}
 \begin{rSection}{Work Experience}
@@ -99,10 +89,6 @@ AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML a
 \end{itemize}
 \end{rSection}
 
-%----------------------------------------------------------------------------------------
-%	TECHNICAL SKILLS
-%----------------------------------------------------------------------------------------
-
 \vspace{-0.3em}
 \begin{rSection}{Technical Skills}
 \vspace{-0.1em}
@@ -113,10 +99,6 @@ AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML a
 
 \end{rSection}
 
-%----------------------------------------------------------------------------------------
-%	EDUCATION SECTION
-%----------------------------------------------------------------------------------------
-
 \vspace{-0.3em}
 \begin{rSection}{Education}
 {\bf Imperial College London} \hfill {\em Sept 2026 -- Sept 2027} \\
@@ -125,10 +107,6 @@ AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML a
 {\textit{B.Tech in Engineering Science}} \hfill {\em CPI: 8.04 / 10.0} \\
 \textit{\textbf{Internship and Placement Cell Coordinator} — Managed corporate outreach and recruitment operations for \textbf{100+} technology and engineering firms.}
 \end{rSection}
-
-%----------------------------------------------------------------------------------------
-%	PROJECTS
-%----------------------------------------------------------------------------------------
 
 \vspace{-0.3em}
 \begin{rSection}{Projects}
@@ -170,8 +148,24 @@ AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML a
     print(f"pdf-path: {pdf_path}")
     print(f"latex-path: {tex_path}")
 
-    print("\n2️⃣  Applying Hotfix & Geometry Constraints...")
-    fixed_code = apply_latex_hotfix(tailored_latex)
+    print("\n2️⃣  Applying Multi-Pass Single-Page Optimization...")
+    pages, _ = compile_and_check_page_metrics(tailored_latex, 1.0, 1.0, master_latex)
+    opt_scale, opt_ls = 1.0, 1.0
+    if pages > 1:
+        p = pages
+        for ls in [0.95, 0.91, 0.88, 0.82, 0.78]:
+            p, _ = compile_and_check_page_metrics(tailored_latex, 1.0, ls, master_latex)
+            if p == 1:
+                opt_ls = ls
+                break
+        if p > 1:
+            for scale in [0.95, 0.90, 0.85, 0.80]:
+                p, _ = compile_and_check_page_metrics(tailored_latex, scale, opt_ls, master_latex)
+                if p == 1:
+                    opt_scale = scale
+                    break
+
+    fixed_code = apply_latex_hotfix(tailored_latex, opt_scale, opt_ls, master_latex)
     with open(tex_path, "w", encoding="utf-8") as f:
         f.write(fixed_code)
 
