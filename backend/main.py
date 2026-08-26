@@ -3900,7 +3900,7 @@ Instructions:
         answer_text = generate_content_with_fallback(
             prompt=prompt,
             custom_api_key=active_api_key,
-            model_tier="strong"
+            model_tier="lite"
         )
         return {"status": "success", "answer": answer_text.strip()}
     except Exception as e:

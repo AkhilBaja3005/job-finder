@@ -571,8 +571,12 @@ def _execute_openrouter(prompt: str, model_list: list, response_schema, api_key:
 # ─────────────────────────────────────────────────────────────────────────────
 # High-Level Entrypoints
 # ─────────────────────────────────────────────────────────────────────────────
+FAST_LITE_MODELS = [
+    "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash"
+]
+
 STRONG_JSON_MODELS = [
-    "gemini-3.7-flash" , "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", "gemini-3.5-flash-lite"
+    "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", "gemini-3.5-flash-lite"
 ]
 
 def generate_content_with_fallback(
@@ -585,7 +589,12 @@ def generate_content_with_fallback(
 ) -> str:
     """JSON / structured output generation via fallback list."""
     full_prompt = f"SYSTEM INSTRUCTION: {system_instruction}\n\n{prompt}" if system_instruction else prompt
-    models_to_use = STRONG_JSON_MODELS if model_tier == 'strong' else JSON_FALLBACK_MODELS
+    if model_tier == 'strong':
+        models_to_use = STRONG_JSON_MODELS
+    elif model_tier == 'lite':
+        models_to_use = FAST_LITE_MODELS
+    else:
+        models_to_use = FAST_LITE_MODELS
     return _generate_with_model_list(
         full_prompt, models_to_use, response_schema, custom_api_key, on_log
     )
