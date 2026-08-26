@@ -1,5 +1,6 @@
 import os
 import asyncio
+from typing import Any
 # pyrefly: ignore [missing-import]
 from playwright.async_api import async_playwright
 # pyrefly: ignore [missing-import]
@@ -12,7 +13,7 @@ import re
 # process (~2-3s saved per request). Falls back to per-call browser when
 # the shared one is not yet ready (e.g. during startup).
 _shared_playwright = None
-_shared_browser = None
+_shared_browser: Any = None
 
 # ── Pre-warmed browser context pool ─────────────────────────────────────────
 # Context creation + stealth init script takes ~200-500ms; pre-creating a
