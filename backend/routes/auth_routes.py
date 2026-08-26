@@ -108,7 +108,8 @@ async def user_me(authorization: Optional[str] = Header(None)):
         try:
             res = supabase_request(f"user_resumes?user_id=eq.{user['id']}&select=resume_data", "GET")
             if res and len(res) > 0:
-                rdata = json.loads(res[0].get("resume_data", "{}"))
+                raw_rdata = res[0].get("resume_data", {})
+                rdata = json.loads(raw_rdata) if isinstance(raw_rdata, str) else (raw_rdata or {})
                 user["resume_data"] = rdata
                 if rdata.get("name"):
                     user["resume_name"] = rdata.get("name")
@@ -190,7 +191,7 @@ async def update_user_profile(request: ProfileUpdateRequest, authorization: Opti
             existing_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
             payload = {
                 "user_id": user_id,
-                "resume_data": json.dumps(profile_dict),
+                "resume_data": profile_dict,
                 "updated_at": "now()"
             }
             if existing_rows and len(existing_rows) > 0:

@@ -110,7 +110,8 @@ def get_session_data(token: Optional[str]) -> dict:
                 from services.auth import supabase_request
                 res = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
                 if res and len(res) > 0:
-                    resume_dict = json.loads(res[0].get("resume_data", "{}"))
+                    raw_rdata = res[0].get("resume_data", {})
+                    resume_dict = json.loads(raw_rdata) if isinstance(raw_rdata, str) else (raw_rdata or {})
                     path = ""
                     master_latex = res[0].get("master_latex", "")
                     if master_latex:
@@ -158,14 +159,19 @@ def set_session_data(token: Optional[str], data: dict, path: str):
 
         try:
             user = get_user_by_token(token)
-            if user:
-                user_id = user.get("id")
+            if user and user.get("id") and not str(user.get("id")).startswith("guest_"):
+                user_id = user["id"]
                 from services.auth import supabase_request
+                existing = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
                 record = {
                     "user_id": user_id,
-                    "resume_data": json.dumps(data),
-                    "master_latex": master_latex
+                    "resume_data": data,
+                    "master_latex": master_latex,
+                    "updated_at": "now()"
                 }
-                supabase_request("user_resumes", "POST", record)
+                if existing and len(existing) > 0:
+                    supabase_request(f"user_resumes?user_id=eq.{user_id}", "PATCH", record)
+                else:
+                    supabase_request("user_resumes", "POST", record)
         except Exception as e:
             print(f"Failed to persist resume to Supabase user session: {e}")
