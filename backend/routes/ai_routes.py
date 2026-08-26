@@ -629,8 +629,11 @@ async def answer_question(request: AnswerQuestionRequest, authorization: Optiona
     print(f"[AI Screen Solver] 🏢 Company: {request.company_name or 'N/A'} | Role: {request.job_title or 'N/A'}")
 
     q_lower = q_clean.lower()
+    custom_notice = session_resume_data.get("notice_period") or session_resume_data.get("noticePeriod")
+    custom_salary = session_resume_data.get("salary_expectations") or session_resume_data.get("salary")
+
     if "notice" in q_lower or "how soon" in q_lower or "start date" in q_lower:
-        ans = "Available immediately (2 weeks notice)."
+        ans = custom_notice or "Available immediately (2 weeks notice)."
         print(f"[AI Screen Solver] 💡 Deterministic Answer: {ans}\n")
         return {"status": "success", "answer": ans}
     if "hear about" in q_lower or "source" in q_lower or "referred" in q_lower:
@@ -638,7 +641,7 @@ async def answer_question(request: AnswerQuestionRequest, authorization: Optiona
         print(f"[AI Screen Solver] 💡 Deterministic Answer: {ans}\n")
         return {"status": "success", "answer": ans}
     if "salary" in q_lower or "compensation" in q_lower or "expectation" in q_lower:
-        ans = "Competitive market rate / Open to discuss based on role scope."
+        ans = custom_salary or "Competitive market rate / Open to discuss based on role scope."
         print(f"[AI Screen Solver] 💡 Deterministic Answer: {ans}\n")
         return {"status": "success", "answer": ans}
 

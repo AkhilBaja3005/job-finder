@@ -379,15 +379,18 @@
   async function generateAIAnswer(question, profile, jobInfo, baseUrl, token) {
     const qLower = question.toLowerCase();
 
-    // Deterministic short-answers
+    const customNotice = (profile && (profile.notice_period || profile.noticePeriod)) || "";
+    const customSalary = (profile && (profile.salary_expectations || profile.salary)) || "";
+
+    // Deterministic short-answers using user profile preference
     if (qLower.includes("notice") || qLower.includes("how soon") || qLower.includes("start date")) {
-      return "Available immediately (2 weeks notice).";
+      return customNotice || "Available immediately";
     }
     if (qLower.includes("hear about") || qLower.includes("referred") || qLower.includes("source")) {
       return "LinkedIn";
     }
     if (qLower.includes("salary") || qLower.includes("compensation") || qLower.includes("expectation")) {
-      return "Competitive market rate / Open to discuss based on role scope.";
+      return customSalary || "Competitive market rate / Open to discuss based on role scope.";
     }
 
     console.log(`%c[Job Finder AI] ❓ Extracted Question: "${question}"`, "color: #38bdf8; font-weight: bold;");
@@ -529,10 +532,12 @@
   async function runAutofill() {
     showToast("⏳ Auto-filling application & generating AI answers...");
 
-    chrome.storage.local.get(["userToken", "resumeData", "eeoProfile", "backendUrl"], async (storage) => {
+    chrome.storage.local.get(["userToken", "resumeData", "eeoProfile", "backendUrl", "noticePeriod", "salaryExpectations"], async (storage) => {
       let resume = storage.resumeData || {};
       const token = (storage.userToken || "").trim();
       const baseUrl = (storage.backendUrl || "http://127.0.0.1:8000").replace(/\/+$/, "");
+      const customNotice = storage.noticePeriod || resume.notice_period || resume.noticePeriod || "Available immediately";
+      const customSalary = storage.salaryExpectations || resume.salary_expectations || resume.salary || "Competitive market rate";
 
       if (!resume || !resume.name) {
         try {
@@ -692,6 +697,16 @@
         // Location
         else if (/\b(city|location|address)\b/i.test(key)) {
           val = location;
+          isProfileField = true;
+        }
+        // Notice Period
+        else if (/notice\s*period|notice|how\s*soon|start\s*date/i.test(key) && !/hear|source|how\s*did/i.test(key)) {
+          val = customNotice;
+          isProfileField = true;
+        }
+        // Salary expectations
+        else if (/salary|compensation|expected\s*pay|pay\s*expectation/i.test(key)) {
+          val = customSalary;
           isProfileField = true;
         }
         // EEO

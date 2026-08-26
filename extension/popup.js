@@ -45,6 +45,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const profGithub = document.getElementById("prof-github");
   const profPortfolio = document.getElementById("prof-portfolio");
   const profSkills = document.getElementById("prof-skills");
+  const profNotice = document.getElementById("prof-notice");
+  const profSalary = document.getElementById("prof-salary");
   const eeoWorkAuth = document.getElementById("eeo-work-auth");
   const eeoSponsorship = document.getElementById("eeo-sponsorship");
   const profSummary = document.getElementById("prof-summary");
@@ -238,6 +240,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const skillsStr = skillsList.join(", ");
     if (profSkills && (forceOverwrite || !profSkills.value)) profSkills.value = skillsStr;
 
+    const notice = resume.notice_period || resume.noticePeriod || "";
+    if (profNotice && (forceOverwrite || !profNotice.value)) profNotice.value = notice || "Available immediately";
+
+    const salary = resume.salary_expectations || resume.salary || "";
+    if (profSalary && (forceOverwrite || !profSalary.value)) profSalary.value = salary || "Competitive market rate";
+
     if (profSummary && (forceOverwrite || !profSummary.value)) {
       if (typeof resume === "object") {
         profSummary.value = JSON.stringify(resume, null, 2);
@@ -250,7 +258,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ----------------------------------------------------
   // Load Storage Initialization
   // ----------------------------------------------------
-  chrome.storage.local.get(["backendUrl", "userToken", "resumeData", "eeoProfile"], (items) => {
+  chrome.storage.local.get(["backendUrl", "userToken", "resumeData", "eeoProfile", "noticePeriod", "salaryExpectations"], (items) => {
     if (items && items.backendUrl && items.backendUrl.trim()) {
       API_BASE_URL = items.backendUrl.trim().replace(/\/+$/, "");
       if (backendUrlInput) backendUrlInput.value = API_BASE_URL;
@@ -267,6 +275,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const eeo = items?.eeoProfile || {};
     if (eeo.workAuth && eeoWorkAuth) eeoWorkAuth.value = eeo.workAuth;
     if (eeo.sponsorship && eeoSponsorship) eeoSponsorship.value = eeo.sponsorship;
+
+    if (items?.noticePeriod && profNotice) profNotice.value = items.noticePeriod;
+    if (items?.salaryExpectations && profSalary) profSalary.value = items.salaryExpectations;
 
     checkHealth();
     scanActiveTab();
@@ -727,12 +738,17 @@ document.addEventListener("DOMContentLoaded", () => {
         parsedResumeObj = {};
       }
 
+      const noticePeriod = (profNotice?.value || "").trim() || "Available immediately";
+      const salaryExpectations = (profSalary?.value || "").trim() || "Competitive market rate";
+
       const resumeData = {
         ...parsedResumeObj,
         name: `${profFirstName.value} ${profLastName.value}`.trim() || parsedResumeObj.name || "",
         email: profEmail.value.trim() || parsedResumeObj.email || "",
         phone: profPhone.value.trim() || parsedResumeObj.phone || "",
         location: profLocation.value.trim() || parsedResumeObj.location || "",
+        notice_period: noticePeriod,
+        salary_expectations: salaryExpectations,
         links: [profLinkedin.value.trim(), profGithub.value.trim(), profPortfolio.value.trim()].filter(Boolean),
         skills: profSkills.value.split(",").map((s) => s.trim()).filter(Boolean),
         summary: parsedResumeObj.summary || profSummary.value.trim()
@@ -743,9 +759,9 @@ document.addEventListener("DOMContentLoaded", () => {
         sponsorship: eeoSponsorship.value
       };
 
-      chrome.storage.local.set({ resumeData, eeoProfile }, () => {
+      chrome.storage.local.set({ resumeData, eeoProfile, noticePeriod, salaryExpectations }, () => {
         if (profSummary) profSummary.value = JSON.stringify(resumeData, null, 2);
-        showToast("✅ Candidate Profile & Full Resume JSON Saved!");
+        showToast("✅ Candidate Profile & Preferences Saved!");
       });
     });
   }
