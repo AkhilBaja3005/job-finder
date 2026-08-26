@@ -325,10 +325,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (scoreSub) scoreSub.textContent = cachedAnalysis.fit_score >= 70 ? "Strong match profile" : "Missing key keywords";
         if (activeRoleTitle && cachedAnalysis.title) activeRoleTitle.textContent = cachedAnalysis.title;
         if (activeCompanyName && cachedAnalysis.company) activeCompanyName.textContent = cachedAnalysis.company;
-        if (alignSeniority && cachedAnalysis.seniority) alignSeniority.textContent = cachedAnalysis.seniority;
-        if (alignDomain && cachedAnalysis.domain) alignDomain.textContent = cachedAnalysis.domain;
+        if (alignSen && cachedAnalysis.seniority) alignSen.textContent = cachedAnalysis.seniority;
+        if (alignDom && cachedAnalysis.domain) alignDom.textContent = cachedAnalysis.domain;
         if (alignVer && cachedAnalysis.verdict) alignVer.textContent = cachedAnalysis.verdict;
-        const alignCard = document.getElementById("alignment-report-card");
         if (alignCard) alignCard.style.display = "block";
         if (cachedAnalysis.flags && cachedAnalysis.flags !== "None detected" && alignFlagsBox && alignFlags) {
           alignFlags.textContent = cachedAnalysis.flags;
