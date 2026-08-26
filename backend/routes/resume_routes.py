@@ -690,15 +690,18 @@ async def save_user_archetype(request: SaveArchetypeRequest, authorization: Opti
 
     # Update manifest
     manifest_path = _get_archetype_manifest_path(token)
-    manifest = {"archetypes": [], "active_archetype": name}
+    manifest: dict = {"archetypes": [], "active_archetype": name}
     if os.path.exists(manifest_path):
         try:
             with open(manifest_path, "r", encoding="utf-8") as f:
-                manifest = json.load(f)
+                loaded_manifest = json.load(f)
+                if isinstance(loaded_manifest, dict):
+                    manifest = loaded_manifest
         except Exception:
             pass
 
-    archetypes = [a for a in manifest.get("archetypes", []) if a.get("name") != name]
+    existing_archetypes = manifest.get("archetypes", [])
+    archetypes: list[dict] = [a for a in existing_archetypes if isinstance(a, dict) and a.get("name") != name]
     eval_res = evaluate_master_resume(session_data) if session_data else {"skills_count": 0, "ats_score": 85}
     archetypes.append({
         "name": name,
@@ -708,7 +711,8 @@ async def save_user_archetype(request: SaveArchetypeRequest, authorization: Opti
         "updated_at": time.strftime("%Y-%m-%d %H:%M")
     })
     for a in archetypes:
-        a["is_active"] = (a.get("name") == name)
+        if isinstance(a, dict):
+            a["is_active"] = (a.get("name") == name)
 
     manifest["archetypes"] = archetypes
     manifest["active_archetype"] = name
@@ -734,12 +738,13 @@ async def switch_user_archetype(request: SwitchArchetypeRequest, authorization: 
     with open(arch_data_path, "r", encoding="utf-8") as f:
         loaded_data = json.load(f)
 
-    set_session_data(token, loaded_data, arch_tex_path if os.path.exists(arch_tex_path) else None)
+    session_tex = arch_tex_path if os.path.exists(arch_tex_path) else ""
+    set_session_data(token, loaded_data, session_tex)
     guest_file = _get_guest_state_file(token)
     new_eval = evaluate_master_resume(loaded_data)
     try:
         with open(guest_file, "w") as f:
-            json.dump({"data": loaded_data, "path": arch_tex_path, "evaluation": new_eval}, f, indent=2)
+            json.dump({"data": loaded_data, "path": session_tex, "evaluation": new_eval}, f, indent=2)
     except Exception:
         pass
 
@@ -748,12 +753,14 @@ async def switch_user_archetype(request: SwitchArchetypeRequest, authorization: 
     if os.path.exists(manifest_path):
         try:
             with open(manifest_path, "r", encoding="utf-8") as f:
-                manifest = json.load(f)
-            for a in manifest.get("archetypes", []):
-                a["is_active"] = (a.get("name") == name)
-            manifest["active_archetype"] = name
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, indent=2)
+                manifest_data = json.load(f)
+            if isinstance(manifest_data, dict):
+                for a in manifest_data.get("archetypes", []):
+                    if isinstance(a, dict):
+                        a["is_active"] = (a.get("name") == name)
+                manifest_data["active_archetype"] = name
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(manifest_data, f, indent=2)
         except Exception:
             pass
 

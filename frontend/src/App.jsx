@@ -135,6 +135,10 @@ function App() {
   const [forceTailorEnabled, setForceTailorEnabled] = useState(false);
   const [coverLetterCopied, setCoverLetterCopied] = useState(false);
   const [toast, setToast] = useState(null); // { message, type: 'success'|'error'|'info' }
+  const showToast = useCallback((message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [backendHealth, setBackendHealth] = useState('checking'); // 'healthy' | 'warming' | 'checking'
   const [commitSha, setCommitSha] = useState('');
