@@ -3881,11 +3881,23 @@ Instructions:
 2. If the question specifies a constraint (such as 'in just one line', 'in 5 sentences or less', 'in 150 words', 'in 2-3 bullet points'), STRICTLY obey that exact formatting constraint.
 3. Sound authentic, ambitious, and professional. Do NOT include conversational filler, meta-introductions (like "Here is my answer:"), or quotation marks. Output only the clean answer text."""
 
-    from services.gemini_client import generate_content_with_fallback
+    db_api_key = None
+    if token:
+        user = await async_get_user_by_token(token)
+        if user:
+            db_api_key = user.get("gemini_api_key")
+    active_api_key = x_gemini_api_key or db_api_key
+
+    from services.gemini_client import generate_content_with_fallback, JSON_FALLBACK_MODELS
     try:
-        answer_text = generate_content_with_fallback(prompt, model_name="gemini-2.5-flash", temperature=0.3)
+        answer_text = generate_content_with_fallback(
+            prompt=prompt,
+            custom_api_key=active_api_key,
+            model_list=JSON_FALLBACK_MODELS
+        )
         return {"status": "success", "answer": answer_text.strip()}
     except Exception as e:
+        print(f"[answer_question] LLM generation error: {e}")
         # Fallback heuristic answer
         q_lower = request.question.lower()
         if "one line" in q_lower or "one-line" in q_lower or "condensed cover letter" in q_lower:
