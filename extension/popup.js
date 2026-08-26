@@ -75,6 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let currentJobInfo = null;
   let activePreviewText = "";
+  let lastScannedTabUrl = "";
   window.selectedUserSkills = new Set();
   window.baseAtsScore = null;
 
@@ -423,11 +424,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (activeRoleTitle) activeRoleTitle.textContent = details.title || "Detected Job Posting";
     if (activeCompanyName) activeCompanyName.textContent = details.company || "Hiring Company";
 
-    if (customJdTitle && (!customJdTitle.value || customJdTitle.value === "Detected Job Posting")) customJdTitle.value = details.title || "";
-    if (customJdCompany && (!customJdCompany.value || customJdCompany.value === "Hiring Company")) customJdCompany.value = details.company || "";
-    if (customJdText && (!customJdText.value || customJdText.value.length < 50) && details.description) {
-      customJdText.value = details.description;
-    }
+    if (customJdTitle) customJdTitle.value = details.title || "";
+    if (customJdCompany) customJdCompany.value = details.company || "";
+    if (customJdText) customJdText.value = details.description || "";
 
     const descLen = (details.description || "").trim().length;
     const titleLower = (details.title || "").toLowerCase();
@@ -599,7 +598,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   }
 
-  function scanActiveTab() {
+  function scanActiveTab(forceFresh = false) {
     getActiveTab((activeTab) => {
       if (!activeTab || !activeTab.id) {
         handleJobDetails(null);
@@ -611,11 +610,20 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
+      const cleanActive = getCleanUrl(tabUrl);
+      const isNewTab = cleanActive && cleanActive !== getCleanUrl(lastScannedTabUrl);
+      lastScannedTabUrl = tabUrl;
+
+      if (isNewTab || forceFresh) {
+        if (customJdTitle) customJdTitle.value = "";
+        if (customJdCompany) customJdCompany.value = "";
+        if (customJdText) customJdText.value = "";
+      }
+
       chrome.storage.local.get(["customJdState"], (st) => {
         const cachedJd = st?.customJdState;
-        const cleanActive = getCleanUrl(tabUrl);
         const cleanCached = getCleanUrl(cachedJd?.url);
-        const isSamePage = cachedJd && cachedJd.text && cachedJd.text.length > 30 && cleanActive && cleanCached && cleanCached === cleanActive;
+        const isSamePage = !forceFresh && cachedJd && cachedJd.text && cachedJd.text.length > 30 && cleanActive && cleanCached && cleanCached === cleanActive;
 
         if (isSamePage) {
           handleJobDetails({
@@ -1104,7 +1112,9 @@ document.addEventListener("DOMContentLoaded", () => {
     btnRefreshTab.addEventListener("click", (e) => {
       e.preventDefault();
       showToast("🔄 Rescanning active tab...");
-      scanActiveTab();
+      chrome.storage.local.remove(["customJdState"], () => {
+        scanActiveTab(true);
+      });
     });
   }
 
