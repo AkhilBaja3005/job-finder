@@ -118,8 +118,19 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
             platform_bg = "#EC489915" if is_reed else "#0A66C215" if is_linkedin else "#2164F315" if is_indeed else "#10B98115"
             tailor_url = f"{backend_url}/email_action/tailor?job_url={urllib.parse.quote(job_url)}&email={urllib.parse.quote(email)}&title={urllib.parse.quote(str(job.get('title', '')))}&company={urllib.parse.quote(str(job.get('company', '')))}"
 
+            recruiter_info = job.get("recruiter") or {}
+            rec_name = recruiter_info.get("name") if isinstance(recruiter_info, dict) else None
+            rec_profile = recruiter_info.get("profile_url") if isinstance(recruiter_info, dict) else None
+
+            recruiter_html = ""
+            if rec_name:
+                if rec_profile:
+                    recruiter_html = f'<p style="margin: 4px 0 0 0; color: #475569; font-size: 0.84rem;">👤 Recruiter: <a href="{rec_profile}" target="_blank" style="color: #0284C7; text-decoration: none; font-weight: 600;">{rec_name}</a></p>'
+                else:
+                    recruiter_html = f'<p style="margin: 4px 0 0 0; color: #475569; font-size: 0.84rem;">👤 Recruiter: <span style="font-weight: 600;">{rec_name}</span></p>'
+
             cards_html += f"""
-            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; margin-bottom: 12px;">
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; margin-bottom: 12px; box-sizing: border-box;">
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr>
                         <td>
@@ -127,9 +138,10 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
                             <p style="margin: 0; color: #64748B; font-size: 0.88rem; font-weight: 500;">
                                 {job.get('company', 'Company')} &bull; <span style="color: {platform_color}; font-weight: 700; background-color: {platform_bg}; padding: 2px 6px; border-radius: 4px;">{platform_name}</span>
                             </p>
+                            {recruiter_html}
                         </td>
-                        <td style="text-align: right; vertical-align: top; width: 90px;">
-                            <span style="display: inline-block; background-color: #10B98115; color: #10B981; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700;">{job.get('score', 80)}% match</span>
+                        <td style="text-align: right; vertical-align: top; width: 110px;">
+                            <span style="display: inline-block; background-color: #10B98115; color: #10B981; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; white-space: nowrap;">{job.get('score', 80)}% match (Exact ATS)</span>
                         </td>
                     </tr>
                 </table>
@@ -139,7 +151,7 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
                             <a href="{job_url}" target="_blank" style="display: block; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600;">View Listing</a>
                         </td>
                         <td style="width: 50%; padding-left: 5px;">
-                            <a href="{tailor_url}" target="_blank" style="display: block; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold;">⚡ 1-Click Auto-Tailor</a>
+                            <a href="{tailor_url}" target="_blank" style="display: block; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold;">⚡ Auto-Tailor</a>
                         </td>
                     </tr>
                 </table>
