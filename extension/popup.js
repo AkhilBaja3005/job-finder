@@ -272,65 +272,103 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function getCleanUrl(url) {
+    if (!url || typeof url !== "string") return "";
+    try {
+      const u = new URL(url);
+      return `${u.origin}${u.pathname}`.toLowerCase().replace(/\/+$/, "");
+    } catch (e) {
+      return url.split("?")[0].split("#")[0].toLowerCase().replace(/\/+$/, "");
+    }
+  }
+
   // ----------------------------------------------------
   // Load Storage Initialization
   // ----------------------------------------------------
-  chrome.storage.local.get(["backendUrl", "userToken", "resumeData", "eeoProfile", "noticePeriod", "salaryExpectations", "customJdState", "lastPreviewState", "lastAtsAnalysis"], (items) => {
-    if (items && items.backendUrl && items.backendUrl.trim()) {
-      API_BASE_URL = items.backendUrl.trim().replace(/\/+$/, "");
-      if (backendUrlInput) backendUrlInput.value = API_BASE_URL;
-    } else if (backendUrlInput) {
-      backendUrlInput.value = DEFAULT_API_BASE_URL;
-    }
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const activeTabUrl = (tabs && tabs[0]?.url) || "";
+    const cleanActiveUrl = getCleanUrl(activeTabUrl);
 
-    if (items && items.userToken) {
-      if (userTokenInput) userTokenInput.value = items.userToken;
-      fetchUserInfo(items.userToken);
-    }
-    if (items && items.resumeData) populateProfileUI(items.resumeData);
-
-    const eeo = items?.eeoProfile || {};
-    if (eeo.workAuth && eeoWorkAuth) eeoWorkAuth.value = eeo.workAuth;
-    if (eeo.sponsorship && eeoSponsorship) eeoSponsorship.value = eeo.sponsorship;
-
-    if (items?.noticePeriod && profNotice) profNotice.value = items.noticePeriod;
-    if (items?.salaryExpectations && profSalary) profSalary.value = items.salaryExpectations;
-
-    // Restore cached Custom/Pasted JD
-    if (items?.customJdState) {
-      if (customJdTitle && items.customJdState.title) customJdTitle.value = items.customJdState.title;
-      if (customJdCompany && items.customJdState.company) customJdCompany.value = items.customJdState.company;
-      if (customJdText && items.customJdState.text) customJdText.value = items.customJdState.text;
-    }
-
-    // Restore cached Cover Letter or Outreach Preview
-    if (items?.lastPreviewState && items.lastPreviewState.text) {
-      activePreviewText = items.lastPreviewState.text;
-      if (previewTitle && items.lastPreviewState.title) previewTitle.textContent = items.lastPreviewState.title;
-      if (previewContent) previewContent.textContent = items.lastPreviewState.text;
-      if (previewWrapper) previewWrapper.style.display = "block";
-    }
-
-    // Restore cached ATS Score & Analysis
-    if (items?.lastAtsAnalysis) {
-      const an = items.lastAtsAnalysis;
-      if (scoreCircle && an.fit_score) scoreCircle.textContent = `${an.fit_score}%`;
-      if (scoreSub) scoreSub.textContent = an.fit_score >= 70 ? "Strong match profile" : "Missing key keywords";
-      if (activeRoleTitle && an.title) activeRoleTitle.textContent = an.title;
-      if (activeCompanyName && an.company) activeCompanyName.textContent = an.company;
-      if (alignSeniority && an.seniority) alignSeniority.textContent = an.seniority;
-      if (alignDomain && an.domain) alignDomain.textContent = an.domain;
-      if (alignVer && an.verdict) alignVer.textContent = an.verdict;
-      const alignCard = document.getElementById("alignment-report-card");
-      if (alignCard) alignCard.style.display = "block";
-      if (an.flags && an.flags !== "None detected" && alignFlagsBox && alignFlags) {
-        alignFlags.textContent = an.flags;
-        alignFlagsBox.style.display = "block";
+    chrome.storage.local.get([
+      "backendUrl", "userToken", "resumeData", "eeoProfile", "noticePeriod",
+      "salaryExpectations", "customJdState", "lastPreviewState", "lastAtsAnalysis"
+    ], (items) => {
+      if (items && items.backendUrl && items.backendUrl.trim()) {
+        API_BASE_URL = items.backendUrl.trim().replace(/\/+$/, "");
+        if (backendUrlInput) backendUrlInput.value = API_BASE_URL;
+      } else if (backendUrlInput) {
+        backendUrlInput.value = DEFAULT_API_BASE_URL;
       }
-    }
 
-    checkHealth();
-    scanActiveTab();
+      if (items && items.userToken) {
+        if (userTokenInput) userTokenInput.value = items.userToken;
+        fetchUserInfo(items.userToken);
+      }
+      if (items && items.resumeData) populateProfileUI(items.resumeData);
+
+      const eeo = items?.eeoProfile || {};
+      if (eeo.workAuth && eeoWorkAuth) eeoWorkAuth.value = eeo.workAuth;
+      if (eeo.sponsorship && eeoSponsorship) eeoSponsorship.value = eeo.sponsorship;
+
+      if (items?.noticePeriod && profNotice) profNotice.value = items.noticePeriod;
+      if (items?.salaryExpectations && profSalary) profSalary.value = items.salaryExpectations;
+
+      const cachedAnalysis = items?.lastAtsAnalysis;
+      const cleanAnalysisUrl = getCleanUrl(cachedAnalysis?.url);
+
+      const cachedJd = items?.customJdState;
+      const cleanJdUrl = getCleanUrl(cachedJd?.url);
+
+      // ONLY restore cached ATS score and custom JD if the user is on the exact SAME job page URL!
+      if (cleanAnalysisUrl && cleanActiveUrl && cleanAnalysisUrl === cleanActiveUrl) {
+        if (scoreCircle && cachedAnalysis.fit_score) scoreCircle.textContent = `${cachedAnalysis.fit_score}%`;
+        if (scoreSub) scoreSub.textContent = cachedAnalysis.fit_score >= 70 ? "Strong match profile" : "Missing key keywords";
+        if (activeRoleTitle && cachedAnalysis.title) activeRoleTitle.textContent = cachedAnalysis.title;
+        if (activeCompanyName && cachedAnalysis.company) activeCompanyName.textContent = cachedAnalysis.company;
+        if (alignSeniority && cachedAnalysis.seniority) alignSeniority.textContent = cachedAnalysis.seniority;
+        if (alignDomain && cachedAnalysis.domain) alignDomain.textContent = cachedAnalysis.domain;
+        if (alignVer && cachedAnalysis.verdict) alignVer.textContent = cachedAnalysis.verdict;
+        const alignCard = document.getElementById("alignment-report-card");
+        if (alignCard) alignCard.style.display = "block";
+        if (cachedAnalysis.flags && cachedAnalysis.flags !== "None detected" && alignFlagsBox && alignFlags) {
+          alignFlags.textContent = cachedAnalysis.flags;
+          alignFlagsBox.style.display = "block";
+        }
+      } else {
+        // Different page -> reset ATS score card for fresh scan
+        if (activeRoleTitle) activeRoleTitle.textContent = "Detecting job page...";
+        if (activeCompanyName) activeCompanyName.textContent = "Open LinkedIn, Indeed, Greenhouse, or Lever";
+        if (scoreCircle) scoreCircle.textContent = "⏳";
+        if (scoreSub) scoreSub.textContent = "Computing ATS match score...";
+        const alignCard = document.getElementById("alignment-report-card");
+        if (alignCard) alignCard.style.display = "none";
+        if (missingSkillsSection) missingSkillsSection.style.display = "none";
+        if (previewWrapper) previewWrapper.style.display = "none";
+        if (jdMissingAlert) jdMissingAlert.style.display = "none";
+      }
+
+      // Restore custom JD ONLY if on the exact same page
+      if (cleanJdUrl && cleanActiveUrl && cleanJdUrl === cleanActiveUrl) {
+        if (customJdTitle && cachedJd.title) customJdTitle.value = cachedJd.title;
+        if (customJdCompany && cachedJd.company) customJdCompany.value = cachedJd.company;
+        if (customJdText && cachedJd.text) customJdText.value = cachedJd.text;
+      } else {
+        if (customJdTitle) customJdTitle.value = "";
+        if (customJdCompany) customJdCompany.value = "";
+        if (customJdText) customJdText.value = "";
+      }
+
+      // Restore cached preview ONLY if on the same page
+      if (items?.lastPreviewState && items.lastPreviewState.text && items.lastPreviewState.url && getCleanUrl(items.lastPreviewState.url) === cleanActiveUrl) {
+        activePreviewText = items.lastPreviewState.text;
+        if (previewTitle && items.lastPreviewState.title) previewTitle.textContent = items.lastPreviewState.title;
+        if (previewContent) previewContent.textContent = items.lastPreviewState.text;
+        if (previewWrapper) previewWrapper.style.display = "block";
+      }
+
+      checkHealth();
+      scanActiveTab();
+    });
   });
 
   // ----------------------------------------------------
@@ -532,9 +570,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       chrome.storage.local.get(["customJdState"], (st) => {
         const cachedJd = st?.customJdState;
-        const normActive = tabUrl.split("?")[0].split("#")[0].toLowerCase();
-        const normCached = (cachedJd?.url || "").split("?")[0].split("#")[0].toLowerCase();
-        const isSamePage = cachedJd && cachedJd.text && cachedJd.text.length > 30 && (normCached === normActive || normActive.includes(normCached) || normCached.includes(normActive));
+        const cleanActive = getCleanUrl(tabUrl);
+        const cleanCached = getCleanUrl(cachedJd?.url);
+        const isSamePage = cachedJd && cachedJd.text && cachedJd.text.length > 30 && cleanActive && cleanCached && cleanCached === cleanActive;
 
         if (isSamePage) {
           handleJobDetails({
