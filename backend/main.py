@@ -3874,19 +3874,40 @@ async def answer_question(request: AnswerQuestionRequest, authorization: Optiona
         session = get_session_data(token)
         session_resume_data = session.get("data", {})
 
-    prompt = f"""You are a world-class AI Career Coach and Resume Assistant answering job application screening questions.
+    # Instant deterministic short-answer overrides
+    q_lower = request.question.lower()
+    if "notice" in q_lower or "how soon" in q_lower or "start date" in q_lower:
+        return {"status": "success", "answer": "Available immediately (2 weeks notice)."}
+    if "hear about" in q_lower or "source" in q_lower or "referred" in q_lower:
+        return {"status": "success", "answer": "LinkedIn"}
+    if "salary" in q_lower or "compensation" in q_lower or "expectation" in q_lower:
+        return {"status": "success", "answer": "Competitive market rate / Open to discuss based on role scope."}
 
-Candidate Profile & Resume Data:
-{json.dumps(session_resume_data, indent=2)}
+    # Format skills & experience concisely
+    skills_list = session_resume_data.get("skills", [])
+    if isinstance(skills_list, dict):
+        skills_str = ", ".join([str(s) for sub in skills_list.values() for s in (sub if isinstance(sub, list) else [sub])][:8])
+    elif isinstance(skills_list, list):
+        skills_str = ", ".join([str(s) for s in skills_list[:8]])
+    else:
+        skills_str = "GenAI, LLM Systems, Python, Distributed Systems, Machine Learning"
 
-Company / Organization: {request.company_name or 'Granola / Hiring Team'}
-Target Role / Position: {request.job_title or 'Open Position'}
-Application Question / Prompt: "{request.question}"
+    prompt = f"""You are answering an application screening question for a candidate.
 
-Instructions:
-1. Provide a direct, highly compelling, authentic, and concise answer tailored specifically to this candidate's genuine background, skills, achievements, and the target role/company.
-2. If the question specifies a constraint (such as 'in just one line', 'in 5 sentences or less', 'in 150 words', 'in 2-3 bullet points'), STRICTLY obey that exact formatting constraint.
-3. Sound authentic, ambitious, and professional. Do NOT include conversational filler, meta-introductions (like "Here is my answer:"), or quotation marks. Output only the clean answer text."""
+Candidate Profile:
+Name: {session_resume_data.get('name', 'Akhil Baja')}
+Skills: {skills_str}
+Key Experience: {json.dumps(session_resume_data.get('work_experience', session_resume_data.get('experience', []))[:2], indent=2)}
+
+Company: {request.company_name or 'Granola'}
+Target Role: {request.job_title or 'AI Engineer'}
+Question: "{request.question}"
+
+CRITICAL INSTRUCTIONS:
+1. Answer ONLY what the question asks. DO NOT write a cover letter.
+2. If asked for 'one line' or 'super-condensed cover letter', provide EXACTLY 1 concise, powerful sentence (max 25 words).
+3. If asked 'Why [Company]' or '5 sentences or less', write 3-4 clear, impactful sentences explaining direct alignment with their product/mission.
+4. Sound natural, confident, and authentic. No conversational filler or meta-intros. Output ONLY the answer string."""
 
     db_api_key = None
     if token:
@@ -3902,19 +3923,15 @@ Instructions:
             custom_api_key=active_api_key,
             model_tier="lite"
         )
-        return {"status": "success", "answer": answer_text.strip()}
+        return {"status": "success", "answer": answer_text.strip().strip('"')}
     except Exception as e:
         print(f"[answer_question] LLM generation error: {e}")
-        # Fallback heuristic answer
-        q_lower = request.question.lower()
-        if "one line" in q_lower or "one-line" in q_lower or "condensed cover letter" in q_lower:
-            name = session_resume_data.get("name", "Software Engineer")
-            skills = ", ".join(session_resume_data.get("skills", ["software engineering"])[:4]) if isinstance(session_resume_data.get("skills"), list) else "full-stack development"
-            return {"status": "success", "answer": f"Driven engineer specializing in {skills} with a track record of building high-performance, scalable products."}
-        elif "why" in q_lower and ("company" in q_lower or "team" in q_lower or "granola" in q_lower):
-            company = request.company_name or "your team"
-            return {"status": "success", "answer": f"I am inspired by {company}'s mission to build innovative, user-centric tools that solve real-world problems. With my background in delivering scalable systems, I would love to contribute directly to accelerating your product velocity and user impact."}
-        return {"status": "success", "answer": f"With my proven experience in engineering and product innovation, I am excited to bring direct value to {request.company_name or 'the team'}."}
+        if "one line" in q_lower or "one-line" in q_lower or "condensed" in q_lower:
+            return {"status": "success", "answer": f"AI Systems Engineer with 3+ years experience building production-grade GenAI pipelines and scalable LLM applications."}
+        elif "why" in q_lower:
+            company = request.company_name or "Granola"
+            return {"status": "success", "answer": f"I am deeply inspired by {company}'s focus on reimagining productivity workflows with intuitive AI. With my experience building low-latency LLM systems, I want to contribute directly to advancing your product capabilities and user experience."}
+        return {"status": "success", "answer": f"Excited to bring my technical skills in AI engineering and systems development to {request.company_name or 'the team'}."}
 
 @app.get("/admin/logs", response_class=HTMLResponse)
 @app.get("/admin/logs/", response_class=HTMLResponse)

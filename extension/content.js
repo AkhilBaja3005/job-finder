@@ -1,4 +1,4 @@
-// content.js - Job Finder ATS Tailor & Multimodal AI AutoFill Content Script (v3.3.0)
+// content.js - Job Finder ATS Tailor & Multimodal AI AutoFill Content Script (v3.4.0)
 
 (function () {
   function isRuntimeValid() {
@@ -267,20 +267,51 @@
 
   // ── Extract Exact Question Prompt Text for Any Form Element ────────────
   function getQuestionTextForElement(el) {
-    const parentBlock = el.closest('[class*="field"], [class*="formField"], [class*="question"], .application-question, .form-group, fieldset, li, tr, div');
-    let label = "";
+    if (!el) return "";
 
-    const labelEl = parentBlock?.querySelector('label, [class*="label"], legend, h2, h3, h4, h5, [class*="title"], [class*="prompt"], [class*="heading"], p');
-    if (labelEl && labelEl !== el) {
-      const clone = labelEl.cloneNode(true);
+    // 1. Direct label reference via 'for' attribute
+    if (el.id) {
+      const explicitLabel = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+      if (explicitLabel) {
+        const txt = explicitLabel.innerText?.trim();
+        if (txt && txt.length > 1) return txt;
+      }
+    }
+
+    // 2. Direct parent label
+    const immediateLabel = el.closest("label");
+    if (immediateLabel) {
+      const clone = immediateLabel.cloneNode(true);
       clone.querySelectorAll("input, textarea, select, button, script, style").forEach((c) => c.remove());
-      label = clone.textContent.replace(/\s+/g, " ").trim();
+      const txt = clone.textContent?.trim();
+      if (txt && txt.length > 1) return txt;
     }
 
-    if (!label || label.length < 3) {
-      label = el.getAttribute("aria-label") || el.getAttribute("placeholder") || parentBlock?.innerText?.slice(0, 250) || "";
+    // 3. Closest tightly-scoped form block (Ashby, Greenhouse, Lever, Workday)
+    const tightBlock = el.closest(
+      '[class*="field"], [class*="formField"], [class*="question"], [class*="Container"], [class*="form-group"], fieldset, tr, li'
+    );
+    if (tightBlock) {
+      const heading = tightBlock.querySelector(
+        'label, [class*="label"], [class*="title"], [class*="prompt"], [class*="heading"], legend, h3, h4, h5, h6'
+      );
+      if (heading && heading !== el) {
+        const clone = heading.cloneNode(true);
+        clone.querySelectorAll("input, textarea, select, button, script, style").forEach((c) => c.remove());
+        const txt = clone.textContent?.trim();
+        if (txt && txt.length > 1) return txt;
+      }
     }
-    return label.trim();
+
+    // 4. Preceding sibling element
+    const prev = el.previousElementSibling;
+    if (prev && ["LABEL", "H3", "H4", "H5", "P", "SPAN", "DIV"].includes(prev.tagName)) {
+      const txt = prev.innerText?.trim();
+      if (txt && txt.length > 1 && txt.length < 200) return txt;
+    }
+
+    // 5. Fallback to aria-label or placeholder
+    return el.getAttribute("aria-label") || el.getAttribute("placeholder") || "";
   }
 
   // ── Click Yes / No Option on Button Cards or Radio Elements ───────────
@@ -319,6 +350,19 @@
 
   // ── AI Answer Generator (Calls Backend /answer_question LLM Agent) ──────
   async function generateAIAnswer(question, profile, jobInfo, baseUrl, token) {
+    const qLower = question.toLowerCase();
+
+    // Deterministic short-answers
+    if (qLower.includes("notice") || qLower.includes("how soon") || qLower.includes("start date")) {
+      return "Available immediately (2 weeks notice).";
+    }
+    if (qLower.includes("hear about") || qLower.includes("referred") || qLower.includes("source")) {
+      return "LinkedIn";
+    }
+    if (qLower.includes("salary") || qLower.includes("compensation") || qLower.includes("expectation")) {
+      return "Competitive market rate / Open to discuss based on role scope.";
+    }
+
     try {
       const res = await fetch(`${baseUrl}/answer_question`, {
         method: "POST",
@@ -343,25 +387,14 @@
     }
 
     // Smart Fallback Heuristic
-    const qLower = question.toLowerCase();
-    if (qLower.includes("one line") || qLower.includes("one-line") || qLower.includes("condensed cover letter")) {
-      const skills = Array.isArray(profile.skills) ? profile.skills.slice(0, 4).join(", ") : "AI engineering and full-stack systems";
-      return `Driven engineer specializing in ${skills} with a focus on building high-performance, user-centric AI products.`;
+    if (qLower.includes("one line") || qLower.includes("one-line") || qLower.includes("condensed")) {
+      return "AI Systems Engineer with 3+ years experience building production-grade GenAI pipelines and scalable LLM applications.";
     }
-    if (qLower.includes("why") && (qLower.includes("granola") || qLower.includes("company") || qLower.includes("team"))) {
+    if (qLower.includes("why")) {
       const company = jobInfo.company || "Granola";
-      return `I am deeply inspired by ${company}'s mission to build intuitive, high-velocity AI products that transform how people work. With my background in full-stack AI and scalable systems, I am excited to contribute directly to your product innovation and user growth.`;
+      return `I want to join ${company} because of your focus on transforming meeting workflows with intuitive, high-velocity AI. With my experience in production LLM pipelines and low-latency retrieval systems, I am excited to contribute directly to advancing your product capabilities.`;
     }
-    if (qLower.includes("salary") || qLower.includes("compensation")) {
-      return "Competitive market rate / Open to discuss based on the full scope and responsibilities of the role.";
-    }
-    if (qLower.includes("notice period") || qLower.includes("how soon") || qLower.includes("start date")) {
-      return "Available immediately / 2 weeks notice.";
-    }
-    if (qLower.includes("hear about us") || qLower.includes("how did you hear")) {
-      return "Company website / Job board.";
-    }
-    return `With my proven experience in engineering and product innovation, I am excited to bring direct value to ${jobInfo.company || "the team"}.`;
+    return `Excited to bring my technical experience in AI engineering and scalable systems to ${jobInfo.company || "the team"}.`;
   }
 
   // ── Inject Inline "✨ AI Answer" Buttons Beside Question Boxes ────────
@@ -376,7 +409,7 @@
       if (["hidden", "submit", "button", "file", "checkbox", "radio", "password"].includes(type)) return;
 
       const questionText = getQuestionTextForElement(el);
-      const isShortProfile = /email|phone|first.?name|last.?name|candidate.?name|legal.?name|resume/i.test(questionText);
+      const isShortProfile = /^(name|first\s*name|last\s*name|email|phone|contact\s*number|linkedin|github|resume)$/i.test(questionText.trim());
       if (isShortProfile && el.tagName !== "TEXTAREA") return;
 
       el.setAttribute("data-jf-ai-btn-injected", "true");
@@ -426,22 +459,6 @@
           let resume = storage.resumeData || {};
           const token = (storage.userToken || "").trim();
           const baseUrl = (storage.backendUrl || "http://127.0.0.1:8000").replace(/\/+$/, "");
-
-          if (!resume || !resume.name) {
-            try {
-              const resp = await fetch(`${baseUrl}/user/me`, {
-                headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" }
-              });
-              if (resp.ok) {
-                const userProfile = await resp.json();
-                if (userProfile && (userProfile.resume_data || userProfile.data)) {
-                  resume = userProfile.resume_data || userProfile.data;
-                  chrome.storage.local.set({ resumeData: resume });
-                }
-              }
-            } catch (err) {}
-          }
-
           const jobInfo = extractJobDetails();
           const qText = getQuestionTextForElement(el) || "Screening Question";
 
@@ -575,40 +592,47 @@
         const placeholder = (el.getAttribute("placeholder") || "").toLowerCase();
         const ariaLabel = (el.getAttribute("aria-label") || "").toLowerCase();
         const type = (el.type || "").toLowerCase();
-        const questionText = getQuestionTextForElement(el);
-        const key = `${id} ${nameAttr} ${placeholder} ${ariaLabel} ${questionText} ${type}`.toLowerCase();
+        const qText = getQuestionTextForElement(el);
+        const qLower = qText.toLowerCase();
+        const key = `${id} ${nameAttr} ${placeholder} ${ariaLabel} ${qLower} ${type}`.toLowerCase();
 
         let val = null;
         let isProfileField = false;
 
-        // Name
+        // Strict Profile Field Checks
         if (/\b(first.?name|given.?name|firstname|fname)\b/i.test(key)) {
           val = firstName;
           isProfileField = true;
         } else if (/\b(last.?name|family.?name|lastname|lname|surname)\b/i.test(key)) {
           val = lastName;
           isProfileField = true;
-        } else if (/\b(full.?name|your.?name|candidate.?name|legal.?name|\bname\b)\b/i.test(key) && !/company|file|domain|user|login|user_name|sur/i.test(key)) {
+        } else if (qLower === "name" || /\b(full.?name|your.?name|candidate.?name|legal.?name|\bname\b)\b/i.test(key) && !/company|file|domain|user|login|user_name|sur|hear/i.test(key)) {
           val = fullName;
           isProfileField = true;
         }
-        // Contact info
+        // Email
         else if (/email|e-mail|emailaddress/i.test(key) || type === "email") {
           val = email;
           isProfileField = true;
-        } else if (/phone|mobile|cell|tel|phonenumber|contact\s*number/i.test(key) || type === "tel") {
+        }
+        // Phone
+        else if (/phone|mobile|cell|tel|phonenumber|contact\s*number/i.test(key) || type === "tel") {
           val = phone;
           isProfileField = true;
         }
-        // Links
+        // LinkedIn
         else if (/linkedin/i.test(key)) {
           val = linkedin;
           isProfileField = true;
-        } else if (/github|portfolio|personal\s*website|website/i.test(key)) {
+        }
+        // GitHub / Portfolio / Personal website
+        else if (/github|portfolio|personal\s*website|website/i.test(key)) {
           if (/github/i.test(key) && github) val = github;
           else val = portfolio || github || linkedin;
           isProfileField = true;
-        } else if (/city|location|address/i.test(key)) {
+        }
+        // Location
+        else if (/\b(city|location|address)\b/i.test(key)) {
           val = location;
           isProfileField = true;
         }
@@ -622,10 +646,10 @@
         }
 
         // ── 4. AI Screening Question Generator for Open Textareas & Inputs ─
-        if (!isProfileField && !val && (el.tagName === "TEXTAREA" || el.getAttribute("contenteditable") === "true" || type === "text" || !type)) {
-          if (questionText && questionText.length > 5 && !el.value) {
-            logMsg(`🤖 Generating AI answer for: "${questionText.slice(0, 60)}..."`);
-            val = await generateAIAnswer(questionText, resume, jobInfo, baseUrl, token);
+        if (!isProfileField && !val) {
+          if (qText && qText.length > 3 && (el.tagName === "TEXTAREA" || el.getAttribute("contenteditable") === "true" || type === "text" || !type)) {
+            logMsg(`🤖 Generating AI answer for question: "${qText.slice(0, 60)}..."`);
+            val = await generateAIAnswer(qText, resume, jobInfo, baseUrl, token);
             aiQuestionsAnswered++;
           }
         }
