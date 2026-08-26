@@ -243,6 +243,7 @@ RULE 4 — ONE-PAGE BUDGET, BOLDING & STUDENT/DEGREE TIMELINE ACCURACY (CRITICAL
       * ALWAYS phrase ongoing degrees as: "MSc Candidate in Artificial Intelligence at Imperial College London" or "Postgraduate Researcher in AI at Imperial College London".
       * Completed Past Education (e.g. "Aug 2019 – May 2023"): Use "B.Tech graduate from IIT Hyderabad" or "B.Tech in Engineering Science from IIT Hyderabad".
   • Professional Summary MUST be placed at the top (below header), kept to 2-3 lines visually, reflecting their exact student/graduate standing, actual professional years, and targeted domain skills.
+  • PROFESSIONAL SUMMARY NATURAL FLOW: Keep the summary fluid, factual, and high-impact. Never pack arbitrary keywords into awkward run-on clauses (e.g. avoid awkward phrasing like "leveraging rapid prototyping and semantic search capabilities to optimize..."). Place technical keywords into their appropriate Technical Skills category and experience bullets.
   • BOLDING RULES: You MUST automatically bold key technical models/frameworks, metrics (e.g. `\\textbf{{40\\%}}`, `\\textbf{{60\\%}}`, `\\textbf{{£30M+}}`), awards (e.g. `\\textbf{{[BIU Star Award]}}`), and key institutions explicitly present in the candidate's text.
   • The entire tailored resume MUST fit on exactly ONE page.
   • Write concise bullets using the Playbook formula: Action + Technology + Problem + Measurable Metric. Each bullet MUST occupy between 70% and 150% of one line.
