@@ -1,22 +1,25 @@
-// popup.js - ATS Tailor Extension Controller (v2.6.0 Parametric Production Ready)
+// popup.js - Job Finder ATS Tailor Controller (v2.7.0 Tabbed Unified Edition)
 
-// Parameterized API Base URL (Configurable via chrome.storage.local key "backendUrl")
-const DEFAULT_API_BASE_URL = "https://www.job-finder.space";
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 let API_BASE_URL = DEFAULT_API_BASE_URL;
 
-chrome.storage.local.get(["backendUrl"], (items) => {
-  if (items && items.backendUrl && items.backendUrl.trim()) {
-    API_BASE_URL = items.backendUrl.trim().replace(/\/+$/, "");
-  }
-});
-
-
 document.addEventListener("DOMContentLoaded", () => {
+  // Elements - Header & Tabs
+  const statusBadge = document.getElementById("backend-status");
+  const navTabs = document.querySelectorAll(".nav-tab");
+  const tabPanes = document.querySelectorAll(".tab-pane");
+
+  // Tab 1 Elements: ATS & Apply
   const activeRoleTitle = document.getElementById("active-role-title");
   const activeCompanyName = document.getElementById("active-company-name");
-  const scoreSection = document.getElementById("score-section");
   const scoreCircle = document.getElementById("ats-score-circle");
   const scoreSub = document.getElementById("ats-score-sub");
+  const alignCard = document.getElementById("alignment-report-card");
+  const alignSen = document.getElementById("align-seniority");
+  const alignDom = document.getElementById("align-domain");
+  const alignVer = document.getElementById("align-verdict");
+  const alignFlagsBox = document.getElementById("align-flags-box");
+  const alignFlags = document.getElementById("align-flags");
   const missingSkillsSection = document.getElementById("missing-skills-section");
   const missingSkillsContainer = document.getElementById("missing-skills-container");
 
@@ -25,38 +28,53 @@ document.addEventListener("DOMContentLoaded", () => {
   const previewContent = document.getElementById("text-preview-content");
   const btnCopyPreview = document.getElementById("btn-copy-preview");
 
+  const btnFill = document.getElementById("btn-autofill");
+  const btnTailorPdf = document.getElementById("btn-tailor-pdf");
+  const btnEmailTailor = document.getElementById("btn-email-tailor");
   const btnCoverLetter = document.getElementById("btn-cover-letter");
   const btnOutreach = document.getElementById("btn-outreach");
-  const btnEmailTailor = document.getElementById("btn-email-tailor");
-  const btnTailorPdf = document.getElementById("btn-tailor-pdf");
-  const btnFill = document.getElementById("btn-autofill");
+
+  // Tab 2 Elements: Profile
+  const btnSyncBackendNow = document.getElementById("btn-sync-backend-now");
+  const profFirstName = document.getElementById("prof-firstName");
+  const profLastName = document.getElementById("prof-lastName");
+  const profEmail = document.getElementById("prof-email");
+  const profPhone = document.getElementById("prof-phone");
+  const profLocation = document.getElementById("prof-location");
+  const profLinkedin = document.getElementById("prof-linkedin");
+  const profGithub = document.getElementById("prof-github");
+  const profPortfolio = document.getElementById("prof-portfolio");
+  const profSkills = document.getElementById("prof-skills");
+  const eeoWorkAuth = document.getElementById("eeo-work-auth");
+  const eeoSponsorship = document.getElementById("eeo-sponsorship");
+  const profSummary = document.getElementById("prof-summary");
+  const btnSaveProfile = document.getElementById("btn-save-profile");
+
+  // Tab 3 Elements: Batch Apply
   const btnToggleAuto = document.getElementById("btn-toggle-auto");
   const autoStatusText = document.getElementById("auto-status-text");
   const statApplied = document.getElementById("stat-applied");
   const statSkipped = document.getElementById("stat-skipped");
-  const eeoWorkAuth = document.getElementById("eeo-work-auth");
-  const eeoSponsorship = document.getElementById("eeo-sponsorship");
+  const cfgMaxYears = document.getElementById("cfg-max-years");
+  const cfgBlacklist = document.getElementById("cfg-blacklist");
+  const btnSaveFilters = document.getElementById("btn-save-filters");
   const logWindow = document.getElementById("log-window");
-  let isAutoRunning = false;
 
+  // Tab 4 Elements: Settings
   const userTokenInput = document.getElementById("user-token");
-  const toast = document.getElementById("popup-toast");
-  const btnSettingsUrl = document.getElementById("btn-settings-url");
-  const settingsUrlBox = document.getElementById("settings-url-box");
-
-  if (btnSettingsUrl && settingsUrlBox) {
-    btnSettingsUrl.addEventListener("click", () => {
-      const isHidden = settingsUrlBox.style.display === "none";
-      settingsUrlBox.style.display = isHidden ? "block" : "none";
-    });
-  }
-
-  let currentJobInfo = null;
-  let activePreviewText = "";
-
+  const backendUrlInput = document.getElementById("backend-url-input");
   const userInfoCard = document.getElementById("user-info-card");
   const userNameDisplay = document.getElementById("user-name-display");
   const userEmailDisplay = document.getElementById("user-email-display");
+  const btnSaveSettings = document.getElementById("btn-save-settings");
+  const toast = document.getElementById("popup-toast");
+
+  let isAutoRunning = false;
+  let currentJobInfo = null;
+  let activePreviewText = "";
+  window.selectedUserSkills = new Set();
+  window.baseAtsScore = null;
+
   function showToast(msg) {
     if (!toast) return;
     toast.textContent = msg;
@@ -64,326 +82,317 @@ document.addEventListener("DOMContentLoaded", () => {
     setTimeout(() => { toast.style.display = "none"; }, 3500);
   }
 
-  // Fetch user profile for confirmation
-  function fetchUserInfo(syncKey) {
+  // ----------------------------------------------------
+  // Tab Switching
+  // ----------------------------------------------------
+  navTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      navTabs.forEach((t) => t.classList.remove("active"));
+      tabPanes.forEach((p) => p.classList.remove("active"));
+
+      tab.classList.add("active");
+      const targetId = tab.getAttribute("data-target");
+      const targetPane = document.getElementById(targetId);
+      if (targetPane) targetPane.classList.add("active");
+    });
+  });
+
+  // ----------------------------------------------------
+  // User & Base URL Sync
+  // ----------------------------------------------------
+  function getBaseUrl() {
+    return API_BASE_URL;
+  }
+
+  function getAuthToken() {
+    return (userTokenInput?.value || "").trim().toUpperCase();
+  }
+
+  function checkHealth() {
+    fetch(`${API_BASE_URL}/healthz`, { headers: { "Accept": "application/json" } })
+      .then((res) => {
+        if (res.ok) {
+          statusBadge.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
+          statusBadge.style.color = "#34d399";
+        } else {
+          statusBadge.innerHTML = '<span>Offline 🔴</span>';
+          statusBadge.style.color = "#f87171";
+        }
+      })
+      .catch(() => {
+        statusBadge.innerHTML = '<span>Offline 🔴</span>';
+        statusBadge.style.color = "#f87171";
+      });
+  }
+
+  function fetchUserInfo(syncKey, showAlert = false) {
     if (!syncKey || !syncKey.trim()) {
       if (userInfoCard) userInfoCard.style.display = "none";
       return;
     }
-    const cleanKey = syncKey.trim();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const cleanKey = syncKey.trim().toUpperCase();
+
     fetch(`${API_BASE_URL}/user/me`, {
-      signal: controller.signal,
-      headers: { "Authorization": `Bearer ${cleanKey}` }
+      headers: { "Authorization": `Bearer ${cleanKey}`, "Accept": "application/json" }
     })
-      .then((res) => {
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        return res.json();
-      })
-      .then((data) => {
+      .then(async (res) => {
+        const ct = res.headers.get("content-type") || "";
+        if (!res.ok || !ct.includes("application/json")) return;
+        const data = await res.json();
         if (data && (data.email || data.id)) {
-          const email = data.email || "";
-          let candidateName = data.resume_name;
-          if (!candidateName && email) {
-            const handle = email.split("@")[0];
-            candidateName = handle.replace(/[._-]/g, " ").toUpperCase();
-          }
-          if (!candidateName) {
-            candidateName = "ACTIVE USER";
-          }
-          if (userNameDisplay) userNameDisplay.textContent = `✓ ${candidateName}`;
+          const email = data.email || "User Account";
+          const name = email.split("@")[0];
+          if (userNameDisplay) userNameDisplay.textContent = `👤 Synced: ${name.charAt(0).toUpperCase() + name.slice(1)}`;
           if (userEmailDisplay) userEmailDisplay.textContent = `📧 ${email}`;
           if (userInfoCard) userInfoCard.style.display = "flex";
-          const settingsUserInfo = document.getElementById("settings-user-info");
-          if (settingsUserInfo) settingsUserInfo.textContent = `✓ ${candidateName} (${email})`;
-        } else {
-          if (userInfoCard) userInfoCard.style.display = "none";
+
+          if (data.resume_data) {
+            populateProfileUI(data.resume_data);
+            chrome.storage.local.set({ resumeData: data.resume_data });
+          }
+          if (showAlert) showToast("⚡ Synced profile from web app!");
         }
       })
-      .catch(() => {
-        if (userInfoCard) userInfoCard.style.display = "none";
-      });
+      .catch(() => {});
   }
 
-  const backendUrlInput = document.getElementById("backend-url-input");
+  function populateProfileUI(resume) {
+    if (!resume) return;
+    const fullName = (resume.name || "").trim().split(/\s+/);
+    if (profFirstName && !profFirstName.value) profFirstName.value = fullName[0] || "";
+    if (profLastName && !profLastName.value) profLastName.value = fullName.slice(1).join(" ") || "";
+    if (profEmail && !profEmail.value) profEmail.value = resume.email || "";
+    if (profPhone && !profPhone.value) profPhone.value = resume.phone || "";
+    if (profLocation && !profLocation.value) profLocation.value = resume.location || "";
 
-  // Load saved sync key and custom backend URL on popup boot
-  chrome.storage.local.get(["userToken", "backendUrl"], (items) => {
-    if (items.backendUrl && backendUrlInput) {
-      backendUrlInput.value = items.backendUrl;
+    const links = Array.isArray(resume.links) ? resume.links : [];
+    const linkedin = links.find((l) => l.toLowerCase().includes("linkedin")) || resume.linkedin || "";
+    const github = links.find((l) => l.toLowerCase().includes("github")) || resume.github || "";
+    const portfolio = links.find((l) => !l.toLowerCase().includes("linkedin") && !l.toLowerCase().includes("github")) || resume.portfolio || "";
+
+    if (profLinkedin && !profLinkedin.value) profLinkedin.value = linkedin;
+    if (profGithub && !profGithub.value) profGithub.value = github;
+    if (profPortfolio && !profPortfolio.value) profPortfolio.value = portfolio;
+
+    const skillsStr = Array.isArray(resume.skills) ? resume.skills.join(", ") : resume.skills || "";
+    if (profSkills && !profSkills.value) profSkills.value = skillsStr;
+    if (profSummary && !profSummary.value) profSummary.value = resume.summary || "";
+  }
+
+  // ----------------------------------------------------
+  // Load Storage Initialization
+  // ----------------------------------------------------
+  chrome.storage.local.get([
+    "backendUrl", "userToken", "resumeData", "eeoProfile", "maxYears",
+    "blacklistKeywords", "isAutoRunning", "appliedCount", "skippedCount", "appLogs"
+  ], (items) => {
+    if (items && items.backendUrl && items.backendUrl.trim()) {
       API_BASE_URL = items.backendUrl.trim().replace(/\/+$/, "");
+      if (backendUrlInput) backendUrlInput.value = API_BASE_URL;
     } else if (backendUrlInput) {
       backendUrlInput.value = DEFAULT_API_BASE_URL;
     }
-    if (items.userToken && userTokenInput) {
-      userTokenInput.value = items.userToken;
+
+    if (items && items.userToken) {
+      if (userTokenInput) userTokenInput.value = items.userToken;
       fetchUserInfo(items.userToken);
     }
-  });
+    if (items && items.resumeData) populateProfileUI(items.resumeData);
 
-  if (backendUrlInput) {
-    backendUrlInput.addEventListener("change", (e) => {
-      const url = e.target.value.trim().replace(/\/+$/, "");
-      if (url) {
-        API_BASE_URL = url;
-        chrome.storage.local.set({ backendUrl: url }, () => {
-          showToast("✓ Server endpoint updated!");
-          const syncKey = userTokenInput ? userTokenInput.value.trim() : "";
-          if (syncKey) fetchUserInfo(syncKey);
-        });
-      }
-    });
-  }
+    const eeo = items?.eeoProfile || {};
+    if (eeo.workAuth && eeoWorkAuth) eeoWorkAuth.value = eeo.workAuth;
+    if (eeo.sponsorship && eeoSponsorship) eeoSponsorship.value = eeo.sponsorship;
 
-  if (userTokenInput) {
-    userTokenInput.addEventListener("input", (e) => {
-      const key = e.target.value.trim();
-      chrome.storage.local.set({ userToken: key });
-      fetchUserInfo(key);
-    });
-  }
+    if (items?.maxYears && cfgMaxYears) cfgMaxYears.value = items.maxYears;
+    if (items?.blacklistKeywords && cfgBlacklist) cfgBlacklist.value = items.blacklistKeywords;
 
-  // Copy Preview Button handler
-  if (btnCopyPreview) {
-    btnCopyPreview.addEventListener("click", () => {
-      if (activePreviewText) {
-        navigator.clipboard.writeText(activePreviewText);
-        btnCopyPreview.textContent = "✓ Copied!";
-        setTimeout(() => { btnCopyPreview.textContent = "📋 Copy to Clipboard"; }, 2000);
-      }
-    });
-  }
+    if (statApplied && items?.appliedCount !== undefined) statApplied.textContent = items.appliedCount;
+    if (statSkipped && items?.skippedCount !== undefined) statSkipped.textContent = items.skippedCount;
 
-  // Active tab job details extraction
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (!tabs || !tabs[0]) return;
-    const activeTab = tabs[0];
-
-    function handleJobDetails(details) {
-      if (!details || !details.title) {
-        const pageTitle = activeTab.title || "";
-        if (pageTitle && !pageTitle.includes("New Tab")) {
-          activeRoleTitle.textContent = pageTitle.slice(0, 50);
-          activeCompanyName.textContent = activeTab.url ? new URL(activeTab.url).hostname.replace("www.", "") : "Active Tab";
-          currentJobInfo = { title: pageTitle, company: "", description: pageTitle, url: activeTab.url };
-          fetchAtsScore(currentJobInfo);
-        } else {
-          activeRoleTitle.textContent = "Open LinkedIn, Indeed, or Workday";
-          activeCompanyName.textContent = "No job posting detected on active tab";
-        }
-        return;
-      }
-
-      currentJobInfo = details;
-      activeRoleTitle.textContent = currentJobInfo.title;
-      activeCompanyName.textContent = currentJobInfo.company || "Detecting company...";
-
-      // Call dedicated extension endpoint to extract exact Company & Role via LLM
-      chrome.storage.local.get(["userToken"], (items) => {
-        const token = items ? items.userToken || "guest" : "guest";
-        if (currentJobInfo.description && currentJobInfo.description.length > 20) {
-          fetch(`${API_BASE_URL}/extension/parse_job_details`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              page_text: currentJobInfo.pageSource || currentJobInfo.description,
-              page_url: currentJobInfo.url,
-              page_title: currentJobInfo.title
-            })
-          })
-            .then(res => res.json())
-            .then(data => {
-              if (data && data.company) {
-                currentJobInfo.company = data.company;
-                activeCompanyName.textContent = data.company;
-              } else if (!currentJobInfo.company || currentJobInfo.company === "Detecting company...") {
-                currentJobInfo.company = "Hiring Company";
-                activeCompanyName.textContent = "Hiring Company";
-              }
-              if (data && data.job_title) {
-                currentJobInfo.title = data.job_title;
-                activeRoleTitle.textContent = data.job_title;
-              }
-              if (data && data.job_description && data.job_description.length > currentJobInfo.description.length) {
-                currentJobInfo.description = data.job_description;
-              }
-              fetchAtsScore(currentJobInfo);
-            })
-            .catch(() => {
-              if (!currentJobInfo.company || currentJobInfo.company === "Detecting company...") {
-                currentJobInfo.company = "Hiring Company";
-                activeCompanyName.textContent = "Hiring Company";
-              }
-              fetchAtsScore(currentJobInfo);
-            });
-        } else {
-          fetchAtsScore(currentJobInfo);
-        }
-      });
+    if (items?.isAutoRunning !== undefined) {
+      isAutoRunning = !!items.isAutoRunning;
+      updateAutoUI(isAutoRunning);
+    }
+    if (items?.appLogs && logWindow) {
+      logWindow.innerHTML = items.appLogs.map((l) => `<div>${l}</div>`).join("");
+      logWindow.scrollTop = logWindow.scrollHeight;
     }
 
-    function fetchAtsScore(jobInfo) {
-      scoreSection.style.display = "flex";
-      scoreCircle.textContent = "⏳";
-      scoreSub.textContent = "Computing ATS match score...";
+    checkHealth();
+    scanActiveTab();
+  });
 
-      chrome.storage.local.get(["userToken"], (items) => {
-        const token = items ? items.userToken || "guest" : "guest";
-        if (jobInfo.description && jobInfo.description.length > 30) {
-          fetch(`${API_BASE_URL}/analyze_job`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              job_description: jobInfo.description,
-              job_title: jobInfo.title,
-              company: jobInfo.company,
-              job_url: jobInfo.url,
-              skip_tailoring: true
-            })
-          })
-            .then(res => res.text())
-            .then(text => {
-              const lines = text.split("\n").filter(Boolean);
-              for (const line of lines) {
-                try {
-                  const ev = JSON.parse(line);
-                  if (ev.type === "result" && ev.analysis) {
-                    const ma = ev.analysis.match_analysis || {};
-                    const score = ma.overall_score || ev.analysis.overall_score || 78;
-                    const missing = ma.missing_skills || [];
+  // ----------------------------------------------------
+  // Active Tab Scraping & ATS Gap Analysis
+  // ----------------------------------------------------
+  function handleJobDetails(details) {
+    if (!details || (!details.title && !details.description)) {
+      if (activeRoleTitle) activeRoleTitle.textContent = "No job posting detected";
+      if (activeCompanyName) activeCompanyName.textContent = "Open LinkedIn, Indeed, or Workday";
+      if (scoreCircle) scoreCircle.textContent = "—";
+      if (scoreSub) scoreSub.textContent = "Navigate to a job posting tab";
+      return;
+    }
 
-                    scoreCircle.textContent = `${score}%`;
-                    scoreSub.textContent = score >= 70 ? "Strong match profile" : "Missing key keywords";
+    currentJobInfo = details;
+    if (activeRoleTitle) activeRoleTitle.textContent = details.title || "Detected Job Posting";
+    if (activeCompanyName) activeCompanyName.textContent = details.company || "Hiring Company";
 
-                    if (ev.company && (!currentJobInfo.company || currentJobInfo.company === "Target Company" || currentJobInfo.company === "Hiring Company")) {
-                      currentJobInfo.company = ev.company;
-                      activeCompanyName.textContent = ev.company;
-                    }
-                    if (ev.job_title && currentJobInfo.title && currentJobInfo.title.length > 40) {
-                      currentJobInfo.title = ev.job_title;
-                      activeRoleTitle.textContent = ev.job_title;
-                    }
+    chrome.storage.local.get(["userToken"], (items) => {
+      const token = items ? items.userToken || "guest" : "guest";
+      fetch(`${API_BASE_URL}/analyze_job`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          job_url: details.url,
+          job_title: details.title,
+          job_description: details.description,
+          send_email: false,
+          skip_tailoring: true,
+          source_mode: "extension"
+        })
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Backend non-responsive");
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split("\n");
+            buf = lines.pop();
+            for (const line of lines) {
+              try {
+                const ev = JSON.parse(line);
+                if (ev.type === "result") {
+                  const score = ev.fit_score !== undefined ? ev.fit_score : 75;
+                  scoreCircle.textContent = `${score}%`;
+                  scoreSub.textContent = score >= 70 ? "Strong match profile" : "Missing key keywords";
+                  scoreCircle.style.borderColor = score >= 70 ? "#34d399" : score >= 50 ? "#38bdf8" : "#fb7185";
+                  scoreCircle.style.color = score >= 70 ? "#34d399" : score >= 50 ? "#38bdf8" : "#fb7185";
 
-                    const alignCard = document.getElementById("alignment-report-card");
-                    const alignSen = document.getElementById("align-seniority");
-                    const alignDom = document.getElementById("align-domain");
-                    const alignVer = document.getElementById("align-verdict");
-                    const alignFlagsBox = document.getElementById("align-flags-box");
-                    const alignFlags = document.getElementById("align-flags");
+                  const ma = ev.analysis && ev.analysis.match_analysis ? ev.analysis.match_analysis : {};
+                  const missing = ma.missing_skills || [];
 
-                    if (ma.alignment_report && alignCard && alignSen && alignDom && alignVer) {
-                      alignSen.textContent = ma.alignment_report.seniority || "Direct Alignment";
-                      alignDom.textContent = ma.alignment_report.domain || "High Alignment";
-                      alignVer.textContent = ma.alignment_report.verdict || "Strong Match";
-                      const rf = ma.alignment_report.red_flags;
-                      if (rf && rf !== "None detected" && alignFlagsBox && alignFlags) {
-                        alignFlags.textContent = rf;
-                        alignFlagsBox.style.display = "block";
-                      } else if (alignFlagsBox) {
-                        alignFlagsBox.style.display = "none";
-                      }
-                      alignCard.style.display = "block";
-                    } else if (alignCard) {
-                      alignCard.style.display = "none";
-                    }
-
-                    if (missing.length > 0) {
-                      window.selectedUserSkills = window.selectedUserSkills || new Set();
-                      missingSkillsContainer.innerHTML = missing.slice(0, 8).map(s => {
-                        const isSelected = window.selectedUserSkills.has(s);
-                        return `<span class="skill-chip ${isSelected ? "selected" : ""}" data-skill="${s}">${isSelected ? "✓ " : "+ "}${s}</span>`;
-                      }).join("");
-                      missingSkillsSection.style.display = "block";
-
-                      // Add click listener to toggle skill selection & dynamically recalculate score preview
-                      window.baseAtsScore = score;
-                      missingSkillsContainer.querySelectorAll(".skill-chip").forEach(chip => {
-                        chip.addEventListener("click", () => {
-                          const sk = chip.getAttribute("data-skill");
-                          if (window.selectedUserSkills.has(sk)) {
-                            window.selectedUserSkills.delete(sk);
-                            chip.classList.remove("selected");
-                            chip.textContent = "+ " + sk;
-                          } else {
-                            window.selectedUserSkills.add(sk);
-                            chip.classList.add("selected");
-                            chip.textContent = "✓ " + sk;
-                          }
-                          // Recalculate preview score instantly using exact JD skill importance weights (0.40 * mandatory_weight * weight)
-                          const skillWeights = (ev.analysis && ev.analysis.match_analysis && ev.analysis.match_analysis.score_breakdown && ev.analysis.match_analysis.score_breakdown.skill_weights) || {};
-                          let totalBoost = 0;
-                          window.selectedUserSkills.forEach(s => {
-                            const w = skillWeights[s] || (1 / (missing.length || 5));
-                            // Boost = 0.40 (skills weight) * 85.0 * w
-                            totalBoost += (0.40 * 85.0 * w);
-                          });
-                          const addedCount = window.selectedUserSkills.size;
-                          const boostedScore = Math.min(99, Math.round((window.baseAtsScore || score) + totalBoost));
-                          scoreCircle.textContent = `${boostedScore}%`;
-                          scoreSub.textContent = boostedScore >= 70 ? `Strong match profile (${addedCount} forced skill${addedCount > 1 ? "s" : ""})` : "Missing key keywords";
-                        });
-                      });
-                    }
-                    break;
+                  if (ev.company && (!currentJobInfo.company || currentJobInfo.company === "Target Company")) {
+                    currentJobInfo.company = ev.company;
+                    activeCompanyName.textContent = ev.company;
                   }
-                } catch (e) {}
+                  if (ev.job_title && currentJobInfo.title && currentJobInfo.title.length > 40) {
+                    currentJobInfo.title = ev.job_title;
+                    activeRoleTitle.textContent = ev.job_title;
+                  }
+
+                  if (ma.alignment_report && alignCard && alignSen && alignDom && alignVer) {
+                    alignSen.textContent = ma.alignment_report.seniority || "Direct Alignment";
+                    alignDom.textContent = ma.alignment_report.domain || "High Alignment";
+                    alignVer.textContent = ma.alignment_report.verdict || "Strong Match";
+                    const rf = ma.alignment_report.red_flags;
+                    if (rf && rf !== "None detected" && alignFlagsBox && alignFlags) {
+                      alignFlags.textContent = rf;
+                      alignFlagsBox.style.display = "block";
+                    } else if (alignFlagsBox) {
+                      alignFlagsBox.style.display = "none";
+                    }
+                    alignCard.style.display = "block";
+                  }
+
+                  if (missing.length > 0) {
+                    window.selectedUserSkills = window.selectedUserSkills || new Set();
+                    missingSkillsContainer.innerHTML = missing.slice(0, 8).map((s) => {
+                      const isSelected = window.selectedUserSkills.has(s);
+                      return `<span class="skill-chip ${isSelected ? "selected" : ""}" data-skill="${s}">${isSelected ? "✓ " : "+ "}${s}</span>`;
+                    }).join("");
+                    missingSkillsSection.style.display = "block";
+
+                    window.baseAtsScore = score;
+                    missingSkillsContainer.querySelectorAll(".skill-chip").forEach((chip) => {
+                      chip.addEventListener("click", () => {
+                        const sk = chip.getAttribute("data-skill");
+                        if (window.selectedUserSkills.has(sk)) {
+                          window.selectedUserSkills.delete(sk);
+                          chip.classList.remove("selected");
+                          chip.textContent = "+ " + sk;
+                        } else {
+                          window.selectedUserSkills.add(sk);
+                          chip.classList.add("selected");
+                          chip.textContent = "✓ " + sk;
+                        }
+                        const skillWeights = (ev.analysis && ev.analysis.match_analysis && ev.analysis.match_analysis.score_breakdown && ev.analysis.match_analysis.score_breakdown.skill_weights) || {};
+                        let totalBoost = 0;
+                        window.selectedUserSkills.forEach((s) => {
+                          const w = skillWeights[s] || (1 / (missing.length || 5));
+                          totalBoost += (0.40 * 85.0 * w);
+                        });
+                        const addedCount = window.selectedUserSkills.size;
+                        const boostedScore = Math.min(99, Math.round((window.baseAtsScore || score) + totalBoost));
+                        scoreCircle.textContent = `${boostedScore}%`;
+                        scoreSub.textContent = boostedScore >= 70 ? `Strong match profile (${addedCount} boosted)` : "Missing key keywords";
+                      });
+                    });
+                  }
+                  break;
+                }
+              } catch (e) {}
+            }
+          }
+        })
+        .catch(() => {
+          scoreCircle.textContent = "⚠️";
+          scoreSub.textContent = "Offline / Server non-responsive";
+        });
+    });
+  }
+
+  function scanActiveTab() {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!tabs || !tabs[0]) return;
+      const activeTab = tabs[0];
+      chrome.tabs.sendMessage(activeTab.id, { action: "GET_JOB_DETAILS" }, (response) => {
+        const err = chrome.runtime.lastError;
+        if (!err && response && response.title) {
+          handleJobDetails(response);
+        } else {
+          try {
+            chrome.scripting.executeScript({
+              target: { tabId: activeTab.id },
+              func: () => {
+                const url = window.location.href;
+                let phenomTitle = document.querySelector(".job-title, h1.job-title, [data-ph-at-id='job-title']")?.innerText?.trim();
+                let title = phenomTitle || document.querySelector(".job-details-jobs-unified-top-card__job-title, .jobs-unified-top-card__job-title, .jobsearch-JobInfoHeader-title, h1")?.innerText?.trim() || document.title;
+                if (title) {
+                  if (title.includes(" - Single Position")) title = title.replace(" - Single Position", "");
+                  title = title.split(" | ")[0].split(" - Careers")[0].trim();
+                }
+                let phenomCompany = document.querySelector(".company-name, .org-name, [data-ph-at-id='company-name']")?.innerText?.trim();
+                let company = phenomCompany || document.querySelector(".job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name, [data-company-name='true']")?.innerText?.trim() || "";
+                let description = document.querySelector("#job-details, .jobs-description__content, #jobDescriptionText, .job-description, [data-ph-at-id='job-description'], main")?.innerText?.trim() || document.body.innerText.slice(0, 4000);
+                const pageSource = document.body ? document.body.innerText.slice(0, 15000) : description;
+                return { title, company, description, url, pageSource };
               }
-            })
-            .catch((err) => {
-              scoreCircle.textContent = "⚠️";
-              scoreSub.textContent = "Offline / Server non-responsive";
+            }, (results) => {
+              if (results && results[0] && results[0].result) {
+                handleJobDetails(results[0].result);
+              } else {
+                handleJobDetails(null);
+              }
             });
+          } catch (e) {
+            handleJobDetails(null);
+          }
         }
       });
-    }
-
-    // Try runtime message first
-    chrome.tabs.sendMessage(activeTab.id, { action: "GET_JOB_DETAILS" }, (response) => {
-      const err = chrome.runtime.lastError; // Access to suppress unchecked runtime error
-      if (!err && response && response.title) {
-        handleJobDetails(response);
-      } else {
-        // Fallback: Execute script directly with error suppression
-        try {
-          chrome.scripting.executeScript({
-            target: { tabId: activeTab.id },
-            func: () => {
-            const url = window.location.href;
-            let phenomTitle = document.querySelector(".job-title, h1.job-title, [data-ph-at-id='job-title']")?.innerText?.trim();
-            let title = phenomTitle || document.querySelector(".job-details-jobs-unified-top-card__job-title, .jobs-unified-top-card__job-title, .jobsearch-JobInfoHeader-title, h1")?.innerText?.trim() || document.title;
-            if (title) {
-              if (title.includes(" - Single Position")) title = title.replace(" - Single Position", "");
-              title = title.split(" | ")[0].split(" - Careers")[0].trim();
-            }
-            let phenomCompany = document.querySelector(".company-name, .org-name, [data-ph-at-id='company-name']")?.innerText?.trim();
-            let company = phenomCompany || document.querySelector(".job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name, [data-company-name='true']")?.innerText?.trim() || "";
-            let description = document.querySelector("#job-details, .jobs-description__content, #jobDescriptionText, .job-description, [data-ph-at-id='job-description'], main")?.innerText?.trim() || document.body.innerText.slice(0, 4000);
-            const pageSource = document.body ? document.body.innerText.slice(0, 15000) : description;
-            return { title, company, description, url, pageSource };
-          }
-          }, (results) => {
-            const err = chrome.runtime.lastError; // Access to suppress unchecked runtime error
-            if (!err && results && results[0] && results[0].result) {
-              handleJobDetails(results[0].result);
-            } else {
-              handleJobDetails(null);
-            }
-          });
-        } catch (e) {
-          handleJobDetails(null);
-        }
-      }
     });
-  });
+  }
 
+  // ----------------------------------------------------
+  // Action Handlers
+  // ----------------------------------------------------
   // 1-Click Tailor & Download PDF
   if (btnTailorPdf) {
     btnTailorPdf.addEventListener("click", () => {
@@ -413,10 +422,7 @@ document.addEventListener("DOMContentLoaded", () => {
           })
         })
           .then(async (res) => {
-            if (!res.ok) {
-              const errJson = await res.json().catch(() => ({}));
-              throw new Error(errJson.detail || `Server error (${res.status})`);
-            }
+            if (!res.ok) throw new Error(`Server error (${res.status})`);
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let buf = "";
@@ -431,9 +437,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 try {
                   const ev = JSON.parse(line);
                   if (ev.type === "log" && ev.message) {
-                    if (!ev.message.includes("Comparing candidate profile") && !ev.message.includes("ATS gap analysis")) {
-                      showToast(ev.message);
-                    }
+                    if (!ev.message.includes("Comparing candidate profile")) showToast(ev.message);
                   } else if (ev.type === "result") {
                     if (ev.download_pdf_url && !openedPdf) {
                       openedPdf = true;
@@ -448,13 +452,13 @@ document.addEventListener("DOMContentLoaded", () => {
               }
             }
           })
-          .catch(err => showToast("❌ Tailoring failed: " + err.message))
+          .catch((err) => showToast("❌ Tailoring failed: " + err.message))
           .finally(() => { btnTailorPdf.disabled = false; });
       });
     });
   }
 
-  // Direct 1-Click Email Tailored Package
+  // 1-Click Email Tailored Package
   if (btnEmailTailor) {
     btnEmailTailor.addEventListener("click", () => {
       if (!currentJobInfo) {
@@ -482,10 +486,7 @@ document.addEventListener("DOMContentLoaded", () => {
           })
         })
           .then(async (res) => {
-            if (!res.ok) {
-              const errJson = await res.json().catch(() => ({}));
-              throw new Error(errJson.detail || `Server error (${res.status})`);
-            }
+            if (!res.ok) throw new Error(`Server error (${res.status})`);
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
             let buf = "";
@@ -498,18 +499,14 @@ document.addEventListener("DOMContentLoaded", () => {
               for (const line of lines) {
                 try {
                   const ev = JSON.parse(line);
-                  if (ev.type === "log" && ev.message) {
-                    if (!ev.message.includes("Comparing candidate profile") && !ev.message.includes("ATS gap analysis")) {
-                      showToast(ev.message);
-                    }
-                  } else if (ev.type === "result") {
+                  if (ev.type === "result") {
                     showToast("📧 ✅ Tailored package emailed seamlessly to your inbox!");
                   }
                 } catch (e) {}
               }
             }
           })
-          .catch(err => showToast("❌ Email dispatch failed: " + err.message));
+          .catch((err) => showToast("❌ Email dispatch failed: " + err.message));
       });
     });
   }
@@ -523,22 +520,15 @@ document.addEventListener("DOMContentLoaded", () => {
         showToast("⏳ Generating Cover Letter...");
         fetch(`${API_BASE_URL}/generate_cover_letter_history`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
           body: JSON.stringify({
             job_title: currentJobInfo.title,
             company: currentJobInfo.company,
             job_url: currentJobInfo.url
           })
         })
-          .then(async (res) => {
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.detail || `Server error (${res.status})`);
-            return data;
-          })
-          .then(data => {
+          .then((res) => res.json())
+          .then((data) => {
             if (data.cover_letter) {
               activePreviewText = data.cover_letter;
               previewTitle.textContent = "📝 Generated Cover Letter";
@@ -547,7 +537,7 @@ document.addEventListener("DOMContentLoaded", () => {
               showToast("📝 Cover letter generated! Preview below.");
             }
           })
-          .catch(err => showToast("❌ Error: " + err.message));
+          .catch((err) => showToast("❌ Error: " + err.message));
       });
     });
   }
@@ -561,10 +551,7 @@ document.addEventListener("DOMContentLoaded", () => {
         showToast("⏳ Generating Recruiter Outreach...");
         fetch(`${API_BASE_URL}/generate_outreach`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
           body: JSON.stringify({
             job_title: currentJobInfo.title || "Target Role",
             company_name: currentJobInfo.company || "Target Company",
@@ -572,12 +559,8 @@ document.addEventListener("DOMContentLoaded", () => {
             job_url: currentJobInfo.url || ""
           })
         })
-          .then(async (res) => {
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.detail || `Server error (${res.status})`);
-            return data;
-          })
-          .then(data => {
+          .then((res) => res.json())
+          .then((data) => {
             const msg = data.message?.email_body || data.message?.linkedin_message || "Outreach generated!";
             activePreviewText = msg;
             previewTitle.textContent = "✉️ Generated Outreach Message";
@@ -585,14 +568,22 @@ document.addEventListener("DOMContentLoaded", () => {
             previewWrapper.style.display = "block";
             showToast("✉️ Outreach generated! Preview below.");
           })
-          .catch(err => showToast("❌ Error: " + err.message));
+          .catch((err) => showToast("❌ Error: " + err.message));
       });
     });
   }
 
-  // ----------------------------------------------------
-  // Single-Page Active Auto-Fill Trigger
-  // ----------------------------------------------------
+  if (btnCopyPreview) {
+    btnCopyPreview.addEventListener("click", () => {
+      if (previewContent && previewContent.textContent) {
+        navigator.clipboard.writeText(previewContent.textContent);
+        btnCopyPreview.textContent = "✅ Copied!";
+        setTimeout(() => { btnCopyPreview.textContent = "📋 Copy to Clipboard"; }, 2000);
+      }
+    });
+  }
+
+  // Single-Page Auto-Fill Trigger
   if (btnFill) {
     btnFill.addEventListener("click", () => {
       btnFill.textContent = "⚡ Filling Active Form...";
@@ -606,9 +597,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ----------------------------------------------------
-  // LinkedIn Batch Auto-Apply Loop Toggle
-  // ----------------------------------------------------
+  // Batch Auto-Apply Toggle
   function updateAutoUI(running) {
     if (!btnToggleAuto || !autoStatusText) return;
     if (running) {
@@ -631,52 +620,72 @@ document.addEventListener("DOMContentLoaded", () => {
         updateAutoUI(isAutoRunning);
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           if (tabs[0]?.id) {
-            chrome.tabs.sendMessage(tabs[0].id, {
-              action: "TOGGLE_BATCH_AUTO",
-              state: isAutoRunning
-            });
+            chrome.tabs.sendMessage(tabs[0].id, { action: "TOGGLE_BATCH_AUTO", state: isAutoRunning });
           }
         });
       });
     });
   }
 
-  // Save EEO Preferences
-  function saveEEO() {
-    const eeoProfile = {
-      workAuth: eeoWorkAuth?.value || "Yes",
-      sponsorship: eeoSponsorship?.value || "No"
-    };
-    chrome.storage.local.set({ eeoProfile });
+  // ----------------------------------------------------
+  // Save & Storage Handlers
+  // ----------------------------------------------------
+  if (btnSyncBackendNow) {
+    btnSyncBackendNow.addEventListener("click", () => {
+      fetchUserInfo(getAuthToken(), true);
+    });
   }
 
-  if (eeoWorkAuth) eeoWorkAuth.addEventListener("change", saveEEO);
-  if (eeoSponsorship) eeoSponsorship.addEventListener("change", saveEEO);
+  if (btnSaveProfile) {
+    btnSaveProfile.addEventListener("click", () => {
+      const resumeData = {
+        name: `${profFirstName.value} ${profLastName.value}`.trim(),
+        email: profEmail.value.trim(),
+        phone: profPhone.value.trim(),
+        location: profLocation.value.trim(),
+        links: [profLinkedin.value.trim(), profGithub.value.trim(), profPortfolio.value.trim()].filter(Boolean),
+        skills: profSkills.value.split(",").map((s) => s.trim()).filter(Boolean),
+        summary: profSummary.value.trim()
+      };
+      const eeoProfile = {
+        workAuth: eeoWorkAuth.value,
+        sponsorship: eeoSponsorship.value
+      };
+      chrome.storage.local.set({ resumeData, eeoProfile }, () => {
+        showToast("✅ Candidate Profile & Preferences Saved!");
+      });
+    });
+  }
 
-  // Load Auto-Apply State and Stats
-  chrome.storage.local.get(["eeoProfile", "appliedCount", "skippedCount", "appLogs", "isAutoRunning"], (items) => {
-    if (items.eeoProfile) {
-      if (eeoWorkAuth && items.eeoProfile.workAuth) eeoWorkAuth.value = items.eeoProfile.workAuth;
-      if (eeoSponsorship && items.eeoProfile.sponsorship) eeoSponsorship.value = items.eeoProfile.sponsorship;
-    }
-    if (statApplied && items.appliedCount !== undefined) statApplied.textContent = items.appliedCount;
-    if (statSkipped && items.skippedCount !== undefined) statSkipped.textContent = items.skippedCount;
-    if (items.isAutoRunning !== undefined) {
-      isAutoRunning = !!items.isAutoRunning;
-      updateAutoUI(isAutoRunning);
-    }
-    if (items.appLogs && logWindow) {
-      logWindow.innerHTML = items.appLogs.map(l => `<div>${l}</div>`).join('');
-      logWindow.scrollTop = logWindow.scrollHeight;
-    }
-  });
+  if (btnSaveFilters) {
+    btnSaveFilters.addEventListener("click", () => {
+      const maxYears = cfgMaxYears.value;
+      const blacklistKeywords = cfgBlacklist.value;
+      chrome.storage.local.set({ maxYears, blacklistKeywords }, () => {
+        showToast("✅ Filtering Rules Saved!");
+      });
+    });
+  }
 
-  // Storage Change Listener for Auto-Apply stats & logs
+  if (btnSaveSettings) {
+    btnSaveSettings.addEventListener("click", () => {
+      const userToken = getAuthToken();
+      const backendUrl = (backendUrlInput.value || DEFAULT_API_BASE_URL).trim().replace(/\/+$/, "");
+      API_BASE_URL = backendUrl;
+      chrome.storage.local.set({ userToken, backendUrl }, () => {
+        checkHealth();
+        fetchUserInfo(userToken);
+        showToast("✅ Settings Saved & Tested!");
+      });
+    });
+  }
+
+  // Storage Change Listener
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.appliedCount && statApplied) statApplied.textContent = changes.appliedCount.newValue || 0;
     if (changes.skippedCount && statSkipped) statSkipped.textContent = changes.skippedCount.newValue || 0;
     if (changes.appLogs && logWindow) {
-      logWindow.innerHTML = (changes.appLogs.newValue || []).map(l => `<div>${l}</div>`).join('');
+      logWindow.innerHTML = (changes.appLogs.newValue || []).map((l) => `<div>${l}</div>`).join("");
       logWindow.scrollTop = logWindow.scrollHeight;
     }
     if (changes.isAutoRunning) {

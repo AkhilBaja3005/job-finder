@@ -7,7 +7,7 @@
     body {
       width: 380px;
       margin: 0;
-      padding: 16px;
+      padding: 14px 16px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: #0f172a;
       color: #f8fafc;
@@ -18,8 +18,8 @@
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid rgba(255,255,255,0.08);
-      padding-bottom: 12px;
-      margin-bottom: 14px;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
     }
     .brand-title {
       font-size: 15px;
@@ -50,117 +50,90 @@
       background: #34d399;
       box-shadow: 0 0 6px #34d399;
     }
-    
-    /* Dedicated Top Right Account & Sync Bar */
-    .sync-card {
-      background: rgba(30, 41, 59, 0.5);
-      border: 1px solid rgba(56, 189, 248, 0.2);
-      border-radius: 10px;
-      padding: 8px 12px;
-      margin-bottom: 14px;
+
+    /* Top Navigation Tabs */
+    .nav-tabs {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 8px;
+      padding: 3px;
+      margin-bottom: 12px;
+      gap: 3px;
     }
-    .sync-left {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-width: 0;
+    .nav-tab {
       flex: 1;
-    }
-    .user-name-text {
-      font-size: 11px;
-      font-weight: 800;
-      color: #38bdf8;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .user-email-text {
-      font-size: 10px;
-      color: #94a3b8;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .sync-right {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-shrink: 0;
-    }
-    .sync-key-label {
-      font-size: 10px;
-      font-weight: 800;
-      color: #94a3b8;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    input.sync-input {
-      width: 78px;
-      box-sizing: border-box;
-      background: #1e293b;
-      border: 1px solid #38bdf8;
-      color: #38bdf8;
-      padding: 4px 8px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 800;
       text-align: center;
-      outline: none;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+      padding: 6px 2px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      border-radius: 6px;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      transition: all 0.2s ease;
+      white-space: nowrap;
     }
-    input.sync-input:focus {
-      border-color: #34d399;
-      box-shadow: 0 0 8px rgba(52, 211, 153, 0.3);
+    .nav-tab:hover {
+      color: #f8fafc;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .nav-tab.active {
+      background: #0284c7;
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+    }
+
+    .tab-pane {
+      display: none;
+    }
+    .tab-pane.active {
+      display: block;
     }
 
     .card {
       background: rgba(255,255,255,0.03);
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 12px;
-      padding: 12px 14px;
-      margin-bottom: 12px;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
     }
     .score-box {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
       background: rgba(56, 189, 248, 0.08);
       border: 1px solid rgba(56, 189, 248, 0.25);
-      border-radius: 12px;
-      padding: 12px 14px;
-      margin-bottom: 14px;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
     }
     .score-circle {
-      width: 52px;
-      height: 52px;
+      width: 48px;
+      height: 48px;
       border-radius: 50%;
       background: rgba(56, 189, 248, 0.15);
       border: 3px solid #38bdf8;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 800;
       color: #38bdf8;
       flex-shrink: 0;
-      box-shadow: 0 0 14px rgba(56, 189, 248, 0.2);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
     }
     .skill-chip {
       display: inline-block;
       background: rgba(239, 68, 68, 0.15);
       border: 1px solid rgba(239, 68, 68, 0.3);
       color: #fca5a5;
-      padding: 3px 9px;
-      border-radius: 12px;
-      font-size: 10.5px;
+      padding: 3px 8px;
+      border-radius: 10px;
+      font-size: 10px;
       font-weight: 700;
-      margin: 3px 4px 3px 0;
+      margin: 2px 3px 2px 0;
       cursor: pointer;
       user-select: none;
       transition: all 0.2s ease;
@@ -177,28 +150,32 @@
     }
     .btn {
       width: 100%;
-      padding: 11px;
-      border-radius: 8px;
+      padding: 9px;
+      border-radius: 7px;
       border: none;
       color: #fff;
       font-weight: 700;
-      font-size: 12px;
+      font-size: 11.5px;
       cursor: pointer;
-      margin-top: 8px;
+      margin-top: 6px;
       transition: all 0.2s ease;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      box-shadow: 0 3px 10px rgba(0,0,0,0.15);
     }
     .btn:hover {
       opacity: 0.92;
       transform: translateY(-1px);
     }
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+      box-shadow: 0 3px 12px rgba(2, 132, 199, 0.3);
+    }
     .btn-email {
       background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
+      box-shadow: 0 3px 12px rgba(16, 185, 129, 0.25);
     }
     .btn-secondary {
       background: rgba(255,255,255,0.06);
@@ -208,27 +185,52 @@
     .preview-box {
       background: #090d16;
       border: 1px solid rgba(56, 189, 248, 0.3);
-      border-radius: 10px;
-      padding: 12px;
-      margin-top: 8px;
-      margin-bottom: 12px;
-      max-height: 180px;
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 6px;
+      margin-bottom: 8px;
+      max-height: 140px;
       overflow-y: auto;
-      font-size: 11px;
-      line-height: 1.5;
+      font-size: 10.5px;
+      line-height: 1.45;
       color: #e2e8f0;
       white-space: pre-wrap;
       word-break: break-word;
       text-align: left;
     }
+    .form-group {
+      margin-bottom: 8px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 10px;
+      color: #94a3b8;
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+    .form-control {
+      width: 100%;
+      box-sizing: border-box;
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #f8fafc;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: inherit;
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: #38bdf8;
+    }
     .toast {
       position: relative;
-      margin-top: 12px;
+      margin-top: 10px;
       background: rgba(2, 132, 199, 0.25);
       border: 1px solid #0284c7;
       color: #38bdf8;
-      padding: 9px 12px;
-      border-radius: 8px;
+      padding: 8px 10px;
+      border-radius: 7px;
       font-size: 11px;
       font-weight: 700;
       text-align: center;
@@ -240,129 +242,229 @@
   <!-- Brand & Status Header Bar -->
   <div class="header-bar">
     <h2 class="brand-title"><span>🎯</span> Job Finder ATS Tailor</h2>
-    <div style="display: flex; align-items: center; gap: 6px;">
-      <span id="backend-status" class="status-pill">
-        <span class="status-dot"></span>
-        <span>Connected</span>
-      </span>
-      <button id="btn-settings-url" style="background: transparent; border: none; color: #94a3b8; cursor: pointer; font-size: 13px; padding: 2px 4px; transition: color 0.2s;" title="Change Server Endpoint URL">⚙️</button>
-    </div>
+    <span id="backend-status" class="status-pill">
+      <span class="status-dot"></span>
+      <span>Connected</span>
+    </span>
   </div>
 
-  <!-- Hidden Settings Box for Sync Key & Server Endpoint URL -->
-  <div id="settings-url-box" style="display: none; background: rgba(30, 41, 59, 0.95); border: 1px solid #0284c7; border-radius: 10px; padding: 12px; margin-bottom: 14px;">
-    <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.04em;">🌐 Server Endpoint Base URL:</div>
-    <input type="text" id="backend-url-input" class="sync-input" style="width: 100%; text-align: left; padding: 6px 10px; margin-bottom: 8px; border-radius: 6px; background: #0f172a; border: 1px solid #334155; color: #f8fafc; font-weight: 600; font-size: 11px;" placeholder="https://your-backend.hf.space or https://www.job-finder.space">
-    
-    <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.04em;">🔑 Extension Sync Key:</div>
-    <input type="text" id="user-token" class="sync-input" style="width: 100%; text-align: left; padding: 6px 10px; margin-bottom: 8px; border-radius: 6px; background: #0f172a; border: 1px solid #0284c7; color: #38bdf8; font-weight: 700; font-size: 11px;" placeholder="Paste Sync Key from Dashboard (e.g. GABY48)">
-    
-    <div id="user-info-card" style="display: none; flex-direction: column; gap: 2px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 6px 10px;">
-      <div id="user-name-display" style="font-size: 11px; font-weight: 800; color: #34d399;">✓ AUTHENTICATED USER</div>
-      <div id="user-email-display" style="font-size: 10px; color: #94a3b8;">📧 user@example.com</div>
-    </div>
+  <!-- Top Navigation Tabs -->
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-target="tab-ats">🎯 ATS & Apply</button>
+    <button class="nav-tab" data-target="tab-profile">👤 Profile</button>
+    <button class="nav-tab" data-target="tab-batch">🤖 Batch Apply</button>
+    <button class="nav-tab" data-target="tab-settings">⚙️ Settings</button>
   </div>
 
-
-
-  <!-- Detected Active Job Card -->
-  <div id="job-active-card" class="card">
-    <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.05em;">Detected Active Job:</div>
-    <div id="active-role-title" style="font-size: 13px; font-weight: 700; color: #fff; line-height: 1.35;">Detecting job page...</div>
-    <div id="active-company-name" style="font-size: 11px; color: #94a3b8; margin-top: 3px; font-weight: 500;">Open LinkedIn, Indeed, or Workday</div>
-  </div>
-
-  <!-- ATS Match Score Section -->
-  <div id="score-section" class="score-box">
-    <div id="ats-score-circle" class="score-circle">⏳</div>
-    <div>
-      <div style="font-weight: 700; font-size: 13px; color: #f8fafc;">ATS Match Score</div>
-      <div id="ats-score-sub" style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Computing ATS match score...</div>
-    </div>
-  </div>
-
-  <!-- Career-Ops Alignment Rubric Breakdown (Seniority, Tech, Domain, Red Flags, Verdict) -->
-  <div id="alignment-report-card" style="display: none; background: rgba(30, 41, 59, 0.45); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px;">
-    <div style="font-size: 9px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">📊 Career-Ops Strategic Alignment:</div>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10px;">
-      <div style="background: rgba(15, 23, 42, 0.6); padding: 4px 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.05);">
-        <span style="color: #94a3b8; font-weight: 600;">🎓 Level:</span> <span id="align-seniority" style="color: #f8fafc; font-weight: 700;">Matching</span>
-      </div>
-      <div style="background: rgba(15, 23, 42, 0.6); padding: 4px 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.05);">
-        <span style="color: #94a3b8; font-weight: 600;">🏢 Domain:</span> <span id="align-domain" style="color: #f8fafc; font-weight: 700;">Direct</span>
-      </div>
-      <div id="align-flags-box" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); padding: 4px 6px; border-radius: 5px; grid-column: span 2; display: none;">
-        <span style="color: #fca5a5; font-weight: 700;">🚩 Gap / Constraint:</span> <span id="align-flags" style="color: #fecaca; font-weight: 600;">None</span>
-      </div>
-      <div style="background: rgba(15, 23, 42, 0.6); padding: 4px 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.05); grid-column: span 2;">
-        <span style="color: #94a3b8; font-weight: 600;">⚡ Strategic Verdict:</span> <span id="align-verdict" style="color: #34d399; font-weight: 800;">Strong Fit</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Missing Skills Chips -->
-  <div id="missing-skills-section" style="margin-bottom: 12px; display: none;">
-    <div style="font-size: 10px; font-weight: 700; color: #fca5a5; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.05em;">Top Missing Keywords:</div>
-    <div id="missing-skills-container"></div>
-  </div>
-
-  <!-- Interactive Text Preview Box for Cover Letter / Outreach -->
-  <div id="text-preview-wrapper" style="display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span id="preview-title" style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;">Preview Generated Content</span>
-      <button id="btn-copy-preview" style="background: #0284c7; border: none; color: #fff; padding: 4px 9px; border-radius: 5px; font-size: 10px; font-weight: 700; cursor: pointer;">📋 Copy to Clipboard</button>
-    </div>
-    <div id="text-preview-content" class="preview-box"></div>
-  </div>
-
-  <!-- Extension Action Buttons -->
-  <button id="btn-autofill" class="btn" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);">⚡ Fill Active Application</button>
-  <button id="btn-tailor-pdf" class="btn btn-secondary">📄 1-Click Tailor & Download PDF</button>
-  <button id="btn-email-tailor" class="btn btn-email">📧 1-Click Email Tailored Package</button>
-  <button id="btn-cover-letter" class="btn btn-secondary">📝 Generate & Preview Cover Letter</button>
-  <button id="btn-outreach" class="btn btn-secondary">✉️ Generate & Preview Recruiter Outreach</button>
-
-  <!-- Auto-Apply Batch Controls -->
-  <div style="background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; padding: 10px; margin-top: 12px;">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span style="font-size: 11px; font-weight: 700; color: #fff;">🤖 LinkedIn Batch Auto-Apply</span>
-      <span id="auto-status-text" style="font-size: 10px; color: #94a3b8; font-weight: 600;">Idle</span>
-    </div>
-    <button id="btn-toggle-auto" class="btn" style="background: linear-gradient(135deg, #10b981, #059669); margin-top: 6px; padding: 8px;">▶️ Start Batch Auto-Apply</button>
-
-    <div style="display: flex; gap: 8px; margin-top: 8px;">
-      <div style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px; text-align: center;">
-        <div id="stat-applied" style="font-size: 14px; font-weight: 800; color: #38bdf8;">0</div>
-        <div style="font-size: 9px; color: #94a3b8; text-transform: uppercase;">Applied</div>
-      </div>
-      <div style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px; text-align: center;">
-        <div id="stat-skipped" style="font-size: 14px; font-weight: 800; color: #38bdf8;">0</div>
-        <div style="font-size: 9px; color: #94a3b8; text-transform: uppercase;">Skipped</div>
-      </div>
+  <!-- ======================================================== -->
+  <!-- TAB 1: ATS & APPLY                                       -->
+  <!-- ======================================================== -->
+  <div id="tab-ats" class="tab-pane active">
+    <!-- Detected Active Job Card -->
+    <div id="job-active-card" class="card">
+      <div style="font-size: 9.5px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.05em;">Detected Active Job:</div>
+      <div id="active-role-title" style="font-size: 12.5px; font-weight: 700; color: #fff; line-height: 1.35;">Detecting job page...</div>
+      <div id="active-company-name" style="font-size: 10.5px; color: #94a3b8; margin-top: 2px; font-weight: 500;">Open LinkedIn, Indeed, or Workday</div>
     </div>
 
-    <!-- EEO Preferences -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">
+    <!-- ATS Match Score Section -->
+    <div id="score-section" class="score-box">
+      <div id="ats-score-circle" class="score-circle">⏳</div>
       <div>
-        <label style="font-size: 9.5px; color: #94a3b8;">US Work Auth:</label>
-        <select id="eeo-work-auth" style="width: 100%; background: #0f172a; border: 1px solid #334155; color: #fff; padding: 4px 6px; border-radius: 5px; font-size: 10px;">
+        <div style="font-weight: 700; font-size: 12.5px; color: #f8fafc;">ATS Match Score</div>
+        <div id="ats-score-sub" style="font-size: 10.5px; color: #94a3b8; margin-top: 1px;">Computing ATS match score...</div>
+      </div>
+    </div>
+
+    <!-- Career-Ops Alignment Rubric Breakdown -->
+    <div id="alignment-report-card" style="display: none; background: rgba(30, 41, 59, 0.45); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px;">
+      <div style="font-size: 9px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">📊 Career-Ops Strategic Alignment:</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 9.5px;">
+        <div style="background: rgba(15, 23, 42, 0.6); padding: 4px 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.05);">
+          <span style="color: #94a3b8; font-weight: 600;">🎓 Level:</span> <span id="align-seniority" style="color: #f8fafc; font-weight: 700;">Matching</span>
+        </div>
+        <div style="background: rgba(15, 23, 42, 0.6); padding: 4px 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.05);">
+          <span style="color: #94a3b8; font-weight: 600;">🏢 Domain:</span> <span id="align-domain" style="color: #f8fafc; font-weight: 700;">Direct</span>
+        </div>
+        <div id="align-flags-box" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); padding: 4px 6px; border-radius: 5px; grid-column: span 2; display: none;">
+          <span style="color: #fca5a5; font-weight: 700;">🚩 Gap / Constraint:</span> <span id="align-flags" style="color: #fecaca; font-weight: 600;">None</span>
+        </div>
+        <div style="background: rgba(15, 23, 42, 0.6); padding: 4px 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.05); grid-column: span 2;">
+          <span style="color: #94a3b8; font-weight: 600;">⚡ Strategic Verdict:</span> <span id="align-verdict" style="color: #34d399; font-weight: 800;">Strong Fit</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Missing Skills Chips -->
+    <div id="missing-skills-section" style="margin-bottom: 10px; display: none;">
+      <div style="font-size: 9.5px; font-weight: 700; color: #fca5a5; text-transform: uppercase; margin-bottom: 3px; letter-spacing: 0.05em;">Top Missing Keywords:</div>
+      <div id="missing-skills-container"></div>
+    </div>
+
+    <!-- Interactive Text Preview Box for Cover Letter / Outreach -->
+    <div id="text-preview-wrapper" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="preview-title" style="font-size: 10.5px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;">Preview Generated Content</span>
+        <button id="btn-copy-preview" style="background: #0284c7; border: none; color: #fff; padding: 3px 8px; border-radius: 4px; font-size: 9.5px; font-weight: 700; cursor: pointer;">📋 Copy to Clipboard</button>
+      </div>
+      <div id="text-preview-content" class="preview-box"></div>
+    </div>
+
+    <!-- Extension Action Buttons -->
+    <button id="btn-autofill" class="btn btn-primary">⚡ Fill Active Application</button>
+    <button id="btn-tailor-pdf" class="btn btn-secondary">📄 1-Click Tailor & Download PDF</button>
+    <button id="btn-email-tailor" class="btn btn-email">📧 1-Click Email Tailored Package</button>
+    <button id="btn-cover-letter" class="btn btn-secondary">📝 Generate & Preview Cover Letter</button>
+    <button id="btn-outreach" class="btn btn-secondary">✉️ Generate & Preview Recruiter Outreach</button>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- TAB 2: PROFILE & RESUME                                  -->
+  <!-- ======================================================== -->
+  <div id="tab-profile" class="tab-pane">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+      <span style="font-size: 11px; font-weight: 700; color: #38bdf8;">Candidate Details</span>
+      <button id="btn-sync-backend-now" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; padding: 3px 8px; border-radius: 5px; font-size: 10px; font-weight: 700; cursor: pointer;">⚡ Sync from Web App</button>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+      <div class="form-group">
+        <label>First Name:</label>
+        <input type="text" id="prof-firstName" class="form-control" placeholder="Akhil">
+      </div>
+      <div class="form-group">
+        <label>Last Name:</label>
+        <input type="text" id="prof-lastName" class="form-control" placeholder="Baja">
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+      <div class="form-group">
+        <label>Email:</label>
+        <input type="email" id="prof-email" class="form-control" placeholder="akhil@example.com">
+      </div>
+      <div class="form-group">
+        <label>Phone:</label>
+        <input type="tel" id="prof-phone" class="form-control" placeholder="+1 (555) 000-0000">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Location (City, Country):</label>
+      <input type="text" id="prof-location" class="form-control" placeholder="San Francisco, CA or Remote">
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+      <div class="form-group">
+        <label>LinkedIn URL:</label>
+        <input type="text" id="prof-linkedin" class="form-control" placeholder="https://linkedin.com/in/...">
+      </div>
+      <div class="form-group">
+        <label>GitHub URL:</label>
+        <input type="text" id="prof-github" class="form-control" placeholder="https://github.com/...">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Portfolio / Website:</label>
+      <input type="text" id="prof-portfolio" class="form-control" placeholder="https://myportfolio.com">
+    </div>
+
+    <div class="form-group">
+      <label>Skills (comma-separated):</label>
+      <input type="text" id="prof-skills" class="form-control" placeholder="Python, FastAPI, React, Docker, SQL, AWS">
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+      <div class="form-group">
+        <label>US Work Auth:</label>
+        <select id="eeo-work-auth" class="form-control">
           <option value="Yes">Yes</option>
           <option value="No">No</option>
         </select>
       </div>
-      <div>
-        <label style="font-size: 9.5px; color: #94a3b8;">Visa Sponsorship:</label>
-        <select id="eeo-sponsorship" style="width: 100%; background: #0f172a; border: 1px solid #334155; color: #fff; padding: 4px 6px; border-radius: 5px; font-size: 10px;">
+      <div class="form-group">
+        <label>Visa Sponsorship:</label>
+        <select id="eeo-sponsorship" class="form-control">
           <option value="No">No</option>
           <option value="Yes">Yes</option>
         </select>
       </div>
     </div>
+
+    <div class="form-group">
+      <label>Resume Summary / Raw Text:</label>
+      <textarea id="prof-summary" class="form-control" rows="3" placeholder="Paste your resume summary or parsed text for AI answers..."></textarea>
+    </div>
+
+    <button id="btn-save-profile" class="btn btn-primary">💾 Save Profile & Preferences</button>
   </div>
 
-  <!-- Automation Log -->
-  <div id="log-window" style="background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 6px 8px; font-family: monospace; font-size: 9.5px; color: #94a3b8; max-height: 60px; overflow-y: auto; margin-top: 8px;">
-    <div>⚡ Ready to auto-fill (Greenhouse, Lever, Ashby, Workday, LinkedIn, Indeed)...</div>
+  <!-- ======================================================== -->
+  <!-- TAB 3: BATCH APPLY                                       -->
+  <!-- ======================================================== -->
+  <div id="tab-batch" class="tab-pane">
+    <div style="background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; padding: 10px; margin-bottom: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 700; color: #fff;">🤖 LinkedIn Batch Auto-Apply</span>
+        <span id="auto-status-text" style="font-size: 10px; color: #94a3b8; font-weight: 600;">Idle</span>
+      </div>
+      <button id="btn-toggle-auto" class="btn" style="background: linear-gradient(135deg, #10b981, #059669); margin-top: 8px;">▶️ Start Batch Auto-Apply</button>
+
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
+        <div style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px; text-align: center;">
+          <div id="stat-applied" style="font-size: 14px; font-weight: 800; color: #38bdf8;">0</div>
+          <div style="font-size: 9px; color: #94a3b8; text-transform: uppercase;">Applied</div>
+        </div>
+        <div style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px; text-align: center;">
+          <div id="stat-skipped" style="font-size: 14px; font-weight: 800; color: #38bdf8;">0</div>
+          <div style="font-size: 9px; color: #94a3b8; text-transform: uppercase;">Skipped</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filtering Rules -->
+    <div class="card">
+      <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px;">🎯 Job Filtering Rules:</div>
+      <div class="form-group">
+        <label>Max Years Experience Required:</label>
+        <input type="number" id="cfg-max-years" class="form-control" value="5" min="0" max="20">
+      </div>
+      <div class="form-group">
+        <label>Blacklist Keywords in Job Title (comma-separated):</label>
+        <input type="text" id="cfg-blacklist" class="form-control" placeholder="Senior, Staff, Principal, Lead, Manager">
+      </div>
+      <button id="btn-save-filters" class="btn btn-secondary">💾 Save Filtering Rules</button>
+    </div>
+
+    <!-- Automation Log -->
+    <div style="font-size: 9.5px; font-weight: 700; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase;">📋 Activity Log:</div>
+    <div id="log-window" style="background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 6px 8px; font-family: monospace; font-size: 9.5px; color: #94a3b8; max-height: 80px; overflow-y: auto;">
+      <div>⚡ Ready to auto-fill (Greenhouse, Lever, Ashby, Workday, LinkedIn, Indeed)...</div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- TAB 4: SETTINGS                                          -->
+  <!-- ======================================================== -->
+  <div id="tab-settings" class="tab-pane">
+    <div class="card">
+      <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px;">🔑 Extension Sync Key:</div>
+      <input type="text" id="user-token" class="form-control" style="font-weight: 700; color: #38bdf8; text-transform: uppercase;" placeholder="Paste Sync Key from Dashboard (e.g. GABY48)">
+      <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">Copy your 6-digit Sync Code from the web dashboard header.</div>
+
+      <div id="user-info-card" style="display: none; flex-direction: column; gap: 2px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 6px 10px; margin-top: 8px;">
+        <div id="user-name-display" style="font-size: 11px; font-weight: 800; color: #34d399;">✓ AUTHENTICATED USER</div>
+        <div id="user-email-display" style="font-size: 10px; color: #94a3b8;">📧 user@example.com</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px;">🌐 Server Endpoint Base URL:</div>
+      <input type="text" id="backend-url-input" class="form-control" placeholder="http://127.0.0.1:8000 or https://www.job-finder.space">
+    </div>
+
+    <button id="btn-save-settings" class="btn btn-primary">💾 Save Settings & Test Connection</button>
   </div>
 
   <div id="popup-toast" class="toast"></div>
