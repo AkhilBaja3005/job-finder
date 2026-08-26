@@ -104,5 +104,5 @@ async function checkHotReload() {
     // Backend offline or running in pure remote mode, ignore silently
   }
 }
-setInterval(checkHotReload, 2000);
+setInterval(checkHotReload, 15000);
 checkHotReload();

@@ -11,6 +11,18 @@
 
   if (!isRuntimeValid()) return;
 
+  // Ignore Captcha / reCAPTCHA / Cloudflare Turnstile verification frames
+  const frameHost = window.location.hostname || "";
+  const framePath = window.location.pathname || "";
+  if (
+    (frameHost.includes("google.com") && framePath.includes("recaptcha")) ||
+    (frameHost.includes("cloudflare.com") && framePath.includes("turnstile")) ||
+    frameHost.includes("hcaptcha.com") ||
+    frameHost.includes("captcha")
+  ) {
+    return;
+  }
+
   function logMsg(msg) {
     console.log("[Job Finder ATS AI]", msg);
     try {
@@ -191,7 +203,7 @@
       }
     }
 
-    const invalidTitles = ["sign in", "log in", "login", "register", "apply now", "menu", "search", "indeed", "linkedin"];
+    const invalidTitles = ["sign in", "log in", "login", "register", "apply now", "menu", "search", "indeed", "linkedin", "recaptcha", "captcha", "hcaptcha", "turnstile", "privacy", "terms"];
     if (!title || invalidTitles.includes(title.toLowerCase())) {
       const docTitle = document.title || "";
       const cleanedDocTitle = docTitle.split(" - ")[0].split(" | ")[0].split(" at ")[0].trim();
@@ -213,7 +225,7 @@
     // Clean company name
     if (company && typeof company === "string") {
       company = company.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\.(ashbyhq|greenhouse|lever|myworkdayjobs|workday|smartrecruiters)\.com/i, "").trim();
-      if (["jobs.ashbyhq", "ashby", "greenhouse", "lever", "workday", "smartrecruiters", "indeed", "linkedin"].includes(company.toLowerCase())) {
+      if (["jobs.ashbyhq", "ashby", "greenhouse", "lever", "workday", "smartrecruiters", "indeed", "linkedin", "recaptcha", "google recaptcha"].includes(company.toLowerCase())) {
         const pathParts = window.location.pathname.split("/").filter(Boolean);
         company = pathParts[0] ? pathParts[0].replace(/[-_]/g, ' ') : "";
       }

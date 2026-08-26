@@ -244,16 +244,35 @@ async def download_latex(request: LatexDownloadRequest, authorization: Optional[
 
 @router.get("/download_application_pdf/{filepath:path}")
 async def download_application_pdf(filepath: str):
+    from services.session_store import USER_DATA_DIR
     clean_rel = os.path.normpath(filepath).lstrip("/")
-    pdf_path = os.path.abspath(os.path.join(OUTPUT_DIR, clean_rel))
-    out_dir_abs = os.path.abspath(OUTPUT_DIR)
+    parts = clean_rel.split(os.sep)
 
-    if not pdf_path.startswith(out_dir_abs) or not os.path.exists(pdf_path):
-        flat_path = os.path.join(OUTPUT_DIR, os.path.basename(filepath))
-        if os.path.exists(flat_path):
-            pdf_path = flat_path
-        else:
-            raise HTTPException(status_code=404, detail="PDF file not found")
+    candidate_paths = [
+        os.path.abspath(os.path.join(OUTPUT_DIR, clean_rel)),
+        os.path.abspath(os.path.join(OUTPUT_DIR, os.path.basename(clean_rel))),
+    ]
+
+    if len(parts) >= 2:
+        user_key = parts[0]
+        filename = os.path.join(*parts[1:])
+        candidate_paths.append(os.path.abspath(os.path.join(USER_DATA_DIR, user_key, "output", filename)))
+        candidate_paths.append(os.path.abspath(os.path.join(USER_DATA_DIR, user_key, "output", os.path.basename(filename))))
+    elif len(parts) == 1 and os.path.exists(USER_DATA_DIR):
+        filename = parts[0]
+        for root, _, files in os.walk(USER_DATA_DIR):
+            if filename in files:
+                candidate_paths.append(os.path.abspath(os.path.join(root, filename)))
+                break
+
+    pdf_path = None
+    for p in candidate_paths:
+        if os.path.exists(p) and os.path.isfile(p):
+            pdf_path = p
+            break
+
+    if not pdf_path:
+        raise HTTPException(status_code=404, detail="PDF file not found")
 
     filename = os.path.basename(pdf_path)
     return FileResponse(

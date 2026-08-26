@@ -554,7 +554,7 @@ function App() {
       const res = await fetch(`${API_BASE}/user/archetypes/save`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ archetype_name: name, latex_code: masterLatex })
+        body: JSON.stringify({ archetype_name: name, latex_code: null })
       });
       if (res.ok) {
         const body = await res.json();
