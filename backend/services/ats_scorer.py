@@ -301,11 +301,13 @@ def _flatten_resume_skills(raw_skills: Any) -> str:
         return " ".join([str(s) for s in raw_skills])
     return str(raw_skills or "")
 
-def _extract_taxonomy_skills(text: str) -> Set[str]:
+def _extract_taxonomy_skills(text: Optional[str]) -> Set[str]:
     """
     Extracts canonical skills safely using alphanumeric matching and strict
     boundary checks for vulnerable short single words.
     """
+    if not text:
+        return set()
     cleaned = _clean_text(text)
     found_skills = set()
 

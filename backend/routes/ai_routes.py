@@ -100,6 +100,7 @@ class JobAnalysisRequest(BaseModel):
     source_mode: Optional[str] = "website"
     user_selected_skills: Optional[List[str]] = None
     candidate_profile: Optional[dict] = None
+    tailoring_intensity: Optional[str] = "balanced"
 
 
 class TailorResumeRequest(BaseModel):
@@ -107,6 +108,7 @@ class TailorResumeRequest(BaseModel):
     job_description: str
     missing_skills: Optional[List[str]] = []
     company_name: Optional[str] = "Company"
+    tailoring_intensity: Optional[str] = "balanced"
 
 
 class InterviewPrepRequest(BaseModel):
@@ -280,7 +282,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     recruiter_name,
                     active_api_key,
                     on_log=log_callback,
-                    user_selected_skills=getattr(request, 'user_selected_skills', None)
+                    user_selected_skills=getattr(request, 'user_selected_skills', None),
+                    tailoring_intensity=getattr(request, 'tailoring_intensity', 'balanced') or 'balanced'
                 )
             )
 

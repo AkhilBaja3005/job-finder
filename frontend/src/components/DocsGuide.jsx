@@ -31,11 +31,11 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
 
   const navItems = [
     { id: 'quickstart', label: '🚀 Quickstart', icon: '⚡' },
-    { id: 'extension', label: '🧩 Chrome Extension v2.1', icon: '💻' },
+    { id: 'extension', label: '🧩 Chrome Extension v2.2', icon: '💻' },
     { id: 'sync-key', label: '🔑 Sync Key & Pairing', icon: '🔗' },
-    { id: 'master-resume', label: '📄 Master Resume Setup', icon: '📝' },
-    { id: 'ats-scoring', label: '🎯 ATS Scoring & Tailoring', icon: '📊' },
-    { id: 'autofill', label: '✨ In-Page AI Autofill', icon: '🤖' },
+    { id: 'master-resume', label: '👥 Multi-Archetypes & Master Resume', icon: '📝' },
+    { id: 'ats-scoring', label: '🎯 ATS Scoring & Strategies', icon: '📊' },
+    { id: 'autofill', label: '✨ In-Page AI Autofill & PDF Drop', icon: '🤖' },
     { id: 'discovery', label: '🔍 Job Discovery Search', icon: '🌐' },
     { id: 'api-setup', label: '⚙️ API & Deployment', icon: '🛠️' },
   ];
@@ -279,11 +279,11 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             </div>
           </section>
 
-          {/* SECTION: Chrome Extension v2.1.0 */}
+          {/* SECTION: Chrome Extension v2.2.0 */}
           <section id="extension" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <span style={{ fontSize: '1.5rem' }}>🧩</span>
-              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Chrome Extension v2.1.0 (Side Panel)</h2>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Chrome Extension v2.2.0 (Side Panel & Automation)</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '20px' }}>
               The extension uses Chrome's native <strong>Manifest V3 Persistent Side Panel API</strong>. It docks seamlessly to the right side of your browser and stays open as you switch tabs, click links, and fill out application forms.
@@ -315,27 +315,27 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             {/* In-Page Capabilities */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
               <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
+                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>🏷️ Live Toolbar ATS Badge</div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Shows your live match percentage (🟢 <code>94%</code>, 🟡 <code>76%</code>) on the browser toolbar icon in real time as you navigate job tabs without opening the panel.
+                </p>
+              </div>
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
+                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>📎 1-Click File Auto-Attach</div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Click <code>📎 Attach PDF</code> in the side panel to compile and programmatically inject your tailored PDF into ATS dropzones on Ashby, Greenhouse, Lever, and Workday via DataTransfer.
+                </p>
+              </div>
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
                 <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>🔄 Live Tab Sync & Rescan</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                   Switching tabs automatically scans the newly active job posting. If you edit custom job details, clicking <code>🔄 Rescan Tab</code> clears stale cache and re-extracts the live page DOM.
                 </p>
               </div>
               <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>📄 1-Click Tailored PDF</div>
-                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
-                  Compiles a strictly 1-page tailored LaTeX resume PDF via Tectonic directly in your browser. Bypasses Playwright scraping because the extension extracts DOM text locally.
-                </p>
-              </div>
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
                 <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>✉️ 1-Click Email Package</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                   Sends a formatted delivery email with the compiled PDF attached, ATS score breakdown, role title, company name, and direct Overleaf editing links straight to your inbox.
-                </p>
-              </div>
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>🖼️ Embedded Frame Support</div>
-                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
-                  Injects into top-level windows and embedded <code>&lt;iframe&gt;</code> job applications (e.g. Greenhouse/Lever embeds on custom corporate domains) seamlessly.
                 </p>
               </div>
             </div>
@@ -392,14 +392,14 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             </div>
           </section>
 
-          {/* SECTION: Master Resume & Category Lockdown */}
+          {/* SECTION: Multi-Archetypes & Master Resume */}
           <section id="master-resume" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '1.5rem' }}>📄</span>
-              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Master Resume & Category Lockdown</h2>
+              <span style={{ fontSize: '1.5rem' }}>👥</span>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Multi-Archetype Profiles & Category Lockdown</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
-              Our parser enforces <strong>Deterministic Category Preservation</strong>. When you upload a resume, your technical skill buckets are locked and preserved verbatim during AI tailoring.
+              Store multiple distinct master resumes (e.g., <strong>GenAI Systems Engineer</strong>, <strong>Data Scientist</strong>, <strong>Backend SWE</strong>) and toggle the active baseline for target jobs.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
@@ -422,21 +422,43 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             </div>
           </section>
 
-          {/* SECTION: ATS Scoring & Tailoring */}
+          {/* SECTION: ATS Scoring & Tailoring Strategies */}
           <section id="ats-scoring" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <span style={{ fontSize: '1.5rem' }}>🎯</span>
-              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>ATS Scoring & Single-Page Multi-Pass Engine</h2>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>ATS Scoring & Tailoring Strategies</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
-              The ATS scoring engine combines deterministic taxonomy matching with semantic role evaluation to generate accurate match scores and guarantees single-page output.
+              Choose your tailoring strategy and let our multi-pass compensation engine produce a strictly 1-page PDF.
             </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+              <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#38bdf8', marginBottom: '6px' }}>🛡️ Strict Conservative</div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Preserves original bullet structure verbatim and only replaces technical keywords where direct equivalents exist.
+                </p>
+              </div>
+              <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '12px', padding: '18px' }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#34d399', marginBottom: '6px' }}>⚖️ Balanced (Recommended)</div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Aligns terminology, weaves missing target skills, and highlights relevant systems while strictly preserving candidate facts.
+                </p>
+              </div>
+              <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f59e0b', marginBottom: '6px' }}>🚀 Impact-Driven</div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Emphasizes business throughput, latency reductions, scalability, and measurable ROI metrics in every bullet point.
+                </p>
+              </div>
+            </div>
 
             <div style={{
               background: 'rgba(15, 23, 42, 0.6)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: '14px',
               padding: '24px',
+              marginTop: '16px',
               display: 'flex',
               flexDirection: 'column',
               gap: '16px'

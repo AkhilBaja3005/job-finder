@@ -1,5 +1,6 @@
 import os
 import re
+from typing import Any
 # pyrefly: ignore [missing-import]
 from jinja2 import Template
 # pyrefly: ignore [missing-import]
@@ -322,9 +323,9 @@ async def generate_pdf_resume(resume_data: dict, output_pdf_path: str):
     # Reuse app shared Playwright browser if ready; fallback to fresh launch if startup isn't complete
     try:
         from services.scraper import _shared_browser
-        browser = _shared_browser
+        browser: Any = _shared_browser
     except Exception:
-        browser = None
+        browser: Any = None
 
     if browser and browser.is_connected():
         page = await browser.new_page()

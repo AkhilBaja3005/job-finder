@@ -173,6 +173,7 @@ def tailor_latex_code(
     reviewer_feedback: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
     user_selected_skills: Optional[List[str]] = None,
+    tailoring_intensity: str = "balanced",
 ) -> str:
     """
     Step 2: Directly tailors the master LaTeX code for a target job.
@@ -188,9 +189,19 @@ def tailor_latex_code(
 
     approved_skills_str = ", ".join(user_selected_skills) if user_selected_skills else "None"
 
+    intensity_modes = {
+        "conservative": "TAILORING INTENSITY: CONSERVATIVE\n- Keep original bullet sentence structures intact; only insert missing keywords where direct, natural fits exist.",
+        "balanced": "TAILORING INTENSITY: BALANCED (Standard)\n- Align technical terminology, highlight relevant systems/frameworks, and emphasize quantifiable results without altering underlying facts.",
+        "impact": "TAILORING INTENSITY: IMPACT-DRIVEN (Metrics & ROI)\n- Strongly emphasize measurable business impact, performance improvements, latency/throughput gains, and architectural metrics in every bullet point."
+    }
+    intensity_note = intensity_modes.get(tailoring_intensity, intensity_modes["balanced"])
+
     prompt = f"""You are an expert LaTeX CV typesetter and ATS optimizer.
 Take the candidate's MASTER LaTeX resume code below and tailor it for the target job: "{job_title}".
 {feedback_str}
+
+{intensity_note}
+
 TARGET JOB DESCRIPTION (excerpt):
 ---
 {jd_truncated}
@@ -351,6 +362,7 @@ async def analyze_job_fit(
     custom_api_key: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
     user_selected_skills: Optional[List[str]] = None,
+    tailoring_intensity: str = "balanced",
 ) -> AnalysisResponse:
     """
     Hybrid ATS scoring pipeline:
@@ -541,7 +553,8 @@ RULES:
             tailor_latex_code,
             master_latex, job_title, job_description, suggestions,
             ats.missing_skills, custom_api_key, on_log=on_log,
-            user_selected_skills=user_selected_skills
+            user_selected_skills=user_selected_skills,
+            tailoring_intensity=tailoring_intensity
         )
         response_obj.latex_code = tailored_latex
     return response_obj

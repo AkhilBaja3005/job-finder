@@ -135,6 +135,10 @@ function App() {
   const [forceTailorEnabled, setForceTailorEnabled] = useState(false);
   const [coverLetterCopied, setCoverLetterCopied] = useState(false);
   const [toast, setToast] = useState(null); // { message, type: 'success'|'error'|'info' }
+  const showToast = useCallback((message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
   const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [backendHealth, setBackendHealth] = useState('checking'); // 'healthy' | 'warming' | 'checking'
   const [commitSha, setCommitSha] = useState('');
@@ -270,6 +274,11 @@ function App() {
   const [userSelectedSkills, setUserSelectedSkills] = useState(new Set()); // 'all' | 'tailored' | 'applied'
   const [historySortOrder, setHistorySortOrder] = useState('newest'); // 'newest' | 'oldest'
   const [minHistoryScore, setMinHistoryScore] = useState(0); // Custom match percentage filter
+  const [tailoringIntensity, setTailoringIntensity] = useState('balanced'); // 'conservative' | 'balanced' | 'impact'
+  const [userArchetypes, setUserArchetypes] = useState([]);
+  const [activeArchetype, setActiveArchetype] = useState('Primary');
+  const [newArchetypeName, setNewArchetypeName] = useState('');
+  const [archetypeLoading, setArchetypeLoading] = useState(false);
   const scrapedJobDescriptionRef = useRef('');
   const analysisPanelRef = useRef(null);
   const [outreachAnchorTop, setOutreachAnchorTop] = useState(0);
@@ -523,7 +532,105 @@ function App() {
       }
     };
     fetchResume();
+    fetchArchetypes();
   }, [authToken]);
+
+  const fetchArchetypes = async () => {
+    try {
+      const headers = {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      const res = await fetch(`${API_BASE}/user/archetypes`, { headers });
+      if (res.ok) {
+        const body = await res.json();
+        setUserArchetypes(body.archetypes || []);
+        if (body.active_archetype) setActiveArchetype(body.active_archetype);
+      }
+    } catch (e) {}
+  };
+
+  const handleSaveArchetype = async () => {
+    const name = newArchetypeName.trim();
+    if (!name) return;
+    setArchetypeLoading(true);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      const res = await fetch(`${API_BASE}/user/archetypes/save`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ archetype_name: name, latex_code: null })
+      });
+      if (res.ok) {
+        const body = await res.json();
+        setUserArchetypes(body.archetypes || []);
+        setActiveArchetype(body.active_archetype || name);
+        setNewArchetypeName('');
+        showToast(`✅ Saved master archetype: ${name}`, 'success');
+      } else {
+        showToast('Failed to save archetype', 'error');
+      }
+    } catch (e) {
+      showToast('Failed to save archetype: ' + e.message, 'error');
+    } finally {
+      setArchetypeLoading(false);
+    }
+  };
+
+  const handleSwitchArchetype = async (name) => {
+    if (!name || name === activeArchetype) return;
+    setArchetypeLoading(true);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      const res = await fetch(`${API_BASE}/user/archetypes/switch`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ archetype_name: name })
+      });
+      if (res.ok) {
+        const body = await res.json();
+        setActiveArchetype(body.active_archetype || name);
+        if (body.data) setResumeData(body.data);
+        if (body.evaluation) setResumeEvaluation(body.evaluation);
+        showToast(`⚡ Switched active master profile to: ${name}`, 'success');
+        fetchArchetypes();
+      }
+    } catch (e) {
+      showToast('Failed to switch archetype: ' + e.message, 'error');
+    } finally {
+      setArchetypeLoading(false);
+    }
+  };
+
+  const handleDeleteArchetype = async (name, e) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete the master archetype profile "${name}"?`)) {
+      return;
+    }
+    setArchetypeLoading(true);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      const res = await fetch(`${API_BASE}/user/archetypes/delete`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ archetype_name: name })
+      });
+      if (res.ok) {
+        const body = await res.json();
+        setUserArchetypes(body.archetypes || []);
+        if (body.active_archetype) setActiveArchetype(body.active_archetype);
+        showToast(`🗑️ Deleted archetype "${name}"`, 'info');
+        fetchArchetypes();
+      } else {
+        showToast('Failed to delete archetype', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to delete archetype: ' + err.message, 'error');
+    } finally {
+      setArchetypeLoading(false);
+    }
+  };
 
   const handleClearCache = async () => {
     if (!window.confirm("Are you sure you want to clear all in-memory caches, active session state, and output PDF/TEX files?")) {
@@ -796,6 +903,7 @@ function App() {
           job_title: targetTitle || 'Target Role',
           job_description: activeDescription || null,
           skip_tailoring: true,
+          tailoring_intensity: tailoringIntensity,
         };
         console.log('[handleAnalyzeJob] Sending payload:', {
           job_url: payload.job_url,
@@ -983,7 +1091,8 @@ function App() {
           job_title: targetTitle || 'Target Role',
           job_description: activeDescription || null,
           skip_tailoring: false, // Run full LaTeX tailoring + page checks + reviewer checks
-          force_tailoring: overrideForce
+          force_tailoring: overrideForce,
+          tailoring_intensity: tailoringIntensity
         }),
       });
 
@@ -2922,6 +3031,8 @@ function App() {
                   handleAnalyzeJob={handleAnalyzeJob}
                   handleGenerateTailoredResume={handleGenerateTailoredResume}
                   onGenerateOutreach={handleGenerateOutreach}
+                  tailoringIntensity={tailoringIntensity}
+                  setTailoringIntensity={setTailoringIntensity}
                 />
               </Suspense>
             )}
@@ -3000,6 +3111,112 @@ function App() {
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             {dashboardMode === 'master' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Multi-Archetype Switcher Card */}
+                <div style={{
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '12px',
+                  padding: '16px 18px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.98rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>👥 Master Profile Archetypes</span>
+                      </div>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        Save and toggle distinct base profiles (e.g. GenAI vs. Data Science vs. Backend SWE)
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--accent-secondary)', fontWeight: 700 }}>
+                      Active: {activeArchetype}
+                    </div>
+                  </div>
+
+                  {/* Archetype Chips */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                    {userArchetypes.map((arch) => (
+                      <div
+                        key={arch.name}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          borderRadius: '8px',
+                          border: arch.name === activeArchetype ? '1px solid var(--accent-primary)' : '1px solid rgba(255,255,255,0.1)',
+                          background: arch.name === activeArchetype ? 'rgba(56, 189, 248, 0.2)' : 'rgba(0,0,0,0.3)',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        <button
+                          type="button"
+                          disabled={archetypeLoading}
+                          onClick={() => handleSwitchArchetype(arch.name)}
+                          style={{
+                            padding: '6px 10px',
+                            background: 'transparent',
+                            border: 'none',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            color: arch.name === activeArchetype ? '#38bdf8' : 'var(--text-muted)'
+                          }}
+                        >
+                          <span>{arch.name === activeArchetype ? '✓' : '•'}</span>
+                          <span>{arch.name}</span>
+                          {arch.skills_count ? <span style={{ opacity: 0.6, fontSize: '0.7rem' }}>({arch.skills_count} skills)</span> : null}
+                        </button>
+                        {arch.name !== 'Primary' && (
+                          <button
+                            type="button"
+                            title={`Delete ${arch.name}`}
+                            disabled={archetypeLoading}
+                            onClick={(e) => handleDeleteArchetype(arch.name, e)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              borderLeft: '1px solid rgba(255,255,255,0.1)',
+                              color: '#94a3b8',
+                              padding: '6px 8px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              lineHeight: 1
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Save current state as new Archetype */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '2px' }}>
+                    <input
+                      type="text"
+                      placeholder="New Archetype Name (e.g. Staff GenAI Engineer)"
+                      value={newArchetypeName}
+                      onChange={(e) => setNewArchetypeName(e.target.value)}
+                      style={{ flex: 1, padding: '7px 12px', fontSize: '0.8rem', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', borderRadius: '6px', color: '#fff' }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSaveArchetype(); }}
+                    />
+                    <button
+                      className="btn btn-secondary"
+                      disabled={archetypeLoading || !newArchetypeName.trim()}
+                      onClick={handleSaveArchetype}
+                      style={{ padding: '7px 14px', fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+                    >
+                      {archetypeLoading ? '⏳ Saving...' : '💾 Save as Archetype'}
+                    </button>
+                  </div>
+                </div>
+
                 {/* Standalone Master Resume ATS Evaluation & Suggestions Card */}
                 {resumeData && resumeEvaluation && (
                   <div style={{

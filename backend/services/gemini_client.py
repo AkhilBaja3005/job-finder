@@ -54,7 +54,7 @@ GROQ_FALLBACK_MODELS = [
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper & Cleanup Functions
 # ─────────────────────────────────────────────────────────────────────────────
-def clean_schema(schema: dict, inside_properties: bool = False) -> Any:
+def clean_schema(schema: Any, inside_properties: bool = False) -> Any:
     """
     Recursively cleans a JSON schema for Gemini/LLM engine compatibility.
     """

@@ -40,6 +40,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnSubmitCustomJd = document.getElementById("btn-submit-custom-jd");
 
   const btnFill = document.getElementById("btn-autofill");
+  const btnAutoAttach = document.getElementById("btn-auto-attach");
+  const selTailoringIntensity = document.getElementById("sel-tailoring-intensity");
   const btnTailorPdf = document.getElementById("btn-tailor-pdf");
   const btnEmailTailor = document.getElementById("btn-email-tailor");
   const btnCoverLetter = document.getElementById("btn-cover-letter");
@@ -486,6 +488,10 @@ document.addEventListener("DOMContentLoaded", () => {
                   scoreCircle.style.borderColor = score >= 70 ? "#34d399" : score >= 50 ? "#38bdf8" : "#fb7185";
                   scoreCircle.style.color = score >= 70 ? "#34d399" : score >= 50 ? "#38bdf8" : "#fb7185";
 
+                  try {
+                    chrome.runtime.sendMessage({ action: "SET_BADGE", score });
+                  } catch (e) {}
+
                   const ma = ev.analysis && ev.analysis.match_analysis ? ev.analysis.match_analysis : {};
                   const missing = ma.missing_skills || [];
 
@@ -791,6 +797,102 @@ document.addEventListener("DOMContentLoaded", () => {
             setTimeout(() => { btnFill.textContent = "⚡ Fill Active Application"; }, 1400);
           }
         });
+      });
+    });
+  }
+
+  // ── Native File Upload Injection (DataTransfer PDF Drop) ─────────────
+  if (btnAutoAttach) {
+    btnAutoAttach.addEventListener("click", () => {
+      if (!currentJobInfo) {
+        showToast("⚠️ Open a job page first!");
+        return;
+      }
+      chrome.storage.local.get(["userToken", "resumeData", "candidateProfile"], (items) => {
+        const token = items ? items.userToken || "guest" : "guest";
+        const candidateProfile = (items && (items.resumeData || items.candidateProfile)) || null;
+        const intensity = selTailoringIntensity ? selTailoringIntensity.value : "balanced";
+
+        showToast("⏳ Compiling tailored PDF for auto-attachment...");
+        btnAutoAttach.disabled = true;
+
+        fetch(`${API_BASE_URL}/analyze_job`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            job_url: currentJobInfo.url,
+            job_title: currentJobInfo.title,
+            company: currentJobInfo.company,
+            job_description: currentJobInfo.description,
+            candidate_profile: candidateProfile,
+            send_email: false,
+            skip_tailoring: false,
+            force_tailoring: true,
+            tailoring_intensity: intensity,
+            source_mode: "extension",
+            user_selected_skills: Array.from(window.selectedUserSkills || [])
+          })
+        })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(`Server error (${res.status})`);
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buf = "";
+            let pdfUrl = null;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buf += decoder.decode(value, { stream: true });
+              const lines = buf.split("\n");
+              buf = lines.pop();
+              for (const line of lines) {
+                try {
+                  const ev = JSON.parse(line);
+                  if (ev.type === "result" && ev.download_pdf_url) {
+                    pdfUrl = ev.download_pdf_url.startsWith("http") ? ev.download_pdf_url : `${API_BASE_URL}${ev.download_pdf_url}`;
+                  }
+                } catch (e) {}
+              }
+            }
+
+            if (!pdfUrl) throw new Error("Could not retrieve compiled PDF URL");
+
+            // Fetch PDF binary and convert to Base64
+            const pdfRes = await fetch(pdfUrl);
+            const arrayBuffer = await pdfRes.arrayBuffer();
+            let binary = "";
+            const bytes = new Uint8Array(arrayBuffer);
+            for (let i = 0; i < bytes.byteLength; i++) {
+              binary += String.fromCharCode(bytes[i]);
+            }
+            const pdfBase64 = btoa(binary);
+
+            const candName = (candidateProfile && candidateProfile.name) ? candidateProfile.name.replace(/\s+/g, "_") : "Candidate";
+            const compName = (currentJobInfo.company || "Target_Company").replace(/\s+/g, "_");
+            const fileName = `Resume_${candName}_${compName}.pdf`;
+
+            // Send to active tab content.js
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+              const activeTab = tabs && tabs[0];
+              if (activeTab && activeTab.id) {
+                chrome.tabs.sendMessage(activeTab.id, {
+                  action: "AUTO_ATTACH_RESUME",
+                  pdfBase64,
+                  fileName
+                }, (resp) => {
+                  const err = chrome.runtime.lastError;
+                  if (err) {
+                    showToast("⚠️ Please reload the job application page to enable file auto-attach.");
+                  }
+                });
+              }
+            });
+          })
+          .catch((err) => showToast("❌ Auto-attach failed: " + err.message))
+          .finally(() => { btnAutoAttach.disabled = false; });
       });
     });
   }

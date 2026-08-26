@@ -15,11 +15,60 @@ const TailorMode = ({
   handleAnalyzeJob,
   handleGenerateTailoredResume,
   onGenerateOutreach,
+  tailoringIntensity = 'balanced',
+  setTailoringIntensity,
 }) => {
   return (
     <>
       <div className="section-label">Target Job</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+        {/* Tailoring Intensity Segmented Control */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '10px',
+          padding: '8px 10px',
+          marginBottom: '12px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--accent-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Tailoring Strategy
+            </span>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              {tailoringIntensity === 'conservative' ? '🛡️ Strict Keywords' : tailoringIntensity === 'impact' ? '🚀 Metrics & ROI Focus' : '⚖️ Balanced (Recommended)'}
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginTop: '2px' }}>
+            {[
+              { id: 'conservative', label: '🛡️ Strict' },
+              { id: 'balanced', label: '⚖️ Balanced' },
+              { id: 'impact', label: '🚀 Impact' }
+            ].map((mode) => (
+              <button
+                key={mode.id}
+                type="button"
+                style={{
+                  padding: '6px 4px',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  borderRadius: '6px',
+                  border: `1px solid ${tailoringIntensity === mode.id ? 'var(--accent-primary)' : 'rgba(255,255,255,0.08)'}`,
+                  background: tailoringIntensity === mode.id ? 'rgba(56, 189, 248, 0.2)' : 'rgba(0,0,0,0.2)',
+                  color: tailoringIntensity === mode.id ? '#38bdf8' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onClick={() => setTailoringIntensity && setTailoringIntensity(mode.id)}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <input
           type="text"
           placeholder="Job Application URL (LinkedIn, Indeed…)"

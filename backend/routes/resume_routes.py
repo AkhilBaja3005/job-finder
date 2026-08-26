@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import time
 import uuid
 import shutil
 import asyncio
@@ -243,16 +244,35 @@ async def download_latex(request: LatexDownloadRequest, authorization: Optional[
 
 @router.get("/download_application_pdf/{filepath:path}")
 async def download_application_pdf(filepath: str):
+    from services.session_store import USER_DATA_DIR
     clean_rel = os.path.normpath(filepath).lstrip("/")
-    pdf_path = os.path.abspath(os.path.join(OUTPUT_DIR, clean_rel))
-    out_dir_abs = os.path.abspath(OUTPUT_DIR)
+    parts = clean_rel.split(os.sep)
 
-    if not pdf_path.startswith(out_dir_abs) or not os.path.exists(pdf_path):
-        flat_path = os.path.join(OUTPUT_DIR, os.path.basename(filepath))
-        if os.path.exists(flat_path):
-            pdf_path = flat_path
-        else:
-            raise HTTPException(status_code=404, detail="PDF file not found")
+    candidate_paths = [
+        os.path.abspath(os.path.join(OUTPUT_DIR, clean_rel)),
+        os.path.abspath(os.path.join(OUTPUT_DIR, os.path.basename(clean_rel))),
+    ]
+
+    if len(parts) >= 2:
+        user_key = parts[0]
+        filename = os.path.join(*parts[1:])
+        candidate_paths.append(os.path.abspath(os.path.join(USER_DATA_DIR, user_key, "output", filename)))
+        candidate_paths.append(os.path.abspath(os.path.join(USER_DATA_DIR, user_key, "output", os.path.basename(filename))))
+    elif len(parts) == 1 and os.path.exists(USER_DATA_DIR):
+        filename = parts[0]
+        for root, _, files in os.walk(USER_DATA_DIR):
+            if filename in files:
+                candidate_paths.append(os.path.abspath(os.path.join(root, filename)))
+                break
+
+    pdf_path = None
+    for p in candidate_paths:
+        if os.path.exists(p) and os.path.isfile(p):
+            pdf_path = p
+            break
+
+    if not pdf_path:
+        raise HTTPException(status_code=404, detail="PDF file not found")
 
     filename = os.path.basename(pdf_path)
     return FileResponse(
@@ -601,3 +621,207 @@ async def download_extension(
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="job_finder_extension.zip"'}
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-Archetype Master Resume Management
+# ─────────────────────────────────────────────────────────────────────────────
+class SaveArchetypeRequest(BaseModel):
+    archetype_name: str
+    latex_code: Optional[str] = None
+
+class SwitchArchetypeRequest(BaseModel):
+    archetype_name: str
+
+class DeleteArchetypeRequest(BaseModel):
+    archetype_name: str
+
+
+def _get_archetype_manifest_path(token: Optional[str]) -> str:
+    user_up_dir, _ = _get_user_storage_dirs(token or "guest")
+    return os.path.join(user_up_dir, "archetypes_manifest.json")
+
+
+@router.get("/user/archetypes")
+async def get_user_archetypes(authorization: Optional[str] = Header(None)):
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    manifest_path = _get_archetype_manifest_path(token)
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+                return {"status": "success", "archetypes": manifest.get("archetypes", []), "active_archetype": manifest.get("active_archetype", "Primary")}
+        except Exception:
+            pass
+    return {
+        "status": "success",
+        "archetypes": [{"name": "Primary", "description": "Default Master Profile", "skills_count": 0, "is_active": True}],
+        "active_archetype": "Primary"
+    }
+
+
+@router.post("/user/archetypes/save")
+async def save_user_archetype(request: SaveArchetypeRequest, authorization: Optional[str] = Header(None)):
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    name = request.archetype_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Archetype name cannot be empty.")
+
+    session = get_session_data(token)
+    session_data = session.get("data") or {}
+    session_tex_path = session.get("latex_path")
+
+    user_up_dir, _ = _get_user_storage_dirs(token or "guest")
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    arch_tex_path = os.path.join(user_up_dir, f"archetype_{safe_name}.tex")
+    arch_data_path = os.path.join(user_up_dir, f"archetype_{safe_name}.json")
+
+    latex_to_save = request.latex_code
+    if not latex_to_save and session_tex_path and os.path.exists(session_tex_path):
+        try:
+            with open(session_tex_path, "r", encoding="utf-8") as f:
+                latex_to_save = f.read()
+        except Exception:
+            pass
+
+    if latex_to_save:
+        with open(arch_tex_path, "w", encoding="utf-8") as f:
+            f.write(latex_to_save)
+
+    with open(arch_data_path, "w", encoding="utf-8") as f:
+        json.dump(session_data, f, indent=2)
+
+    # Update manifest
+    manifest_path = _get_archetype_manifest_path(token)
+    manifest: dict = {"archetypes": [], "active_archetype": name}
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                loaded_manifest = json.load(f)
+                if isinstance(loaded_manifest, dict):
+                    manifest = loaded_manifest
+        except Exception:
+            pass
+
+    existing_archetypes = manifest.get("archetypes", [])
+    archetypes: list[dict] = [a for a in existing_archetypes if isinstance(a, dict) and a.get("name") != name]
+    eval_res = evaluate_master_resume(session_data) if session_data else {"skills_count": 0, "ats_score": 85}
+    archetypes.append({
+        "name": name,
+        "skills_count": eval_res.get("skills_count", 0),
+        "ats_score": eval_res.get("ats_score", 85),
+        "is_active": True,
+        "updated_at": time.strftime("%Y-%m-%d %H:%M")
+    })
+    for a in archetypes:
+        if isinstance(a, dict):
+            a["is_active"] = (a.get("name") == name)
+
+    manifest["archetypes"] = archetypes
+    manifest["active_archetype"] = name
+
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+    return {"status": "success", "message": f"Archetype '{name}' saved successfully!", "archetypes": archetypes, "active_archetype": name}
+
+
+@router.post("/user/archetypes/switch")
+async def switch_user_archetype(request: SwitchArchetypeRequest, authorization: Optional[str] = Header(None)):
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    name = request.archetype_name.strip()
+    user_up_dir, _ = _get_user_storage_dirs(token or "guest")
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    arch_tex_path = os.path.join(user_up_dir, f"archetype_{safe_name}.tex")
+    arch_data_path = os.path.join(user_up_dir, f"archetype_{safe_name}.json")
+
+    if not os.path.exists(arch_data_path):
+        raise HTTPException(status_code=404, detail=f"Archetype '{name}' not found.")
+
+    with open(arch_data_path, "r", encoding="utf-8") as f:
+        loaded_data = json.load(f)
+
+    session_tex = arch_tex_path if os.path.exists(arch_tex_path) else ""
+    set_session_data(token, loaded_data, session_tex)
+    guest_file = _get_guest_state_file(token)
+    new_eval = evaluate_master_resume(loaded_data)
+    try:
+        with open(guest_file, "w") as f:
+            json.dump({"data": loaded_data, "path": session_tex, "evaluation": new_eval}, f, indent=2)
+    except Exception:
+        pass
+
+    # Update manifest active status
+    manifest_path = _get_archetype_manifest_path(token)
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest_data = json.load(f)
+            if isinstance(manifest_data, dict):
+                for a in manifest_data.get("archetypes", []):
+                    if isinstance(a, dict):
+                        a["is_active"] = (a.get("name") == name)
+                manifest_data["active_archetype"] = name
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(manifest_data, f, indent=2)
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "active_archetype": name,
+        "data": loaded_data,
+        "evaluation": new_eval
+    }
+
+
+@router.post("/user/archetypes/delete")
+async def delete_user_archetype(request: DeleteArchetypeRequest, authorization: Optional[str] = Header(None)):
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    name = request.archetype_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Archetype name cannot be empty.")
+
+    user_up_dir, _ = _get_user_storage_dirs(token or "guest")
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    arch_tex_path = os.path.join(user_up_dir, f"archetype_{safe_name}.tex")
+    arch_data_path = os.path.join(user_up_dir, f"archetype_{safe_name}.json")
+
+    # Delete physical archetype files if present
+    if os.path.exists(arch_tex_path):
+        try: os.remove(arch_tex_path)
+        except Exception: pass
+    if os.path.exists(arch_data_path):
+        try: os.remove(arch_data_path)
+        except Exception: pass
+
+    # Update manifest
+    manifest_path = _get_archetype_manifest_path(token)
+    remaining_archetypes = []
+    active_name = "Primary"
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest_data = json.load(f)
+            if isinstance(manifest_data, dict):
+                existing = manifest_data.get("archetypes", [])
+                remaining_archetypes = [a for a in existing if isinstance(a, dict) and a.get("name") != name]
+                if manifest_data.get("active_archetype") == name:
+                    active_name = remaining_archetypes[0]["name"] if remaining_archetypes else "Primary"
+                else:
+                    active_name = manifest_data.get("active_archetype", "Primary")
+                
+                manifest_data["archetypes"] = remaining_archetypes
+                manifest_data["active_archetype"] = active_name
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(manifest_data, f, indent=2)
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "message": f"Archetype '{name}' deleted successfully.",
+        "archetypes": remaining_archetypes,
+        "active_archetype": active_name
+    }
+
