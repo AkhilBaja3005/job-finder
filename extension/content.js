@@ -287,6 +287,7 @@
   }
 
   // ── Extract Exact Question Prompt Text for Any Form Element ────────────
+  // ── Extract Exact Question Prompt Text for Any Form Element ────────────
   function getQuestionTextForElement(el) {
     if (!el) return "";
 
@@ -299,7 +300,17 @@
       }
     }
 
-    // 2. Direct parent label
+    // 2. Direct aria-labelledby reference (Ashby, React ARIA, Workday)
+    const labelledById = el.getAttribute("aria-labelledby");
+    if (labelledById) {
+      const lbl = document.getElementById(labelledById);
+      if (lbl) {
+        const txt = lbl.innerText?.trim();
+        if (txt && txt.length > 1) return txt;
+      }
+    }
+
+    // 3. Direct parent label
     const immediateLabel = el.closest("label");
     if (immediateLabel) {
       const clone = immediateLabel.cloneNode(true);
@@ -308,13 +319,13 @@
       if (txt && txt.length > 1) return txt;
     }
 
-    // 3. Closest tightly-scoped form block (Ashby, Greenhouse, Lever, Workday)
+    // 4. Closest tightly-scoped form block (Ashby, Greenhouse, Lever, Workday)
     const tightBlock = el.closest(
-      '[class*="field"], [class*="formField"], [class*="question"], [class*="Container"], [class*="form-group"], fieldset, tr, li'
+      '[class*="field"], [class*="formField"], [class*="formSection"], [class*="question"], [class*="Container"], [class*="form-group"], [data-testid*="field"], [data-testid*="form"], fieldset, tr, li'
     );
     if (tightBlock) {
       const heading = tightBlock.querySelector(
-        'label, [class*="label"], [class*="title"], [class*="prompt"], [class*="heading"], legend, h3, h4, h5, h6'
+        'label, [class*="label"], [class*="title"], [class*="prompt"], [class*="heading"], [data-testid*="label"], legend, h3, h4, h5, h6'
       );
       if (heading && heading !== el) {
         const clone = heading.cloneNode(true);
@@ -324,15 +335,36 @@
       }
     }
 
-    // 4. Preceding sibling element
+    // 5. Walk ancestors up to 5 levels to find any preceding label or heading
+    let ancestor = el.parentElement;
+    for (let i = 0; i < 5 && ancestor && ancestor !== document.body; i++) {
+      const foundLabel = ancestor.querySelector('label, [class*="label"], [class*="title"], [class*="prompt"], [class*="heading"], legend, h3, h4, h5');
+      if (foundLabel && foundLabel !== el && !foundLabel.contains(el)) {
+        const clone = foundLabel.cloneNode(true);
+        clone.querySelectorAll("input, textarea, select, button, script, style").forEach((c) => c.remove());
+        const txt = clone.textContent?.trim();
+        if (txt && txt.length > 1) return txt;
+      }
+      ancestor = ancestor.parentElement;
+    }
+
+    // 6. Preceding sibling element
     const prev = el.previousElementSibling;
     if (prev && ["LABEL", "H3", "H4", "H5", "P", "SPAN", "DIV"].includes(prev.tagName)) {
       const txt = prev.innerText?.trim();
       if (txt && txt.length > 1 && txt.length < 200) return txt;
     }
 
-    // 5. Fallback to aria-label or placeholder
-    return el.getAttribute("aria-label") || el.getAttribute("placeholder") || "";
+    // 7. aria-label attribute
+    const ariaLabel = el.getAttribute("aria-label")?.trim();
+    if (ariaLabel && ariaLabel.length > 1) return ariaLabel;
+
+    // 8. Filtered placeholder fallback (ignore generic input prompts)
+    const ph = (el.getAttribute("placeholder") || "").trim();
+    const isGenericPrompt = /^(start\s*typing|type\s*here|enter\s*text|search|select|choose|optional|e\.g\.|write|answer|n\/a|\.\.\.)/i.test(ph);
+    if (ph && !isGenericPrompt && ph.length > 1) return ph;
+
+    return "";
   }
 
   // ── Click Yes / No Option on Button Cards or Radio Elements ───────────
@@ -378,20 +410,51 @@
 
   // ── AI Answer Generator (Calls Backend /answer_question LLM Agent) ──────
   async function generateAIAnswer(question, profile, jobInfo, baseUrl, token) {
-    const qLower = question.toLowerCase();
+    const qLower = (question || "").toLowerCase();
 
     const customNotice = (profile && (profile.notice_period || profile.noticePeriod)) || "";
     const customSalary = (profile && (profile.salary_expectations || profile.salary)) || "";
+    const customLocation = (profile && (profile.location || profile.personal?.location)) || "";
+    const customPortfolio = (profile && (profile.portfolio || profile.personal?.portfolio)) || "";
+    const customLinkedin = (profile && (profile.linkedin || profile.personal?.linkedin)) || "";
+    const customGithub = (profile && (profile.github || profile.personal?.github)) || "";
 
     // Deterministic short-answers using user profile preference
     if (qLower.includes("notice") || qLower.includes("how soon") || qLower.includes("start date")) {
       return customNotice || "Available immediately";
     }
-    if (qLower.includes("hear about") || qLower.includes("referred") || qLower.includes("source")) {
+    if (qLower.includes("hear about") || qLower.includes("referred") || qLower.includes("source") || qLower.includes("where did you find")) {
       return "LinkedIn";
     }
     if (qLower.includes("salary") || qLower.includes("compensation") || qLower.includes("expectation")) {
       return customSalary || "Competitive market rate / Open to discuss based on role scope.";
+    }
+    if (qLower.includes("located") || qLower.includes("location") || qLower.includes("where are you") || qLower.includes("where do you live") || qLower.includes("current address") || qLower.includes("city") || qLower.includes("country")) {
+      return customLocation || "London, United Kingdom / Open to relocation";
+    }
+    if (qLower.includes("portfolio") || qLower.includes("website") || qLower.includes("personal site")) {
+      return customPortfolio || "";
+    }
+    if (qLower.includes("linkedin")) {
+      return customLinkedin || "https://linkedin.com/in/akhilbaja";
+    }
+    if (qLower.includes("github")) {
+      return customGithub || "https://github.com/AkhilBaja3005";
+    }
+    if (qLower.includes("authorized") || qLower.includes("authorization") || qLower.includes("eligible to work") || qLower.includes("legal right")) {
+      return "Yes";
+    }
+    if (qLower.includes("require sponsor") || (qLower.includes("sponsorship") && !qLower.includes("will you require"))) {
+      return "No";
+    }
+    if (qLower.includes("relocate") || qLower.includes("hybrid") || qLower.includes("on-site") || qLower.includes("office") || qLower.includes("commute")) {
+      return "Yes, comfortable working on-site / hybrid and open to relocation as required.";
+    }
+    if (qLower.includes("background check") || qLower.includes("drug test") || qLower.includes("18 years") || qLower.includes("age of 18")) {
+      return "Yes";
+    }
+    if (qLower.includes("worked here") || qLower.includes("former employee") || qLower.includes("previously employed") || qLower.includes("non-compete")) {
+      return "No";
     }
 
     console.log(`%c[Job Finder AI] ❓ Extracted Question: "${question}"`, "color: #38bdf8; font-weight: bold;");
@@ -405,8 +468,8 @@
           "Authorization": `Bearer ${token || "guest"}`
         },
         body: JSON.stringify({
-          question,
-          company_name: jobInfo.company || "Granola",
+          question: question || "Brief summary of experience",
+          company_name: jobInfo.company || "Target Company",
           job_title: jobInfo.title || "AI Engineer",
           candidate_profile: profile
         })
@@ -761,15 +824,49 @@
           val = linkedin;
           isProfileField = true;
         }
-        // GitHub / Portfolio / Personal website
-        else if (/github|portfolio|personal\s*website|website/i.test(key)) {
-          if (/github/i.test(key) && github) val = github;
-          else val = portfolio || github || linkedin;
+        // GitHub
+        else if (/github/i.test(key)) {
+          val = github;
           isProfileField = true;
         }
-        // Location
-        else if (/\b(city|location|address)\b/i.test(key)) {
+        // Portfolio / Personal website / Links
+        else if (/portfolio|personal\s*website|website|blog|personal_site/i.test(key)) {
+          val = portfolio || github || linkedin;
+          isProfileField = true;
+        }
+        // Location / City / Address / Country / Postal
+        else if (/\b(city|location|address|current_city|current_location|residence)\b/i.test(key) && !/company|work_location/i.test(key)) {
           val = location;
+          isProfileField = true;
+        }
+        // Current / Most Recent Employer & Job Title
+        else if (/current\s*(company|employer)|recent\s*company/i.test(key)) {
+          val = (resume.experience && resume.experience[0]?.company) || "Qualcomm";
+          isProfileField = true;
+        } else if (/current\s*(title|position|role)|recent\s*title/i.test(key)) {
+          val = (resume.experience && (resume.experience[0]?.role || resume.experience[0]?.title)) || "Software Engineer";
+          isProfileField = true;
+        }
+        // Education (University, Degree, Major, GPA)
+        else if (/school|university|college|institution|education_institution/i.test(key)) {
+          val = (resume.education && (resume.education[0]?.institution || resume.education[0]?.school)) || "Imperial College London";
+          isProfileField = true;
+        } else if (/degree|degree_level|education_level/i.test(key)) {
+          val = (resume.education && resume.education[0]?.degree) || "Master's Degree";
+          isProfileField = true;
+        } else if (/major|discipline|field_of_study|department/i.test(key)) {
+          val = (resume.education && (resume.education[0]?.field_of_study || resume.education[0]?.fieldOfStudy)) || "Artificial Intelligence";
+          isProfileField = true;
+        } else if (/gpa|cpi|grade/i.test(key) && type !== "select-one") {
+          val = "8.04";
+          isProfileField = true;
+        } else if (/grad(uation)?\s*(year|date)|completion\s*year/i.test(key)) {
+          val = "2027";
+          isProfileField = true;
+        }
+        // Years of Experience (Generic or Tech-Specific)
+        else if (/years\s*(of)?\s*experience|total\s*experience|years\s*exp/i.test(key)) {
+          val = "3";
           isProfileField = true;
         }
         // Notice Period
@@ -782,12 +879,33 @@
           val = customSalary;
           isProfileField = true;
         }
-        // EEO
+        // EEO & Legal Work Authorization
         else if (/authorized|work in the us|work in the uk|work authorization|legally authorized/i.test(key)) {
           val = eeo.workAuth || "Yes";
           isProfileField = true;
         } else if (/sponsor|visa|require.*sponsorship/i.test(key)) {
           val = eeo.sponsorship || "No";
+          isProfileField = true;
+        } else if (/gender/i.test(key)) {
+          val = eeo.gender || "Male";
+          isProfileField = true;
+        } else if (/race|ethnicity/i.test(key)) {
+          val = eeo.race || "Asian";
+          isProfileField = true;
+        } else if (/veteran/i.test(key)) {
+          val = eeo.veteran || "I am not a protected veteran";
+          isProfileField = true;
+        } else if (/disability/i.test(key)) {
+          val = eeo.disability || "No, I do not have a disability";
+          isProfileField = true;
+        } else if (/pronoun/i.test(key)) {
+          val = "He/Him";
+          isProfileField = true;
+        } else if (/18\s*years|age\s*of\s*18|legal\s*age|background\s*check|drug\s*test|relocate/i.test(key)) {
+          val = "Yes";
+          isProfileField = true;
+        } else if (/former\s*employee|worked\s*here\s*before|previously\s*employed|non-compete/i.test(key)) {
+          val = "No";
           isProfileField = true;
         }
 
