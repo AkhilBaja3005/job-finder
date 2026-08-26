@@ -28,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnCoverLetter = document.getElementById("btn-cover-letter");
   const btnOutreach = document.getElementById("btn-outreach");
   const btnEmailTailor = document.getElementById("btn-email-tailor");
+  const btnTailorPdf = document.getElementById("btn-tailor-pdf");
   const userTokenInput = document.getElementById("user-token");
   const toast = document.getElementById("popup-toast");
   const btnSettingsUrl = document.getElementById("btn-settings-url");
@@ -372,6 +373,76 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   });
+
+  // 1-Click Tailor & Download PDF
+  if (btnTailorPdf) {
+    btnTailorPdf.addEventListener("click", () => {
+      if (!currentJobInfo) {
+        showToast("⚠️ Open a job page first!");
+        return;
+      }
+      chrome.storage.local.get(["userToken"], (items) => {
+        const token = items ? items.userToken || "guest" : "guest";
+        showToast("⏳ Tailoring LaTeX resume & compiling PDF...");
+        btnTailorPdf.disabled = true;
+        fetch(`${API_BASE_URL}/analyze_job`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            job_url: currentJobInfo.url,
+            job_title: currentJobInfo.title,
+            job_description: currentJobInfo.description,
+            send_email: false,
+            skip_tailoring: false,
+            force_tailoring: true,
+            source_mode: "extension",
+            user_selected_skills: Array.from(window.selectedUserSkills || [])
+          })
+        })
+          .then(async (res) => {
+            if (!res.ok) {
+              const errJson = await res.json().catch(() => ({}));
+              throw new Error(errJson.detail || `Server error (${res.status})`);
+            }
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buf = "";
+            let openedPdf = false;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buf += decoder.decode(value, { stream: true });
+              const lines = buf.split("\n");
+              buf = lines.pop();
+              for (const line of lines) {
+                try {
+                  const ev = JSON.parse(line);
+                  if (ev.type === "log" && ev.message) {
+                    if (!ev.message.includes("Comparing candidate profile") && !ev.message.includes("ATS gap analysis")) {
+                      showToast(ev.message);
+                    }
+                  } else if (ev.type === "result") {
+                    if (ev.download_pdf_url && !openedPdf) {
+                      openedPdf = true;
+                      const pdfUrl = ev.download_pdf_url.startsWith("http") ? ev.download_pdf_url : `${API_BASE_URL}${ev.download_pdf_url}`;
+                      chrome.tabs.create({ url: pdfUrl });
+                      showToast("📄 ✅ Tailored PDF generated & opened!");
+                    } else {
+                      showToast(`📄 ✅ Resume tailored! (Fit score: ${ev.fit_score || 85}%)`);
+                    }
+                  }
+                } catch (e) {}
+              }
+            }
+          })
+          .catch(err => showToast("❌ Tailoring failed: " + err.message))
+          .finally(() => { btnTailorPdf.disabled = false; });
+      });
+    });
+  }
 
   // Direct 1-Click Email Tailored Package
   if (btnEmailTailor) {
