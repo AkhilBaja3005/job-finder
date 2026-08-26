@@ -435,8 +435,54 @@
     return fallbackAns;
   }
 
+  // ── Smart Career Page Detector ────────────────────────────────────────
+  function isJobOrCareerPage() {
+    const href = window.location.href.toLowerCase();
+    const hostname = window.location.hostname.toLowerCase();
+
+    // 1. Known ATS & Hiring Portals
+    const atsDomains = [
+      "greenhouse.io", "lever.co", "ashbyhq.com", "myworkdayjobs.com", "workday.com",
+      "smartrecruiters.com", "icims.com", "taleo.net", "bamboohr.com", "jobvite.com",
+      "ziprecruiter.com", "indeed.com", "wellfound.com", "angel.co", "workable.com",
+      "rippling.com", "phenom.com", "eightfold.ai", "jazzhr.com", "recruitee.com",
+      "breezy.hr", "applytojob.com", "pinpointhq.com", "homerun.co", "teamtailor.com",
+      "withwaymo.com", "waymo.com", "otta.com", "glassdoor.com", "monster.com"
+    ];
+    if (atsDomains.some((d) => hostname.includes(d))) return true;
+
+    // 2. Career subdomains & specific URL paths
+    if (hostname.startsWith("careers.") || hostname.startsWith("jobs.") || hostname.includes("careers") || hostname.includes("jobs")) return true;
+    if (
+      href.includes("/jobs/") || href.includes("/job/") ||
+      href.includes("/careers/") || href.includes("/career/") ||
+      href.includes("/openings/") || href.includes("/positions/") ||
+      href.includes("/apply") || href.includes("/application") ||
+      href.includes("gh_jid=") || href.includes("jobid=") ||
+      href.includes("/join-us") || href.includes("/work-with-us")
+    ) return true;
+
+    if (hostname.includes("linkedin.com") && (href.includes("/jobs/") || href.includes("/job-apply/"))) return true;
+
+    // 3. Application Form DOM Presence
+    const hasJobAppDom = document.querySelector(
+      "[class*='easy-apply'], [class*='apply-form'], [class*='application-form'], [data-automation-id*='job'], [data-ph-at-id*='job'], #job-details, #jobDescriptionText, [class*='jobDescription'], form[action*='apply'], form[action*='job']"
+    );
+    if (hasJobAppDom) return true;
+
+    // 4. Presence of Resume upload inputs
+    const hasResumeUpload = document.querySelector(
+      "input[type='file'][accept*='pdf'], input[type='file'][name*='resume'], input[type='file'][id*='resume'], input[type='file'][aria-label*='resume']"
+    );
+    if (hasResumeUpload) return true;
+
+    return false;
+  }
+
   // ── Inject Inline "✨ AI Answer" Buttons Beside Question Boxes ────────
   function injectInlineAIButtons() {
+    if (!isJobOrCareerPage()) return;
+
     const candidateInputs = document.querySelectorAll(
       "textarea, input[type='text'], input:not([type]), [contenteditable='true']"
     );
@@ -797,9 +843,11 @@
     setTimeout(() => toast.remove(), 3000);
   }
 
-  // ── Auto-Inject Buttons on Mutation / Page Load ────────────────────────
-  setTimeout(injectInlineAIButtons, 1000);
-  setInterval(injectInlineAIButtons, 3000);
+  // ── Auto-Inject Buttons on Mutation / Page Load (Only on Career Sites) ──
+  if (isJobOrCareerPage()) {
+    setTimeout(injectInlineAIButtons, 800);
+    setInterval(injectInlineAIButtons, 2500);
+  }
 
   // ── Message Listener ──────────────────────────────────────────────────
   try {
