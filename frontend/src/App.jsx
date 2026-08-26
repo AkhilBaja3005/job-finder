@@ -7,6 +7,7 @@ const DiscoverMode = lazy(() => import('./components/DiscoverMode'));
 const HistoryMode = lazy(() => import('./components/HistoryMode'));
 const SkeletonLoader = lazy(() => import('./components/SkeletonLoader').then(m => ({ default: m.SkeletonLoader })));
 const OutreachModal = lazy(() => import('./components/OutreachModal'));
+const DocsGuide = lazy(() => import('./components/DocsGuide'));
 
 // Automatically inject ngrok-skip-browser-warning header into all frontend fetch requests
 const originalFetch = window.fetch;
@@ -152,12 +153,29 @@ function App() {
   const [searchKeywords, setSearchKeywords] = useState(() => sessionStorage.getItem('search_keywords') || '');
   const [searchTimeframe, setSearchTimeframe] = useState(() => sessionStorage.getItem('search_timeframe') || '48h'); // '24h' | '48h' | '1w' | '1m'
   const [isDiscoveryView, setIsDiscoveryView] = useState(() => sessionStorage.getItem('is_discovery_view') === 'true');
-  const [dashboardMode, setDashboardMode] = useState(() => sessionStorage.getItem('dashboard_mode') || 'tailor'); // 'tailor' | 'discover' | 'history'
+  const [dashboardMode, setDashboardMode] = useState(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/docs')) {
+      return 'docs';
+    }
+    return sessionStorage.getItem('dashboard_mode') || 'tailor';
+  });
   const [searchSortMode, setSearchSortMode] = useState('overall'); // 'overall' | 'role_fit' | 'time'
   const [searchPage, setSearchPage] = useState(1);
 
   const [applicationHistory, setApplicationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Sync /docs path with dashboardMode
+  useEffect(() => {
+    const handleLocation = () => {
+      if (window.location.pathname.startsWith('/docs')) {
+        setDashboardMode('docs');
+      }
+    };
+    handleLocation();
+    window.addEventListener('popstate', handleLocation);
+    return () => window.removeEventListener('popstate', handleLocation);
+  }, []);
 
   
   // 1-Click Chrome Extension Auto-Sync & Auto-Download Handler
@@ -1767,6 +1785,37 @@ function App() {
               </span>
             </div>
           )}
+          {/* Docs & Setup Guide Button */}
+          <button
+            className="btn btn-secondary"
+            style={{
+              padding: '6px 13px',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: dashboardMode === 'docs' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255,255,255,0.06)',
+              borderColor: dashboardMode === 'docs' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.15)',
+              color: dashboardMode === 'docs' ? '#38bdf8' : '#e2e8f0',
+              cursor: 'pointer',
+              borderRadius: '8px'
+            }}
+            onClick={() => {
+              if (dashboardMode === 'docs') {
+                setDashboardMode('tailor');
+                window.history.pushState(null, '', '/');
+              } else {
+                setDashboardMode('docs');
+                window.history.pushState(null, '', '/docs');
+              }
+            }}
+            title="View Setup Guide & Documentation"
+          >
+            <span>📖</span>
+            <span>Docs & Guide</span>
+          </button>
+
           {/* Optimization #2: Keyboard help button */}
           <button
             className="btn btn-secondary"
@@ -1869,7 +1918,19 @@ function App() {
         </div>
       </header>
 
-      {!user ? (
+      {dashboardMode === 'docs' ? (
+        <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Documentation & Setup Guide...</div>}>
+          <DocsGuide
+            user={user}
+            userToken={userToken}
+            onDownloadExtension={() => handleOneClickExtensionSync(user?.sync_code)}
+            onNavigateMode={(mode) => {
+              setDashboardMode(mode);
+              window.history.pushState(null, '', '/');
+            }}
+          />
+        </Suspense>
+      ) : !user ? (
         <div className="login-container" style={{ maxWidth: '460px', margin: '70px auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '38px' }}>
             {/* Brand mark */}
@@ -2826,6 +2887,16 @@ function App() {
               >
                 <span style={{ fontSize: '1.2rem' }}>📂</span>
                 History
+              </button>
+              <button
+                onClick={() => { setDashboardMode('docs'); setIsDiscoveryView(false); window.history.pushState(null, '', '/docs'); }}
+                style={{
+                  flex: 1, background: 'none', border: 'none', color: dashboardMode === 'docs' ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                }}
+              >
+                <span style={{ fontSize: '1.2rem' }}>📖</span>
+                Docs
               </button>
             </div>
             <style>{`
