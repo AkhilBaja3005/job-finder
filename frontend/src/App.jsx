@@ -1922,7 +1922,7 @@ function App() {
         <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Documentation & Setup Guide...</div>}>
           <DocsGuide
             user={user}
-            userToken={userToken}
+            userToken={authToken}
             onDownloadExtension={() => handleOneClickExtensionSync(user?.sync_code)}
             onNavigateMode={(mode) => {
               setDashboardMode(mode);
