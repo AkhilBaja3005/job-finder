@@ -450,6 +450,7 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify({
           job_url: details.url,
           job_title: details.title,
+          company: details.company,
           job_description: details.description,
           candidate_profile: candidateProfile,
           send_email: false,
@@ -814,6 +815,7 @@ document.addEventListener("DOMContentLoaded", () => {
           body: JSON.stringify({
             job_url: currentJobInfo.url,
             job_title: currentJobInfo.title,
+            company: currentJobInfo.company,
             job_description: currentJobInfo.description,
             send_email: false,
             skip_tailoring: false,
@@ -882,6 +884,7 @@ document.addEventListener("DOMContentLoaded", () => {
           body: JSON.stringify({
             job_url: currentJobInfo.url,
             job_title: currentJobInfo.title,
+            company: currentJobInfo.company,
             job_description: currentJobInfo.description,
             candidate_profile: candidateProfile,
             send_email: true,
