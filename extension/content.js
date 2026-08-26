@@ -490,31 +490,48 @@
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
         e.stopPropagation();
+
+        if (!isRuntimeValid()) {
+          showToast("⚠️ Extension was updated. Please refresh page (Cmd+R).");
+          return;
+        }
+
         btn.innerHTML = "⏳ Generating...";
         btn.disabled = true;
 
-        chrome.storage.local.get(["userToken", "resumeData", "backendUrl"], async (storage) => {
-          let resume = storage.resumeData || {};
-          const token = (storage.userToken || "").trim();
-          const baseUrl = (storage.backendUrl || "http://127.0.0.1:8000").replace(/\/+$/, "");
-          const jobInfo = extractJobDetails();
-          const qText = getQuestionTextForElement(el) || "Screening Question";
+        try {
+          chrome.storage.local.get(["userToken", "resumeData", "backendUrl", "noticePeriod", "salaryExpectations"], async (storage) => {
+            if (chrome.runtime.lastError || !storage) {
+              btn.innerHTML = "⚠️ Refresh Page";
+              btn.disabled = false;
+              return;
+            }
+            let resume = storage.resumeData || {};
+            const token = (storage.userToken || "").trim();
+            const baseUrl = (storage.backendUrl || "http://127.0.0.1:8000").replace(/\/+$/, "");
+            const jobInfo = extractJobDetails();
+            const qText = getQuestionTextForElement(el) || "Screening Question";
 
-          const answer = await generateAIAnswer(qText, resume, jobInfo, baseUrl, token);
-          if (answer) {
-            setNativeValue(el, answer);
-            el.style.outline = "2px solid #10b981";
-            el.style.background = "rgba(16, 185, 129, 0.05)";
-            btn.innerHTML = "✅ Filled";
-            showToast("✨ AI Answer Generated!");
-          } else {
-            btn.innerHTML = "⚠️ Retry";
-          }
-          setTimeout(() => {
-            btn.innerHTML = "✨ AI Answer";
-            btn.disabled = false;
-          }, 2000);
-        });
+            const answer = await generateAIAnswer(qText, resume, jobInfo, baseUrl, token);
+            if (answer) {
+              setNativeValue(el, answer);
+              el.style.outline = "2px solid #10b981";
+              el.style.background = "rgba(16, 185, 129, 0.05)";
+              btn.innerHTML = "✅ Filled";
+              showToast("✨ AI Answer Generated!");
+            } else {
+              btn.innerHTML = "⚠️ Retry";
+            }
+            setTimeout(() => {
+              btn.innerHTML = "✨ AI Answer";
+              btn.disabled = false;
+            }, 2000);
+          });
+        } catch (err) {
+          btn.innerHTML = "⚠️ Refresh Page";
+          btn.disabled = false;
+          showToast("⚠️ Extension reloaded. Please refresh the page.");
+        }
       });
 
       const parent = el.parentElement;
@@ -530,9 +547,18 @@
 
   // ── Comprehensive AutoFill Master Function ────────────────────────────
   async function runAutofill() {
+    if (!isRuntimeValid()) {
+      showToast("⚠️ Extension was updated. Please refresh the page (Cmd+R).");
+      return;
+    }
     showToast("⏳ Auto-filling application & generating AI answers...");
 
-    chrome.storage.local.get(["userToken", "resumeData", "eeoProfile", "backendUrl", "noticePeriod", "salaryExpectations"], async (storage) => {
+    try {
+      chrome.storage.local.get(["userToken", "resumeData", "eeoProfile", "backendUrl", "noticePeriod", "salaryExpectations"], async (storage) => {
+        if (chrome.runtime.lastError || !storage) {
+          showToast("⚠️ Extension was reloaded. Please refresh the page.");
+          return;
+        }
       let resume = storage.resumeData || {};
       const token = (storage.userToken || "").trim();
       const baseUrl = (storage.backendUrl || "http://127.0.0.1:8000").replace(/\/+$/, "");
@@ -747,6 +773,9 @@
       logMsg(`⚡ Auto-filled ${filledCount} field${filledCount !== 1 ? "s" : ""} (${aiQuestionsAnswered} AI answers generated).`);
       showToast(`✨ Auto-filled ${filledCount} fields (${aiQuestionsAnswered} AI answers generated)!`);
     });
+    } catch (err) {
+      showToast("⚠️ Extension was updated. Please refresh the page.");
+    }
   }
 
   function showToast(msg) {
