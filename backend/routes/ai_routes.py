@@ -357,6 +357,11 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             pdf_download_url = f"/download_application_pdf/{safe_key}/{os.path.basename(temp_pdf_path)}" if os.path.exists(temp_pdf_path) else None
 
+            dumped = analysis.model_dump()
+            dumped["latex_code"] = final_latex
+            dumped["overleaf_url"] = overleaf_url
+            dumped["download_pdf_url"] = pdf_download_url
+
             email_sent = False
             dest_email = None
             if request.send_email:
@@ -403,10 +408,6 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     except Exception as e:
                         print(f"[analyze_job] Email send error: {e}")
 
-            dumped = analysis.model_dump()
-            dumped["latex_code"] = final_latex
-            dumped["overleaf_url"] = overleaf_url
-            dumped["download_pdf_url"] = pdf_download_url
             dumped["email_sent"] = email_sent
             dumped["dest_email"] = dest_email
 
