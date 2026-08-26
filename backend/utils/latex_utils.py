@@ -200,17 +200,23 @@ def apply_latex_hotfix(
     if "\\frenchspacing" not in fixed:
         fixed = fixed.replace("\\begin{document}", "\\frenchspacing\n\\begin{document}", 1)
 
-    # ── Escape unescaped special LaTeX chars ─────────────────────────────────
-    fixed = re.sub(r'(?<!\\)&', r'\\&', fixed)
-    fixed = re.sub(r'(?<!\\)%', r'\\%', fixed)
-    fixed = re.sub(r'(?<!\\)_', r'\\_', fixed)
-    # Escape unescaped # characters in body text, preserving LaTeX macro parameter declarations like #1, #2 inside \newcommand / \def
-    fixed = re.sub(r"(?<!\\)#(?!\d)", r'\\#', fixed)
-    # Undo double-escapes that arise from the above
-    fixed = fixed.replace('\\\\&', '\\&')
-    fixed = fixed.replace('\\\\%', '\\%')
-    fixed = fixed.replace('\\\\_', '\\_')
-    fixed = fixed.replace('\\\\#', '\\#')
+    # ── Escape unescaped special LaTeX chars in document body ONLY ────────────
+    doc_start = fixed.find('\\begin{document}')
+    if doc_start != -1:
+        preamble = fixed[:doc_start]
+        body = fixed[doc_start:]
+
+        body = re.sub(r'(?<!\\)&', r'\\&', body)
+        body = re.sub(r'(?<!\\)%', r'\\%', body)
+        body = re.sub(r'(?<!\\)_', r'\\_', body)
+        # Escape unescaped # characters in body text, preserving LaTeX macro parameter declarations like #1, #2 inside \newcommand / \def
+        body = re.sub(r"(?<!\\)#(?!\d)", r'\\#', body)
+        # Undo double-escapes that arise from the above
+        body = body.replace('\\\\&', '\\&')
+        body = body.replace('\\\\%', '\\%')
+        body = body.replace('\\\\_', '\\_')
+        body = body.replace('\\\\#', '\\#')
+        fixed = preamble + body
 
     # ── Remove stray \\ before \begin{itemize} (causes big gaps) ────────────
     fixed = re.sub(
