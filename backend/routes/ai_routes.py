@@ -624,13 +624,23 @@ async def answer_question(request: AnswerQuestionRequest, authorization: Optiona
         session = get_session_data(token)
         session_resume_data = session.get("data", {})
 
-    q_lower = request.question.lower()
+    q_clean = request.question.strip()
+    print(f"\n[AI Screen Solver] ❓ Extracted Question: \"{q_clean}\"")
+    print(f"[AI Screen Solver] 🏢 Company: {request.company_name or 'N/A'} | Role: {request.job_title or 'N/A'}")
+
+    q_lower = q_clean.lower()
     if "notice" in q_lower or "how soon" in q_lower or "start date" in q_lower:
-        return {"status": "success", "answer": "Available immediately (2 weeks notice)."}
+        ans = "Available immediately (2 weeks notice)."
+        print(f"[AI Screen Solver] 💡 Deterministic Answer: {ans}\n")
+        return {"status": "success", "answer": ans}
     if "hear about" in q_lower or "source" in q_lower or "referred" in q_lower:
-        return {"status": "success", "answer": "LinkedIn"}
+        ans = "LinkedIn"
+        print(f"[AI Screen Solver] 💡 Deterministic Answer: {ans}\n")
+        return {"status": "success", "answer": ans}
     if "salary" in q_lower or "compensation" in q_lower or "expectation" in q_lower:
-        return {"status": "success", "answer": "Competitive market rate / Open to discuss based on role scope."}
+        ans = "Competitive market rate / Open to discuss based on role scope."
+        print(f"[AI Screen Solver] 💡 Deterministic Answer: {ans}\n")
+        return {"status": "success", "answer": ans}
 
     skills_list = session_resume_data.get("skills", [])
     if isinstance(skills_list, dict):
@@ -671,15 +681,20 @@ CRITICAL INSTRUCTIONS:
             custom_api_key=active_api_key,
             model_tier="lite"
         )
-        return {"status": "success", "answer": answer_text.strip().strip('"')}
+        final_ans = answer_text.strip().strip('"')
+        print(f"[AI Screen Solver] 💡 LLM Generated Answer:\n{final_ans}\n")
+        return {"status": "success", "answer": final_ans}
     except Exception as e:
         print(f"[answer_question] LLM generation error: {e}")
         if "one line" in q_lower or "one-line" in q_lower or "condensed" in q_lower:
-            return {"status": "success", "answer": "AI Systems Engineer with 3+ years experience building production-grade GenAI pipelines and scalable LLM applications."}
+            final_ans = "AI Systems Engineer with 3+ years experience building production-grade GenAI pipelines and scalable LLM applications."
         elif "why" in q_lower:
             company = request.company_name or "Granola"
-            return {"status": "success", "answer": f"I am deeply inspired by {company}'s focus on reimagining productivity workflows with intuitive AI. With my experience building low-latency LLM systems, I want to contribute directly to advancing your product capabilities and user experience."}
-        return {"status": "success", "answer": f"Excited to bring my technical skills in AI engineering and systems development to {request.company_name or 'the team'}."}
+            final_ans = f"I am drawn to {company}'s vision of transforming collaborative meeting workflows with intuitive, AI-native tools. Having built high-throughput GenAI systems and fast retrieval pipelines at scale, I am excited to contribute directly to engineering robust, low-latency AI features for your users."
+        else:
+            final_ans = f"With experience building production AI systems and scalable infrastructure, I look forward to contributing directly to {request.company_name or 'the team'}."
+        print(f"[AI Screen Solver] 💡 Fallback Generated Answer:\n{final_ans}\n")
+        return {"status": "success", "answer": final_ans}
 
 
 @router.post("/user/solve_field")

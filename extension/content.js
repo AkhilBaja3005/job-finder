@@ -370,6 +370,8 @@
       return "Competitive market rate / Open to discuss based on role scope.";
     }
 
+    console.log(`%c[Job Finder AI] ❓ Extracted Question: "${question}"`, "color: #38bdf8; font-weight: bold;");
+
     try {
       const res = await fetch(`${baseUrl}/answer_question`, {
         method: "POST",
@@ -387,21 +389,27 @@
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.answer) return data.answer;
+        if (data.answer) {
+          console.log(`%c[Job Finder AI] 💡 Generated Answer: "${data.answer}"`, "color: #34d399; font-weight: bold;");
+          return data.answer;
+        }
       }
     } catch (e) {
       console.warn("[Job Finder AI] Backend answer_question request error:", e);
     }
 
     // Smart Fallback Heuristic
+    let fallbackAns = "";
     if (qLower.includes("one line") || qLower.includes("one-line") || qLower.includes("condensed")) {
-      return "AI Systems Engineer with 3+ years experience building production-grade GenAI pipelines and scalable LLM applications.";
-    }
-    if (qLower.includes("why")) {
+      fallbackAns = "AI Systems Engineer with 3+ years experience building production-grade GenAI pipelines and scalable LLM applications.";
+    } else if (qLower.includes("why")) {
       const company = jobInfo.company || "Granola";
-      return `I want to join ${company} because of your focus on transforming meeting workflows with intuitive, high-velocity AI. With my experience in production LLM pipelines and low-latency retrieval systems, I am excited to contribute directly to advancing your product capabilities.`;
+      fallbackAns = `I want to join ${company} because of your focus on transforming meeting workflows with intuitive, high-velocity AI. With my experience in production LLM pipelines and low-latency retrieval systems, I am excited to contribute directly to advancing your product capabilities.`;
+    } else {
+      fallbackAns = `Excited to bring my technical experience in AI engineering and scalable systems to ${jobInfo.company || "the team"}.`;
     }
-    return `Excited to bring my technical experience in AI engineering and scalable systems to ${jobInfo.company || "the team"}.`;
+    console.log(`%c[Job Finder AI] 💡 Fallback Answer: "${fallbackAns}"`, "color: #facc15; font-weight: bold;");
+    return fallbackAns;
   }
 
   // ── Inject Inline "✨ AI Answer" Buttons Beside Question Boxes ────────
