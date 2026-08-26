@@ -50,6 +50,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
+// Enable Chrome native Side Panel on extension action click
+if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((err) => {
+    console.log("[SidePanel] Panel behavior notice:", err);
+  });
+}
+
 // Handle 1-Click Sync Key initialization from web app
 chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
   if (request.action === "SYNC_USER_KEY" && request.syncKey) {
