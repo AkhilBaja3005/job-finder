@@ -37,7 +37,10 @@ def fetch_live_indeed_fallback_jobs(keyword: str = "Data Scientist", location: s
         soup = BeautifulSoup(resp.text, "html.parser")
         
         for a_tag in soup.find_all("a"):
-            href = a_tag.get("href", "")
+            href_val = a_tag.get("href")
+            if not href_val or not isinstance(href_val, str):
+                continue
+            href = href_val
             if "/url?q=" in href:
                 href = href.split("/url?q=")[1].split("&")[0]
             
