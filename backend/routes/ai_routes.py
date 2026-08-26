@@ -113,6 +113,7 @@ class InterviewPrepRequest(BaseModel):
     job_title: str
     company: str
     job_url: Optional[str] = None
+    job_description: Optional[str] = None
 
 
 class CoverLetterHistoryRequest(BaseModel):
@@ -533,8 +534,8 @@ async def generate_interview_prep(request: InterviewPrepRequest, authorization: 
     if not resume:
         raise HTTPException(status_code=400, detail="No resume uploaded yet. Upload a resume first.")
 
-    jd_text = ""
-    if request.job_url:
+    jd_text = request.job_description or ""
+    if not jd_text and request.job_url:
         try:
             scraped = await scrape_job_description(request.job_url)
             jd_text = scraped.get("description", "")
