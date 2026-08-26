@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
@@ -138,12 +138,23 @@ if os.path.exists(frontend_dist):
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-    @app.get("/{rest_of_path:path}", response_class=HTMLResponse)
+    @app.api_route("/{rest_of_path:path}", methods=["GET", "HEAD"], response_class=HTMLResponse)
     async def serve_spa_frontend(rest_of_path: str):
+        # 1. Block directory traversal and sensitive environment / key scanners
+        forbidden_substrings = ("..", ".env", ".aws", ".git", ".ssh", "passwd", "environ", "actuator", "graphql", "config.json", "credentials", "phpinfo", "swagger", "meta-data", "secrets.toml")
+        if any(bad in rest_of_path.lower() for bad in forbidden_substrings):
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        # 2. Block direct access to internal api routes if not handled by routers
         if rest_of_path and not rest_of_path.startswith("api"):
-            requested = os.path.join(frontend_dist, rest_of_path)
-            if os.path.exists(requested) and os.path.isfile(requested):
-                return FileResponse(requested)
+            try:
+                # Resolve canonical safe path within frontend_dist
+                target = os.path.abspath(os.path.join(frontend_dist, rest_of_path))
+                if target.startswith(frontend_dist) and os.path.exists(target) and os.path.isfile(target):
+                    return FileResponse(target)
+            except Exception:
+                pass
+
         index_file = os.path.join(frontend_dist, "index.html")
         if os.path.exists(index_file):
             return FileResponse(index_file)

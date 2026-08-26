@@ -777,7 +777,7 @@ async def find_matching_jobs(
             try:
                 if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 50:
                     r = await _score_job_with_real_jd(job, resume_data, None, asyncio.Semaphore(50))
-                    if r and r.get("score", 0) >= 55:
+                    if r:
                         scored_jobs.append(r)
                         yield json.dumps({"type": "partial_result", "job": r}) + "\n"
             except Exception as pe:
@@ -823,9 +823,8 @@ async def find_matching_jobs(
             if r is not None:
                 log_msg = f"✓ Scored match: {r['title']} @ {r['company']} ({r['score']}% Match)"
                 yield json.dumps({"type": "log", "message": log_msg}) + " " * 2048 + "\n"
-                if r["score"] >= 55:
-                    scored_jobs.append(r)
-                    yield json.dumps({"type": "partial_result", "job": r}) + "\n"
+                scored_jobs.append(r)
+                yield json.dumps({"type": "partial_result", "job": r}) + "\n"
             else:
                 # Yield a progress heartbeat chunk to keep connection active
                 yield json.dumps({"type": "log", "message": "⏳ Processing web listings..."}) + " " * 2048 + "\n"
@@ -834,13 +833,10 @@ async def find_matching_jobs(
         yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + " " * 2048 + "\n"
         for job in title_only_batch:
             r = _score_job_with_title_heuristic(job, resume_data)
-            if r["score"] >= 55:
-                scored_jobs.append(r)
-                yield json.dumps({"type": "partial_result", "job": r}) + "\n"
+            scored_jobs.append(r)
+            yield json.dumps({"type": "partial_result", "job": r}) + "\n"
 
-    # Sort accurate (JD-scored) jobs before estimated (title-only) ones, since
-    # an estimated job's raw score isn't directly comparable to a real
-    # ATS-scored one — within each group, sort descending by score.
+    # Sort all scored jobs descending by ATS match score (highest score first)
     scored_jobs.sort(key=lambda x: (x["estimated"], -x["score"]))
     accurate_count = sum(1 for j in scored_jobs if not j["estimated"])
     estimated_count = len(scored_jobs) - accurate_count
