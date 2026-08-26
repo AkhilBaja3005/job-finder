@@ -191,7 +191,27 @@
   // ── Native Form Value Setters (Framework Safe: React 18/19, Vue, Svelte) ───
   function setNativeValue(element, value) {
     if (!element || value === undefined || value === null) return;
-    const stringVal = String(value);
+    const stringVal = String(value).trim();
+    if (!stringVal || stringVal === "undefined" || stringVal === "null") return;
+
+    if (element.getAttribute("contenteditable") === "true") {
+      try {
+        element.focus();
+        element.innerText = stringVal;
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+        element.setAttribute("data-jf-filled", "true");
+      } catch (e) {}
+      return;
+    }
+
+    const type = (element.type || "").toLowerCase();
+    if (type === "number" || type === "range") {
+      const num = parseFloat(stringVal.replace(/[^0-9.-]/g, ""));
+      if (isNaN(num)) return;
+    } else if (type === "date" || type === "month" || type === "time") {
+      if (!stringVal.match(/^\d{4}-\d{2}/) && !stringVal.match(/^\d{2}:\d{2}/)) return;
+    }
 
     const valueSetter = Object.getOwnPropertyDescriptor(element, "value")?.set;
     const prototype = Object.getPrototypeOf(element);
@@ -692,7 +712,7 @@
           }
         }
 
-        if (!val) continue;
+        if (!val || val === "undefined" || val === "null" || String(val).trim() === "") continue;
 
         try {
           if (el.tagName === "SELECT") {
