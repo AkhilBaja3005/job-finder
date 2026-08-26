@@ -31,9 +31,11 @@ else:
 MAX_LOCAL_HISTORY_ENTRIES = 200
 
 
-def _safe_key(token: Optional[str]) -> str:
-    """Mirrors main.py's _safe_key(): filesystem-safe per-user cache key."""
-    key = token or "guest"
+def _safe_key(token: Any) -> str:
+    """Mirrors session_store's _safe_key(): filesystem-safe per-user cache key."""
+    if token is None:
+        return "guest"
+    key = str(token).strip()
     key = re.sub(r'[^a-zA-Z0-9_-]', '', key)[:40]
     return key or "guest"
 

@@ -99,6 +99,7 @@ class JobAnalysisRequest(BaseModel):
     send_email: Optional[bool] = False
     source_mode: Optional[str] = "website"
     user_selected_skills: Optional[List[str]] = None
+    candidate_profile: Optional[dict] = None
 
 
 class TailorResumeRequest(BaseModel):
@@ -183,11 +184,11 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
     token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
 
     session = get_session_data(token)
-    session_resume_data = session.get("data")
+    session_resume_data = request.candidate_profile or session.get("data")
     session_resume_path = session.get("path")
 
     if not session_resume_data:
-        raise HTTPException(status_code=400, detail="Please upload a resume first.")
+        raise HTTPException(status_code=400, detail="Please upload a resume first or sync your profile from the web app.")
 
     # Cache hit check
     if request.job_description and not request.force_tailoring:

@@ -288,8 +288,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (activeRoleTitle) activeRoleTitle.textContent = details.title || "Detected Job Posting";
     if (activeCompanyName) activeCompanyName.textContent = details.company || "Hiring Company";
 
-    chrome.storage.local.get(["userToken"], (items) => {
+    chrome.storage.local.get(["userToken", "resumeData", "candidateProfile"], (items) => {
       const token = items ? items.userToken || "guest" : "guest";
+      const candidateProfile = (items && (items.resumeData || items.candidateProfile)) || null;
+
       fetch(`${API_BASE_URL}/analyze_job`, {
         method: "POST",
         headers: {
@@ -300,13 +302,21 @@ document.addEventListener("DOMContentLoaded", () => {
           job_url: details.url,
           job_title: details.title,
           job_description: details.description,
+          candidate_profile: candidateProfile,
           send_email: false,
           skip_tailoring: true,
           source_mode: "extension"
         })
       })
         .then(async (res) => {
-          if (!res.ok) throw new Error("Backend non-responsive");
+          if (!res.ok) {
+            let errMsg = "Backend error";
+            try {
+              const errData = await res.json();
+              errMsg = errData.detail || errMsg;
+            } catch (e) {}
+            throw new Error(errMsg);
+          }
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
           let buf = "";
@@ -392,9 +402,15 @@ document.addEventListener("DOMContentLoaded", () => {
             }
           }
         })
-        .catch(() => {
-          scoreCircle.textContent = "⚠️";
-          scoreSub.textContent = "Offline / Server non-responsive";
+        .catch((err) => {
+          const msg = (err && err.message) || "";
+          if (msg.toLowerCase().includes("resume") || msg.toLowerCase().includes("upload")) {
+            scoreCircle.textContent = "—";
+            scoreSub.textContent = "Upload or sync resume to score";
+          } else {
+            scoreCircle.textContent = "⚠️";
+            scoreSub.textContent = "Offline / Server non-responsive";
+          }
         });
     });
   }

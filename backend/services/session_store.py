@@ -24,9 +24,13 @@ _store_lock = threading.Lock()
 LLMClientLogQueue: queue.Queue = queue.Queue()
 
 
-def _safe_key(token: Optional[str]) -> str:
+def _safe_key(token: Any) -> str:
     """Sanitize a token or guest ID for use as a filesystem directory name."""
-    raw = token or "guest"
+    if token is None:
+        return "guest"
+    raw = str(token).strip()
+    if not raw:
+        return "guest"
     return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in raw)
 
 
