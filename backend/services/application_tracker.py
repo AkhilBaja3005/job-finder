@@ -15,7 +15,7 @@ import re
 import time
 import hashlib
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any, Dict, List, Tuple
 
 from services.auth import supabase_request, get_user_by_token
 
