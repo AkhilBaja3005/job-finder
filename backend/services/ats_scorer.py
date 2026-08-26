@@ -285,7 +285,7 @@ class ATSScoreResult:
     missing_skills: List[str]
     candidate_years: float
     required_years: int
-    score_breakdown: Dict[str, str]
+    score_breakdown: Dict[str, Any]
 
 def _flatten_resume_skills(raw_skills: Any) -> str:
     """Safely flattens dictionary or list skills into a single string for taxonomy extraction."""
@@ -923,7 +923,7 @@ def evaluate_master_resume(resume_data: dict, config: ScoringConfig = DEFAULT_SC
                 cleaned = re.sub(r'\s*```$', '', cleaned)
             parsed = json.loads(cleaned)
             if isinstance(parsed, list):
-                ai_suggestions = [str(x) for x in parsed if isinstance(x, str)]
+                ai_suggestions = [x for x in parsed if isinstance(x, str)]
     except Exception as e:
         # Silently degrade qualitative Gemini audit fallback to baseline rules
         pass

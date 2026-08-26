@@ -14,4 +14,7 @@ backend/tectonic
 backend/tectonic.tar.gz
 backend/user_data/
 bandit_report.txt
-extension/*
+.vscode/
+pyrightconfig.json
+*.swp
+

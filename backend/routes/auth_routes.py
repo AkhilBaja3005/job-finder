@@ -198,7 +198,8 @@ async def update_user_profile(request: ProfileUpdateRequest, authorization: Opti
                 supabase_request(f"user_resumes?user_id=eq.{user_id}", "PATCH", payload)
             else:
                 supabase_request("user_resumes", "POST", payload)
-            invalidate_token_cache(token)
+            if token:
+                invalidate_token_cache(token)
         except Exception as e:
             print(f"Supabase profile cloud sync error: {e}")
 

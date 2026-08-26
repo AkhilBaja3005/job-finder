@@ -28,7 +28,7 @@ def test_indeed_fallback_live():
             
             results = []
             for a_tag in g_soup.select("a.result__url"):
-                href = a_tag.get("href", "")
+                href = a_tag.get("href") or ""
                 snip_td = a_tag.find_parent("td")
                 title_text = ""
                 if snip_td:

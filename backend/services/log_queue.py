@@ -1,6 +1,7 @@
 import queue
 import logging
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 
 # India Standard Time (IST = UTC + 5:30)
 IST_TZ = timezone(timedelta(hours=5, minutes=30))
@@ -23,7 +24,7 @@ class LLMClientLogQueue:
         log_ist(msg)
 
     @classmethod
-    def get(cls, block: bool = True, timeout: float = None):
+    def get(cls, block: bool = True, timeout: Optional[float] = None):
         """Fetches a single message, blocking if necessary until one arrives."""
         return cls._queue.get(block=block, timeout=timeout)
         

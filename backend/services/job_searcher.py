@@ -117,7 +117,7 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
             title = title_elem.get_text(strip=True)
             company = company_elem.get_text(strip=True) if company_elem else "Unknown Company"
             loc = location_elem.get_text(strip=True) if location_elem else location
-            href = link_elem.get("href", "").split("?")[0] # Clean query trackers
+            href = str(link_elem.get("href", "")).split("?")[0] # Clean query trackers
             date_str = date_elem.get_text(strip=True) if date_elem else "Just posted"
             
             # Extract job ID from href URN
@@ -327,14 +327,17 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
             items = rss_soup.find_all("item")
             if items:
                 for item in items[:15]:
-                    raw_title = item.find("title").get_text().strip() if item.find("title") else "Indeed Job"
-                    link = item.find("link").get_text().strip() if item.find("link") else url
-                    pub_date = item.find("pubDate").get_text().strip() if item.find("pubDate") else "Recent"
+                    _title_tag = item.find("title")
+                    _link_tag = item.find("link")
+                    _date_tag = item.find("pubDate")
                     source_elem = item.find("source")
+                    raw_title = _title_tag.get_text().strip() if _title_tag else "Indeed Job"
+                    link = _link_tag.get_text().strip() if _link_tag else url
+                    pub_date = _date_tag.get_text().strip() if _date_tag else "Recent"
                     company_name = source_elem.get_text().strip() if source_elem else "Indeed Employer"
                     
                     jk_match = re.search(r'[?&]jk=([a-f0-9]{16})', link)
-                    j_id = jk_match.group(1) if jk_match else None
+                    j_id = jk_match.group(1) if jk_match else link.split("/")[-1] or "unknown"
 
                     results.append(JobSearchResult(
                         title=raw_title,
@@ -445,7 +448,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
                 url=href,
                 platform="Indeed",
                 post_date_raw=date_str,
-                job_id=jk or href
+                job_id=str(jk) if jk else href
             ))
             
     except Exception as e:

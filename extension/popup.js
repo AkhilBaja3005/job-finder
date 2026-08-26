@@ -30,6 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Custom JD Paste & Edit Elements
   const linkEditJd = document.getElementById("link-edit-jd");
+  const btnRefreshTab = document.getElementById("btn-refresh-tab");
   const jdMissingAlert = document.getElementById("jd-missing-alert");
   const btnToggleCustomJd = document.getElementById("btn-toggle-custom-jd");
   const customJdBox = document.getElementById("custom-jd-box");
@@ -297,10 +298,31 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ----------------------------------------------------
+  // Robust Active Tab Query Helper for Side Panel & Popup
+  // ----------------------------------------------------
+  function getActiveTab(callback) {
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
+      if (tabs && tabs[0] && tabs[0].url) {
+        callback(tabs[0]);
+        return;
+      }
+      chrome.tabs.query({ active: true, currentWindow: true }, (curTabs) => {
+        if (curTabs && curTabs[0] && curTabs[0].url) {
+          callback(curTabs[0]);
+          return;
+        }
+        chrome.tabs.query({ active: true }, (allTabs) => {
+          callback(allTabs && allTabs[0] ? allTabs[0] : null);
+        });
+      });
+    });
+  }
+
+  // ----------------------------------------------------
   // Load Storage Initialization
   // ----------------------------------------------------
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const activeTabUrl = (tabs && tabs[0]?.url) || "";
+  getActiveTab((activeTab) => {
+    const activeTabUrl = activeTab?.url || "";
     const cleanActiveUrl = getCleanUrl(activeTabUrl);
 
     chrome.storage.local.get([
@@ -572,9 +594,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function scanActiveTab() {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (!tabs || !tabs[0]) return;
-      const activeTab = tabs[0];
+    getActiveTab((activeTab) => {
+      if (!activeTab) {
+        handleJobDetails(null);
+        return;
+      }
       const tabUrl = activeTab.url || "";
       if (isRestrictedUrl(tabUrl)) {
         handleJobDetails(null);
@@ -713,13 +737,13 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnFill) {
     btnFill.addEventListener("click", () => {
       btnFill.textContent = "⚡ Filling Active Form...";
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (!tabs || !tabs[0]?.id) {
+      getActiveTab((activeTab) => {
+        if (!activeTab || !activeTab.id) {
           btnFill.textContent = "⚡ Fill Active Application";
           return;
         }
-        const activeTabId = tabs[0].id;
-        const url = tabs[0].url || "";
+        const activeTabId = activeTab.id;
+        const url = activeTab.url || "";
         if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) {
           showToast("⚠️ Open a job application page first!");
           btnFill.textContent = "⚡ Fill Active Application";
@@ -1073,4 +1097,29 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
   }
+
+  if (btnRefreshTab) {
+    btnRefreshTab.addEventListener("click", (e) => {
+      e.preventDefault();
+      showToast("🔄 Rescanning active tab...");
+      scanActiveTab();
+    });
+  }
+
+  // ----------------------------------------------------
+  // Live Active Tab Listeners for Persistent Side Panel
+  // ----------------------------------------------------
+  if (chrome.tabs && chrome.tabs.onActivated) {
+    chrome.tabs.onActivated.addListener(() => {
+      scanActiveTab();
+    });
+  }
+  if (chrome.tabs && chrome.tabs.onUpdated) {
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+      if (changeInfo.status === "complete" || (changeInfo.url && !isRestrictedUrl(changeInfo.url))) {
+        scanActiveTab();
+      }
+    });
+  }
 });
+

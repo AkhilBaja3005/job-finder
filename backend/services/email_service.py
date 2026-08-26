@@ -6,7 +6,7 @@ import urllib.parse
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 def send_notification_email(
     to_email: str,
@@ -93,7 +93,7 @@ def send_notification_email(
                     else:
                         from_addr = "onboarding@resend.dev"
 
-                    payload = {
+                    payload: Dict[str, Any] = {
                         "from": from_addr,
                         "to": [to_email],
                         "subject": subject,
@@ -181,7 +181,7 @@ def send_notification_email(
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = email_from
+        msg["From"] = email_from or smtp_user or ""
         msg["To"] = to_email
 
         msg.attach(MIMEText(text_body, "plain"))
@@ -200,19 +200,19 @@ def send_notification_email(
         if smtp_port == 465:
             with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15) as server:
                 server.login(smtp_user, smtp_pass)
-                server.sendmail(email_from, [to_email], msg.as_string())
+                server.sendmail(email_from or smtp_user or "", [to_email], msg.as_string())
         else:
             try:
                 with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
                     server.starttls()
                     server.login(smtp_user, smtp_pass)
-                    server.sendmail(email_from, [to_email], msg.as_string())
+                    server.sendmail(email_from or smtp_user or "", [to_email], msg.as_string())
             except (OSError, smtplib.SMTPException) as e:
                 # If Port 587 fails (common outbound block on cloud platforms), try Port 465 SSL fallback
                 print(f"[Mailer] Port {smtp_port} failed ({e}). Trying Port 465 SSL fallback...")
                 with smtplib.SMTP_SSL(smtp_host, 465, timeout=15) as server:
                     server.login(smtp_user, smtp_pass)
-                    server.sendmail(email_from, [to_email], msg.as_string())
+                    server.sendmail(email_from or smtp_user or "", [to_email], msg.as_string())
 
         print("[Mailer] Sent successfully via SMTP.")
         return True

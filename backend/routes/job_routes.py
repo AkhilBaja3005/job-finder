@@ -201,7 +201,7 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                 try:
                     async for chunk in find_matching_jobs(
                         resume_data=session_resume_data,
-                        location=request.location,
+                        location=request.location or "",
                         keywords=request.keywords,
                         timeframe=request.timeframe or "48h",
                         custom_api_key=active_api_key,
@@ -344,6 +344,9 @@ async def apply(request: ApplyRequest, http_request: Request, authorization: Opt
         if not session_resume_path or not os.path.exists(session_resume_path):
             raise HTTPException(status_code=400, detail="No resume available to upload.")
         pdf_path = session_resume_path
+
+    if not session_resume_data:
+        raise HTTPException(status_code=400, detail="Please upload a resume first or sync your profile from the web app.")
 
     db_api_key = None
     if token:

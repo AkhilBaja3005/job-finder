@@ -118,14 +118,16 @@ def record_application(token: Optional[str], entry: dict) -> None:
         print("[application_tracker] Supabase write returned no rows, falling back to local file")
 
     # Local snapshot persistence
-    if record.get("pdf_path") and os.path.exists(record.get("pdf_path")):
+    pdf_p = record.get("pdf_path")
+    if pdf_p and isinstance(pdf_p, str) and os.path.exists(pdf_p):
         try:
             snapshot_dir = os.path.join(OUTPUT_DIR, _safe_key(token), "snapshots")
             os.makedirs(snapshot_dir, exist_ok=True)
-            app_id = f"{int(record['timestamp'])}_{hashlib.md5(record.get('job_title', '').encode('utf-8')).hexdigest()[:6]}"
+            job_t = str(record.get("job_title") or "")
+            app_id = f"{int(record['timestamp'])}_{hashlib.md5(job_t.encode('utf-8')).hexdigest()[:6]}"
             snap_pdf = os.path.join(snapshot_dir, f"tailored_{app_id}.pdf")
             import shutil
-            shutil.copy2(record["pdf_path"], snap_pdf)
+            shutil.copy2(pdf_p, snap_pdf)
             record["snapshot_pdf_path"] = snap_pdf
         except Exception as snap_err:
             print(f"[application_tracker] Warning: Could not create PDF snapshot: {snap_err}")

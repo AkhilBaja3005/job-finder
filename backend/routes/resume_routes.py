@@ -310,7 +310,13 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
 @router.post("/open_in_overleaf")
 async def open_in_overleaf(request: OverleafRequest):
     try:
-        url = await asyncio.to_thread(upload_zip_to_tmpfiles, request.latex_code, request.candidate_name, request.job_title, request.company)
+        url = await asyncio.to_thread(
+            upload_zip_to_tmpfiles,
+            request.latex_code,
+            request.candidate_name or "",
+            request.job_title or "",
+            request.company or ""
+        )
         return {"url": url}
     except Exception as e:
         traceback.print_exc()
@@ -323,8 +329,14 @@ async def open_original_in_overleaf(request: OriginalOverleafRequest):
         session = get_session_data(None)
         master_path = session.get("path") if session else None
         latex_code = _build_original_latex(request.resume_data, master_path)
-        candidate_name = request.resume_data.get("name", "")
-        url = await asyncio.to_thread(upload_zip_to_tmpfiles, latex_code, candidate_name, request.job_title, request.company)
+        candidate_name = request.resume_data.get("name", "") or ""
+        url = await asyncio.to_thread(
+            upload_zip_to_tmpfiles,
+            latex_code,
+            candidate_name,
+            request.job_title or "",
+            request.company or ""
+        )
         return {"url": url}
     except Exception as e:
         traceback.print_exc()
@@ -525,7 +537,7 @@ async def render_html_resume_endpoint(authorization: Optional[str] = Header(None
     session = get_session_data(token)
     session_resume = session.get("data") or {}
 
-    from utils.html_resume_renderer import render_html_resume
+    from services.html_resume_renderer import render_html_resume
     html_content = render_html_resume(session_resume)
     return HTMLResponse(content=html_content, status_code=200)
 

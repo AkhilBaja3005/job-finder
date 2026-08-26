@@ -9,7 +9,7 @@ import urllib.request
 from google import genai
 # pyrefly: ignore [missing-import]
 from google.genai import types
-from typing import Optional, Callable, Dict
+from typing import Optional, Callable, Dict, Any, List
 
 from utils.ssl_utils import SSL_CONTEXT as _SSL_CONTEXT
 
@@ -54,7 +54,7 @@ GROQ_FALLBACK_MODELS = [
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper & Cleanup Functions
 # ─────────────────────────────────────────────────────────────────────────────
-def clean_schema(schema: dict, inside_properties: bool = False) -> dict:
+def clean_schema(schema: dict, inside_properties: bool = False) -> Any:
     """
     Recursively cleans a JSON schema for Gemini/LLM engine compatibility.
     """
@@ -227,7 +227,7 @@ def _generate_with_model_list(
     if _nvidia_configured():
         try:
             # Internal execution now tests validation natively before returning text
-            return _execute_nvidia_nim_fallback(prompt, response_schema, nvidia_api_key, on_log)
+            return _execute_nvidia_nim_fallback(prompt, response_schema, nvidia_api_key or "", on_log)
         except Exception as nv_err:
             print(f"[LLM Client] Stage 1 (NVIDIA NIM) failed or hit validation error: {str(nv_err)[:120]}. Falling back to Stage 2...")
             if on_log:
@@ -249,7 +249,7 @@ def _generate_with_model_list(
         raise ValueError("Pipeline dropped to final floor, but GEMINI_API_KEY environment variable is missing.")
 
     client = get_gemini_client(gemini_key)
-    config_args = {
+    config_args: Any = {
         "temperature": 0.1,
         "automatic_function_calling": types.AutomaticFunctionCallingConfig(disable=True)
     }
@@ -310,7 +310,7 @@ def _execute_nvidia_nim_fallback(prompt: str, response_schema, api_key: str, on_
                     "Accept": "application/json",
                 }
                 messages = [{"role": "user", "content": prompt}]
-                payload = {
+                payload: Dict[str, Any] = {
                     "model": model_name,
                     "messages": messages,
                     "temperature": 0.1,
@@ -503,10 +503,20 @@ def _execute_anthropic(prompt: str, response_schema, api_key: str) -> str:
         system_prompt += f"\nReturn ONLY a raw JSON object string that complies strictly with this JSON schema:\n{schema_json}"
         messages[0]["content"] += "\nEnsure your response is valid JSON and starts with '{' and ends with '}'."
 
-    completion = anthropic_client.messages.create(
-        model=claude_model, max_tokens=4096, temperature=0.1, system=system_prompt, messages=messages
-    )
-    return completion.content[0].text
+    call_kwargs: Any = {
+        "model": claude_model,
+        "max_tokens": 4096,
+        "temperature": 0.1,
+        "system": system_prompt,
+        "messages": messages,
+    }
+    completion: Any = anthropic_client.messages.create(**call_kwargs)
+    c0 = completion.content[0]
+    try:
+        from anthropic.types import TextBlock  # type: ignore[import]
+        return c0.text if isinstance(c0, TextBlock) else str(c0)
+    except ImportError:
+        return c0.text if hasattr(c0, 'text') else str(c0)  # type: ignore[union-attr]
 
 
 def _execute_groq(prompt: str, response_schema, api_key: str) -> str:
@@ -518,14 +528,14 @@ def _execute_groq(prompt: str, response_schema, api_key: str) -> str:
         for retry_attempt in range(3):
             try:
                 messages = [{"role": "user", "content": prompt}]
-                payload_args = {"model": groq_model, "messages": messages, "temperature": 0.1}
+                payload_args: Any = {"model": groq_model, "messages": messages, "temperature": 0.1}
                 if response_schema is not None:
                     payload_args["response_format"] = {"type": "json_object"}
                     schema_json = json.dumps(clean_schema(response_schema.model_json_schema()), indent=2)
                     messages[0]["content"] += f"\n\nCRITICAL: You must return a JSON object that adheres strictly to this JSON schema:\n{schema_json}"
 
-                completion = groq_client.chat.completions.create(**payload_args)
-                return completion.choices[0].message.content
+                completion: Any = groq_client.chat.completions.create(**payload_args)
+                return str(completion.choices[0].message.content or "")
             except Exception as model_err:
                 err_str = str(model_err).lower()
                 if any(x in err_str for x in ["429", "rate_limit", "quota", "limit exceeded"]):
@@ -554,7 +564,7 @@ def _execute_openrouter(prompt: str, model_list: list, response_schema, api_key:
                 "HTTP-Referer": "https://github.com/AkhilBaja3005/job-finder",
                 "X-Title": "Job Finder Resume Tailor"
             }
-            payload = {"model": or_model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1}
+            payload: Any = {"model": or_model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1}
             if response_schema is not None:
                 payload["response_format"] = {"type": "json_object", "schema": clean_schema(response_schema.model_json_schema())}
 

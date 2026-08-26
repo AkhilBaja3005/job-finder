@@ -6,7 +6,7 @@ Extracted from main.py for separation of concerns.
 
 import re
 import os
-from typing import Optional, List
+from typing import Optional, List, Dict, Set, Any
 
 
 UPLOAD_DIR = "./uploads"
@@ -34,6 +34,23 @@ def extract_latex_command(latex_code: str, cmd_name: str) -> Optional[str]:
                 if brace_count == 0:
                     return latex_code[idx: i + 1]
     return None
+
+
+def categorize_skill(skill: str) -> str:
+    s = skill.strip().lower()
+    languages = {"python", "sql", "c++", "c", "java", "javascript", "typescript", "golang", "go", "rust", "c#", "scala", "r", "bash", "shell", "ruby", "php", "swift", "kotlin", "html", "css"}
+    if s in languages or any(s == f"{l} programming" for l in languages):
+        return "Languages"
+    
+    data_platforms = {"spark", "pyspark", "hadoop", "kafka", "postgresql", "postgres", "mongodb", "redis", "snowflake", "bigquery", "databricks", "azure", "aws", "gcp", "cloudera", "sas", "mysql", "elasticsearch", "cassandra", "dynamodb", "airflow"}
+    if any(k in s for k in data_platforms):
+        return "Data & Platforms"
+
+    software_infra = {"docker", "kubernetes", "k8s", "rancher", "jenkins", "rabbitmq", "git", "ci/cd", "cicd", "microservices", "linux", "distributed systems", "unit testing", "ast", "static analysis", "rapid prototyping", "agile", "scrum", "system design", "grpc", "rest", "graphql"}
+    if any(k in s for k in software_infra):
+        return "Software & Infrastructure"
+    
+    return "AI/ML & GenAI"
 
 
 def apply_latex_hotfix(
@@ -307,13 +324,16 @@ def apply_latex_hotfix(
         fixed = re.sub(pat, r'\\textbf{\1}', fixed)
 
     # ── Auto-bold metrics, percentages, currencies, dynamic companies & schools ──
-    def _bold_metrics_in_body(match):
-        block = match.group(0)
+    def _bold_metrics_in_body(match_or_text):
+        if hasattr(match_or_text, "group"):
+            block = match_or_text.group(0)
+        else:
+            block = str(match_or_text)
         # Avoid bolding inside command arguments or environments that should not be touched
         parts = re.split(r'(\\textbf\{[^{}]*\}|\\href\{[^{}]*\}\{[^{}]*\}|\\begin\{rSection\}\{Technical\s+Skills\}.*?\\end\{rSection\})', block, flags=re.DOTALL)
         
         # Dynamically discover candidate employers & institutions from the resume itself
-        dynamic_entities = set()
+        dynamic_entities: Set[str] = set()
         if master_latex:
             # Extract employer names from {\bf Company} \hfill
             for emp in re.findall(r'\{\\bf\s+([^{}\\]+)\}\s*\\mybar|\{\\bf\s+([^{}\\]+)\}\s*\\hfill', master_latex):
@@ -334,30 +354,15 @@ def apply_latex_hotfix(
                 # Bold currencies and scale amounts: £30M+, $10M+, 2M+, 1,000+, 200+, 5,000+
                 parts[i] = re.sub(r'(?<!\\textbf\{)(?<!\w)([£\$]\d+(?:\.\d+)?[MKB]?\+?|\b\d+(?:,\d{3})+\+?|\b\d+[MKB]\+?)(?!\w)(?!\})', r'\\textbf{\1}', parts[i])
                 # Bold dynamically extracted candidate employers & schools
-                for entity in sorted(dynamic_entities, key=len, reverse=True):
-                    pat = r'(?<!\\textbf\{)(?<!\w)(' + re.escape(entity) + r')(?!\w)(?!\})'
+                for entity_str in sorted(list(dynamic_entities), key=lambda x: len(x), reverse=True):
+                    pat = f"(?<!\\\\textbf\\{{)(?<!\\w)({re.escape(entity_str)})(?!\\w)(?!\\}})"
                     parts[i] = re.sub(pat, r'\\textbf{\1}', parts[i])
         return "".join(parts)
 
     doc_start = fixed.find('\\begin{document}')
     if doc_start != -1:
-        fixed = fixed[:doc_start] + _bold_metrics_in_body(re.search(r'\\begin\{document\}.*', fixed, re.DOTALL))
-
-    def categorize_skill(skill: str) -> str:
-        s = skill.strip().lower()
-        languages = {"python", "sql", "c++", "c", "java", "javascript", "typescript", "golang", "go", "rust", "c#", "scala", "r", "bash", "shell", "ruby", "php", "swift", "kotlin", "html", "css"}
-        if s in languages or any(s == f"{l} programming" for l in languages):
-            return "Languages"
-        
-        data_platforms = {"spark", "pyspark", "hadoop", "kafka", "postgresql", "postgres", "mongodb", "redis", "snowflake", "bigquery", "databricks", "azure", "aws", "gcp", "cloudera", "sas", "mysql", "elasticsearch", "cassandra", "dynamodb", "airflow"}
-        if any(k in s for k in data_platforms):
-            return "Data & Platforms"
-
-        software_infra = {"docker", "kubernetes", "k8s", "rancher", "jenkins", "rabbitmq", "git", "ci/cd", "cicd", "microservices", "linux", "distributed systems", "unit testing", "ast", "static analysis", "rapid prototyping", "agile", "scrum", "system design", "grpc", "rest", "graphql"}
-        if any(k in s for k in software_infra):
-            return "Software & Infrastructure"
-        
-        return "AI/ML & GenAI"
+        _body_match = re.search(r'\\begin\{document\}.*', fixed, re.DOTALL)
+        fixed = fixed[:doc_start] + _bold_metrics_in_body(_body_match.group(0) if _body_match else fixed[doc_start:])
 
     # ── Inject user-selected skills directly into Technical Skills section (bypassing LLM review) ──
     if user_selected_skills and len(user_selected_skills) > 0:
@@ -437,7 +442,7 @@ def _format_bullet_bolding(text: str, dynamic_skills: Optional[List[str]] = None
             t = f"\\textbf{{{prefix.strip()}:}} {rest.strip()}"
 
     # Build dynamic tech keywords from candidate's skills + common domain frameworks
-    keywords_to_bold = set()
+    keywords_to_bold: Set[str] = set()
     if dynamic_skills:
         for s in dynamic_skills:
             if len(s.strip()) > 1:
@@ -448,8 +453,8 @@ def _format_bullet_bolding(text: str, dynamic_skills: Optional[List[str]] = None
     for i in range(len(parts)):
         if not parts[i].startswith('\\textbf{'):
             # Bold dynamic skills extracted from candidate profile
-            for kw in sorted(keywords_to_bold, key=len, reverse=True):
-                pattern = r'(?<!\\textbf\{)(?<!\w)(' + re.escape(kw) + r')(?!\w)(?!\})'
+            for kw_str in sorted(list(keywords_to_bold), key=lambda x: len(x), reverse=True):
+                pattern = f"(?<!\\\\textbf\\{{)(?<!\\w)({re.escape(kw_str)})(?!\\w)(?!\\}})"
                 parts[i] = re.sub(pattern, r'\\textbf{\1}', parts[i])
     t = "".join(parts)
 
@@ -514,6 +519,8 @@ def generate_latex_from_json(
     latex.append("\\renewcommand{\\labelitemii}{$\\bullet$}")
     latex.append("\\frenchspacing")
 
+    name_block: Optional[str] = None
+    address_block: Optional[str] = None
     if master_latex:
         name_block    = extract_latex_command(master_latex, "\\name")
         address_block = extract_latex_command(master_latex, "\\address")

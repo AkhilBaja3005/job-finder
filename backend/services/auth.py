@@ -72,7 +72,7 @@ def get_supabase_client():
     key = os.getenv("SUPABASE_KEY", "")
     return url, key
 
-def supabase_request(path: str, method: str = "GET", data: dict = None) -> list:
+def supabase_request(path: str, method: str = "GET", data: Optional[Dict[str, Any]] = None) -> list:
     url_base, key = get_supabase_client()
     if not url_base or not key:
         print("WARNING: Supabase URL or Key not set in environment.")
@@ -98,11 +98,6 @@ def supabase_request(path: str, method: str = "GET", data: dict = None) -> list:
     except Exception as e:
         print(f"Supabase request error on {method} {path}: {e}")
         return []
-
-async def async_supabase_request(path: str, method: str = "GET", data: dict = None) -> list:
-    """Non-blocking wrapper: runs supabase_request in a thread so it doesn't
-    block the asyncio event loop during I/O-heavy Supabase calls."""
-    return await asyncio.to_thread(supabase_request, path, method, data)
 
 def create_or_get_user(email: str, picture_url: Optional[str] = None) -> dict:
     encoded_email = urllib.parse.quote(email)
@@ -218,7 +213,7 @@ def invalidate_token_cache(token: str):
 def update_user_api_key(user_id, api_key: str):
     supabase_request(f"users?id=eq.{user_id}", "PATCH", {"gemini_api_key": api_key})
 
-def update_user_resume_data(user_id, resume_data: dict, master_latex: str = None):
+def update_user_resume_data(user_id, resume_data: dict, master_latex: Optional[str] = None):
     payload = {"resume_data": json.dumps(resume_data)}
     if master_latex is not None:
         payload["master_latex"] = master_latex

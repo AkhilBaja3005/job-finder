@@ -4,7 +4,7 @@ Generates personalized recruiter outreach messages using LLM.
 """
 
 import json
-from typing import Optional, Dict
+from typing import Optional, Dict, Callable
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 
@@ -28,7 +28,7 @@ def generate_outreach_message(
     recruiter_name: Optional[str],
     company_name: str,
     custom_api_key: Optional[str] = None,
-    on_log: Optional[callable] = None
+    on_log: Optional[Callable] = None
 ) -> OutreachMessage:
     """
     Generate personalized outreach message sections using LLM.

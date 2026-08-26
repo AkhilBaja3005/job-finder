@@ -55,7 +55,8 @@ def _parse_recruiter_html(html: str) -> Dict[str, Optional[str]]:
         if name_tag:
             recruiter_name = _clean_text(name_tag.get_text()) or None
         if link_tag:
-            recruiter_profile_url = link_tag.get('href')
+            _href_val = link_tag.get('href')
+            recruiter_profile_url = str(_href_val) if _href_val is not None else None
 
     # 2. Check for "Job poster" / "Hiring team" / "Meet the hiring team" text labels
     if not recruiter_name:
@@ -75,7 +76,7 @@ def _parse_recruiter_html(html: str) -> Dict[str, Optional[str]]:
                 candidates = container.find_all('a', href=re.compile(r'linkedin\.com/in/'))
                 if candidates:
                     best = min(candidates, key=lambda a: len(_clean_text(a.get_text())))
-                    recruiter_profile_url = recruiter_profile_url or best.get('href')
+                    recruiter_profile_url = recruiter_profile_url or str(best.get('href') or "")
                     recruiter_name = _clean_text(best.get_text()) or None
                     break
 
@@ -91,12 +92,12 @@ def _parse_recruiter_html(html: str) -> Dict[str, Optional[str]]:
             recruiter_name = _clean_text(recruiter_match.group(1))
         elif recruiter_profile_url:
             # Fallback 2: Extract name from profile link anchor tag or URL path slug
-            profile_anchor = soup.find('a', href=re.compile(re.escape(recruiter_profile_url)))
+            profile_anchor = soup.find('a', href=re.compile(re.escape(str(recruiter_profile_url))))
             if profile_anchor and _clean_text(profile_anchor.get_text()):
                 recruiter_name = _clean_text(profile_anchor.get_text())
             else:
                 # Extract slug e.g. "owen-thomas-12345" -> "Owen Thomas"
-                slug_match = re.search(r'/in/([a-zA-Z0-9-]+)', recruiter_profile_url)
+                slug_match = re.search(r'/in/([a-zA-Z0-9-]+)', str(recruiter_profile_url))
                 if slug_match:
                     slug = slug_match.group(1)
                     # Strip numerical ID suffix if present
@@ -268,7 +269,7 @@ def extract_recruiter_from_indeed(job_url: str) -> Dict[str, Optional[str]]:
             "company_name": None,
             "platform": "indeed",
             "job_key": job_key,
-            "requires_scraping": True
+            "requires_scraping": "true"
         }
     except Exception as e:
         print(f"Error extracting Indeed recruiter info: {e}")

@@ -3,6 +3,7 @@ import sys
 import shutil
 import subprocess
 import time
+from typing import Any, Dict, List
 
 # Ensure backend root is in sys.path
 backend_dir = os.path.abspath(os.path.dirname(__file__))
@@ -120,7 +121,8 @@ B.Tech in Engineering Science \hfill {\em CPI: 8.04}
     # Check 2: Bold Text Verification
     print(f"\n   🔦 [CHECK 2: BOLD CHARACTERS]")
     page = doc[0]
-    blocks = page.get_text("dict")["blocks"]
+    page_dict: Any = page.get_text("dict")
+    blocks = page_dict.get("blocks", []) if isinstance(page_dict, dict) else []
     
     bold_spans = []
     for block in blocks:

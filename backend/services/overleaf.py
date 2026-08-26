@@ -12,7 +12,7 @@ def _sanitize_filename_part(part: str) -> str:
     """Sanitize string components for safe inclusion in project titles."""
     if not part:
         return ""
-    cleaned = re.sub(r'[\r\n\t]+', ' ', str(part)).strip()
+    cleaned = re.sub(r'[\r\n\t]+', ' ', part).strip()
     cleaned = re.sub(r'[\\/:*?"<>|]+', '', cleaned)
     return cleaned.strip()
 

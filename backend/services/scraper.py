@@ -3,7 +3,7 @@ import asyncio
 # pyrefly: ignore [missing-import]
 from playwright.async_api import async_playwright
 # pyrefly: ignore [missing-import]
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 import re
 
 # ── Module-level shared Playwright browser ─────────────────────────────────
@@ -107,11 +107,11 @@ def oc_distill_html(html_str: str, base_url: str = "") -> dict:
 
     og_title = soup.find("meta", property="og:title") or soup.find("meta", attrs={"name": "twitter:title"})
     if og_title and og_title.get("content"):
-        title = og_title["content"].split(" | ")[0].split(" - ")[0].strip()
+        title = str(og_title["content"]).split(" | ")[0].split(" - ")[0].strip()
 
     og_site = soup.find("meta", property="og:site_name")
     if og_site and og_site.get("content"):
-        company = og_site["content"].strip()
+        company = str(og_site["content"]).strip()
 
     # 2. Prune junk tags
     for junk in soup(["script", "style", "svg", "noscript", "iframe", "header", "footer", "nav", "meta", "link"]):
@@ -160,6 +160,8 @@ def oc_distill_html(html_str: str, base_url: str = "") -> dict:
     # 4. Convert DOM to clean Markdown
     lines = []
     for elem in main_elem.descendants:
+        if not isinstance(elem, Tag) or elem.name is None:
+            continue
         if elem.name in ["h1", "h2", "h3", "h4", "h5", "h6"]:
             lvl = int(elem.name[1])
             txt = elem.get_text().strip()
@@ -460,6 +462,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
         title = "Unknown Role"
         extracted_company = ""
         soup = None
+        html = ""
 
         # Execute up to 3 retry attempts
         for attempt in range(3):
@@ -542,7 +545,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                     cmp_anchor = soup.select_one("a[href*='/cmp/']")
                     if cmp_anchor:
                         cmp_href = cmp_anchor.get("href", "")
-                        cmp_match = re.search(r'/cmp/([a-zA-Z0-9%_\-]+)', cmp_href)
+                        cmp_match = re.search(r'/cmp/([a-zA-Z0-9%_\-]+)', str(cmp_href))
                         if cmp_match:
                             extracted_cmp = cmp_match.group(1).replace('+', ' ').replace('-', ' ').title()
                             if extracted_cmp:

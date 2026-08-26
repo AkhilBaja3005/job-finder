@@ -17,7 +17,7 @@ async def test_indeed_url():
     print(f"Testing scraper on URL: {test_url}")
     scraped = await scrape_job_description(test_url)
     print("Title:", scraped.get("title"))
-    print("Company:", _extract_company_from_jd(scraped.get("description"), test_url))
+    print("Company:", _extract_company_from_jd(scraped.get("description") or "", test_url))
     print("Description length:", len(scraped.get("description", "")))
 
 if __name__ == "__main__":

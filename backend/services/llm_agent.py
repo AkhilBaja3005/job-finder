@@ -113,7 +113,7 @@ def _parse_llm_json(raw_text: str, label: str = "LLM JSON") -> dict:
             raise ValueError(f"{label}: could not locate a JSON object in the response: {text[:300]}")
         return json.loads(match.group(0))
 
-def _sanitize_suggestions(suggestions) -> dict:
+def _sanitize_suggestions(suggestions) -> Any:
     """
     Escape LaTeX-unsafe characters in LLM-generated suggestion strings.
     Accepts either a SectionUpdate object or a plain dict.

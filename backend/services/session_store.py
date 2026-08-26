@@ -107,21 +107,22 @@ def get_session_data(token: Optional[str]) -> dict:
             user = get_user_by_token(token)
             if user:
                 user_id = user.get("id")
-                from services.auth import supabase_request
-                res = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
-                if res and len(res) > 0:
-                    raw_rdata = res[0].get("resume_data", {})
-                    resume_dict = json.loads(raw_rdata) if isinstance(raw_rdata, str) else (raw_rdata or {})
-                    path = ""
-                    master_latex = res[0].get("master_latex", "")
-                    if master_latex:
-                        user_up_dir, _ = _get_user_storage_dirs(user_id)
-                        path = os.path.join(user_up_dir, f"{user_id}_master.tex")
-                        with open(path, "w", encoding="utf-8") as f:
-                            f.write(master_latex)
-                    with _store_lock:
-                        _session_store[token] = {"data": resume_dict, "path": path}
-                    return {"data": resume_dict, "path": path}
+                if user_id:
+                    from services.auth import supabase_request
+                    res = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
+                    if res and len(res) > 0:
+                        raw_rdata = res[0].get("resume_data", {})
+                        resume_dict = json.loads(raw_rdata) if isinstance(raw_rdata, str) else (raw_rdata or {})
+                        path = ""
+                        master_latex = res[0].get("master_latex", "")
+                        if master_latex:
+                            user_up_dir, _ = _get_user_storage_dirs(str(user_id))
+                            path = os.path.join(user_up_dir, f"{user_id}_master.tex")
+                            with open(path, "w", encoding="utf-8") as f:
+                                f.write(master_latex)
+                        with _store_lock:
+                            _session_store[token] = {"data": resume_dict, "path": path}
+                        return {"data": resume_dict, "path": path}
         except Exception as e:
             print(f"Failed to load resume from Supabase user session: {e}")
 

@@ -137,9 +137,9 @@ def categorize_skills_with_llm(raw_skills: Union[str, List[str]]) -> Dict[str, L
     2. LLM Fallback Call for remaining unknown/unclassified skills with temperature=0.
     """
     if isinstance(raw_skills, list):
-        skill_items = [str(s).strip() for s in raw_skills if str(s).strip()]
+        skill_items = [s.strip() for s in raw_skills if s and s.strip()]
     else:
-        skill_items = [s.strip() for s in str(raw_skills).split(",") if s.strip()]
+        skill_items = [s.strip() for s in raw_skills.split(",") if s.strip()]
 
     result_categories: Dict[str, List[str]] = {}
     unknown_skills: List[str] = []

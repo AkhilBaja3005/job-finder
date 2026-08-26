@@ -194,7 +194,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
     # Cache hit check
     if request.job_description and not request.force_tailoring:
-        cached = get_cached_analysis(token, request.job_title, request.job_description)
+        cached = get_cached_analysis(token, request.job_title or "", request.job_description)
         if cached:
             if request.skip_tailoring:
                 cached = dict(cached)
@@ -202,10 +202,10 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             if request.skip_tailoring or cached.get("latex_code"):
                 async def cached_event_generator():
                     yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
-                    company_name = await asyncio.to_thread(_extract_company_from_jd, request.job_description, request.job_url)
+                    company_name = await asyncio.to_thread(_extract_company_from_jd, request.job_description or "", request.job_url)
                     yield json.dumps({
                         "type": "result",
-                        "job_title": request.job_title,
+                        "job_title": request.job_title or "",
                         "job_description": request.job_description,
                         "company": company_name,
                         "analysis": cached
@@ -273,8 +273,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             fit_task = asyncio.create_task(
                 analyze_job_fit(
                     session_resume_data,
-                    job_title,
-                    jd_text,
+                    job_title or "",
+                    jd_text or "",
                     master_latex if not request.skip_tailoring else None,
                     recruiter_name,
                     active_api_key,
@@ -296,17 +296,17 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             if request.skip_tailoring:
                 dumped = analysis.model_dump()
-                company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
+                company_name = await asyncio.to_thread(_extract_company_from_jd, jd_text or "", request.job_url)
                 yield json.dumps({
                     "type": "result",
                     "percent": 100,
                     "fit_score": dumped.get("match_analysis", {}).get("overall_score"),
-                    "job_title": job_title,
-                    "job_description": jd_text,
+                    "job_title": job_title or "",
+                    "job_description": jd_text or "",
                     "company": company_name,
                     "analysis": dumped
                 }) + "\n"
-                set_cached_analysis(token, job_title, jd_text, dumped)
+                set_cached_analysis(token, job_title or "", jd_text or "", dumped)
                 return
 
             yield json.dumps({"type": "log", "percent": 85, "message": "⚙️ Compiling tailored LaTeX resume to PDF..."}) + "\n"
@@ -348,11 +348,11 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             ctx.log_step("compile_pdf", time.time() - t0)
 
             candidate_name = session_resume_data.get("name", "") if isinstance(session_resume_data, dict) else ""
-            extracted_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company']) else await asyncio.to_thread(_extract_company_from_jd, jd_text, request.job_url)
+            extracted_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company']) else await asyncio.to_thread(_extract_company_from_jd, jd_text or "", request.job_url)
 
             overleaf_url = None
             try:
-                overleaf_url = await asyncio.to_thread(upload_zip_to_tmpfiles, final_latex, candidate_name, job_title, extracted_company)
+                overleaf_url = await asyncio.to_thread(upload_zip_to_tmpfiles, final_latex, candidate_name, job_title or "", extracted_company or "")
             except Exception as e:
                 print(f"[analyze_job] Overleaf upload warning: {e}")
 
@@ -433,14 +433,14 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             dumped["email_sent"] = email_sent
             dumped["dest_email"] = dest_email
 
-            set_cached_analysis(token, job_title, jd_text, dumped)
+            set_cached_analysis(token, job_title or "", jd_text or "", dumped)
 
             yield json.dumps({
                 "type": "result",
                 "percent": 100,
                 "fit_score": dumped.get("match_analysis", {}).get("overall_score"),
-                "job_title": job_title,
-                "job_description": jd_text,
+                "job_title": job_title or "",
+                "job_description": jd_text or "",
                 "company": extracted_company,
                 "analysis": dumped,
                 "overleaf_url": overleaf_url,
@@ -465,12 +465,15 @@ async def generate_tailored_resume(request: TailorResumeRequest, authorization: 
         raise HTTPException(status_code=400, detail="Please upload a resume first.")
 
     try:
+        from utils.latex_utils import generate_latex_from_json
+        master_latex = session.get("master_latex") or (generate_latex_from_json(session_resume_data) if session_resume_data else "")
         raw_tailored_latex = await asyncio.to_thread(
             tailor_resume,
-            session_resume_data,
-            request.job_description,
-            request.job_title,
-            request.missing_skills
+            master_latex=master_latex,
+            job_title=request.job_title or "",
+            job_description=request.job_description or "",
+            suggestions={},
+            missing_skills=request.missing_skills or []
         )
         return {"status": "success", "latex_code": raw_tailored_latex}
     except Exception as e:
@@ -612,11 +615,11 @@ async def generate_outreach(request: GenerateOutreachRequest, authorization: Opt
 
         outreach_msg = await asyncio.to_thread(
             generate_outreach_message,
-            job_description=request.job_description,
+            job_description=request.job_description or "",
             resume_data=session_resume_data,
             ats_analysis=ats_analysis,
             recruiter_name=recruiter_info.get("recruiter_name"),
-            company_name=recruiter_info.get("company_name", request.company_name),
+            company_name=recruiter_info.get("company_name") or request.company_name or "",
             custom_api_key=active_api_key
         )
 
@@ -650,11 +653,11 @@ async def generate_recruiter_outreach_endpoint(
         if user:
             active_api_key = user.get("gemini_api_key")
 
-    ats_analysis = get_cached_analysis(token, request.job_title, request.job_description) or {}
+    ats_analysis = get_cached_analysis(token, request.job_title or "", request.job_description or "") or {}
 
     outreach = await asyncio.to_thread(
         generate_outreach_message,
-        request.job_description,
+        request.job_description or "",
         session_resume_data,
         ats_analysis,
         request.recruiter_name,
@@ -728,12 +731,15 @@ async def answer_question(request: AnswerQuestionRequest, authorization: Optiona
     else:
         skills_str = "GenAI, LLM Systems, Python, Distributed Systems, Machine Learning"
 
+    exp_data = session_resume_data.get('work_experience') or session_resume_data.get('experience') or []
+    exp_slice = exp_data[:2] if isinstance(exp_data, list) else []
+
     prompt = f"""You are answering an application screening question for a candidate.
 
 Candidate Profile:
 Name: {session_resume_data.get('name', 'Akhil Baja')}
 Skills: {skills_str}
-Key Experience: {json.dumps(session_resume_data.get('work_experience', session_resume_data.get('experience', []))[:2], indent=2)}
+Key Experience: {json.dumps(exp_slice, indent=2)}
 
 Company: {request.company_name or 'Granola'}
 Target Role: {request.job_title or 'AI Engineer'}
