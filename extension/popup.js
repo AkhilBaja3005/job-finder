@@ -448,11 +448,48 @@ document.addEventListener("DOMContentLoaded", () => {
     btnFill.addEventListener("click", () => {
       btnFill.textContent = "⚡ Filling Active Form...";
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.id) {
-          chrome.tabs.sendMessage(tabs[0].id, { action: "TRIGGER_AUTOFILL" }, () => {
-            setTimeout(() => { btnFill.textContent = "⚡ Fill Active Application"; }, 1400);
-          });
+        if (!tabs || !tabs[0]?.id) {
+          btnFill.textContent = "⚡ Fill Active Application";
+          return;
         }
+        const activeTabId = tabs[0].id;
+        const url = tabs[0].url || "";
+        if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) {
+          showToast("⚠️ Open a job application page first!");
+          btnFill.textContent = "⚡ Fill Active Application";
+          return;
+        }
+
+        chrome.tabs.sendMessage(activeTabId, { action: "TRIGGER_AUTOFILL" }, (response) => {
+          const err = chrome.runtime.lastError; // Access to suppress unchecked runtime error
+          if (err) {
+            // Content script was not loaded on this tab yet, dynamically inject it and trigger autofill
+            try {
+              chrome.scripting.executeScript({
+                target: { tabId: activeTabId },
+                files: ["content.js"]
+              }, () => {
+                const err2 = chrome.runtime.lastError;
+                if (!err2) {
+                  setTimeout(() => {
+                    chrome.tabs.sendMessage(activeTabId, { action: "TRIGGER_AUTOFILL" }, () => {
+                      const err3 = chrome.runtime.lastError;
+                      setTimeout(() => { btnFill.textContent = "⚡ Fill Active Application"; }, 1400);
+                    });
+                  }, 200);
+                } else {
+                  showToast("⚠️ Please reload the job page and retry.");
+                  btnFill.textContent = "⚡ Fill Active Application";
+                }
+              });
+            } catch (e) {
+              showToast("⚠️ Please reload the job page and retry.");
+              btnFill.textContent = "⚡ Fill Active Application";
+            }
+          } else {
+            setTimeout(() => { btnFill.textContent = "⚡ Fill Active Application"; }, 1400);
+          }
+        });
       });
     });
   }
