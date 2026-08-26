@@ -60,6 +60,23 @@ def update_task_status(task_id: str, status: str, message: str):
         }
 
 
+@router.get("/extension_version_hash")
+def get_extension_version_hash():
+    import hashlib
+    ext_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "extension"))
+    h = hashlib.md5()
+    if os.path.exists(ext_dir):
+        for root, _, files in sorted(os.walk(ext_dir)):
+            for f in sorted(files):
+                if not f.startswith(".") and not f.endswith((".pyc", ".swp", "~")):
+                    fp = os.path.join(root, f)
+                    try:
+                        h.update(f"{f}:{os.path.getmtime(fp)}".encode())
+                    except OSError:
+                        pass
+    return {"hash": h.hexdigest()}
+
+
 def _extract_company_from_jd(jd_text: str, page_url: Optional[str] = None) -> str:
     import re
     if page_url:
