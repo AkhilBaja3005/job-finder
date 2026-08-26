@@ -1,4 +1,4 @@
-// popup.js - Job Finder ATS Tailor Controller (v2.7.0 Tabbed Unified Edition)
+// popup.js - Job Finder ATS Tailor Controller (v2.8.0 Fast Sync Edition)
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 let API_BASE_URL = DEFAULT_API_BASE_URL;
@@ -50,17 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const profSummary = document.getElementById("prof-summary");
   const btnSaveProfile = document.getElementById("btn-save-profile");
 
-  // Tab 3 Elements: Batch Apply
-  const btnToggleAuto = document.getElementById("btn-toggle-auto");
-  const autoStatusText = document.getElementById("auto-status-text");
-  const statApplied = document.getElementById("stat-applied");
-  const statSkipped = document.getElementById("stat-skipped");
-  const cfgMaxYears = document.getElementById("cfg-max-years");
-  const cfgBlacklist = document.getElementById("cfg-blacklist");
-  const btnSaveFilters = document.getElementById("btn-save-filters");
-  const logWindow = document.getElementById("log-window");
-
-  // Tab 4 Elements: Settings
+  // Tab 3 Elements: Settings
   const userTokenInput = document.getElementById("user-token");
   const backendUrlInput = document.getElementById("backend-url-input");
   const userInfoCard = document.getElementById("user-info-card");
@@ -69,7 +59,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnSaveSettings = document.getElementById("btn-save-settings");
   const toast = document.getElementById("popup-toast");
 
-  let isAutoRunning = false;
   let currentJobInfo = null;
   let activePreviewText = "";
   window.selectedUserSkills = new Set();
@@ -125,19 +114,22 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
-  function fetchUserInfo(syncKey, showAlert = false) {
-    if (!syncKey || !syncKey.trim()) {
-      if (userInfoCard) userInfoCard.style.display = "none";
+  async function fetchUserInfo(syncKey, showAlert = false) {
+    const key = (syncKey || getAuthToken()).trim().toUpperCase();
+    if (!key) {
+      if (showAlert) showToast("⚠️ Set your 6-digit Sync Key in Settings first!");
       return;
     }
-    const cleanKey = syncKey.trim().toUpperCase();
 
-    fetch(`${API_BASE_URL}/user/me`, {
-      headers: { "Authorization": `Bearer ${cleanKey}`, "Accept": "application/json" }
-    })
-      .then(async (res) => {
-        const ct = res.headers.get("content-type") || "";
-        if (!res.ok || !ct.includes("application/json")) return;
+    try {
+      // 1. Fetch user data from /user/me
+      const res = await fetch(`${API_BASE_URL}/user/me`, {
+        headers: { "Authorization": `Bearer ${key}`, "Accept": "application/json" }
+      });
+      const ct = res.headers.get("content-type") || "";
+
+      let resume = null;
+      if (res.ok && ct.includes("application/json")) {
         const data = await res.json();
         if (data && (data.email || data.id)) {
           const email = data.email || "User Account";
@@ -147,45 +139,66 @@ document.addEventListener("DOMContentLoaded", () => {
           if (userInfoCard) userInfoCard.style.display = "flex";
 
           if (data.resume_data) {
-            populateProfileUI(data.resume_data);
-            chrome.storage.local.set({ resumeData: data.resume_data });
+            resume = data.resume_data;
           }
-          if (showAlert) showToast("⚡ Synced profile from web app!");
         }
-      })
-      .catch(() => {});
+      }
+
+      // 2. Fallback / Enrichment from /get_session_resume
+      if (!resume || !resume.name) {
+        try {
+          const sessRes = await fetch(`${API_BASE_URL}/get_session_resume`, {
+            headers: { "Authorization": `Bearer ${key}`, "Accept": "application/json" }
+          });
+          if (sessRes.ok) {
+            const sessData = await sessRes.json();
+            if (sessData && sessData.data && sessData.data.name) {
+              resume = sessData.data;
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (resume) {
+        populateProfileUI(resume, true);
+        chrome.storage.local.set({ resumeData: resume, userToken: key });
+        if (showAlert) showToast("⚡ Synced profile & resume from backend!");
+      } else {
+        if (showAlert) showToast("⚡ Connected! No resume uploaded yet in web app.");
+      }
+    } catch (e) {
+      if (showAlert) showToast("❌ Could not connect to backend server");
+    }
   }
 
-  function populateProfileUI(resume) {
+  function populateProfileUI(resume, forceOverwrite = false) {
     if (!resume) return;
+
     const fullName = (resume.name || "").trim().split(/\s+/);
-    if (profFirstName && !profFirstName.value) profFirstName.value = fullName[0] || "";
-    if (profLastName && !profLastName.value) profLastName.value = fullName.slice(1).join(" ") || "";
-    if (profEmail && !profEmail.value) profEmail.value = resume.email || "";
-    if (profPhone && !profPhone.value) profPhone.value = resume.phone || "";
-    if (profLocation && !profLocation.value) profLocation.value = resume.location || "";
+    if (profFirstName && (forceOverwrite || !profFirstName.value)) profFirstName.value = fullName[0] || "";
+    if (profLastName && (forceOverwrite || !profLastName.value)) profLastName.value = fullName.slice(1).join(" ") || "";
+    if (profEmail && (forceOverwrite || !profEmail.value)) profEmail.value = resume.email || "";
+    if (profPhone && (forceOverwrite || !profPhone.value)) profPhone.value = resume.phone || "";
+    if (profLocation && (forceOverwrite || !profLocation.value)) profLocation.value = resume.location || "";
 
     const links = Array.isArray(resume.links) ? resume.links : [];
     const linkedin = links.find((l) => l.toLowerCase().includes("linkedin")) || resume.linkedin || "";
     const github = links.find((l) => l.toLowerCase().includes("github")) || resume.github || "";
     const portfolio = links.find((l) => !l.toLowerCase().includes("linkedin") && !l.toLowerCase().includes("github")) || resume.portfolio || "";
 
-    if (profLinkedin && !profLinkedin.value) profLinkedin.value = linkedin;
-    if (profGithub && !profGithub.value) profGithub.value = github;
-    if (profPortfolio && !profPortfolio.value) profPortfolio.value = portfolio;
+    if (profLinkedin && (forceOverwrite || !profLinkedin.value)) profLinkedin.value = linkedin;
+    if (profGithub && (forceOverwrite || !profGithub.value)) profGithub.value = github;
+    if (profPortfolio && (forceOverwrite || !profPortfolio.value)) profPortfolio.value = portfolio;
 
     const skillsStr = Array.isArray(resume.skills) ? resume.skills.join(", ") : resume.skills || "";
-    if (profSkills && !profSkills.value) profSkills.value = skillsStr;
-    if (profSummary && !profSummary.value) profSummary.value = resume.summary || "";
+    if (profSkills && (forceOverwrite || !profSkills.value)) profSkills.value = skillsStr;
+    if (profSummary && (forceOverwrite || !profSummary.value)) profSummary.value = resume.summary || "";
   }
 
   // ----------------------------------------------------
   // Load Storage Initialization
   // ----------------------------------------------------
-  chrome.storage.local.get([
-    "backendUrl", "userToken", "resumeData", "eeoProfile", "maxYears",
-    "blacklistKeywords", "isAutoRunning", "appliedCount", "skippedCount", "appLogs"
-  ], (items) => {
+  chrome.storage.local.get(["backendUrl", "userToken", "resumeData", "eeoProfile"], (items) => {
     if (items && items.backendUrl && items.backendUrl.trim()) {
       API_BASE_URL = items.backendUrl.trim().replace(/\/+$/, "");
       if (backendUrlInput) backendUrlInput.value = API_BASE_URL;
@@ -203,21 +216,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (eeo.workAuth && eeoWorkAuth) eeoWorkAuth.value = eeo.workAuth;
     if (eeo.sponsorship && eeoSponsorship) eeoSponsorship.value = eeo.sponsorship;
 
-    if (items?.maxYears && cfgMaxYears) cfgMaxYears.value = items.maxYears;
-    if (items?.blacklistKeywords && cfgBlacklist) cfgBlacklist.value = items.blacklistKeywords;
-
-    if (statApplied && items?.appliedCount !== undefined) statApplied.textContent = items.appliedCount;
-    if (statSkipped && items?.skippedCount !== undefined) statSkipped.textContent = items.skippedCount;
-
-    if (items?.isAutoRunning !== undefined) {
-      isAutoRunning = !!items.isAutoRunning;
-      updateAutoUI(isAutoRunning);
-    }
-    if (items?.appLogs && logWindow) {
-      logWindow.innerHTML = items.appLogs.map((l) => `<div>${l}</div>`).join("");
-      logWindow.scrollTop = logWindow.scrollHeight;
-    }
-
     checkHealth();
     scanActiveTab();
   });
@@ -228,7 +226,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function handleJobDetails(details) {
     if (!details || (!details.title && !details.description)) {
       if (activeRoleTitle) activeRoleTitle.textContent = "No job posting detected";
-      if (activeCompanyName) activeCompanyName.textContent = "Open LinkedIn, Indeed, or Workday";
+      if (activeCompanyName) activeCompanyName.textContent = "Open LinkedIn, Indeed, or Greenhouse";
       if (scoreCircle) scoreCircle.textContent = "—";
       if (scoreSub) scoreSub.textContent = "Navigate to a job posting tab";
       return;
@@ -393,6 +391,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // ----------------------------------------------------
   // Action Handlers
   // ----------------------------------------------------
+  // Single-Page Auto-Fill Trigger
+  if (btnFill) {
+    btnFill.addEventListener("click", () => {
+      btnFill.textContent = "⚡ Filling Active Form...";
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, { action: "TRIGGER_AUTOFILL" }, () => {
+            setTimeout(() => { btnFill.textContent = "⚡ Fill Active Application"; }, 1400);
+          });
+        }
+      });
+    });
+  }
+
   // 1-Click Tailor & Download PDF
   if (btnTailorPdf) {
     btnTailorPdf.addEventListener("click", () => {
@@ -583,56 +595,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Single-Page Auto-Fill Trigger
-  if (btnFill) {
-    btnFill.addEventListener("click", () => {
-      btnFill.textContent = "⚡ Filling Active Form...";
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.id) {
-          chrome.tabs.sendMessage(tabs[0].id, { action: "TRIGGER_AUTOFILL" }, () => {
-            setTimeout(() => { btnFill.textContent = "⚡ Fill Active Application"; }, 1400);
-          });
-        }
-      });
-    });
-  }
-
-  // Batch Auto-Apply Toggle
-  function updateAutoUI(running) {
-    if (!btnToggleAuto || !autoStatusText) return;
-    if (running) {
-      btnToggleAuto.textContent = "⏸️ Stop Batch Auto-Apply";
-      btnToggleAuto.style.background = "linear-gradient(135deg, #ef4444, #dc2626)";
-      autoStatusText.textContent = "Running 🟢";
-      autoStatusText.style.color = "#34d399";
-    } else {
-      btnToggleAuto.textContent = "▶️ Start Batch Auto-Apply";
-      btnToggleAuto.style.background = "linear-gradient(135deg, #10b981, #059669)";
-      autoStatusText.textContent = "Idle";
-      autoStatusText.style.color = "#94a3b8";
-    }
-  }
-
-  if (btnToggleAuto) {
-    btnToggleAuto.addEventListener("click", () => {
-      isAutoRunning = !isAutoRunning;
-      chrome.storage.local.set({ isAutoRunning }, () => {
-        updateAutoUI(isAutoRunning);
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (tabs[0]?.id) {
-            chrome.tabs.sendMessage(tabs[0].id, { action: "TOGGLE_BATCH_AUTO", state: isAutoRunning });
-          }
-        });
-      });
-    });
-  }
-
   // ----------------------------------------------------
   // Save & Storage Handlers
   // ----------------------------------------------------
   if (btnSyncBackendNow) {
     btnSyncBackendNow.addEventListener("click", () => {
-      fetchUserInfo(getAuthToken(), true);
+      chrome.storage.local.get(["userToken"], (items) => {
+        const token = (items?.userToken || userTokenInput?.value || "").trim();
+        fetchUserInfo(token, true);
+      });
     });
   }
 
@@ -657,16 +628,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  if (btnSaveFilters) {
-    btnSaveFilters.addEventListener("click", () => {
-      const maxYears = cfgMaxYears.value;
-      const blacklistKeywords = cfgBlacklist.value;
-      chrome.storage.local.set({ maxYears, blacklistKeywords }, () => {
-        showToast("✅ Filtering Rules Saved!");
-      });
-    });
-  }
-
   if (btnSaveSettings) {
     btnSaveSettings.addEventListener("click", () => {
       const userToken = getAuthToken();
@@ -674,23 +635,8 @@ document.addEventListener("DOMContentLoaded", () => {
       API_BASE_URL = backendUrl;
       chrome.storage.local.set({ userToken, backendUrl }, () => {
         checkHealth();
-        fetchUserInfo(userToken);
-        showToast("✅ Settings Saved & Tested!");
+        fetchUserInfo(userToken, true);
       });
     });
   }
-
-  // Storage Change Listener
-  chrome.storage.onChanged.addListener((changes) => {
-    if (changes.appliedCount && statApplied) statApplied.textContent = changes.appliedCount.newValue || 0;
-    if (changes.skippedCount && statSkipped) statSkipped.textContent = changes.skippedCount.newValue || 0;
-    if (changes.appLogs && logWindow) {
-      logWindow.innerHTML = (changes.appLogs.newValue || []).map((l) => `<div>${l}</div>`).join("");
-      logWindow.scrollTop = logWindow.scrollHeight;
-    }
-    if (changes.isAutoRunning) {
-      isAutoRunning = !!changes.isAutoRunning.newValue;
-      updateAutoUI(isAutoRunning);
-    }
-  });
 });

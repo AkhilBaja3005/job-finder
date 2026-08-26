@@ -59,13 +59,13 @@
       border-radius: 8px;
       padding: 3px;
       margin-bottom: 12px;
-      gap: 3px;
+      gap: 4px;
     }
     .nav-tab {
       flex: 1;
       text-align: center;
-      padding: 6px 2px;
-      font-size: 11px;
+      padding: 6px 4px;
+      font-size: 11.5px;
       font-weight: 700;
       color: #94a3b8;
       border-radius: 6px;
@@ -248,11 +248,10 @@
     </span>
   </div>
 
-  <!-- Top Navigation Tabs -->
+  <!-- Top Navigation Tabs (3 Sections) -->
   <div class="nav-tabs">
     <button class="nav-tab active" data-target="tab-ats">🎯 ATS & Apply</button>
     <button class="nav-tab" data-target="tab-profile">👤 Profile</button>
-    <button class="nav-tab" data-target="tab-batch">🤖 Batch Apply</button>
     <button class="nav-tab" data-target="tab-settings">⚙️ Settings</button>
   </div>
 
@@ -264,7 +263,7 @@
     <div id="job-active-card" class="card">
       <div style="font-size: 9.5px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 2px; letter-spacing: 0.05em;">Detected Active Job:</div>
       <div id="active-role-title" style="font-size: 12.5px; font-weight: 700; color: #fff; line-height: 1.35;">Detecting job page...</div>
-      <div id="active-company-name" style="font-size: 10.5px; color: #94a3b8; margin-top: 2px; font-weight: 500;">Open LinkedIn, Indeed, or Workday</div>
+      <div id="active-company-name" style="font-size: 10.5px; color: #94a3b8; margin-top: 2px; font-weight: 500;">Open LinkedIn, Indeed, Greenhouse, or Lever</div>
     </div>
 
     <!-- ATS Match Score Section -->
@@ -324,7 +323,7 @@
   <div id="tab-profile" class="tab-pane">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
       <span style="font-size: 11px; font-weight: 700; color: #38bdf8;">Candidate Details</span>
-      <button id="btn-sync-backend-now" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; padding: 3px 8px; border-radius: 5px; font-size: 10px; font-weight: 700; cursor: pointer;">⚡ Sync from Web App</button>
+      <button id="btn-sync-backend-now" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; padding: 4px 10px; border-radius: 5px; font-size: 10.5px; font-weight: 700; cursor: pointer;">⚡ Sync from Web App</button>
     </div>
 
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
@@ -401,51 +400,7 @@
   </div>
 
   <!-- ======================================================== -->
-  <!-- TAB 3: BATCH APPLY                                       -->
-  <!-- ======================================================== -->
-  <div id="tab-batch" class="tab-pane">
-    <div style="background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; padding: 10px; margin-bottom: 10px;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 11px; font-weight: 700; color: #fff;">🤖 LinkedIn Batch Auto-Apply</span>
-        <span id="auto-status-text" style="font-size: 10px; color: #94a3b8; font-weight: 600;">Idle</span>
-      </div>
-      <button id="btn-toggle-auto" class="btn" style="background: linear-gradient(135deg, #10b981, #059669); margin-top: 8px;">▶️ Start Batch Auto-Apply</button>
-
-      <div style="display: flex; gap: 8px; margin-top: 8px;">
-        <div style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px; text-align: center;">
-          <div id="stat-applied" style="font-size: 14px; font-weight: 800; color: #38bdf8;">0</div>
-          <div style="font-size: 9px; color: #94a3b8; text-transform: uppercase;">Applied</div>
-        </div>
-        <div style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px; text-align: center;">
-          <div id="stat-skipped" style="font-size: 14px; font-weight: 800; color: #38bdf8;">0</div>
-          <div style="font-size: 9px; color: #94a3b8; text-transform: uppercase;">Skipped</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Filtering Rules -->
-    <div class="card">
-      <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px;">🎯 Job Filtering Rules:</div>
-      <div class="form-group">
-        <label>Max Years Experience Required:</label>
-        <input type="number" id="cfg-max-years" class="form-control" value="5" min="0" max="20">
-      </div>
-      <div class="form-group">
-        <label>Blacklist Keywords in Job Title (comma-separated):</label>
-        <input type="text" id="cfg-blacklist" class="form-control" placeholder="Senior, Staff, Principal, Lead, Manager">
-      </div>
-      <button id="btn-save-filters" class="btn btn-secondary">💾 Save Filtering Rules</button>
-    </div>
-
-    <!-- Automation Log -->
-    <div style="font-size: 9.5px; font-weight: 700; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase;">📋 Activity Log:</div>
-    <div id="log-window" style="background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 6px 8px; font-family: monospace; font-size: 9.5px; color: #94a3b8; max-height: 80px; overflow-y: auto;">
-      <div>⚡ Ready to auto-fill (Greenhouse, Lever, Ashby, Workday, LinkedIn, Indeed)...</div>
-    </div>
-  </div>
-
-  <!-- ======================================================== -->
-  <!-- TAB 4: SETTINGS                                          -->
+  <!-- TAB 3: SETTINGS                                          -->
   <!-- ======================================================== -->
   <div id="tab-settings" class="tab-pane">
     <div class="card">

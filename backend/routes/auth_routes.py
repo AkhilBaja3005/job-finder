@@ -83,17 +83,20 @@ async def user_me(authorization: Optional[str] = Header(None)):
             if res and len(res) > 0:
                 import json
                 rdata = json.loads(res[0].get("resume_data", "{}"))
+                user["resume_data"] = rdata
                 if rdata.get("name"):
                     user["resume_name"] = rdata.get("name")
         except Exception as e:
             print(f"Failed to fetch candidate name for user_me from Supabase: {e}")
 
-    if not user.get("resume_name"):
+    if not user.get("resume_data"):
         try:
             from main import get_session_data
             sess = get_session_data(token)
-            if sess and isinstance(sess.get("data"), dict) and sess["data"].get("name"):
-                user["resume_name"] = sess["data"].get("name")
+            if sess and isinstance(sess.get("data"), dict) and sess["data"]:
+                user["resume_data"] = sess["data"]
+                if sess["data"].get("name"):
+                    user["resume_name"] = sess["data"].get("name")
         except Exception:
             pass
 
