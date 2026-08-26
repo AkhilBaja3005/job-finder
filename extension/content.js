@@ -319,6 +319,13 @@
     if (!container || !targetChoice) return false;
     const lowerChoice = targetChoice.toLowerCase();
 
+    // Check if the container already has any checked radio or active choice selected by the user
+    const alreadyCheckedRadio = container.querySelector("input[type='radio']:checked");
+    if (alreadyCheckedRadio) return false;
+
+    const alreadyActiveChoice = container.querySelector("[aria-checked='true'], [aria-selected='true'], [class*='selected'], [class*='active']:not(body):not(html)");
+    if (alreadyActiveChoice) return false;
+
     // 1. Radio Inputs
     const radios = container.querySelectorAll("input[type='radio']");
     for (const radio of radios) {
@@ -557,6 +564,7 @@
         const pdfFile = base64ToFile(resume.pdf_base64, `${firstName || "Candidate"}_Resume.pdf`);
         if (pdfFile) {
           for (const fi of fileInputs) {
+            if (fi.files && fi.files.length > 0) continue;
             if (!fi.getAttribute("data-jf-filled")) {
               await fillFileInput(fi, pdfFile);
               fi.setAttribute("data-jf-filled", "true");
@@ -586,6 +594,28 @@
 
       for (const el of formElements) {
         if (!el.offsetParent || el.getAttribute("data-jf-filled") || el.disabled || el.readOnly) continue;
+
+        // Strict Check: NEVER overwrite already filled / pre-filled fields
+        if (el.tagName === "SELECT") {
+          if (el.value && el.value.trim() !== "" && el.selectedIndex > 0) {
+            const selectedText = el.options[el.selectedIndex]?.text?.toLowerCase() || "";
+            if (!selectedText.includes("select") && !selectedText.includes("choose") && !selectedText.includes("please")) {
+              continue;
+            }
+          }
+        } else if (el.getAttribute("contenteditable") === "true") {
+          if (el.innerText && el.innerText.trim().length > 0) {
+            continue;
+          }
+        } else if (el.type === "checkbox" || el.type === "radio") {
+          if (el.checked) {
+            continue;
+          }
+        } else {
+          if (el.value && el.value.trim().length > 0) {
+            continue;
+          }
+        }
 
         const id = (el.id || "").toLowerCase();
         const nameAttr = (el.name || "").toLowerCase();
