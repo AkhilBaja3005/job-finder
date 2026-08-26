@@ -1,4 +1,4 @@
-// content.js - Job Finder ATS Tailor & AutoFill Content Script (v2.6.0)
+// content.js - Job Finder ATS Tailor & Multimodal AI AutoFill Content Script (v3.0.0)
 
 (function () {
   function isRuntimeValid() {
@@ -11,15 +11,11 @@
 
   if (!isRuntimeValid()) return;
 
-  let isAutoRunning = false;
-  let appliedCount = 0;
-  let skippedCount = 0;
-
   function logMsg(msg) {
-    console.log('[Job Finder ATS]', msg);
+    console.log("[Job Finder ATS AI]", msg);
     try {
       if (isRuntimeValid() && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.get(['appLogs'], (items) => {
+        chrome.storage.local.get(["appLogs"], (items) => {
           const logs = items.appLogs || [];
           logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
           if (logs.length > 50) logs.shift();
@@ -90,7 +86,7 @@
     let bestElem = document.body;
     let maxScore = 0;
     const candidates = document.querySelectorAll("div, section, article");
-    candidates.forEach(el => {
+    candidates.forEach((el) => {
       const text = el.innerText || "";
       const len = text.length;
       if (len > 300 && len < 25000) {
@@ -181,11 +177,9 @@
       title = title.split(" | ")[0].split(" - Careers")[0].split(" at ")[0].trim();
     }
     if (!company && url) {
-      if (url.includes("oraclecloud.com") || url.includes("myworkdayjobs.com") || url.includes("greenhouse.io") || url.includes("lever.co")) {
-        const bodyText = document.body ? document.body.innerText : "";
-        const brandMatch = bodyText.match(/(Goldman Sachs|Google|Amazon|Microsoft|Meta|Apple|Netflix|Micron|Oracle|JPMorgan|Bloomberg|Stripe|Uber|Airbnb|Coinbase|Palantir)/i);
-        if (brandMatch) company = brandMatch[1];
-      }
+      const bodyText = document.body ? document.body.innerText : "";
+      const brandMatch = bodyText.match(/(Granola|Goldman Sachs|Google|Amazon|Microsoft|Meta|Apple|Netflix|Micron|Oracle|JPMorgan|Bloomberg|Stripe|Uber|Airbnb|Coinbase|Palantir)/i);
+      if (brandMatch) company = brandMatch[1];
     }
     if (company && typeof company === "string") {
       company = company.trim().charAt(0).toUpperCase() + company.trim().slice(1);
@@ -198,11 +192,10 @@
   function setNativeValue(element, value) {
     if (!element || value === undefined || value === null) return;
     const stringVal = String(value);
-    if (!stringVal) return;
 
-    const valueSetter = Object.getOwnPropertyDescriptor(element, 'value')?.set;
+    const valueSetter = Object.getOwnPropertyDescriptor(element, "value")?.set;
     const prototype = Object.getPrototypeOf(element);
-    const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+    const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
 
     try { element.focus(); } catch (e) {}
 
@@ -215,13 +208,13 @@
     }
 
     try {
-      element.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: stringVal }));
+      element.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: stringVal }));
     } catch (e) {
-      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event("input", { bubbles: true }));
     }
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-    element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
-    element.setAttribute('data-jf-filled', 'true');
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+    element.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+    element.setAttribute("data-jf-filled", "true");
   }
 
   function setSelectValue(select, valueOrText) {
@@ -230,16 +223,17 @@
     const lowerTarget = valueOrText.toLowerCase();
 
     const target = options.find(
-      opt => opt.value.toLowerCase() === lowerTarget || 
-             opt.text.toLowerCase().includes(lowerTarget) ||
-             lowerTarget.includes(opt.text.toLowerCase())
+      (opt) =>
+        opt.value.toLowerCase() === lowerTarget ||
+        opt.text.toLowerCase().includes(lowerTarget) ||
+        lowerTarget.includes(opt.text.toLowerCase())
     );
 
     if (target) {
       select.value = target.value;
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      select.dispatchEvent(new Event('blur', { bubbles: true }));
-      select.setAttribute('data-jf-filled', 'true');
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      select.dispatchEvent(new Event("blur", { bubbles: true }));
+      select.setAttribute("data-jf-filled", "true");
       return true;
     }
     return false;
@@ -247,7 +241,7 @@
 
   function base64ToFile(base64String, filename, mimeType = "application/pdf") {
     try {
-      const base64Data = base64String.includes(',') ? base64String.split(',')[1] : base64String;
+      const base64Data = base64String.includes(",") ? base64String.split(",")[1] : base64String;
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
@@ -264,93 +258,75 @@
       const dataTransfer = new DataTransfer();
       dataTransfer.items.add(file);
       fileInput.files = dataTransfer.files;
-      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+      fileInput.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
     } catch (error) {
       return false;
     }
   }
 
-  // ── Dedicated Portal Form Adapters ────────────────────────────────────
-  function autofillGreenhouse(profile, eeo) {
-    let count = 0;
-    const selectors = {
-      '#first_name': profile.firstName,
-      '#last_name': profile.lastName,
-      '#email': profile.email,
-      '#phone': profile.phone,
-      'input[name*="[first_name]"]': profile.firstName,
-      'input[name*="[last_name]"]': profile.lastName,
-      'input[name*="[email]"]': profile.email,
-      'input[name*="[phone]"]': profile.phone,
-      '#job_application_location': profile.location,
-      'input[autocomplete="custom-question-linkedin"]': profile.linkedin,
-      'input[autocomplete="custom-question-website"]': profile.portfolio || profile.github
-    };
+  // ── Extract Question Text for Given Element ───────────────────────────
+  function getQuestionTextForElement(el) {
+    const parentBlock = el.closest('[class*="field"], [class*="formField"], [class*="question"], .application-question, .form-group, fieldset, li, tr, div');
+    let label = "";
 
-    for (const [sel, val] of Object.entries(selectors)) {
-      if (!val) continue;
-      const el = document.querySelector(sel);
-      if (el && !el.value && el.offsetParent !== null) {
-        setNativeValue(el, val);
-        count++;
-      }
+    const labelEl = parentBlock?.querySelector('label, [class*="label"], legend, h2, h3, h4, h5, [class*="title"], [class*="prompt"]');
+    if (labelEl && labelEl !== el) {
+      const clone = labelEl.cloneNode(true);
+      clone.querySelectorAll("input, textarea, select, button, script, style").forEach((c) => c.remove());
+      label = clone.textContent.replace(/\s+/g, " ").trim();
     }
-    return count;
+
+    if (!label || label.length < 5) {
+      label = el.getAttribute("aria-label") || el.getAttribute("placeholder") || parentBlock?.innerText?.slice(0, 200) || "";
+    }
+    return label.trim();
   }
 
-  function autofillLever(profile, eeo) {
-    let count = 0;
-    const mappings = [
-      { selectors: ['input[name="name"]', 'input[name*="name"]'], val: `${profile.firstName} ${profile.lastName}`.trim() },
-      { selectors: ['input[name="email"]', 'input[name*="email"]', 'input[type="email"]'], val: profile.email },
-      { selectors: ['input[name="phone"]', 'input[name*="phone"]', 'input[type="tel"]'], val: profile.phone },
-      { selectors: ['input[name*="LinkedIn"]', 'input[name*="linkedin"]'], val: profile.linkedin },
-      { selectors: ['input[name*="GitHub"]', 'input[name*="github"]'], val: profile.github },
-      { selectors: ['input[name*="Portfolio"]', 'input[name*="portfolio"]', 'input[name*="website"]'], val: profile.portfolio || profile.github }
-    ];
-
-    mappings.forEach(({ selectors, val }) => {
-      if (!val) return;
-      for (const sel of selectors) {
-        const inp = document.querySelector(sel);
-        if (inp && !inp.value && inp.offsetParent !== null) {
-          setNativeValue(inp, val);
-          count++;
-          break;
-        }
+  // ── AI Answer Generator (Calls Backend LLM Agent) ──────────────────────
+  async function generateAIAnswer(question, profile, jobInfo, baseUrl, token) {
+    try {
+      const res = await fetch(`${baseUrl}/answer_question`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Authorization": `Bearer ${token || "guest"}`
+        },
+        body: JSON.stringify({
+          question,
+          company_name: jobInfo.company || "Granola",
+          job_title: jobInfo.title || "Target Position",
+          candidate_profile: profile
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.answer) return data.answer;
       }
-    });
-    return count;
-  }
+    } catch (e) {}
 
-  function autofillWorkday(profile) {
-    let count = 0;
-    const fieldMap = {
-      'legalNameSection_firstName': profile.firstName,
-      'legalNameSection_lastName': profile.lastName,
-      'addressSection_addressLine1': profile.location,
-      'email': profile.email,
-      'phone-number': profile.phone
-    };
-
-    for (const [automationId, val] of Object.entries(fieldMap)) {
-      if (!val) continue;
-      const inp = document.querySelector(`[data-automation-id="${automationId}"]`);
-      if (inp && !inp.value && inp.offsetParent !== null) {
-        setNativeValue(inp, val);
-        count++;
-      }
+    // Fallback heuristic if backend non-responsive
+    const qLower = question.toLowerCase();
+    if (qLower.includes("one line") || qLower.includes("one-line") || qLower.includes("condensed cover letter")) {
+      const skills = Array.isArray(profile.skills) ? profile.skills.slice(0, 4).join(", ") : "full-stack development and scalable systems";
+      return `Experienced engineer skilled in ${skills} with a focus on building high-impact products.`;
     }
-    return count;
+    if (qLower.includes("why") && (qLower.includes("granola") || qLower.includes("company") || qLower.includes("team"))) {
+      const company = jobInfo.company || "Granola";
+      return `I am deeply inspired by ${company}'s focus on product elegance and empowering workflows. With my technical foundation in delivering fast, reliable software, I am eager to contribute directly to your team's mission and growth.`;
+    }
+    return `With my strong background in software engineering, I am excited to bring my technical skills and ownership mindset to ${jobInfo.company || "the team"}.`;
   }
 
   // ── Universal & Form Auto-fill Logic ──────────────────────────────────
   async function runAutofill() {
+    showToast("⏳ Auto-filling application & generating AI answers...");
+
     chrome.storage.local.get(["userToken", "resumeData", "eeoProfile", "backendUrl"], async (storage) => {
       let resume = storage.resumeData || {};
       const token = (storage.userToken || "").trim();
-      const baseUrl = (storage.backendUrl || "http://127.0.0.1:8000").replace(/\/+$/, '');
+      const baseUrl = (storage.backendUrl || "http://127.0.0.1:8000").replace(/\/+$/, "");
 
       if (!resume || !resume.name) {
         try {
@@ -375,30 +351,24 @@
       const email = resume.email || "";
       const phone = resume.phone || "";
       const location = resume.location || "";
-      const summary = resume.summary || "";
       const links = Array.isArray(resume.links) ? resume.links : [];
-      const linkedin = links.find(l => l.toLowerCase().includes("linkedin")) || resume.linkedin || "";
-      const github = links.find(l => l.toLowerCase().includes("github")) || resume.github || "";
-      const portfolio = links.find(l => !l.toLowerCase().includes("linkedin") && !l.toLowerCase().includes("github")) || resume.portfolio || "";
+      const linkedin = links.find((l) => l.toLowerCase().includes("linkedin")) || resume.linkedin || "";
+      const github = links.find((l) => l.toLowerCase().includes("github")) || resume.github || "";
+      const portfolio = links.find((l) => !l.toLowerCase().includes("linkedin") && !l.toLowerCase().includes("github")) || resume.portfolio || "";
 
-      const profileObj = { firstName, lastName, email, phone, location, linkedin, github, portfolio, summary };
-
-      const url = window.location.href;
+      const jobInfo = extractJobDetails();
       let filledCount = 0;
-
-      if (url.includes('greenhouse.io')) filledCount += autofillGreenhouse(profileObj, eeo);
-      else if (url.includes('lever.co')) filledCount += autofillLever(profileObj, eeo);
-      else if (url.includes('workday') || url.includes('myworkdayjobs.com')) filledCount += autofillWorkday(profileObj);
+      let aiQuestionsAnswered = 0;
 
       const modal = document.querySelector(
-        ".jobs-easy-apply-modal, .artdeco-modal, [data-test-modal], [role='dialog'], .application-container, .ia-BasePage"
+        ".jobs-easy-apply-modal, .artdeco-modal, [data-test-modal], [role='dialog'], .application-container, .ia-BasePage, form, main"
       );
       const scope = modal || document;
 
-      // File attachment
+      // 1. File Upload (Resume PDF)
       if (resume.pdf_base64) {
         const fileInputs = scope.querySelectorAll("input[type='file']");
-        const pdfFile = base64ToFile(resume.pdf_base64, `${firstName || 'Candidate'}_Resume.pdf`);
+        const pdfFile = base64ToFile(resume.pdf_base64, `${firstName || "Candidate"}_Resume.pdf`);
         if (pdfFile) {
           for (const fi of fileInputs) {
             if (!fi.getAttribute("data-jf-filled")) {
@@ -410,9 +380,9 @@
         }
       }
 
-      // Universal Input Scan
+      // 2. Standard Input & Dropdown Scan
       const inputs = scope.querySelectorAll(
-        "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='file']), textarea, select"
+        "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='file']), select"
       );
 
       for (const inp of inputs) {
@@ -436,7 +406,6 @@
         else if (/github/.test(key)) val = github;
         else if (/portfolio|website/.test(key)) val = portfolio || github;
         else if (/city|location|address/.test(key)) val = location;
-        else if (/summary|cover.?letter|about you|additional info/.test(key)) val = summary;
         else if (/authorized|work in the us|work authorization|legally authorized/.test(key)) val = eeo.workAuth || "Yes";
         else if (/sponsor|visa|require.*sponsorship/.test(key)) val = eeo.sponsorship || "No";
 
@@ -453,8 +422,28 @@
         } catch (e) {}
       }
 
-      logMsg(`⚡ Auto-filled ${filledCount} field${filledCount !== 1 ? "s" : ""}.`);
-      showToast(`⚡ Filled ${filledCount} field${filledCount !== 1 ? "s" : ""}!`);
+      // 3. AI Textarea & Screening Question Answering
+      const textareas = scope.querySelectorAll("textarea, [contenteditable='true']");
+      for (const ta of textareas) {
+        if (!ta.offsetParent || ta.getAttribute("data-jf-filled") || ta.disabled || ta.readOnly) continue;
+
+        const question = getQuestionTextForElement(ta);
+        if (question && question.length > 5) {
+          logMsg(`🤖 Generating AI answer for: "${question.slice(0, 60)}..."`);
+          const aiAnswer = await generateAIAnswer(question, resume, jobInfo, baseUrl, token);
+
+          if (aiAnswer) {
+            setNativeValue(ta, aiAnswer);
+            ta.style.outline = "2px solid #10b981";
+            ta.style.background = "rgba(16, 185, 129, 0.05)";
+            filledCount++;
+            aiQuestionsAnswered++;
+          }
+        }
+      }
+
+      logMsg(`⚡ Auto-filled ${filledCount} field${filledCount !== 1 ? "s" : ""} (${aiQuestionsAnswered} AI answers generated).`);
+      showToast(`✨ Auto-filled ${filledCount} fields (${aiQuestionsAnswered} AI answers generated)!`);
     });
   }
 
@@ -489,10 +478,6 @@
           } else if (request.action === "TRIGGER_AUTOFILL") {
             runAutofill();
             sendResponse({ status: "ok" });
-          } else if (request.action === "TOGGLE_BATCH_AUTO") {
-            isAutoRunning = request.state;
-            logMsg(isAutoRunning ? "▶️ Batch Auto-Apply STARTED" : "⏸️ Batch Auto-Apply STOPPED");
-            sendResponse({ status: "ok", isAutoRunning });
           }
         } catch (e) {}
         return true;
