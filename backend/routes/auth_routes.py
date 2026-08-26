@@ -1,21 +1,26 @@
-from fastapi import APIRouter, HTTPException, Header, Request
-from fastapi.responses import RedirectResponse
-from typing import Optional
-from pydantic import BaseModel
 import os
+import json
+import urllib.parse
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Header, Request, BackgroundTasks
+from fastapi.responses import RedirectResponse, HTMLResponse
+from pydantic import BaseModel
 
 from services.auth import (
     create_or_get_user,
     create_session,
     async_get_user_by_token,
     invalidate_token_cache,
+    update_user_api_key,
     get_google_auth_url,
     exchange_google_code_for_email,
     generate_user_sync_code,
+    supabase_request,
     _is_local_deployment
 )
 
-router = APIRouter(tags=["Authentication"])
+router = APIRouter(tags=["Authentication & Settings"])
+
 
 class SubscriptionRequest(BaseModel):
     cron_enabled: bool
@@ -23,6 +28,11 @@ class SubscriptionRequest(BaseModel):
     cron_location: Optional[str] = "Remote"
     cron_time: Optional[str] = "18:00:00"
     send_tailored_email: Optional[bool] = True
+
+
+class SettingsRequest(BaseModel):
+    gemini_api_key: str
+
 
 @router.get("/auth/google")
 @router.get("/auth/url")
@@ -35,6 +45,7 @@ async def auth_google(request: Request):
         raise HTTPException(status_code=500, detail="Google OAuth client ID is not configured.")
     return {"url": auth_url}
 
+
 @router.get("/auth/callback")
 async def auth_callback(code: str, request: Request):
     try:
@@ -44,15 +55,15 @@ async def auth_callback(code: str, request: Request):
         email, picture_url = exchange_google_code_for_email(code, redirect_uri=custom_redirect)
         user = create_or_get_user(email, picture_url)
         token = create_session(user["id"])
-        
+
         frontend_url = os.getenv("FRONTEND_URL")
         if not frontend_url:
-            # Infer from request url scheme and host header
             base = str(request.base_url).rstrip("/")
             frontend_url = base
         return RedirectResponse(url=f"{frontend_url.rstrip('/')}?token={token}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"OAuth verification failed: {str(e)}")
+
 
 @router.post("/auth/mock")
 async def auth_mock(request: dict):
@@ -62,6 +73,7 @@ async def auth_mock(request: dict):
     user = create_or_get_user(email)
     token = create_session(user["id"])
     return {"token": token}
+
 
 @router.get("/user/me")
 async def user_me(authorization: Optional[str] = Header(None)):
@@ -75,13 +87,10 @@ async def user_me(authorization: Optional[str] = Header(None)):
         sync_code = generate_user_sync_code(user["id"])
         user["sync_code"] = sync_code
 
-    # Fetch candidate name from user_resumes table or session store
     if user.get("id") and not str(user.get("id")).startswith("guest_"):
         try:
-            from services.auth import supabase_request
             res = supabase_request(f"user_resumes?user_id=eq.{user['id']}&select=resume_data", "GET")
             if res and len(res) > 0:
-                import json
                 rdata = json.loads(res[0].get("resume_data", "{}"))
                 user["resume_data"] = rdata
                 if rdata.get("name"):
@@ -91,7 +100,7 @@ async def user_me(authorization: Optional[str] = Header(None)):
 
     if not user.get("resume_data"):
         try:
-            from main import get_session_data
+            from services.session_store import get_session_data
             sess = get_session_data(token)
             if sess and isinstance(sess.get("data"), dict) and sess["data"]:
                 user["resume_data"] = sess["data"]
@@ -102,6 +111,33 @@ async def user_me(authorization: Optional[str] = Header(None)):
 
     return user
 
+
+@router.get("/user/sync_code")
+async def get_sync_code(authorization: Optional[str] = Header(None)):
+    """Returns user's permanent 6-digit alphanumeric extension sync key."""
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    user = await async_get_user_by_token(token) if token else None
+    if not user or not user.get("id"):
+        guest_key = (token or "guest")[:6].upper()
+        return {"sync_code": guest_key}
+
+    code = generate_user_sync_code(user["id"])
+    return {"sync_code": code, "email": user.get("email")}
+
+
+@router.post("/user/settings")
+async def user_settings(request: SettingsRequest, authorization: Optional[str] = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ")[1]
+    user = await async_get_user_by_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    update_user_api_key(user["id"], request.gemini_api_key)
+    invalidate_token_cache(token)
+    return {"status": "success"}
+
+
 @router.post("/user/subscription")
 async def user_subscription(request: SubscriptionRequest, authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
@@ -111,7 +147,6 @@ async def user_subscription(request: SubscriptionRequest, authorization: Optiona
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    from services.auth import supabase_request
     payload = {
         "cron_enabled": request.cron_enabled,
         "cron_role": request.cron_role,
@@ -124,3 +159,25 @@ async def user_subscription(request: SubscriptionRequest, authorization: Optiona
     supabase_request(f"users?id=eq.{user['id']}", "PATCH", payload)
     invalidate_token_cache(token)
     return {"status": "success"}
+
+
+@router.get("/email_action/unsubscribe", response_class=HTMLResponse)
+async def email_action_unsubscribe(email: str):
+    """Zero-Click Unsubscribe handler clicked from matching digest email."""
+    try:
+        encoded_email = urllib.parse.quote(email)
+        users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
+        if not users:
+            return HTMLResponse("<h3>Error: Profile matching this email address not found.</h3>", status_code=404)
+
+        user_id = users[0].get("id")
+        supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_enabled": False})
+        return HTMLResponse("""
+        <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 12px; text-align: center;">
+            <div style="font-size: 3rem; margin-bottom: 12px;">🔕</div>
+            <h2 style="color: #0F172A; margin: 0 0 10px;">Unsubscribed</h2>
+            <p style="color: #64748B;">You have successfully disabled daily job digest emails.</p>
+        </div>
+        """)
+    except Exception as e:
+        return HTMLResponse(f"<h3>Unsubscribe failed: {str(e)}</h3>", status_code=500)

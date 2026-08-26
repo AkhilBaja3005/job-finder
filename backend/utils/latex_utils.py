@@ -643,3 +643,70 @@ def generate_latex_from_json(data: dict, master_latex: Optional[str] = None) -> 
 
     latex.append("\\end{document}")
     return "\n".join(latex)
+
+
+def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, linespread: float = 1.0, master_latex: Optional[str] = None) -> tuple:
+    import uuid
+    import shutil
+    import subprocess
+    from pypdf import PdfReader
+    from services.session_store import BASE_DIR, UPLOAD_DIR, OUTPUT_DIR
+
+    try:
+        unique_id = uuid.uuid4().hex[:10]
+        temp_tex = os.path.join(OUTPUT_DIR, f"temp_check_{unique_id}.tex")
+        temp_pdf = os.path.join(OUTPUT_DIR, f"temp_check_{unique_id}.pdf")
+
+        fixed_code = apply_latex_hotfix(latex_code, spacing_scale, linespread, master_latex)
+        with open(temp_tex, "w", encoding="utf-8") as f:
+            f.write(fixed_code)
+
+        cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
+        if not os.path.exists(cls_source):
+            cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
+        if os.path.exists(cls_source):
+            shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
+
+        result = subprocess.run(
+            ["tectonic", temp_tex, "--outdir", OUTPUT_DIR],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if result.returncode != 0:
+            print(f"Tectonic check failed: {result.stderr}")
+            return 999, 0.0
+
+        reader = PdfReader(temp_pdf)
+        pages = len(reader.pages)
+
+        filled_height = 0.0
+        if pages > 0:
+            page = reader.pages[0]
+            min_y = 9999.0
+            max_y = -9999.0
+
+            def visitor(text, cm, tm, font_dict, font_size):
+                nonlocal min_y, max_y
+                if text.strip():
+                    y = tm[4] * cm[1] + tm[5] * cm[3] + cm[5]
+                    if y < min_y:
+                        min_y = y
+                    if y > max_y:
+                        max_y = y
+            try:
+                page.extract_text(visitor_text=visitor)
+                if min_y < 9999.0:
+                    filled_height = max_y - min_y
+            except Exception as ex:
+                print(f"Error extracting baseline coordinates: {ex}")
+
+        if os.path.exists(temp_tex):
+            os.remove(temp_tex)
+        if os.path.exists(temp_pdf):
+            os.remove(temp_pdf)
+
+        return pages, filled_height
+    except Exception as e:
+        print(f"Error checking page metrics: {e}")
+        return 999, 0.0
