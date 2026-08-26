@@ -602,6 +602,36 @@ function App() {
     }
   };
 
+  const handleDeleteArchetype = async (name, e) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete the master archetype profile "${name}"?`)) {
+      return;
+    }
+    setArchetypeLoading(true);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      const res = await fetch(`${API_BASE}/user/archetypes/delete`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ archetype_name: name })
+      });
+      if (res.ok) {
+        const body = await res.json();
+        setUserArchetypes(body.archetypes || []);
+        if (body.active_archetype) setActiveArchetype(body.active_archetype);
+        showToast(`🗑️ Deleted archetype "${name}"`, 'info');
+        fetchArchetypes();
+      } else {
+        showToast('Failed to delete archetype', 'error');
+      }
+    } catch (err) {
+      showToast('Failed to delete archetype: ' + err.message, 'error');
+    } finally {
+      setArchetypeLoading(false);
+    }
+  };
+
   const handleClearCache = async () => {
     if (!window.confirm("Are you sure you want to clear all in-memory caches, active session state, and output PDF/TEX files?")) {
       return;
@@ -3108,30 +3138,61 @@ function App() {
                   {/* Archetype Chips */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
                     {userArchetypes.map((arch) => (
-                      <button
+                      <div
                         key={arch.name}
-                        type="button"
-                        disabled={archetypeLoading}
-                        onClick={() => handleSwitchArchetype(arch.name)}
                         style={{
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                          fontSize: '0.78rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'flex',
+                          display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '6px',
+                          borderRadius: '8px',
                           border: arch.name === activeArchetype ? '1px solid var(--accent-primary)' : '1px solid rgba(255,255,255,0.1)',
                           background: arch.name === activeArchetype ? 'rgba(56, 189, 248, 0.2)' : 'rgba(0,0,0,0.3)',
-                          color: arch.name === activeArchetype ? '#38bdf8' : 'var(--text-muted)',
-                          transition: 'all 0.15s ease'
+                          overflow: 'hidden'
                         }}
                       >
-                        <span>{arch.name === activeArchetype ? '✓' : '•'}</span>
-                        <span>{arch.name}</span>
-                        {arch.skills_count ? <span style={{ opacity: 0.6, fontSize: '0.7rem' }}>({arch.skills_count} skills)</span> : null}
-                      </button>
+                        <button
+                          type="button"
+                          disabled={archetypeLoading}
+                          onClick={() => handleSwitchArchetype(arch.name)}
+                          style={{
+                            padding: '6px 10px',
+                            background: 'transparent',
+                            border: 'none',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            color: arch.name === activeArchetype ? '#38bdf8' : 'var(--text-muted)'
+                          }}
+                        >
+                          <span>{arch.name === activeArchetype ? '✓' : '•'}</span>
+                          <span>{arch.name}</span>
+                          {arch.skills_count ? <span style={{ opacity: 0.6, fontSize: '0.7rem' }}>({arch.skills_count} skills)</span> : null}
+                        </button>
+                        {arch.name !== 'Primary' && (
+                          <button
+                            type="button"
+                            title={`Delete ${arch.name}`}
+                            disabled={archetypeLoading}
+                            onClick={(e) => handleDeleteArchetype(arch.name, e)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              borderLeft: '1px solid rgba(255,255,255,0.1)',
+                              color: '#94a3b8',
+                              padding: '6px 8px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              lineHeight: 1
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
 

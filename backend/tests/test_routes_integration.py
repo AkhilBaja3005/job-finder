@@ -150,6 +150,17 @@ def test_user_archetypes_lifecycle():
     assert res_switch.status_code == 200
     assert res_switch.json()["active_archetype"] == "GenAI Systems Specialist"
 
+    # 5. Delete Data Scientist Archetype
+    res_delete = client.post(
+        "/user/archetypes/delete",
+        json={"archetype_name": "Data Scientist"},
+        headers=auth_headers
+    )
+    assert res_delete.status_code == 200
+    archetype_names = [a["name"] for a in res_delete.json()["archetypes"]]
+    assert "Data Scientist" not in archetype_names
+    assert "GenAI Systems Specialist" in archetype_names
+
 
 def test_job_analysis_tailoring_intensity_schema():
     from routes.ai_routes import JobAnalysisRequest, TailorResumeRequest

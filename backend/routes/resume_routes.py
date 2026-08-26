@@ -633,6 +633,9 @@ class SaveArchetypeRequest(BaseModel):
 class SwitchArchetypeRequest(BaseModel):
     archetype_name: str
 
+class DeleteArchetypeRequest(BaseModel):
+    archetype_name: str
+
 
 def _get_archetype_manifest_path(token: Optional[str]) -> str:
     user_up_dir, _ = _get_user_storage_dirs(token or "guest")
@@ -769,5 +772,56 @@ async def switch_user_archetype(request: SwitchArchetypeRequest, authorization: 
         "active_archetype": name,
         "data": loaded_data,
         "evaluation": new_eval
+    }
+
+
+@router.post("/user/archetypes/delete")
+async def delete_user_archetype(request: DeleteArchetypeRequest, authorization: Optional[str] = Header(None)):
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    name = request.archetype_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Archetype name cannot be empty.")
+
+    user_up_dir, _ = _get_user_storage_dirs(token or "guest")
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    arch_tex_path = os.path.join(user_up_dir, f"archetype_{safe_name}.tex")
+    arch_data_path = os.path.join(user_up_dir, f"archetype_{safe_name}.json")
+
+    # Delete physical archetype files if present
+    if os.path.exists(arch_tex_path):
+        try: os.remove(arch_tex_path)
+        except Exception: pass
+    if os.path.exists(arch_data_path):
+        try: os.remove(arch_data_path)
+        except Exception: pass
+
+    # Update manifest
+    manifest_path = _get_archetype_manifest_path(token)
+    remaining_archetypes = []
+    active_name = "Primary"
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest_data = json.load(f)
+            if isinstance(manifest_data, dict):
+                existing = manifest_data.get("archetypes", [])
+                remaining_archetypes = [a for a in existing if isinstance(a, dict) and a.get("name") != name]
+                if manifest_data.get("active_archetype") == name:
+                    active_name = remaining_archetypes[0]["name"] if remaining_archetypes else "Primary"
+                else:
+                    active_name = manifest_data.get("active_archetype", "Primary")
+                
+                manifest_data["archetypes"] = remaining_archetypes
+                manifest_data["active_archetype"] = active_name
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(manifest_data, f, indent=2)
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "message": f"Archetype '{name}' deleted successfully.",
+        "archetypes": remaining_archetypes,
+        "active_archetype": active_name
     }
 
