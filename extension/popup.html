@@ -316,10 +316,54 @@
   </div>
 
   <!-- Extension Action Buttons -->
-  <button id="btn-tailor-pdf" class="btn" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);">📄 1-Click Tailor & Download PDF</button>
+  <button id="btn-autofill" class="btn" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);">⚡ Fill Active Application</button>
+  <button id="btn-tailor-pdf" class="btn btn-secondary">📄 1-Click Tailor & Download PDF</button>
   <button id="btn-email-tailor" class="btn btn-email">📧 1-Click Email Tailored Package</button>
   <button id="btn-cover-letter" class="btn btn-secondary">📝 Generate & Preview Cover Letter</button>
   <button id="btn-outreach" class="btn btn-secondary">✉️ Generate & Preview Recruiter Outreach</button>
+
+  <!-- Auto-Apply Batch Controls -->
+  <div style="background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; padding: 10px; margin-top: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-size: 11px; font-weight: 700; color: #fff;">🤖 LinkedIn Batch Auto-Apply</span>
+      <span id="auto-status-text" style="font-size: 10px; color: #94a3b8; font-weight: 600;">Idle</span>
+    </div>
+    <button id="btn-toggle-auto" class="btn" style="background: linear-gradient(135deg, #10b981, #059669); margin-top: 6px; padding: 8px;">▶️ Start Batch Auto-Apply</button>
+
+    <div style="display: flex; gap: 8px; margin-top: 8px;">
+      <div style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px; text-align: center;">
+        <div id="stat-applied" style="font-size: 14px; font-weight: 800; color: #38bdf8;">0</div>
+        <div style="font-size: 9px; color: #94a3b8; text-transform: uppercase;">Applied</div>
+      </div>
+      <div style="flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 6px; text-align: center;">
+        <div id="stat-skipped" style="font-size: 14px; font-weight: 800; color: #38bdf8;">0</div>
+        <div style="font-size: 9px; color: #94a3b8; text-transform: uppercase;">Skipped</div>
+      </div>
+    </div>
+
+    <!-- EEO Preferences -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">
+      <div>
+        <label style="font-size: 9.5px; color: #94a3b8;">US Work Auth:</label>
+        <select id="eeo-work-auth" style="width: 100%; background: #0f172a; border: 1px solid #334155; color: #fff; padding: 4px 6px; border-radius: 5px; font-size: 10px;">
+          <option value="Yes">Yes</option>
+          <option value="No">No</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size: 9.5px; color: #94a3b8;">Visa Sponsorship:</label>
+        <select id="eeo-sponsorship" style="width: 100%; background: #0f172a; border: 1px solid #334155; color: #fff; padding: 4px 6px; border-radius: 5px; font-size: 10px;">
+          <option value="No">No</option>
+          <option value="Yes">Yes</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Automation Log -->
+  <div id="log-window" style="background: #020617; border: 1px solid #1e293b; border-radius: 6px; padding: 6px 8px; font-family: monospace; font-size: 9.5px; color: #94a3b8; max-height: 60px; overflow-y: auto; margin-top: 8px;">
+    <div>⚡ Ready to auto-fill (Greenhouse, Lever, Ashby, Workday, LinkedIn, Indeed)...</div>
+  </div>
 
   <div id="popup-toast" class="toast"></div>
 

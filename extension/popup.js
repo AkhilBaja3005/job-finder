@@ -29,6 +29,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnOutreach = document.getElementById("btn-outreach");
   const btnEmailTailor = document.getElementById("btn-email-tailor");
   const btnTailorPdf = document.getElementById("btn-tailor-pdf");
+  const btnFill = document.getElementById("btn-autofill");
+  const btnToggleAuto = document.getElementById("btn-toggle-auto");
+  const autoStatusText = document.getElementById("auto-status-text");
+  const statApplied = document.getElementById("stat-applied");
+  const statSkipped = document.getElementById("stat-skipped");
+  const eeoWorkAuth = document.getElementById("eeo-work-auth");
+  const eeoSponsorship = document.getElementById("eeo-sponsorship");
+  const logWindow = document.getElementById("log-window");
+  let isAutoRunning = false;
+
   const userTokenInput = document.getElementById("user-token");
   const toast = document.getElementById("popup-toast");
   const btnSettingsUrl = document.getElementById("btn-settings-url");
@@ -579,4 +589,99 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
   }
+
+  // ----------------------------------------------------
+  // Single-Page Active Auto-Fill Trigger
+  // ----------------------------------------------------
+  if (btnFill) {
+    btnFill.addEventListener("click", () => {
+      btnFill.textContent = "⚡ Filling Active Form...";
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, { action: "TRIGGER_AUTOFILL" }, () => {
+            setTimeout(() => { btnFill.textContent = "⚡ Fill Active Application"; }, 1400);
+          });
+        }
+      });
+    });
+  }
+
+  // ----------------------------------------------------
+  // LinkedIn Batch Auto-Apply Loop Toggle
+  // ----------------------------------------------------
+  function updateAutoUI(running) {
+    if (!btnToggleAuto || !autoStatusText) return;
+    if (running) {
+      btnToggleAuto.textContent = "⏸️ Stop Batch Auto-Apply";
+      btnToggleAuto.style.background = "linear-gradient(135deg, #ef4444, #dc2626)";
+      autoStatusText.textContent = "Running 🟢";
+      autoStatusText.style.color = "#34d399";
+    } else {
+      btnToggleAuto.textContent = "▶️ Start Batch Auto-Apply";
+      btnToggleAuto.style.background = "linear-gradient(135deg, #10b981, #059669)";
+      autoStatusText.textContent = "Idle";
+      autoStatusText.style.color = "#94a3b8";
+    }
+  }
+
+  if (btnToggleAuto) {
+    btnToggleAuto.addEventListener("click", () => {
+      isAutoRunning = !isAutoRunning;
+      chrome.storage.local.set({ isAutoRunning }, () => {
+        updateAutoUI(isAutoRunning);
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]?.id) {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              action: "TOGGLE_BATCH_AUTO",
+              state: isAutoRunning
+            });
+          }
+        });
+      });
+    });
+  }
+
+  // Save EEO Preferences
+  function saveEEO() {
+    const eeoProfile = {
+      workAuth: eeoWorkAuth?.value || "Yes",
+      sponsorship: eeoSponsorship?.value || "No"
+    };
+    chrome.storage.local.set({ eeoProfile });
+  }
+
+  if (eeoWorkAuth) eeoWorkAuth.addEventListener("change", saveEEO);
+  if (eeoSponsorship) eeoSponsorship.addEventListener("change", saveEEO);
+
+  // Load Auto-Apply State and Stats
+  chrome.storage.local.get(["eeoProfile", "appliedCount", "skippedCount", "appLogs", "isAutoRunning"], (items) => {
+    if (items.eeoProfile) {
+      if (eeoWorkAuth && items.eeoProfile.workAuth) eeoWorkAuth.value = items.eeoProfile.workAuth;
+      if (eeoSponsorship && items.eeoProfile.sponsorship) eeoSponsorship.value = items.eeoProfile.sponsorship;
+    }
+    if (statApplied && items.appliedCount !== undefined) statApplied.textContent = items.appliedCount;
+    if (statSkipped && items.skippedCount !== undefined) statSkipped.textContent = items.skippedCount;
+    if (items.isAutoRunning !== undefined) {
+      isAutoRunning = !!items.isAutoRunning;
+      updateAutoUI(isAutoRunning);
+    }
+    if (items.appLogs && logWindow) {
+      logWindow.innerHTML = items.appLogs.map(l => `<div>${l}</div>`).join('');
+      logWindow.scrollTop = logWindow.scrollHeight;
+    }
+  });
+
+  // Storage Change Listener for Auto-Apply stats & logs
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.appliedCount && statApplied) statApplied.textContent = changes.appliedCount.newValue || 0;
+    if (changes.skippedCount && statSkipped) statSkipped.textContent = changes.skippedCount.newValue || 0;
+    if (changes.appLogs && logWindow) {
+      logWindow.innerHTML = (changes.appLogs.newValue || []).map(l => `<div>${l}</div>`).join('');
+      logWindow.scrollTop = logWindow.scrollHeight;
+    }
+    if (changes.isAutoRunning) {
+      isAutoRunning = !!changes.isAutoRunning.newValue;
+      updateAutoUI(isAutoRunning);
+    }
+  });
 });
