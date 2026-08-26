@@ -104,5 +104,6 @@ async function checkHotReload() {
     // Backend offline or running in pure remote mode, ignore silently
   }
 }
-setInterval(checkHotReload, 15000);
+// Poll once every 15 minutes (15 * 60 * 1000 ms) in development
+setInterval(checkHotReload, 15 * 60 * 1000);
 checkHotReload();
