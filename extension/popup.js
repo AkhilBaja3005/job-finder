@@ -582,9 +582,13 @@ document.addEventListener("DOMContentLoaded", () => {
         showToast("⚠️ Open a job page first!");
         return;
       }
-      chrome.storage.local.get(["userToken"], (items) => {
+      chrome.storage.local.get(["userToken", "resumeData", "candidateProfile"], (items) => {
         const token = items ? items.userToken || "guest" : "guest";
+        const candidateProfile = (items && (items.resumeData || items.candidateProfile)) || null;
+
         showToast("⏳ Tailoring resume & compiling PDF package...");
+        btnEmailTailor.disabled = true;
+
         fetch(`${API_BASE_URL}/analyze_job`, {
           method: "POST",
           headers: {
@@ -595,6 +599,7 @@ document.addEventListener("DOMContentLoaded", () => {
             job_url: currentJobInfo.url,
             job_title: currentJobInfo.title,
             job_description: currentJobInfo.description,
+            candidate_profile: candidateProfile,
             send_email: true,
             skip_tailoring: false,
             force_tailoring: true,
@@ -623,7 +628,8 @@ document.addEventListener("DOMContentLoaded", () => {
               }
             }
           })
-          .catch((err) => showToast("❌ Email dispatch failed: " + err.message));
+          .catch((err) => showToast("❌ Email dispatch failed: " + err.message))
+          .finally(() => { btnEmailTailor.disabled = false; });
       });
     });
   }
