@@ -1,5 +1,5 @@
 const DEFAULT_API_BASE_URL = "https://www.job-finder.space";
-const DEFAULT_SYNC_KEY = "GABY48";
+const DEFAULT_SYNC_KEY = "";
 let API_BASE_URL = DEFAULT_API_BASE_URL;
 
 document.addEventListener("DOMContentLoaded", () => {

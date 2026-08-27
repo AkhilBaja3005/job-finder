@@ -184,7 +184,7 @@ function App() {
   
   // 1-Click Chrome Extension Auto-Sync & Auto-Download Handler
   const handleOneClickExtensionSync = (syncCode) => {
-    const targetKey = syncCode || (user && user.sync_code) || "GABY48";
+    const targetKey = syncCode || (user && user.sync_code) || (localStorage.getItem('guest_token') ? localStorage.getItem('guest_token').replace('guest-', '').slice(0, 6).toUpperCase() : '');
     
     // 1. Copy Key to Clipboard
     try { navigator.clipboard.writeText(targetKey); } catch (e) {}

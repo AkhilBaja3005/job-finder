@@ -200,15 +200,13 @@ async def get_session_resume(authorization: Optional[str] = Header(None)):
     session_info = get_session_data(token)
     data = session_info.get("data", {})
     if not data or not data.get("education"):
-        guest_file = _get_guest_state_file(token)
-        if not os.path.exists(guest_file):
-            guest_file = _get_guest_state_file("guest")
-        if os.path.exists(guest_file):
+        user_guest_file = _get_guest_state_file(token)
+        if os.path.exists(user_guest_file):
             try:
-                with open(guest_file, "r", encoding="utf-8") as f:
+                with open(user_guest_file, "r", encoding="utf-8") as f:
                     saved = json.load(f)
                     data = saved.get("data", {})
-                    set_session_data(token or "guest", data, saved.get("path", ""))
+                    set_session_data(token, data, saved.get("path", ""))
             except Exception as e:
                 print(f"[get_session_resume] Error reading state file: {e}")
 
@@ -574,11 +572,13 @@ async def download_extension(
     auth_token = key or token or (authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None)
     user = await async_get_user_by_token(auth_token) if auth_token else None
 
-    sync_code = "GABY48"
+    sync_code = ""
     if user and user.get("sync_code"):
         sync_code = str(user["sync_code"]).strip().upper()
     elif auth_token and len(auth_token.strip()) == 6 and auth_token.strip().isalnum():
         sync_code = auth_token.strip().upper()
+    elif auth_token and str(auth_token).startswith("guest-"):
+        sync_code = auth_token.replace("guest-", "")[:6].upper()
 
     proto = request.headers.get("x-forwarded-proto", "https")
     host = request.headers.get("x-forwarded-host") or request.headers.get("host", "www.job-finder.space")

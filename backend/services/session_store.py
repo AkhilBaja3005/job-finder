@@ -134,22 +134,25 @@ def get_session_data(token: Optional[str]) -> dict:
         except Exception as e:
             print(f"Failed to load resume from Supabase user session: {e}")
 
-    # Search output directory for the latest complete state file
+    # Check user-specific directory for their saved state file only
     try:
-        state_files = glob.glob(os.path.join(OUTPUT_DIR, "**", "resume_state_*.json"), recursive=True)
-        for sf in sorted(state_files, key=os.path.getmtime, reverse=True):
-            with open(sf, "r", encoding="utf-8") as f:
+        user_key = _safe_key(token)
+        user_state_file = os.path.join(OUTPUT_DIR, user_key, f"resume_state_{user_key}.json")
+        if not os.path.exists(user_state_file):
+            user_state_file = os.path.join(USER_DATA_DIR, user_key, "output", f"resume_state_{user_key}.json")
+        if os.path.exists(user_state_file):
+            with open(user_state_file, "r", encoding="utf-8") as f:
                 content = json.load(f)
                 d = content.get("data", {})
-                if d and d.get("education"):
-                    set_session_data(key, d, content.get("path", ""))
+                if d and (d.get("education") or d.get("skills") or d.get("name")):
+                    with _store_lock:
+                        _session_store[key] = {"data": d, "path": content.get("path", "")}
                     return {"data": d, "path": content.get("path", "")}
     except Exception as ex:
         print(f"[get_session_data] Error searching state files: {ex}")
 
-    # Fallback to guest if user session is empty
-    with _store_lock:
-        return _session_store.get("guest", {"data": {}, "path": ""})
+    # If no resume exists for this specific user/session, return clean empty dict
+    return {"data": {}, "path": ""}
 
 
 def set_session_data(token: Optional[str], data: dict, path: str):
