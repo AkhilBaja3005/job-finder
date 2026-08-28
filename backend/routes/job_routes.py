@@ -434,3 +434,28 @@ async def apply_status(task_id: str):
             "X-Accel-Buffering": "no"
         }
     )
+
+
+@router.post("/user/cron/trigger_now")
+async def trigger_user_cron_now(authorization: Optional[str] = Header(None)):
+    """Allows a user to trigger an immediate live job digest email to their inbox."""
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    user = await async_get_user_by_token(token)
+    if not user:
+        raise HTTPException(status_code=404, detail="User profile not found.")
+
+    from services.cron_scheduler import process_and_send_user_digest
+    success = await process_and_send_user_digest(user, bypass_time_check=True)
+    if success:
+        return {
+            "status": "success",
+            "message": f"Live job digest successfully dispatched to {user.get('email')}!"
+        }
+    else:
+        return {
+            "status": "error",
+            "message": f"Failed to dispatch digest email to {user.get('email')}. Check email service settings."
+        }
