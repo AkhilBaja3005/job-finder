@@ -86,8 +86,8 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
         except Exception:
             pass
 
-    # Build dynamic cards and text digest (include up to top 15 highest-matching roles)
-    top_jobs = matching_jobs[:15] if matching_jobs else []
+    # Build dynamic cards and text digest (include up to top 20 highest-matching roles)
+    top_jobs = matching_jobs[:20] if matching_jobs else []
 
     text_digest_lines = [f"Hi {candidate_name},\n", "Here are your top daily matching roles:\n"]
     if top_jobs:
