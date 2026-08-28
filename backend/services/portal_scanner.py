@@ -6,7 +6,10 @@ and auto-scores matches deterministically against the candidate's profile.
 """
 
 import os
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None
 import asyncio
 # pyrefly: ignore [missing-import]
 import httpx
@@ -25,10 +28,13 @@ class PortalScanner:
     def _load_config(self) -> Dict[str, Any]:
         if os.path.exists(self.config_path):
             try:
-                with open(self.config_path, "r", encoding="utf-8") as f:
-                    return yaml.safe_load(f) or {}
+                if yaml is not None:
+                    with open(self.config_path, "r", encoding="utf-8") as f:
+                        return yaml.safe_load(f) or {}
+                else:
+                    print(f"[PortalScanner] PyYAML not installed; falling back to default portal targets.")
             except Exception as e:
-                print(f"[PortalScanner] Error loading {self.config_path}: {e}")
+                print(f"[PortalScanner] Error loading config {self.config_path}: {e}")
         return {
             "portals": {
                 "greenhouse": [{"company_slug": "anthropic", "name": "Anthropic"}, {"company_slug": "stripe", "name": "Stripe"}],
