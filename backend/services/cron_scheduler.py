@@ -86,8 +86,8 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
         except Exception:
             pass
 
-    # Build dynamic cards and text digest
-    top_jobs = matching_jobs[:5] if matching_jobs else []
+    # Build dynamic cards and text digest (include up to top 20 highest-matching roles)
+    top_jobs = matching_jobs[:20] if matching_jobs else []
 
     text_digest_lines = [f"Hi {candidate_name},\n", "Here are your top daily matching roles:\n"]
     if top_jobs:
@@ -189,7 +189,7 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
     )
 
     if sent and user_id and not str(user_id).startswith("guest_"):
-        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today_str = datetime.now(IST_TZ).strftime("%Y-%m-%d")
         try:
             supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_last_sent_date": today_str})
         except Exception:
@@ -207,7 +207,7 @@ async def background_cron_worker():
             if res and isinstance(res, list):
                 now_ist = datetime.now(IST_TZ)
                 current_hhmm = now_ist.strftime("%H:%M")
-                today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                today_str = now_ist.strftime("%Y-%m-%d")
 
                 for user in res:
                     try:

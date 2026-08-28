@@ -16,4 +16,5 @@ groq
 anthropic
 pytest
 sentry-sdk
+pyyaml
 
