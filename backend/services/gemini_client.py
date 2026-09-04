@@ -24,7 +24,7 @@ PROVIDERS = [
     {"name": "groq",        "key_prefix": "gsk_",     "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]},
     {"name": "openrouter",  "key_prefix": "sk-or-",   "models": ["google/gemini-2.5-flash", "google/gemini-2.5-flash-lite"]},
     {"name": "nvidia",      "key_prefix": "nvapi-",   "models": ['meta/llama-3.1-8b-instruct', "meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "mistralai/mixtral-8x22b-instruct-v0.1"]},
-    {"name": "gemini",      "key_prefix": "AIza",     "models": ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash"]},
+    {"name": "gemini",      "key_prefix": "AIza",     "models": ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash"]},
 ]
 
      
@@ -37,11 +37,11 @@ NVIDIA_FALLBACK_MODELS = [
 ]
 
 JSON_FALLBACK_MODELS = [
-"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite",  "gemini-3.7-flash" ,"gemini-3.6-flash" , "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", 
+"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.8-flash",  "gemini-3.7-flash" ,"gemini-3.6-flash" , "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", 
 ]
 
 LATEX_FALLBACK_MODELS = [
-"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.7-flash" ,"gemini-3.6-flash" , "gemini-3.5-flash", "gemini-3.0-flash","gemini-2.5-flash", 
+"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash" ,"gemini-3.6-flash" , "gemini-3.5-flash", "gemini-3.0-flash","gemini-2.5-flash", 
 ]
 
 GROQ_FALLBACK_MODELS = [
@@ -125,6 +125,7 @@ GEMINI_MODEL_RPM_LIMITS = {
     "gemini-3.5-flash": 5,
     "gemini-3.6-flash": 5,
     "gemini-3.7-flash": 5,
+    "gemini-3.8-flash": 5,
     "gemini-2.5-flash-lite": 10
 }
 _rpm_call_log: Dict[str, list] = {}
@@ -586,7 +587,7 @@ FAST_LITE_MODELS = [
 ]
 
 STRONG_JSON_MODELS = [
-    "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", "gemini-3.5-flash-lite"
+     "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", "gemini-3.5-flash-lite"
 ]
 
 def generate_content_with_fallback(
