@@ -7,7 +7,7 @@ from pypdf import PdfReader
 from docx import Document
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Union
+from typing import List, Optional, Dict, Union, Any
 
 from services.gemini_client import generate_content_with_fallback
 

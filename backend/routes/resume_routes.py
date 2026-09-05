@@ -582,7 +582,7 @@ async def download_extension(
         sync_code = str(user["sync_code"]).strip().upper()
     elif auth_token and len(auth_token.strip()) == 6 and auth_token.strip().isalnum():
         sync_code = auth_token.strip().upper()
-    elif auth_token and str(auth_token).startswith("guest-"):
+    elif auth_token and auth_token.startswith("guest-"):
         sync_code = auth_token.replace("guest-", "")[:6].upper()
 
     proto = request.headers.get("x-forwarded-proto", "https")
