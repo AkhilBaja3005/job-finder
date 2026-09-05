@@ -116,3 +116,70 @@ def test_find_recruiter_api_endpoint(mock_finder):
     data = resp.json()
     assert data["status"] == "success"
     assert data["recruiters"][0]["name"] == "Sara Connor"
+
+
+@patch("services.job_searcher.genai.Client")
+def test_search_direct_ats_jobs_json(mock_client_cls):
+    from services.job_searcher import search_direct_ats_jobs
+    mock_client = MagicMock()
+    mock_client_cls.return_value = mock_client
+
+    mock_resp = MagicMock()
+    mock_resp.text = """```json
+    [
+      {
+        "title": "Senior AI Systems Engineer",
+        "company": "DeepMind",
+        "location": "London, UK",
+        "url": "https://boards.greenhouse.io/deepmind/jobs/12345",
+        "posted_time": "1 day ago"
+      },
+      {
+        "title": "Machine Learning Engineer",
+        "company": "Ashby Corp",
+        "location": "Remote",
+        "url": "https://jobs.ashbyhq.com/ashbycorp/67890",
+        "posted_time": "2 days ago"
+      }
+    ]
+    ```"""
+    mock_client.models.generate_content.return_value = mock_resp
+
+    jobs = search_direct_ats_jobs(role="AI Engineer", location="London", timeframe="48h", api_key="test-key")
+    assert len(jobs) == 2
+    assert jobs[0].platform == "Greenhouse"
+    assert jobs[0].title == "Senior AI Systems Engineer"
+    assert jobs[0].company == "DeepMind"
+    assert jobs[1].platform == "Ashby"
+    assert jobs[1].title == "Machine Learning Engineer"
+
+
+@patch("services.job_searcher.genai.Client")
+def test_search_direct_ats_jobs_markdown_fallback(mock_client_cls):
+    from services.job_searcher import search_direct_ats_jobs
+    mock_client = MagicMock()
+    mock_client_cls.return_value = mock_client
+
+    mock_resp = MagicMock()
+    mock_resp.text = """Here are the listings found:
+* **Title:** Workday Tech Lead
+* **Company:** Kainos
+* **Location:** London
+* **URL:** https://kainos.myworkdayjobs.com/en-US/careers/job/123
+* **Posted:** Today
+
+* **Title:** Full Stack Engineer
+* **Company:** Stripe
+* **Location:** Remote
+* **URL:** https://jobs.lever.co/stripe/456
+* **Posted:** 3 hours ago
+"""
+    mock_client.models.generate_content.return_value = mock_resp
+
+    jobs = search_direct_ats_jobs(role="Software Engineer", location="London", timeframe="24h", api_key="test-key")
+    assert len(jobs) == 2
+    assert jobs[0].platform == "Workday"
+    assert jobs[0].company == "Kainos"
+    assert jobs[1].platform == "Lever"
+    assert jobs[1].company == "Stripe"
+

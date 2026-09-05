@@ -137,9 +137,11 @@ class ScrapeRequest(BaseModel):
 
 
 class SearchJobsRequest(BaseModel):
-    location: Optional[str] = "Remote"
+    role: Optional[str] = None                # e.g., "AI Engineer", "Product Engineer", "Full-Stack"
+    location: Optional[str] = "London"
+    timeframe: Optional[str] = "48h"          # "24h", "48h", "7d"
     keywords: Optional[str] = None
-    timeframe: Optional[str] = "48h"
+    target_platforms: Optional[List[str]] = ["ashby", "greenhouse", "lever", "linkedin", "workday"]
 
 
 class ExtensionParseJobRequest(BaseModel):
@@ -201,7 +203,11 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
             db_api_key = user.get("gemini_api_key")
     active_api_key = x_gemini_api_key or db_api_key
 
-    cache_key = (request.keywords or "", request.location or "Remote", request.timeframe or "48h")
+    effective_keywords = (request.keywords or request.role or "").strip() or None
+    effective_location = request.location or "Remote"
+    effective_timeframe = request.timeframe or "48h"
+
+    cache_key = (effective_keywords, effective_location, effective_timeframe)
     cached_jobs = _job_search_cache.get(cache_key)
     if cached_jobs is not None:
         async def cached_job_stream():
@@ -230,9 +236,9 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                 try:
                     async for chunk in find_matching_jobs(
                         resume_data=session_resume_data,
-                        location=request.location or "",
-                        keywords=request.keywords,
-                        timeframe=request.timeframe or "48h",
+                        location=effective_location,
+                        keywords=effective_keywords,
+                        timeframe=effective_timeframe,
                         custom_api_key=active_api_key,
                         browser=getattr(http_request.app.state, "browser", None)
                     ):

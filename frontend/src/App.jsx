@@ -170,6 +170,7 @@ function App() {
   const [searchLocation, setSearchLocation] = useState(() => sessionStorage.getItem('search_location') || 'Remote');
   const [searchKeywords, setSearchKeywords] = useState(() => sessionStorage.getItem('search_keywords') || '');
   const [searchTimeframe, setSearchTimeframe] = useState(() => sessionStorage.getItem('search_timeframe') || '48h'); // '24h' | '48h' | '1w' | '1m'
+  const [targetPlatform, setTargetPlatform] = useState(() => sessionStorage.getItem('target_platform') || 'all');
   const [isDiscoveryView, setIsDiscoveryView] = useState(() => sessionStorage.getItem('is_discovery_view') === 'true');
   const [dashboardMode, setDashboardMode] = useState(() => {
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/docs')) {
@@ -1282,13 +1283,16 @@ function App() {
       if (geminiApiKey) headers['X-Gemini-API-Key'] = geminiApiKey;
       headers['Authorization'] = `Bearer ${getAuthHeader()}`;
 
+      const targetPlatforms = targetPlatform && targetPlatform !== 'all' ? [targetPlatform] : null;
       const response = await fetch(`${API_BASE}/search_matching_jobs`, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({
+          role: searchKeywords || null,
           location: searchLocation,
           keywords: searchKeywords || null,
-          timeframe: searchTimeframe
+          timeframe: searchTimeframe,
+          target_platforms: targetPlatforms
         }),
       });
 
@@ -1313,6 +1317,7 @@ function App() {
             sessionStorage.setItem('search_location', searchLocation);
             sessionStorage.setItem('search_keywords', searchKeywords);
             sessionStorage.setItem('search_timeframe', searchTimeframe);
+            sessionStorage.setItem('target_platform', targetPlatform);
             sessionStorage.setItem('is_discovery_view', 'true');
             sessionStorage.setItem('dashboard_mode', 'discover');
           } catch (e) {
@@ -1333,11 +1338,22 @@ function App() {
 
 
   const sortedAndPaginatedJobs = useMemo(() => {
-    // 1. Sort copy of jobs array. Accurate (JD-scored) jobs always sort
+    // 1. Filter by target platform if specified
+    let filtered = [...discoveredJobs];
+    if (targetPlatform && targetPlatform !== 'all') {
+      const p = targetPlatform.toLowerCase();
+      filtered = filtered.filter((j) => {
+        const plat = (j.platform || '').toLowerCase();
+        const url = (j.url || '').toLowerCase();
+        return plat.includes(p) || url.includes(p);
+      });
+    }
+
+    // 2. Sort copy of jobs array. Accurate (JD-scored) jobs always sort
     // before estimated (title-only) ones, since an estimated job's score
     // isn't directly comparable to a real ATS-scored one — within each
     // group, apply the user's chosen sort mode.
-    const sorted = [...discoveredJobs];
+    const sorted = filtered;
     const estimatedRank = (j) => (j.estimated ? 1 : 0);
     if (searchSortMode === 'overall') {
       sorted.sort((a, b) => estimatedRank(a) - estimatedRank(b) || (b.score || 0) - (a.score || 0));
@@ -1357,14 +1373,14 @@ function App() {
       sorted.sort((a, b) => estimatedRank(a) - estimatedRank(b) || getAgeValue(a.age) - getAgeValue(b.age));
     }
 
-    // 2. Paginate items (30 items per page)
+    // 3. Paginate items (30 items per page)
     const itemsPerPage = 30;
     const totalPages = Math.ceil(sorted.length / itemsPerPage) || 1;
     const currentPage = Math.max(1, Math.min(searchPage, totalPages));
     const paginated = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     return { sorted, paginated, totalPages, currentPage };
-  }, [discoveredJobs, searchSortMode, searchPage]);
+  }, [discoveredJobs, searchSortMode, searchPage, targetPlatform]);
 
   const handleUrlBlur = async () => {
     if (!jobUrl || !jobUrl.startsWith('http')) return;
@@ -2820,7 +2836,7 @@ function App() {
       ) : (
         <div className="dashboard-grid">
           {/* Left Control Panel */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <div className="card dashboard-left-panel" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
 
             {/* Profile header row */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3065,6 +3081,9 @@ function App() {
                   setSearchLocation={setSearchLocation}
                   searchTimeframe={searchTimeframe}
                   setSearchTimeframe={setSearchTimeframe}
+                  targetPlatform={targetPlatform}
+                  setTargetPlatform={setTargetPlatform}
+                  primaryRole={resumeData?.experience?.[0]?.role || ''}
                   discovering={discovering}
                   loading={loading}
                   handleSearchJobs={handleSearchJobs}
@@ -3082,7 +3101,7 @@ function App() {
           </div>
 
           {/* Right Analysis Panel */}
-          <div ref={analysisPanelRef} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <div ref={analysisPanelRef} className="card dashboard-right-panel" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ marginBottom: 0 }}>
                 {dashboardMode === 'history'
@@ -4244,7 +4263,7 @@ function App() {
                       </div>
                     ) : (
                       <>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '500px', overflowY: 'auto', paddingRight: '4px' }}>
+                        <div className="job-scroll-container" style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minHeight: '400px', overflowY: 'auto', paddingRight: '6px' }}>
                           {paginated.map((job, idx) => {
                             const isExpanded = expandedCards.has(idx);
                             const score = job.score || 0;
@@ -4268,12 +4287,14 @@ function App() {
                                                     : job.platform === 'Greenhouse' ? 'rgba(34,197,94,0.15)'
                                                     : job.platform === 'Ashby' ? 'rgba(168,85,247,0.15)'
                                                     : job.platform === 'Lever' ? 'rgba(56,189,248,0.15)'
+                                                    : job.platform === 'Workday' ? 'rgba(245,158,11,0.15)'
                                                     : 'rgba(255,111,0,0.12)',
                                           color: job.platform === 'LinkedIn' ? '#0a66c2'
                                                : job.platform === 'Reed' ? '#ec4899'
                                                : job.platform === 'Greenhouse' ? '#22c55e'
                                                : job.platform === 'Ashby' ? '#c084fc'
                                                : job.platform === 'Lever' ? '#38bdf8'
+                                               : job.platform === 'Workday' ? '#f59e0b'
                                                : '#ff6f00'
                                         }}>{job.platform}</span>
                                         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{job.age}</span>

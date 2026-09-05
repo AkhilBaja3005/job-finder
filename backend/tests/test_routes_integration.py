@@ -172,3 +172,17 @@ def test_job_analysis_tailoring_intensity_schema():
     assert req2.tailoring_intensity == "conservative"
 
 
+def test_search_jobs_request_schema():
+    from routes.job_routes import SearchJobsRequest
+    # When user leaves role and keywords blank, role should be None
+    req_blank = SearchJobsRequest(keywords=None, role=None)
+    assert req_blank.role is None
+    assert req_blank.keywords is None
+
+    # When user specifies role
+    req_role = SearchJobsRequest(role="Product Engineer", timeframe="7d")
+    assert req_role.role == "Product Engineer"
+    assert req_role.timeframe == "7d"
+
+
+
