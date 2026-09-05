@@ -348,8 +348,27 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         user_selected_skills,
                         getattr(request, 'tailoring_intensity', 'balanced') or 'balanced'
                     )
+
+                    # ── Post-Refinement Scrutiny Check ──────────────────────────────
+                    yield json.dumps({"type": "log", "percent": 84, "message": "🔍 Senior Recruiter Agent performing secondary scrutiny on refined resume..."}) + "\n"
+                    second_review = await asyncio.to_thread(
+                        review_tailored_resume,
+                        raw_tailored_latex,
+                        session_resume_data if isinstance(session_resume_data, dict) else {},
+                        job_title or "Target Role",
+                        jd_text or "",
+                        active_api_key,
+                        log_callback,
+                        user_selected_skills
+                    )
+                    if second_review.satisfied:
+                        yield json.dumps({"type": "log", "percent": 85, "message": "✅ Recruiter Agent approved refined resume after scrutiny."}) + "\n"
+                        print("[analyze_job] Recruiter agent approved refined resume on secondary scrutiny.")
+                    else:
+                        yield json.dumps({"type": "log", "percent": 85, "message": f"ℹ️ Recruiter scrutiny noted minor points ({second_review.feedback[:80]}...); proceeding to compile."}) + "\n"
+                        print(f"[analyze_job] Recruiter secondary scrutiny feedback: {second_review.feedback}")
                 else:
-                    yield json.dumps({"type": "log", "percent": 83, "message": "✅ Recruiter Agent approved resume quality & truthfulness."}) + "\n"
+                    yield json.dumps({"type": "log", "percent": 83, "message": "✅ Recruiter Agent approved resume quality & truthfulness on first pass."}) + "\n"
             except Exception as rev_err:
                 print(f"[analyze_job] Recruiter review check warning: {rev_err}")
 
