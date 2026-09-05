@@ -42,10 +42,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnFill = document.getElementById("btn-autofill");
   const btnAutoAttach = document.getElementById("btn-auto-attach");
   const selTailoringIntensity = document.getElementById("sel-tailoring-intensity");
+  const selResumeArchetype = document.getElementById("sel-resume-archetype");
   const btnTailorPdf = document.getElementById("btn-tailor-pdf");
   const btnEmailTailor = document.getElementById("btn-email-tailor");
   const btnCoverLetter = document.getElementById("btn-cover-letter");
   const btnOutreach = document.getElementById("btn-outreach");
+
+  // Quick Outreach Drawer Elements
+  const outreachTextBox = document.getElementById("outreach-text-box");
+  const btnOutreachInmail = document.getElementById("btn-outreach-inmail");
+  const btnOutreachEmail = document.getElementById("btn-outreach-email");
+  const btnCopyOutreach = document.getElementById("btn-copy-outreach");
+  const btnQuickInmail = document.getElementById("btn-quick-inmail");
 
   // Tab 2 Elements: Profile
   const btnSyncBackendNow = document.getElementById("btn-sync-backend-now");
@@ -213,6 +221,44 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         } catch (e) {}
       }
+
+      // 3. Fetch Master Resume Archetypes
+      try {
+        const archRes = await fetch(`${API_BASE_URL}/user/archetypes`, {
+          headers: { "Authorization": `Bearer ${key}`, "Accept": "application/json" }
+        });
+        if (archRes.ok) {
+          const archData = await archRes.json();
+          if (selResumeArchetype && archData.archetypes && archData.archetypes.length > 0) {
+            selResumeArchetype.innerHTML = "";
+            archData.archetypes.forEach((arch) => {
+              const opt = document.createElement("option");
+              opt.value = arch.name;
+              opt.textContent = arch.name + (arch.is_active ? " (Active)" : "");
+              if (arch.is_active || arch.name === archData.active_archetype) {
+                opt.selected = true;
+              }
+              selResumeArchetype.appendChild(opt);
+            });
+
+            selResumeArchetype.onchange = async () => {
+              const selectedName = selResumeArchetype.value;
+              showToast(`Switching to archetype: ${selectedName}...`);
+              try {
+                const swRes = await fetch(`${API_BASE_URL}/user/archetypes/switch`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                  body: JSON.stringify({ archetype_name: selectedName })
+                });
+                if (swRes.ok) {
+                  showToast(`✓ Switched to ${selectedName}`);
+                  fetchUserInfo(key, false);
+                }
+              } catch (err) {}
+            };
+          }
+        }
+      } catch (e) {}
 
       const displayName = userName || (userEmail ? userEmail.split("@")[0] : "Candidate Profile");
       if (userNameDisplay) userNameDisplay.textContent = `👤 Synced: ${displayName}`;
@@ -1085,22 +1131,77 @@ document.addEventListener("DOMContentLoaded", () => {
         })
           .then((res) => res.json())
           .then((data) => {
-            const msg = data.message?.email_body || data.message?.linkedin_message || "Outreach generated!";
-            activePreviewText = msg;
+            const inmailMsg = data.message?.linkedin_message || data.message?.email_body || "Outreach generated!";
+            const emailMsg = data.message?.email_body || data.message?.linkedin_message || "Outreach generated!";
+            window._lastInmailMsg = inmailMsg;
+            window._lastEmailMsg = emailMsg;
+            window._recruiterProfileUrl = data.recruiter_url || currentJobInfo.url || "https://www.linkedin.com";
+
+            activePreviewText = inmailMsg;
+            if (outreachTextBox) outreachTextBox.textContent = inmailMsg;
             previewTitle.textContent = "✉️ Generated Outreach Message";
-            previewContent.textContent = msg;
+            previewContent.textContent = inmailMsg;
             previewWrapper.style.display = "block";
             chrome.storage.local.set({
               lastPreviewState: {
-                text: msg,
+                text: inmailMsg,
                 title: "✉️ Generated Outreach Message",
                 url: currentJobInfo.url || ""
               }
             });
-            showToast("✉️ Outreach generated! Preview below.");
+            showToast("✉️ Outreach generated! Available in 1-Click Drawer.");
           })
           .catch((err) => showToast("❌ Error: " + err.message));
       });
+    });
+  }
+
+  // Outreach Drawer Controls (InMail / Email switcher & Copy)
+  if (btnOutreachInmail) {
+    btnOutreachInmail.addEventListener("click", () => {
+      btnOutreachInmail.style.background = "rgba(56, 189, 248, 0.15)";
+      btnOutreachInmail.style.color = "#38bdf8";
+      btnOutreachInmail.style.border = "1px solid rgba(56, 189, 248, 0.3)";
+      if (btnOutreachEmail) {
+        btnOutreachEmail.style.background = "transparent";
+        btnOutreachEmail.style.color = "#94a3b8";
+        btnOutreachEmail.style.border = "1px solid rgba(255,255,255,0.1)";
+      }
+      if (outreachTextBox) outreachTextBox.textContent = window._lastInmailMsg || "Click 'Generate & Preview Recruiter Outreach' to create a personalized InMail note.";
+    });
+  }
+
+  if (btnOutreachEmail) {
+    btnOutreachEmail.addEventListener("click", () => {
+      btnOutreachEmail.style.background = "rgba(56, 189, 248, 0.15)";
+      btnOutreachEmail.style.color = "#38bdf8";
+      btnOutreachEmail.style.border = "1px solid rgba(56, 189, 248, 0.3)";
+      if (btnOutreachInmail) {
+        btnOutreachInmail.style.background = "transparent";
+        btnOutreachInmail.style.color = "#94a3b8";
+        btnOutreachInmail.style.border = "1px solid rgba(255,255,255,0.1)";
+      }
+      if (outreachTextBox) outreachTextBox.textContent = window._lastEmailMsg || "Click 'Generate & Preview Recruiter Outreach' to create a personalized cold email.";
+    });
+  }
+
+  if (btnCopyOutreach) {
+    btnCopyOutreach.addEventListener("click", () => {
+      const textToCopy = outreachTextBox ? outreachTextBox.textContent : "";
+      if (textToCopy && !textToCopy.startsWith("Click")) {
+        navigator.clipboard.writeText(textToCopy);
+        btnCopyOutreach.textContent = "✅ Copied!";
+        setTimeout(() => { btnCopyOutreach.textContent = "📋 Copy Outreach"; }, 2000);
+      } else {
+        showToast("⚠️ Generate outreach first!");
+      }
+    });
+  }
+
+  if (btnQuickInmail) {
+    btnQuickInmail.addEventListener("click", () => {
+      const targetUrl = window._recruiterProfileUrl || (currentJobInfo ? currentJobInfo.url : "https://www.linkedin.com");
+      chrome.tabs.create({ url: targetUrl });
     });
   }
 

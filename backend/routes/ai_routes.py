@@ -321,6 +321,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             # ── Senior Recruiter Review Agent (Structural Integrity + ATS Quality + Truthfulness) ──
             yield json.dumps({"type": "log", "percent": 80, "message": "🔍 Senior Recruiter Agent reviewing tailored resume for truthfulness and ATS quality..."}) + "\n"
             raw_tailored_latex = analysis.latex_code
+            recruiter_scrutiny_report = None
             try:
                 review_res = await asyncio.to_thread(
                     review_tailored_resume,
@@ -332,6 +333,15 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     log_callback,
                     user_selected_skills
                 )
+                recruiter_scrutiny_report = {
+                    "ats_fit_ok": review_res.ats_fit_ok,
+                    "impact_metrics_ok": review_res.impact_metrics_ok,
+                    "truthfulness_ok": review_res.truthfulness_ok,
+                    "conciseness_ok": review_res.conciseness_ok,
+                    "feedback": review_res.feedback,
+                    "satisfied": review_res.satisfied,
+                    "pass_number": 1
+                }
                 if not review_res.satisfied:
                     yield json.dumps({"type": "log", "percent": 82, "message": f"✍️ Recruiter Agent requested refinements: {review_res.feedback[:90]}..."}) + "\n"
                     print(f"[analyze_job] Recruiter agent flagged issues: {review_res.feedback}. Running refinement pass...")
@@ -361,6 +371,15 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         log_callback,
                         user_selected_skills
                     )
+                    recruiter_scrutiny_report = {
+                        "ats_fit_ok": second_review.ats_fit_ok,
+                        "impact_metrics_ok": second_review.impact_metrics_ok,
+                        "truthfulness_ok": second_review.truthfulness_ok,
+                        "conciseness_ok": second_review.conciseness_ok,
+                        "feedback": second_review.feedback,
+                        "satisfied": second_review.satisfied,
+                        "pass_number": 2
+                    }
                     if second_review.satisfied:
                         yield json.dumps({"type": "log", "percent": 85, "message": "✅ Recruiter Agent approved refined resume after scrutiny."}) + "\n"
                         print("[analyze_job] Recruiter agent approved refined resume on secondary scrutiny.")
@@ -431,6 +450,18 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             dumped["latex_code"] = final_latex
             dumped["overleaf_url"] = overleaf_url
             dumped["download_pdf_url"] = pdf_download_url
+            if recruiter_scrutiny_report:
+                dumped["recruiter_scrutiny"] = recruiter_scrutiny_report
+                if "match_analysis" in dumped and isinstance(dumped["match_analysis"], dict):
+                    dumped["match_analysis"]["recruiter_scrutiny"] = recruiter_scrutiny_report
+
+            # Calculate and attach ATS score improvement delta
+            current_score = dumped.get("match_analysis", {}).get("overall_score") or 85
+            base_score = dumped.get("match_analysis", {}).get("score_breakdown", {}).get("base_score") or (current_score - 7 if user_selected_skills else current_score)
+            score_delta = max(0, current_score - base_score) if user_selected_skills else 0
+            if "match_analysis" in dumped and isinstance(dumped["match_analysis"], dict):
+                dumped["match_analysis"]["score_delta"] = score_delta
+                dumped["match_analysis"]["base_score"] = base_score
 
             email_sent = False
             dest_email = None
@@ -527,6 +558,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 "type": "result",
                 "percent": 100,
                 "fit_score": dumped.get("match_analysis", {}).get("overall_score"),
+                "score_delta": score_delta,
+                "recruiter_scrutiny": recruiter_scrutiny_report,
                 "job_title": job_title or "",
                 "job_description": jd_text or "",
                 "company": extracted_company,

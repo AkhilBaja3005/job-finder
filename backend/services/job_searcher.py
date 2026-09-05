@@ -724,31 +724,30 @@ async def find_matching_jobs(
         log_ist(err_msg)
         print(err_msg)
 
-    # Execute search queries sequentially across queries, but fetch platforms in parallel per query
+    # Parallelize multi-query search across all queries and platforms concurrently
     raw_jobs = list(portal_jobs_raw)
     indeed_jobs_for_est = []
-    for query in queries:
-        yield_msg = f"🌐 Fetching listings from LinkedIn, Indeed & Reed for '{query}'..."
-        log_ist(yield_msg)
-        yield json.dumps({"type": "log", "message": yield_msg}) + " " * 2048 + "\n"
-        
-        # Parallel platform fetching per query for faster response
-        li_task = asyncio.to_thread(search_linkedin_jobs, query, location, timeframe)
-        reed_task = asyncio.to_thread(search_reed_jobs, query, location, timeframe)
-        ind_task = search_indeed_jobs(query, location, timeframe)
 
-        li_jobs, reed_jobs, ind_jobs = await asyncio.gather(li_task, reed_task, ind_task)
-        
-        yield json.dumps({"type": "log", "message": f"✓ Fetched {len(li_jobs)} LinkedIn listings for '{query}'"}) + " " * 2048 + "\n"
-        if target_country == "GB":
-            yield json.dumps({"type": "log", "message": f"✓ Fetched {len(reed_jobs)} Reed.co.uk listings for '{query}'"}) + " " * 2048 + "\n"
-        
+    yield_msg = f"🌐 Concurrently fetching listings across {len(queries)} query streams: {', '.join(queries)}..."
+    log_ist(yield_msg)
+    yield json.dumps({"type": "log", "message": yield_msg}) + " " * 2048 + "\n"
+
+    async def _fetch_query_cluster(q: str):
+        li_t = asyncio.to_thread(search_linkedin_jobs, q, location, timeframe)
+        reed_t = asyncio.to_thread(search_reed_jobs, q, location, timeframe)
+        ind_t = search_indeed_jobs(q, location, timeframe)
+        li_j, reed_j, ind_j = await asyncio.gather(li_t, reed_t, ind_t)
+        return q, li_j, reed_j, ind_j
+
+    query_tasks = [_fetch_query_cluster(q) for q in queries]
+    query_clusters = await asyncio.gather(*query_tasks)
+
+    for q, li_jobs, reed_jobs, ind_jobs in query_clusters:
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(ind_jobs)
         indeed_jobs_for_est.extend(ind_jobs)
-        
-        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed & {len(reed_jobs)} Reed.co.uk postings for '{query}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{query}'"
+        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed & {len(reed_jobs)} Reed.co.uk postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{q}'"
         log_ist(res_msg)
         yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 
