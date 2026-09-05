@@ -250,3 +250,89 @@ async def email_action_unsubscribe(email: str):
         """)
     except Exception as e:
         return HTMLResponse(f"<h3>Unsubscribe failed: {str(e)}</h3>", status_code=500)
+
+
+@router.get("/email_action/tailor", response_class=HTMLResponse)
+async def email_action_tailor(job_url: str, email: str, title: Optional[str] = None, company: Optional[str] = None):
+    """
+    Zero-Click 1-Tap Tailoring Handler from Daily Job Digest Email.
+    Retrieves user profile, runs full LaTeX tailoring & Reviewer Agent check,
+    compiles single-page PDF, attaches to delivery email, and records to history.
+    """
+    try:
+        encoded_email = urllib.parse.quote(email)
+        users = supabase_request(f"users?email=eq.{encoded_email}", "GET")
+        if not users:
+            return HTMLResponse("<h3>Error: User matching this email address not found.</h3>", status_code=404)
+
+        user = users[0]
+        user_id = user.get("id")
+        user_token = user.get("token") or user_id
+
+        # Load candidate resume data
+        resume_rows = supabase_request(f"user_resumes?user_id=eq.{user_id}&select=resume_data", "GET")
+        if not resume_rows:
+            return HTMLResponse("<h3>Error: No master resume found. Upload a resume in the Job Finder web app first.</h3>", status_code=400)
+
+        raw_data = resume_rows[0].get("resume_data")
+        candidate_profile = json.loads(raw_data) if isinstance(raw_data, str) else (raw_data or {})
+
+        from routes.ai_routes import JobAnalysisRequest, analyze_job
+        from starlette.datastructures import Headers
+
+        # Create dummy Request object for rate limiting and invocation
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "headers": [(b"authorization", f"Bearer {user_token}".encode("utf-8"))],
+            "client": ("127.0.0.1", 80),
+            "scheme": "http",
+            "server": ("127.0.0.1", 80),
+        }
+        fake_http_request = Request(scope)
+
+        req_payload = JobAnalysisRequest(
+            job_url=job_url,
+            job_title=title or "Target Role",
+            company=company or "Company",
+            send_email=True,
+            skip_tailoring=False,
+            force_tailoring=True,
+            candidate_profile=candidate_profile,
+            tailoring_intensity="balanced",
+            source_mode="digest_email"
+        )
+
+        res = await analyze_job(
+            request=req_payload,
+            http_request=fake_http_request,
+            authorization=f"Bearer {user_token}",
+            x_gemini_api_key=user.get("gemini_api_key")
+        )
+
+        # Consume streaming generator in background thread
+        async for _ in res.body_iterator:
+            pass
+
+        target_title = title or "Target Role"
+        target_company = company or "Company"
+        return HTMLResponse(f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 40px auto; padding: 32px 24px; border: 1px solid #10B981; border-radius: 16px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.06); background-color: #ffffff;">
+            <div style="font-size: 3.5rem; margin-bottom: 16px;">⚡</div>
+            <h2 style="color: #0F172A; margin: 0 0 12px; font-weight: 800;">Tailoring Completed!</h2>
+            <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin-bottom: 20px;">
+                Your resume for <strong>{target_title}</strong> at <strong>{target_company}</strong> has been tailored, verified by the Senior Recruiter Agent, and compiled.
+            </p>
+            <div style="background-color: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 14px; margin-bottom: 24px; color: #166534; font-size: 0.9rem; font-weight: 600;">
+                📧 We've dispatched the tailored PDF directly to <strong>{email}</strong>.
+            </div>
+            <a href="{job_url}" target="_blank" style="display: inline-block; background-color: #0284C7; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 0.92rem;">
+                Open Job & Apply Now &rarr;
+            </a>
+            <p style="font-size: 0.8rem; color: #94A3B8; margin-top: 24px;">You can safely close this window.</p>
+        </div>
+        """)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return HTMLResponse(f"<h3>Tailoring failed: {str(e)}</h3>", status_code=500)
