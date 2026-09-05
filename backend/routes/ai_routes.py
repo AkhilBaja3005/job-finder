@@ -26,7 +26,7 @@ from services.session_store import (
 )
 from services.auth import async_get_user_by_token
 from services.scraper import scrape_job_description
-from services.llm_agent import analyze_job_fit, tailor_latex_code as tailor_resume
+from services.llm_agent import analyze_job_fit, tailor_latex_code as tailor_resume, review_tailored_resume
 from utils.latex_utils import generate_latex_from_json, apply_latex_hotfix, compile_and_check_page_metrics
 from services.overleaf import upload_zip_to_tmpfiles
 from services.application_tracker import record_application
@@ -318,10 +318,44 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 set_cached_analysis(token, job_title or "", jd_text or "", dumped, request.user_selected_skills)
                 return
 
+            # ── Senior Recruiter Review Agent (Structural Integrity + ATS Quality + Truthfulness) ──
+            yield json.dumps({"type": "log", "percent": 80, "message": "🔍 Senior Recruiter Agent reviewing tailored resume for truthfulness and ATS quality..."}) + "\n"
+            raw_tailored_latex = analysis.latex_code
+            try:
+                review_res = await asyncio.to_thread(
+                    review_tailored_resume,
+                    raw_tailored_latex,
+                    session_resume_data if isinstance(session_resume_data, dict) else {},
+                    job_title or "Target Role",
+                    jd_text or "",
+                    active_api_key,
+                    log_callback,
+                    user_selected_skills
+                )
+                if not review_res.satisfied:
+                    yield json.dumps({"type": "log", "percent": 82, "message": f"✍️ Recruiter Agent requested refinements: {review_res.feedback[:90]}..."}) + "\n"
+                    print(f"[analyze_job] Recruiter agent flagged issues: {review_res.feedback}. Running refinement pass...")
+                    raw_tailored_latex = await asyncio.to_thread(
+                        tailor_resume,
+                        master_latex,
+                        job_title or "",
+                        jd_text or "",
+                        analysis.suggested_resume_updates,
+                        getattr(analysis.match_analysis, "missing_skills", []) or [],
+                        active_api_key,
+                        f"REVIEWER AGENT FEEDBACK: {review_res.feedback}",
+                        log_callback,
+                        user_selected_skills,
+                        getattr(request, 'tailoring_intensity', 'balanced') or 'balanced'
+                    )
+                else:
+                    yield json.dumps({"type": "log", "percent": 83, "message": "✅ Recruiter Agent approved resume quality & truthfulness."}) + "\n"
+            except Exception as rev_err:
+                print(f"[analyze_job] Recruiter review check warning: {rev_err}")
+
             yield json.dumps({"type": "log", "percent": 85, "message": "⚙️ Compiling tailored LaTeX resume to PDF..."}) + "\n"
             t0 = time.time()
 
-            raw_tailored_latex = analysis.latex_code
             safe_key = _safe_key(token)
             user_up_dir, user_out_dir = _get_user_storage_dirs(safe_key)
             tex_path = os.path.join(user_out_dir, f"tailored_resume_{safe_key}.tex")

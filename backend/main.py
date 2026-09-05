@@ -138,7 +138,7 @@ if os.path.exists(frontend_dist):
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-    @app.api_route("/{rest_of_path:path}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+    @app.api_route("/{rest_of_path:path}", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False)
     async def serve_spa_frontend(rest_of_path: str):
         # 1. Block directory traversal and sensitive environment / key scanners
         forbidden_substrings = ("..", ".env", ".aws", ".git", ".ssh", "passwd", "environ", "actuator", "graphql", "config.json", "credentials", "phpinfo", "swagger", "meta-data", "secrets.toml")
