@@ -296,15 +296,61 @@ input:focus, textarea:focus, select:focus {
 /* ─── Dashboard grid ─────────────────────────────────────── */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 24px;
-  max-width: 100%;
+  grid-template-columns: 380px minmax(0, 1fr);
+  gap: 28px;
+  max-width: 1400px;
+  margin: 0 auto;
   box-sizing: border-box;
+  align-items: stretch;
+}
+
+.dashboard-left-panel {
+  position: sticky;
+  top: 24px;
+  height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.dashboard-right-panel {
+  position: sticky;
+  top: 24px;
+  height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  min-width: 0;
+}
+
+.dashboard-left-panel::-webkit-scrollbar,
+.dashboard-right-panel::-webkit-scrollbar,
+.job-scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dashboard-left-panel::-webkit-scrollbar-thumb,
+.dashboard-right-panel::-webkit-scrollbar-thumb,
+.job-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
 }
 
 @media (max-width: 1024px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .dashboard-left-panel,
+  .dashboard-right-panel {
+    height: auto !important;
+    position: static !important;
+    max-height: none !important;
+    min-height: auto !important;
   }
 }
 
@@ -934,6 +980,12 @@ textarea:focus-visible {
   .dashboard-grid {
     grid-template-columns: 1fr !important;
     gap: 14px;
+  }
+
+  .dashboard-left-panel {
+    position: static !important;
+    max-height: none !important;
+    overflow-y: visible !important;
   }
 
   .workspace {

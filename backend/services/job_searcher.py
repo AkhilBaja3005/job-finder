@@ -10,6 +10,10 @@ from bs4 import BeautifulSoup
 from typing import List, Optional, Dict, Any
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
+# pyrefly: ignore [missing-import]
+from google import genai
+# pyrefly: ignore [missing-import]
+from google.genai import types
 from services.gemini_client import generate_content_with_fallback
 from services.ats_scorer import (
     compute_ats_score, compute_overall_score, calculate_flattened_experience,
@@ -69,6 +73,173 @@ def generate_search_queries_from_resume(resume_data: dict, custom_api_key: Optio
         print(f"[Job Searcher] Failed to generate queries: {e}")
         # Default fallbacks
         return [recent_roles[0]] if recent_roles else ["Software Engineer"]
+
+
+# ─── Direct ATS Job Search with Gemini Google Search Grounding ─────────────
+
+def search_direct_ats_jobs(
+    role: str,
+    location: str = "London",
+    timeframe: str = "48h",
+    api_key: Optional[str] = None
+) -> List[JobSearchResult]:
+    """
+    Leverages Gemini with Google Search Grounding to directly search
+    Greenhouse, Ashby, Lever, and Workday without bot-blocking or scraping hurdles.
+    Enforces strict role relevance and freshness timeframe.
+    """
+    gemini_key = api_key or os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        print("[Direct ATS Search] No GEMINI_API_KEY configured. Skipping.")
+        return []
+    
+    timeframe_prompt_map = {
+        "24h": "posted within the last 24 hours (today)",
+        "48h": "posted within the last 48 hours (past 2 days)",
+        "7d": "posted within the past 7 days (this week)",
+        "1w": "posted within the past 7 days (this week)",
+        "1m": "posted within the past 30 days (this month)"
+    }
+    timeframe_constraint = timeframe_prompt_map.get(timeframe, f"posted within the last {timeframe}")
+    
+    prompt = f"""Search Google for live job openings for "{role}" in "{location}".
+Target direct listings on Greenhouse (boards.greenhouse.io), Ashby (jobs.ashbyhq.com), Lever (jobs.lever.co), or Workday (myworkdayjobs.com).
+Find jobs that are active and {timeframe_constraint}.
+
+Output ONLY a JSON array with objects matching:
+[
+  {{
+    "title": "Exact Job Title",
+    "company": "Company Name",
+    "location": "Location (City, Country, or Remote)",
+    "url": "https://direct-ats-link...",
+    "posted_time": "e.g. 1 day ago / recent"
+  }}
+]
+Do not wrap in explanatory text. Only return the JSON array."""
+    try:
+        client = genai.Client(api_key=gemini_key)
+        raw_text = ""
+        ATS_SEARCH_MODELS = [
+            "gemini-3.8-flash",
+            "gemini-3.7-flash",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash",
+            "gemini-2.5-flash",
+        ]
+        for search_model in ATS_SEARCH_MODELS:
+            try:
+                response = client.models.generate_content(
+                    model=search_model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        tools=[types.Tool(google_search=types.GoogleSearch())],
+                        temperature=0.1
+                    )
+                )
+                if response and response.text:
+                    raw_text = response.text.strip()
+                    if raw_text:
+                        break
+            except Exception as model_err:
+                print(f"[Direct ATS Search] Model {search_model} failed: {model_err}, trying fallback...")
+                continue
+        if not raw_text:
+            return []
+            
+        items = []
+        # 1. Try JSON list extraction
+        json_match = re.search(r"\[\s*\{.*\}\s*\]", raw_text, re.DOTALL)
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group(0))
+                if isinstance(parsed, list):
+                    items = parsed
+            except Exception:
+                pass
+
+        # 2. Fallback: Parse markdown block if JSON was not parsed
+        if not items:
+            current_item = {}
+            for line in raw_text.splitlines():
+                line = line.strip()
+                clean_line = re.sub(r"[\*#_]", "", line).strip()
+                m_title = re.search(r"^Title:\s*(.+)", clean_line, re.IGNORECASE)
+                m_comp = re.search(r"^Company:\s*(.+)", clean_line, re.IGNORECASE)
+                m_loc = re.search(r"^Location:\s*(.+)", clean_line, re.IGNORECASE)
+                m_time = re.search(r"^Posted:\s*(.+)", clean_line, re.IGNORECASE)
+
+                if m_title:
+                    if current_item.get("title") and current_item.get("url"):
+                        items.append(current_item)
+                        current_item = {}
+                    current_item["title"] = m_title.group(1).strip()
+                elif m_comp:
+                    current_item["company"] = m_comp.group(1).strip()
+                elif m_loc:
+                    current_item["location"] = m_loc.group(1).strip()
+                elif "url:" in clean_line.lower():
+                    u_match = re.search(r"https?://[^\s\]\)]+", line)
+                    if u_match:
+                        current_item["url"] = u_match.group(0).strip()
+                elif m_time:
+                    current_item["posted_time"] = m_time.group(1).strip()
+
+            if current_item.get("title") and current_item.get("url"):
+                items.append(current_item)
+
+        if not items:
+            return []
+
+        results: List[JobSearchResult] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            url = item.get("url", "").strip()
+            if not url or not url.startswith("http"):
+                continue
+
+            # Detect platform
+            platform = "Direct ATS"
+            u_low = url.lower()
+            if "ashbyhq.com" in u_low:
+                platform = "Ashby"
+            elif "greenhouse.io" in u_low:
+                platform = "Greenhouse"
+            elif "lever.co" in u_low:
+                platform = "Lever"
+            elif "workday" in u_low:
+                platform = "Workday"
+
+            title_val = item.get("title", "").strip() or role
+            company_val = item.get("company", "").strip() or "Tech Company"
+            loc_val = item.get("location", "").strip() or location
+            posted_val = item.get("posted_time", "").strip() or timeframe
+
+            # Generate unique deterministic job_id
+            job_id = hashlib.md5(url.encode()).hexdigest()[:10]
+
+            results.append(
+                JobSearchResult(
+                    url=url,
+                    title=title_val,
+                    company=company_val,
+                    location=loc_val,
+                    post_date_raw=posted_val,
+                    platform=platform,
+                    job_id=job_id,
+                    full_description=item.get("description") or f"Direct ATS listing for {title_val} at {company_val}."
+                )
+            )
+
+        print(f"[Direct ATS Search] Found {len(results)} jobs for role '{role}' in '{location}' ({timeframe})")
+        log_ist(f"[Direct ATS Search] Found {len(results)} direct ATS jobs via Google Search Grounding for '{role}' in '{location}'")
+        return results
+    except Exception as e:
+        print(f"[Direct ATS Search] Error querying Gemini Google Search Grounding: {e}")
+        log_ist(f"[Direct ATS Search] Grounding search note: {e}")
+        return []
+
 
 # ─── LinkedIn Scraper (Unauthenticated API) ───────────────────────────────
 
@@ -736,46 +907,57 @@ async def find_matching_jobs(
         li_t = asyncio.to_thread(search_linkedin_jobs, q, location, timeframe)
         reed_t = asyncio.to_thread(search_reed_jobs, q, location, timeframe)
         ind_t = search_indeed_jobs(q, location, timeframe)
-        li_j, reed_j, ind_j = await asyncio.gather(li_t, reed_t, ind_t)
-        return q, li_j, reed_j, ind_j
+        ats_t = asyncio.to_thread(search_direct_ats_jobs, q, location, timeframe, custom_api_key)
+        li_j, reed_j, ind_j, ats_j = await asyncio.gather(li_t, reed_t, ind_t, ats_t)
+        return q, li_j, reed_j, ind_j, ats_j
 
     query_tasks = [_fetch_query_cluster(q) for q in queries]
     query_clusters = await asyncio.gather(*query_tasks)
 
-    for q, li_jobs, reed_jobs, ind_jobs in query_clusters:
+    for q, li_jobs, reed_jobs, ind_jobs, ats_jobs in query_clusters:
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(ind_jobs)
+        raw_jobs.extend(ats_jobs)
         indeed_jobs_for_est.extend(ind_jobs)
-        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed & {len(reed_jobs)} Reed.co.uk postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{q}'"
+        res_msg = f"✓ Found {len(ats_jobs)} Direct ATS (Ashby/Greenhouse/Lever/Workday), {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed & {len(reed_jobs)} Reed.co.uk postings for '{q}'" if target_country == "GB" else f"✓ Found {len(ats_jobs)} Direct ATS (Ashby/Greenhouse/Lever/Workday), {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{q}'"
         log_ist(res_msg)
         yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 
     # Deduplicate by job URL / ID
     seen_ids = set()
+    seen_urls = set()
     deduped_jobs = []
     for job in raw_jobs:
-        if job.job_id not in seen_ids:
+        u_norm = job.url.split("?")[0].rstrip("/").lower()
+        if job.job_id not in seen_ids and u_norm not in seen_urls:
             seen_ids.add(job.job_id)
+            seen_urls.add(u_norm)
             deduped_jobs.append(job)
 
     yield json.dumps({"type": "log", "message": f"📊 Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + " " * 2048 + "\n"
 
-    # Separate instant API jobs (Reed, Greenhouse, Ashby, Lever) from web-scraped jobs (LinkedIn/Indeed)
-    api_fast_jobs = [j for j in deduped_jobs if j.platform in ("Reed", "Greenhouse", "Ashby", "Lever")]
-    scraped_jobs = [j for j in deduped_jobs if j.platform not in ("Reed", "Greenhouse", "Ashby", "Lever")]
+    # Separate instant API jobs (Reed, Greenhouse, Ashby, Lever, Workday, Direct ATS) from web-scraped jobs (LinkedIn/Indeed)
+    fast_platforms = ("reed", "greenhouse", "ashby", "lever", "workday", "direct ats")
+    api_fast_jobs = [j for j in deduped_jobs if j.platform.lower() in fast_platforms]
+    scraped_jobs = [j for j in deduped_jobs if j.platform.lower() not in fast_platforms]
     
     scraped_jobs.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
 
     scored_jobs = []
 
-    # Phase A: Instant in-memory scoring for direct ATS API jobs (Greenhouse, Ashby, Lever, Reed with full JD)
+    # Phase A: Instant in-memory scoring for direct ATS API jobs (Greenhouse, Ashby, Lever, Workday, Reed)
     if api_fast_jobs:
         yield json.dumps({"type": "log", "message": f"⚡ Instantly computing ATS match scores for {len(api_fast_jobs)} direct ATS portal openings..."}) + " " * 2048 + "\n"
         for job in api_fast_jobs:
             try:
                 if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 50:
                     r = await _score_job_with_real_jd(job, resume_data, None, asyncio.Semaphore(50))
+                    if r:
+                        scored_jobs.append(r)
+                        yield json.dumps({"type": "partial_result", "job": r}) + "\n"
+                else:
+                    r = _score_job_with_title_heuristic(job, resume_data)
                     if r:
                         scored_jobs.append(r)
                         yield json.dumps({"type": "partial_result", "job": r}) + "\n"
