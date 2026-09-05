@@ -1106,7 +1106,8 @@ function App() {
           job_description: activeDescription || null,
           skip_tailoring: false, // Run full LaTeX tailoring + page checks + reviewer checks
           force_tailoring: overrideForce,
-          tailoring_intensity: tailoringIntensity
+          tailoring_intensity: tailoringIntensity,
+          send_email: sendTailoredEmail
         }),
       });
 

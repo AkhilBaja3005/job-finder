@@ -376,73 +376,92 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             email_sent = False
             dest_email = None
-            if request.send_email:
-                if token and token != "guest":
-                    user = await async_get_user_by_token(token)
-                    if user and user.get("email"):
-                        dest_email = user["email"]
-                if not dest_email and isinstance(session_resume_data, dict) and session_resume_data.get("email"):
-                    dest_email = session_resume_data["email"]
+            should_send_email = bool(request.send_email)
+            user_obj = None
+            if token and token != "guest":
+                user_obj = await async_get_user_by_token(token)
+                if user_obj:
+                    if user_obj.get("send_tailored_email"):
+                        should_send_email = True
+                    if user_obj.get("email"):
+                        dest_email = user_obj["email"]
+            if not dest_email and isinstance(session_resume_data, dict) and session_resume_data.get("email"):
+                dest_email = session_resume_data["email"]
 
-                if dest_email and os.path.exists(temp_pdf_path):
-                    yield json.dumps({"type": "log", "percent": 95, "message": f"📧 Dispatching tailored resume PDF to {dest_email}..."}) + "\n"
-                    from services.email_service import async_send_notification_email
-                    cand_name = session_resume_data.get("name", "").strip() or "Candidate" if isinstance(session_resume_data, dict) else "Candidate"
-                    ats_score = dumped.get("match_analysis", {}).get("overall_score") or 85
-                    ats_display = f"{ats_score}% Match"
-                    email_subj = f"📄 [Resume Delivery] Tailored Resume [{ats_display}]: {job_title} at {extracted_company}"
-                    email_text = (
-                        f"On-Demand Resume Delivery: Tailored Resume PDF\n"
-                        f"For your application at {extracted_company}\n\n"
-                        f"Target Role: {job_title}\n"
-                        f"Company: {extracted_company}\n"
-                        f"ATS Score: {ats_display}\n\n"
-                        f"Hello {cand_name}, your compiled PDF resume (ATS Match Score: {ats_display}) is attached directly to this email.\n\n"
-                        f"{'View Job & Apply: ' + request.job_url + chr(10) if request.job_url else ''}"
-                        f"{'Open & Edit in Overleaf: ' + overleaf_url + chr(10) if overleaf_url else ''}\n"
-                        f"Sent automatically by your Resume Tailor Assistant."
-                    )
-                    email_html = f"""
-                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1e293b;">
-                        <div style="border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 16px;">
-                            <span style="font-size: 11px; font-weight: 700; color: #0284c7; text-transform: uppercase; letter-spacing: 0.05em;">On-Demand Resume Delivery</span>
-                            <h2 style="margin: 4px 0 0 0; color: #0f172a; font-size: 20px; font-weight: 800;">Tailored Resume PDF</h2>
-                            <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">For your application at <strong>{extracted_company}</strong></p>
-                        </div>
-
-                        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 18px; font-size: 13px; line-height: 1.6;">
-                            <div style="margin-bottom: 6px;"><strong>Target Role:</strong> {job_title}</div>
-                            <div style="margin-bottom: 6px;"><strong>Company:</strong> {extracted_company}</div>
-                            <div><strong>ATS Score:</strong> <span style="color: #059669; font-weight: 700;">{ats_display}</span></div>
-                        </div>
-
-                        <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 20px;">
-                            Hello <strong>{cand_name}</strong>, your compiled PDF resume (ATS Match Score: <strong>{ats_display}</strong>) is attached directly to this email.
-                        </p>
-
-                        <div style="margin: 22px 0; text-align: left;">
-                            {"<a href='" + request.job_url + "' style='display: inline-block; background-color: #10b981; color: #ffffff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: 700; font-size: 13px; margin-right: 10px; margin-bottom: 8px;'>View Job & Apply</a>" if request.job_url else ""}
-                            {"<a href='" + overleaf_url + "' style='display: inline-block; background-color: #0284c7; color: #ffffff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: 700; font-size: 13px; margin-bottom: 8px;'>Open & Edit in Overleaf</a>" if overleaf_url else ""}
-                        </div>
-
-                        <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0 12px 0;" />
-                        <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent automatically by your Resume Tailor Assistant.</p>
+            if should_send_email and dest_email and os.path.exists(temp_pdf_path):
+                yield json.dumps({"type": "log", "percent": 95, "message": f"📧 Dispatching tailored resume PDF to {dest_email}..."}) + "\n"
+                from services.email_service import async_send_notification_email
+                cand_name = session_resume_data.get("name", "").strip() or "Candidate" if isinstance(session_resume_data, dict) else "Candidate"
+                ats_score = dumped.get("match_analysis", {}).get("overall_score") or 85
+                ats_display = f"{ats_score}% Match"
+                email_subj = f"📄 [Resume Delivery] Tailored Resume [{ats_display}]: {job_title} at {extracted_company}"
+                email_text = (
+                    f"On-Demand Resume Delivery: Tailored Resume PDF\n"
+                    f"For your application at {extracted_company}\n\n"
+                    f"Target Role: {job_title}\n"
+                    f"Company: {extracted_company}\n"
+                    f"ATS Score: {ats_display}\n\n"
+                    f"Hello {cand_name}, your compiled PDF resume (ATS Match Score: {ats_display}) is attached directly to this email.\n\n"
+                    f"{'View Job & Apply: ' + request.job_url + chr(10) if request.job_url else ''}"
+                    f"{'Open & Edit in Overleaf: ' + overleaf_url + chr(10) if overleaf_url else ''}\n"
+                    f"Sent automatically by your Resume Tailor Assistant."
+                )
+                email_html = f"""
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1e293b;">
+                    <div style="border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 16px;">
+                        <span style="font-size: 11px; font-weight: 700; color: #0284c7; text-transform: uppercase; letter-spacing: 0.05em;">On-Demand Resume Delivery</span>
+                        <h2 style="margin: 4px 0 0 0; color: #0f172a; font-size: 20px; font-weight: 800;">Tailored Resume PDF</h2>
+                        <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">For your application at <strong>{extracted_company}</strong></p>
                     </div>
-                    """
-                    try:
-                        email_sent = await async_send_notification_email(
-                            to_email=dest_email,
-                            subject=email_subj,
-                            text_body=email_text,
-                            html_body=email_html,
-                            attachment_path=temp_pdf_path,
-                            attachment_name=f"Tailored_Resume_{(extracted_company or 'Role').replace(' ', '_')}.pdf"
-                        )
-                    except Exception as e:
-                        print(f"[analyze_job] Email send error: {e}")
+
+                    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 18px; font-size: 13px; line-height: 1.6;">
+                        <div style="margin-bottom: 6px;"><strong>Target Role:</strong> {job_title}</div>
+                        <div style="margin-bottom: 6px;"><strong>Company:</strong> {extracted_company}</div>
+                        <div><strong>ATS Score:</strong> <span style="color: #059669; font-weight: 700;">{ats_display}</span></div>
+                    </div>
+
+                    <p style="font-size: 14px; line-height: 1.6; color: #334155; margin-bottom: 20px;">
+                        Hello <strong>{cand_name}</strong>, your compiled PDF resume (ATS Match Score: <strong>{ats_display}</strong>) is attached directly to this email.
+                    </p>
+
+                    <div style="margin: 22px 0; text-align: left;">
+                        {"<a href='" + request.job_url + "' style='display: inline-block; background-color: #10b981; color: #ffffff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: 700; font-size: 13px; margin-right: 10px; margin-bottom: 8px;'>View Job & Apply</a>" if request.job_url else ""}
+                        {"<a href='" + overleaf_url + "' style='display: inline-block; background-color: #0284c7; color: #ffffff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: 700; font-size: 13px; margin-bottom: 8px;'>Open & Edit in Overleaf</a>" if overleaf_url else ""}
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0 12px 0;" />
+                    <p style="font-size: 11px; color: #94a3b8; margin: 0;">Sent automatically by your Resume Tailor Assistant.</p>
+                </div>
+                """
+                try:
+                    email_sent = await async_send_notification_email(
+                        to_email=dest_email,
+                        subject=email_subj,
+                        text_body=email_text,
+                        html_body=email_html,
+                        attachment_path=temp_pdf_path,
+                        attachment_name=f"Tailored_Resume_{(extracted_company or 'Role').replace(' ', '_')}.pdf"
+                    )
+                except Exception as e:
+                    print(f"[analyze_job] Email send error: {e}")
 
             dumped["email_sent"] = email_sent
             dumped["dest_email"] = dest_email
+
+            # Automatically record tailored application in History
+            try:
+                await asyncio.to_thread(record_application, token, {
+                    "job_title": job_title or "Target Role",
+                    "company": extracted_company or "Hiring Company",
+                    "job_url": request.job_url or "",
+                    "score": dumped.get("match_analysis", {}).get("overall_score"),
+                    "status": "tailored",
+                    "overleaf_url": overleaf_url,
+                    "pdf_url": pdf_download_url,
+                    "source_mode": request.source_mode or "website"
+                })
+            except Exception as rec_err:
+                print(f"[analyze_job] Failed to record application history: {rec_err}")
 
             set_cached_analysis(token, job_title or "", jd_text or "", dumped)
 
