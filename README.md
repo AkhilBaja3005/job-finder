@@ -43,6 +43,16 @@ The project includes:
 - **Open-Ended Question Engine**: Instant screening answer generation for essays like *"Why this company?"* or *"Describe a challenging project"*.
 - **Inline '✨ AI Answer' Buttons**: Directly embedded beside textareas and form inputs on live job pages.
 
+### 🌐 5. Grounding with Google Search & Verified Recruiter Discovery
+- **Native Google Search Grounding**: Connects Gemini (3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash) directly to real-time web content using `tools=[{"google_search": {}}]` with citation and source link extraction.
+- **Verified Recruiter & Hiring Manager Intel**: Discovers active technical recruiters, talent sourcers, and engineering hiring managers on LinkedIn for any target role and company (`POST /jobs/find_recruiter`).
+- **7-Day TTL Smart Caching**: Normalizes corporate suffixes (e.g. `Stripe, Inc.` $\rightarrow$ `stripe`) to eliminate duplicate billing queries.
+
+### 📬 6. Automated Daily Job Matches Digest
+- **Multi-Source Daily Scanning**: Aggregates up to **20 top matching roles** from LinkedIn, Reed, Indeed, and direct ATS portals (Greenhouse, Ashby, Lever).
+- **Recruiter Cards & 1-Click Tailoring**: Direct links to recruiter LinkedIn profiles and instant 1-click LaTeX resume tailoring.
+- **Instant Trigger Endpoint**: Dispatch test digests on demand (`POST /user/cron/trigger_now`) without waiting for the scheduled delivery time.
+
 ---
 
 ## 🧩 Chrome Extension (`Job Finder ATS Tailor v2.1.0`)
@@ -84,8 +94,9 @@ Job Finder/
 │   ├── services/
 │   │   ├── resume_parser.py    # Multi-format resume parsing & category extractor
 │   │   ├── ats_scorer.py       # Deterministic ATS scoring & timeline analysis engine
+│   │   ├── recruiter_finder.py # Google Search Grounding for verified LinkedIn recruiters
 │   │   ├── llm_agent.py        # Resume tailoring, cover letter writer, recruiter reviewer
-│   │   ├── gemini_client.py    # Multi-LLM provider client (Gemini, Claude, Groq, OpenRouter)
+│   │   ├── gemini_client.py    # Multi-LLM provider client (Gemini Grounding, Claude, Groq)
 │   │   ├── email_service.py    # SMTP email delivery with styled HTML templates
 │   │   ├── job_searcher.py     # LinkedIn & Indeed job scraper and ranking pipeline
 │   │   ├── scraper.py          # Playwright headless page scraper
