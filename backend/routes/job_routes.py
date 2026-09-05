@@ -459,3 +459,28 @@ async def trigger_user_cron_now(authorization: Optional[str] = Header(None)):
             "status": "error",
             "message": f"Failed to dispatch digest email to {user.get('email')}. Check email service settings."
         }
+
+
+class FindRecruiterRequest(BaseModel):
+    company: str
+    role: Optional[str] = "Software Engineer"
+    location: Optional[str] = "Remote"
+
+
+@router.post("/jobs/find_recruiter")
+async def find_recruiter_endpoint(
+    req: FindRecruiterRequest,
+    custom_api_key: Optional[str] = Header(None, alias="X-Gemini-API-Key")
+):
+    """Finds verified hiring managers or recruiters for a company and role using Gemini Search Grounding."""
+    from services.recruiter_finder import find_recruiter_for_job
+    if not req.company or not req.company.strip():
+        raise HTTPException(status_code=400, detail="Company name is required.")
+
+    res = find_recruiter_for_job(
+        company=req.company,
+        role=req.role or "Software Engineer",
+        location=req.location or "Remote",
+        custom_api_key=custom_api_key
+    )
+    return res

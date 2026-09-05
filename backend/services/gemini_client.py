@@ -620,3 +620,114 @@ def generate_latex_with_strong_model(
     return _generate_with_model_list(
         prompt, LATEX_FALLBACK_MODELS, response_schema=None, custom_api_key=custom_api_key, on_log=on_log
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Grounded Search Generation (Google Search Tool)
+# ─────────────────────────────────────────────────────────────────────────────
+GROUNDED_SEARCH_MODELS = [
+    "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"
+]
+
+def call_gemini_grounded(
+    prompt: str,
+    custom_api_key: Optional[str] = None,
+    on_log: Optional[Callable[[str], None]] = None,
+    temperature: float = 0.2,
+) -> Dict[str, Any]:
+    """
+    Executes Google Gemini with native Google Search Grounding enabled.
+    
+    Returns a dictionary containing:
+        - text: Generated response text
+        - citations: List of web source dicts with title, url, domain
+        - queries: Search queries executed by the model
+        - grounded: Boolean indicating whether grounding was applied
+        - model: Model name used
+    """
+    current_date_context = "CRITICAL METADATA: The current year is 2026. Keep this in mind for all dates, durations, timelines, and calculations.\n\n"
+    full_prompt = current_date_context + prompt
+
+    gemini_key = custom_api_key if (custom_api_key and (custom_api_key.startswith("AIza") or custom_api_key.startswith("AQ."))) else os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        raise ValueError("GEMINI_API_KEY environment variable is missing for grounded generation.")
+
+    client = get_gemini_client(gemini_key)
+    config_args: Dict[str, Any] = {
+        "temperature": temperature,
+        "tools": [{"google_search": {}}],
+    }
+
+    last_error = None
+    for model_name in GROUNDED_SEARCH_MODELS:
+        try:
+            _throttle_for_rpm(model_name)
+            msg = f"[LLM Grounding] Executing grounded generation with {model_name}..."
+            from services.log_queue import log_ist
+            log_ist(msg)
+            if on_log:
+                on_log(json.dumps({"type": "llm_grounding", "message": msg}))
+
+            response = client.models.generate_content(
+                model=model_name,
+                contents=full_prompt,
+                config=types.GenerateContentConfig(**config_args),
+            )
+
+            text = response.text or ""
+            citations = []
+            queries = []
+            grounded = False
+
+            candidates = getattr(response, "candidates", None)
+            if candidates and len(candidates) > 0:
+                candidate = candidates[0]
+                meta = getattr(candidate, "grounding_metadata", None)
+                if meta:
+                    grounded = True
+                    if hasattr(meta, "web_search_queries") and meta.web_search_queries:
+                        queries = list(meta.web_search_queries)
+
+                    if hasattr(meta, "grounding_chunks") and meta.grounding_chunks:
+                        for chunk in meta.grounding_chunks:
+                            web = getattr(chunk, "web", None)
+                            if web:
+                                citations.append({
+                                    "title": getattr(web, "title", "") or "",
+                                    "url": getattr(web, "uri", "") or "",
+                                    "domain": getattr(web, "domain", "") or ""
+                                })
+
+            # Deduplicate citations by url
+            seen_urls = set()
+            deduped_citations = []
+            for c in citations:
+                u = c.get("url")
+                if u and u not in seen_urls:
+                    seen_urls.add(u)
+                    deduped_citations.append(c)
+
+            return {
+                "text": text,
+                "citations": deduped_citations,
+                "queries": queries,
+                "grounded": grounded,
+                "model": model_name
+            }
+        except Exception as e:
+            last_error = e
+            err_str = str(e).lower()
+            if any(x in err_str for x in ["429", "quota", "rate limit", "resource_exhausted"]):
+                continue
+            print(f"[LLM Grounding] Model {model_name} search grounding warning: {e}. Trying next variant...")
+
+    # Fallback to standard ungrounded generation if grounded endpoints fail
+    print(f"[LLM Grounding] Falling back to ungrounded generation due to: {last_error}")
+    raw_text = generate_content_with_fallback(prompt=prompt, custom_api_key=custom_api_key, on_log=on_log)
+    return {
+        "text": raw_text,
+        "citations": [],
+        "queries": [],
+        "grounded": False,
+        "model": "fallback"
+    }
