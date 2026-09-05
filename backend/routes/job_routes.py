@@ -80,6 +80,34 @@ def get_extension_version_hash():
 def _extract_company_from_jd(jd_text: str, page_url: Optional[str] = None) -> str:
     import re
     if page_url:
+        # 1. Direct Open Guest API Extraction for LinkedIn Job Postings
+        if "linkedin.com" in page_url:
+            job_id_match = re.search(r'(?:jobs/view/|currentJobId=|jobPosting/|[-/])(\d{8,12})(?:[/?&#]|$)', page_url)
+            if job_id_match:
+                job_id = job_id_match.group(1)
+                try:
+                    import urllib.request
+                    from bs4 import BeautifulSoup
+                    from utils.ssl_utils import SSL_CONTEXT
+                    api_url = f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}"
+                    req = urllib.request.Request(
+                        api_url,
+                        headers={
+                            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                            "Accept-Language": "en-US,en;q=0.5"
+                        }
+                    )
+                    with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=5) as resp:
+                        soup = BeautifulSoup(resp.read().decode("utf-8", errors="ignore"), "html.parser")
+                        company_elem = soup.select_one("a.topcard__org-name-link") or soup.select_one(".topcard__flavor") or soup.select_one(".topcard__org-name")
+                        if company_elem:
+                            found_company = company_elem.get_text(strip=True)
+                            if found_company and len(found_company) > 1:
+                                return found_company
+                except Exception:
+                    pass
+
         cleaned_url = page_url.split("?")[0].rstrip("/")
         m = re.search(r'https?://(?:www\.)?([^/]+)\.com/([^/]+)', cleaned_url)
         if m:
@@ -148,7 +176,8 @@ async def scrape_job(request: ScrapeRequest, http_request: Request):
         return {
             "status": "success",
             "title": scraped.get("title", ""),
-            "description": scraped.get("description", "")
+            "description": scraped.get("description", ""),
+            "company": scraped.get("company", "") or _extract_company_from_jd(scraped.get("description", ""), request.url)
         }
     except Exception as e:
         traceback.print_exc()

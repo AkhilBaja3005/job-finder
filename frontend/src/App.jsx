@@ -918,6 +918,7 @@ function App() {
           job_description: activeDescription || null,
           skip_tailoring: true,
           tailoring_intensity: tailoringIntensity,
+          user_selected_skills: Array.from(userSelectedSkills || []),
         };
         console.log('[handleAnalyzeJob] Sending payload:', {
           job_url: payload.job_url,
@@ -960,6 +961,7 @@ function App() {
             console.log('[handleAnalyzeJob] Scraped JD stored in ref:', event.job_description.substring(0, 100) + '...');
           }
           if (event.job_title) setJobTitle(event.job_title);
+          if (event.company) setCompany(event.company);
         } else if (event.type === 'error') {
           console.error('[handleAnalyzeJob] Error event from backend:', event);
           throw new Error(event.message);
@@ -1107,7 +1109,8 @@ function App() {
           skip_tailoring: false, // Run full LaTeX tailoring + page checks + reviewer checks
           force_tailoring: overrideForce,
           tailoring_intensity: tailoringIntensity,
-          send_email: sendTailoredEmail
+          send_email: sendTailoredEmail,
+          user_selected_skills: Array.from(userSelectedSkills || [])
         }),
       });
 
@@ -1129,6 +1132,7 @@ function App() {
         } else if (event.type === 'scraped_data') {
           if (event.job_description) setJobDescription(event.job_description);
           if (event.job_title) setJobTitle(event.job_title);
+          if (event.company) setCompany(event.company);
         } else if (event.type === 'rejection_warning') {
           setRejectionWarning(event.message);
           setStatusLogs((prev) => [...prev, { message: `❌ Warning Paused: ${event.message}`, ts: nowTs() }]);

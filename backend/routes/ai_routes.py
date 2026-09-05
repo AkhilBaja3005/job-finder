@@ -41,20 +41,21 @@ router = APIRouter(tags=["AI & Tailoring"])
 _analysis_cache: Dict[str, dict] = {}
 
 
-def _get_analysis_cache_key(token: Optional[str], job_title: str, jd_text: str) -> str:
+def _get_analysis_cache_key(token: Optional[str], job_title: str, jd_text: str, user_selected_skills: Optional[List[str]] = None) -> str:
     user_part = token or "guest"
     jt = (job_title or "").strip().lower()
     jd = (jd_text or "").strip()[:500].lower()
-    return f"{user_part}:{jt}:{hash(jd)}"
+    skills_part = ",".join(sorted(s.strip().lower() for s in (user_selected_skills or [])))
+    return f"{user_part}:{jt}:{hash(jd)}:{hash(skills_part)}"
 
 
-def get_cached_analysis(token: Optional[str], job_title: str, jd_text: str) -> Optional[dict]:
-    key = _get_analysis_cache_key(token, job_title, jd_text)
+def get_cached_analysis(token: Optional[str], job_title: str, jd_text: str, user_selected_skills: Optional[List[str]] = None) -> Optional[dict]:
+    key = _get_analysis_cache_key(token, job_title, jd_text, user_selected_skills)
     return _analysis_cache.get(key)
 
 
-def set_cached_analysis(token: Optional[str], job_title: str, jd_text: str, data: dict):
-    key = _get_analysis_cache_key(token, job_title, jd_text)
+def set_cached_analysis(token: Optional[str], job_title: str, jd_text: str, data: dict, user_selected_skills: Optional[List[str]] = None):
+    key = _get_analysis_cache_key(token, job_title, jd_text, user_selected_skills)
     _analysis_cache[key] = data
 
 
@@ -197,7 +198,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
     # Cache hit check
     if request.job_description and not request.force_tailoring:
-        cached = get_cached_analysis(token, request.job_title or "", request.job_description)
+        cached = get_cached_analysis(token, request.job_title or "", request.job_description, request.user_selected_skills)
         if cached:
             if request.skip_tailoring:
                 cached = dict(cached)
@@ -243,9 +244,13 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     }) + "\n"
                     return
 
+                scraped_company = scraped.get("company") or _extract_company_from_jd(jd_text or "", request.job_url)
+                if not request.company and scraped_company:
+                    request.company = scraped_company
+
                 ctx.log_step("scrape_job", time.time() - t0)
-                yield json.dumps({"type": "log", "percent": 20, "message": f"✅ Scraped job details for: {job_title}"}) + "\n"
-                yield json.dumps({"type": "scraped_data", "job_title": job_title, "job_description": jd_text}) + "\n"
+                yield json.dumps({"type": "log", "percent": 20, "message": f"✅ Scraped job details for: {job_title} at {scraped_company or 'Company'}"}) + "\n"
+                yield json.dumps({"type": "scraped_data", "job_title": job_title, "job_description": jd_text, "company": scraped_company}) + "\n"
 
             yield json.dumps({"type": "log", "percent": 40, "message": "🤖 Calculating ATS fit score & career-ops analysis..."}) + "\n"
 
@@ -310,7 +315,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     "company": company_name,
                     "analysis": dumped
                 }) + "\n"
-                set_cached_analysis(token, job_title or "", jd_text or "", dumped)
+                set_cached_analysis(token, job_title or "", jd_text or "", dumped, request.user_selected_skills)
                 return
 
             yield json.dumps({"type": "log", "percent": 85, "message": "⚙️ Compiling tailored LaTeX resume to PDF..."}) + "\n"
@@ -463,7 +468,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             except Exception as rec_err:
                 print(f"[analyze_job] Failed to record application history: {rec_err}")
 
-            set_cached_analysis(token, job_title or "", jd_text or "", dumped)
+            set_cached_analysis(token, job_title or "", jd_text or "", dumped, request.user_selected_skills)
 
             yield json.dumps({
                 "type": "result",
