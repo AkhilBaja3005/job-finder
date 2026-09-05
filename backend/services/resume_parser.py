@@ -33,12 +33,34 @@ class Project(BaseModel):
     title: str
     description: List[str]
 
+def sanitize_resume_summary(summary_val: Any) -> str:
+    """Ensures summary is a clean text paragraph and not serialized JSON."""
+    if not summary_val:
+        return ""
+    if isinstance(summary_val, dict):
+        return sanitize_resume_summary(summary_val.get("summary", ""))
+
+    if isinstance(summary_val, str):
+        s = summary_val.strip()
+        if s.startswith("{") and s.endswith("}"):
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, dict) and "summary" in parsed:
+                    return sanitize_resume_summary(parsed["summary"])
+                return ""
+            except Exception:
+                pass
+        return s
+
+    return str(summary_val)
+
+
 class StructuredResume(BaseModel):
     name: str
     email: str
     phone: str
     links: List[str]
-    summary: str
+    summary: str = Field(default="", description="A short professional summary paragraph (2-3 sentences) describing candidate background and expertise. NEVER serialize full resume JSON into this field.")
     skills: Union[Dict[str, List[str]], List[str]]
     experience: List[WorkExperience]
     education: List[Education]
@@ -257,8 +279,7 @@ def parse_resume(file_path: str) -> StructuredResume:
         parsed_data["phone"] = ""
     if not parsed_data.get("links"):
         parsed_data["links"] = []
-    if not parsed_data.get("summary"):
-        parsed_data["summary"] = ""
+    parsed_data["summary"] = sanitize_resume_summary(parsed_data.get("summary", ""))
     if not parsed_data.get("skills"):
         parsed_data["skills"] = {}
     if not parsed_data.get("experience"):

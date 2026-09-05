@@ -18,6 +18,7 @@ from services.auth import (
     supabase_request,
     _is_local_deployment
 )
+from services.resume_parser import sanitize_resume_summary
 
 router = APIRouter(tags=["Authentication & Settings"])
 
@@ -179,7 +180,7 @@ async def update_user_profile(request: ProfileUpdateRequest, authorization: Opti
     if request.work_auth: profile_dict["work_auth"] = request.work_auth
     if request.sponsorship: profile_dict["sponsorship"] = request.sponsorship
     if request.skills: profile_dict["skills"] = request.skills
-    if request.summary: profile_dict["summary"] = request.summary
+    if request.summary: profile_dict["summary"] = sanitize_resume_summary(request.summary)
 
     # Update in-memory session store
     set_session_data(token or "guest", profile_dict, session.get("path", ""))

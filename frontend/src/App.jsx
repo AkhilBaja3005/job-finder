@@ -72,6 +72,20 @@ async function* streamNdjson(response) {
   }
 }
 
+const cleanSummaryText = (val) => {
+  if (!val) return '';
+  if (typeof val === 'object') return cleanSummaryText(val.summary || '');
+  if (typeof val === 'string' && val.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(val);
+      return cleanSummaryText(parsed.summary || '');
+    } catch (e) {
+      return val;
+    }
+  }
+  return String(val);
+};
+
 const RocketIcon = () => (
   <svg
     width="32"
@@ -1749,23 +1763,23 @@ function App() {
             {reviewModalTab === 'diff' && (
               <>
                 {/* Professional Summary Diff View */}
-                {reviewedResumeData.summary && (
+                {cleanSummaryText(reviewedResumeData.summary) && (
                   <div style={{ background: 'var(--panel-bg)', padding: '16px', borderRadius: '10px', borderLeft: '4px solid var(--accent-cyan)' }}>
                     <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--accent-cyan)', marginBottom: '6px' }}>PROFESSIONAL SUMMARY</div>
-                    {previousResumeData && previousResumeData.summary && previousResumeData.summary.trim() !== reviewedResumeData.summary.trim() ? (
+                    {previousResumeData && cleanSummaryText(previousResumeData.summary) && cleanSummaryText(previousResumeData.summary).trim() !== cleanSummaryText(reviewedResumeData.summary).trim() ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div style={{ fontSize: '0.8rem', color: '#F87171', background: 'rgba(239,68,68,0.12)', padding: '10px 12px', borderRadius: '6px', borderLeft: '3px solid #EF4444' }}>
                           <span style={{ fontWeight: 800, marginRight: '6px' }}>- OLD:</span>
-                          <span style={{ textDecoration: 'line-through' }}>{previousResumeData.summary}</span>
+                          <span style={{ textDecoration: 'line-through' }}>{cleanSummaryText(previousResumeData.summary)}</span>
                         </div>
                         <div style={{ fontSize: '0.82rem', color: '#34D399', background: 'rgba(16,185,129,0.12)', padding: '10px 12px', borderRadius: '6px', borderLeft: '3px solid #10B981', fontWeight: 600 }}>
                           <span style={{ fontWeight: 800, marginRight: '6px' }}>+ NEW:</span>
-                          {reviewedResumeData.summary}
+                          {cleanSummaryText(reviewedResumeData.summary)}
                         </div>
                       </div>
                     ) : (
                       <div style={{ fontSize: '0.84rem', color: 'var(--text-main)', fontStyle: 'italic', lineHeight: 1.55 }}>
-                        {reviewedResumeData.summary}
+                        {cleanSummaryText(reviewedResumeData.summary)}
                       </div>
                     )}
                   </div>
@@ -3437,11 +3451,11 @@ function App() {
                 {/* Render Full Master Resume Details in Dashboard */}
                 {resumeData && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '6px' }}>
-                    {resumeData.summary && (
+                    {cleanSummaryText(resumeData.summary) && (
                       <div style={{ background: 'var(--panel-bg)', padding: '14px', borderRadius: '10px', borderLeft: '3px solid var(--accent-cyan)' }}>
                         <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--accent-cyan)', marginBottom: '4px' }}>PROFESSIONAL SUMMARY</div>
                         <div style={{ fontSize: '0.84rem', color: 'var(--text-main)', fontStyle: 'italic', lineHeight: 1.55 }}>
-                          {resumeData.summary}
+                          {cleanSummaryText(resumeData.summary)}
                         </div>
                       </div>
                     )}

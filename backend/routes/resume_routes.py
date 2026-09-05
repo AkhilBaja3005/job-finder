@@ -23,7 +23,7 @@ from services.session_store import (
     set_session_data
 )
 from services.auth import async_get_user_by_token
-from services.resume_parser import parse_resume
+from services.resume_parser import parse_resume, sanitize_resume_summary
 from utils.latex_utils import generate_latex_from_json, apply_latex_hotfix, compile_and_check_page_metrics
 from services.overleaf import upload_zip_to_tmpfiles
 from services.ats_scorer import evaluate_master_resume
@@ -210,6 +210,9 @@ async def get_session_resume(authorization: Optional[str] = Header(None)):
             except Exception as e:
                 print(f"[get_session_resume] Error reading state file: {e}")
 
+    if data and isinstance(data, dict) and "summary" in data:
+        data["summary"] = sanitize_resume_summary(data["summary"])
+
     return {
         "status": "success",
         "data": data,
@@ -222,6 +225,8 @@ async def user_resume(authorization: Optional[str] = Header(None)):
     token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
     session = get_session_data(token)
     data = session.get("data")
+    if data and isinstance(data, dict) and "summary" in data:
+        data["summary"] = sanitize_resume_summary(data["summary"])
     eval_res = evaluate_master_resume(data) if data else None
     return {"data": data, "path": session.get("path"), "evaluation": eval_res}
 
