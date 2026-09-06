@@ -24,8 +24,15 @@ def upload_zip_to_tmpfiles(latex_code: str, candidate_name: str = "", job_title:
         fixed_code = apply_latex_hotfix(latex_code)
         zip_file.writestr("main.tex", fixed_code)
 
-        latexmkrc_content = '$pdf_mode = 5;\n$postscript_mode = $dvi_mode = 0;\n$xelatex = "xelatex -synctex=1 -interaction=nonstopmode %O %S";\n'
+        # Enforce XeLaTeX compilation on Overleaf even if project defaults to pdfLaTeX
+        latexmkrc_content = (
+            '$pdf_mode = 5;\n'
+            '$postscript_mode = $dvi_mode = 0;\n'
+            '$xelatex = "xelatex -synctex=1 -interaction=nonstopmode %O %S";\n'
+            '$pdflatex = "xelatex -synctex=1 -interaction=nonstopmode %O %S";\n'
+        )
         zip_file.writestr("latexmkrc", latexmkrc_content)
+        zip_file.writestr(".latexmkrc", latexmkrc_content)
 
         cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
         if not os.path.exists(cls_path):
