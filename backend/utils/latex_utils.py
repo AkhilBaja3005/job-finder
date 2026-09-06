@@ -154,12 +154,14 @@ def apply_latex_hotfix(
     fontspec_preamble = (
         "\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.20in]{geometry}\n"
         "\\usepackage{fontspec}\n"
-        "\\IfFontExistsTF{Times New Roman}{\n"
-        "  \\setmainfont{Times New Roman}\n"
+        "\\IfFontExistsTF{TeX Gyre Termes}{\n"
+        "  \\setmainfont{TeX Gyre Termes}\n"
         "}{\n"
-        "  \\IfFontExistsTF{Liberation Serif}{\n"
-        "    \\setmainfont{Liberation Serif}\n"
-        "  }{\\IfFontExistsTF{TeX Gyre Termes}{\\setmainfont{TeX Gyre Termes}}{}}\n"
+        "  \\IfFontExistsTF{Times New Roman}{\n"
+        "    \\setmainfont{Times New Roman}\n"
+        "  }{\n"
+        "    \\IfFontExistsTF{Liberation Serif}{\\setmainfont{Liberation Serif}}{}\n"
+        "  }\n"
         "}\n"
     )
     fixed = fixed[:doc_class_end + 1] + fontspec_preamble + fixed[doc_class_end + 1:]
@@ -509,12 +511,14 @@ def generate_latex_from_json(
     latex = []
     latex.append("\\documentclass[12pt]{resume}")
     latex.append("\\usepackage{fontspec}")
-    latex.append("\\IfFontExistsTF{Times New Roman}{")
-    latex.append("  \\setmainfont{Times New Roman}")
+    latex.append("\\IfFontExistsTF{TeX Gyre Termes}{")
+    latex.append("  \\setmainfont{TeX Gyre Termes}")
     latex.append("}{")
-    latex.append("  \\IfFontExistsTF{Liberation Serif}{")
-    latex.append("    \\setmainfont{Liberation Serif}")
-    latex.append("  }{\\IfFontExistsTF{TeX Gyre Termes}{\\setmainfont{TeX Gyre Termes}}{}}")
+    latex.append("  \\IfFontExistsTF{Times New Roman}{")
+    latex.append("    \\setmainfont{Times New Roman}")
+    latex.append("  }{")
+    latex.append("    \\IfFontExistsTF{Liberation Serif}{\\setmainfont{Liberation Serif}}{}")
+    latex.append("  }")
     latex.append("}")
     latex.append("\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{geometry}")
     latex.append("\\usepackage{fontawesome}")

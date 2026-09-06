@@ -538,28 +538,50 @@ input:focus, textarea:focus, select:focus {
 }
 
 .tag {
-  padding: 5px 13px;
-  border-radius: 99px;
-  font-size: 0.77rem;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  font-family: var(--font-mono);
   letter-spacing: 0.01em;
-  transition: all 0.2s ease;
-}
-
-.tag:hover {
-  transform: translateY(-1px);
+  transition: all 0.15s ease;
+  user-select: none;
 }
 
 .tag-match {
-  background: rgba(16, 185, 129, 0.08);
-  color: var(--accent-green);
-  border: 1px solid rgba(16, 185, 129, 0.15);
+  background: rgba(16, 185, 129, 0.1);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.tag-match:hover {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.45);
 }
 
 .tag-missing {
-  background: rgba(239, 68, 68, 0.08);
-  color: var(--accent-red);
-  border: 1px solid rgba(239, 68, 68, 0.15);
+  background: rgba(245, 158, 11, 0.08);
+  color: #FBBF24;
+  border: 1px dashed rgba(245, 158, 11, 0.4);
+  cursor: pointer;
+}
+
+.tag-missing:hover {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: #F59E0B;
+  color: #FDE68A;
+  transform: translateY(-1px);
+}
+
+.tag-missing.selected-skill-chip {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid #10B981;
+  border-style: solid;
+  color: #34D399;
+  font-weight: 600;
 }
 
 /* ─── Warning panels ─────────────────────────────────────── */

@@ -8,6 +8,7 @@ const HistoryMode = lazy(() => import('./components/HistoryMode'));
 const SkeletonLoader = lazy(() => import('./components/SkeletonLoader').then(m => ({ default: m.SkeletonLoader })));
 const OutreachModal = lazy(() => import('./components/OutreachModal'));
 const DocsGuide = lazy(() => import('./components/DocsGuide'));
+import LatexCodeViewer from './components/LatexCodeViewer';
 
 // Automatically inject ngrok-skip-browser-warning header into all frontend fetch requests
 const originalFetch = window.fetch;
@@ -430,18 +431,62 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Optimization #2: Keyboard shortcut - '?' opens the help modal.
-  // Escape-to-close and focus trapping for the modal itself are handled by
-  // useModalA11y (shared across all modals) once it's open.
+  // Keyboard Shortcuts:
+  // - Cmd/Ctrl + Enter: Trigger Analyze & Tailor Job
+  // - Cmd/Ctrl + S: Save Master Archetype
+  // - Cmd/Ctrl + 1: Switch to Tailor mode
+  // - Cmd/Ctrl + 2: Switch to Discover mode
+  // - Cmd/Ctrl + 3: Switch to History mode
+  // - ?: Open Keyboard Shortcuts modal
   useEffect(() => {
     const handler = (e) => {
-      if (e.key === '?' && !showKeyboardHelp) {
+      // Allow Esc to close or ? to open help when not in inputs
+      const isInputFocused = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!loading) {
+          if (analysisResult?.latex_code) {
+            handleGenerateTailoredResume(false);
+          } else {
+            handleAnalyzeJob();
+          }
+        }
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        if (!archetypeLoading) {
+          handleSaveArchetype();
+        }
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === '1' || e.key === '2' || e.key === '3')) {
+        e.preventDefault();
+        if (e.key === '1') {
+          setDashboardMode('tailor');
+          setIsDiscoveryView(false);
+        } else if (e.key === '2') {
+          setDashboardMode('discover');
+          setIsDiscoveryView(true);
+        } else if (e.key === '3') {
+          setDashboardMode('history');
+          setIsDiscoveryView(false);
+          handleFetchHistory();
+        }
+        return;
+      }
+
+      if (e.key === '?' && !isInputFocused && !showKeyboardHelp) {
+        e.preventDefault();
         setShowKeyboardHelp(true);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [showKeyboardHelp]);
+  }, [showKeyboardHelp, loading, archetypeLoading, analysisResult, jobUrl, jobTitle, jobDescription, resumeData, newArchetypeName]);
 
   const handleApiKeyChange = (e) => {
     const val = e.target.value;
@@ -3208,40 +3253,56 @@ function App() {
                 onClick={() => { setDashboardMode('tailor'); setIsDiscoveryView(false); }}
                 style={{
                   flex: 1, background: 'none', border: 'none', color: dashboardMode === 'tailor' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600,
+                  cursor: 'pointer'
                 }}
               >
-                <span style={{ fontSize: '1.2rem' }}>🎯</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <circle cx="12" cy="12" r="6"></circle>
+                  <circle cx="12" cy="12" r="2"></circle>
+                </svg>
                 Tailor
               </button>
               <button
                 onClick={() => { setDashboardMode('discover'); setIsDiscoveryView(true); }}
                 style={{
                   flex: 1, background: 'none', border: 'none', color: dashboardMode === 'discover' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600,
+                  cursor: 'pointer'
                 }}
               >
-                <span style={{ fontSize: '1.2rem' }}>🔍</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
                 Discover
               </button>
               <button
                 onClick={() => { setDashboardMode('history'); setIsDiscoveryView(false); handleFetchHistory(); }}
                 style={{
                   flex: 1, background: 'none', border: 'none', color: dashboardMode === 'history' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600,
+                  cursor: 'pointer'
                 }}
               >
-                <span style={{ fontSize: '1.2rem' }}>📂</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                </svg>
                 History
               </button>
               <button
                 onClick={() => { setDashboardMode('docs'); setIsDiscoveryView(false); window.history.pushState(null, '', '/docs'); }}
                 style={{
                   flex: 1, background: 'none', border: 'none', color: dashboardMode === 'docs' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600,
+                  cursor: 'pointer'
                 }}
               >
-                <span style={{ fontSize: '1.2rem' }}>📖</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                </svg>
                 Docs
               </button>
             </div>
@@ -5264,32 +5325,44 @@ function App() {
 
                     {/* Skills Tags */}
                     <div style={{ marginTop: '20px' }}>
-                      <h3>Matched Skills</h3>
-                      <div className="tag-list">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <h3 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>Matched ATS Taxonomy Keywords</h3>
+                        <span style={{ fontSize: '0.74rem', color: '#34D399', fontFamily: 'var(--font-mono)' }}>
+                          {(analysisResult.match_analysis.matched_skills || []).length} verified
+                        </span>
+                      </div>
+                      <div className="tag-list" style={{ gap: '6px' }}>
                         {(analysisResult.match_analysis.matched_skills || []).map((skill, i) => (
-                          <span key={i} className="tag tag-match">
+                          <span key={i} className="tag tag-match" title="Verified in resume">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
                             {skill}
                           </span>
                         ))}
                       </div>
                     </div>
 
-                    <div style={{ marginTop: '10px' }}>
-                      <h3>Missing Required Skills <span style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)', fontWeight: 500 }}>(Click to force-include in resume)</span></h3>
-                      <div className="tag-list">
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <h3 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                          Missing Target Skills
+                          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: '8px' }}>
+                            (click token to force-tailor into resume)
+                          </span>
+                        </h3>
+                        <span style={{ fontSize: '0.74rem', color: '#FBBF24', fontFamily: 'var(--font-mono)' }}>
+                          {userSelectedSkills.size > 0 ? `${userSelectedSkills.size} selected` : `${(analysisResult.match_analysis.missing_skills || []).length} unmapped`}
+                        </span>
+                      </div>
+                      <div className="tag-list" style={{ gap: '6px' }}>
                         {(analysisResult.match_analysis.missing_skills || []).map((skill, i) => {
                           const isSelected = userSelectedSkills.has(skill);
                           return (
                             <span
                               key={i}
                               className={`tag tag-missing ${isSelected ? 'selected-skill-chip' : ''}`}
-                              style={{
-                                cursor: 'pointer', userSelect: 'none', transition: 'all 0.2s ease',
-                                background: isSelected ? 'rgba(16, 185, 129, 0.25)' : undefined,
-                                border: isSelected ? '1px solid #10B981' : undefined,
-                                color: isSelected ? '#34D399' : undefined,
-                                fontWeight: isSelected ? 700 : 500
-                              }}
+                              title={isSelected ? 'Included in tailored resume' : 'Click to add to resume and boost score'}
                               onClick={() => {
                                 setUserSelectedSkills(prev => {
                                   const next = new Set(prev);
@@ -5318,7 +5391,17 @@ function App() {
                                 });
                               }}
                             >
-                              {isSelected ? '✓ ' : '+ '}{skill}
+                              {isSelected ? (
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                              ) : (
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                              )}
+                              {skill}
                             </span>
                           );
                         })}
@@ -5389,31 +5472,38 @@ function App() {
                 {/* Workspace Panels or Tailor Resume Decision Banner */}
                 {(!analysisResult.latex_code && !keepOriginalMode) ? (
                   <div style={{
-                    marginTop: '24px', padding: '32px 28px', borderRadius: '16px',
-                    background: 'linear-gradient(135deg, rgba(56,189,248,0.08) 0%, rgba(37,99,235,0.04) 100%)',
-                    border: '1px solid rgba(56,189,248,0.22)',
+                    marginTop: '24px', padding: '32px 28px', borderRadius: '14px',
+                    background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)',
+                    border: '1px solid #334155',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '18px', textAlign: 'center',
                     animation: 'slideDown 0.4s ease both'
                   }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', boxShadow: '0 6px 20px rgba(56,189,248,0.3)' }}>🤖</div>
+                    <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-cyan)' }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                      </svg>
+                    </div>
                     <div>
-                      <h3 style={{ margin: '0 0 8px', fontSize: '1.05rem', color: '#fff' }}>ATS Score & Analysis Ready</h3>
-                      <p style={{ maxWidth: '520px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
-                        Keyword alignment, experience scoring, and role-fit analysis are complete.
-                        Ready to generate a tailored LaTeX resume and custom cover letter?
+                      <h3 style={{ margin: '0 0 8px', fontSize: '1.05rem', color: '#fff', fontWeight: 700, letterSpacing: '-0.01em' }}>ATS Score & Role Fit Analysis Ready</h3>
+                      <p style={{ maxWidth: '520px', margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
+                        Keyword taxonomy alignment, seniority scoring, and semantic gap analysis are complete.
+                        Ready to compile an ATS-compliant tailored LaTeX resume and role cover letter.
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
                       <button
                         className="btn"
-                        style={{ padding: '11px 26px', fontWeight: 700, fontSize: '0.92rem', boxShadow: 'var(--accent-glow)' }}
+                        style={{ padding: '10px 24px', fontWeight: 600, fontSize: '0.88rem', gap: '8px' }}
                         onClick={() => handleGenerateTailoredResume(false)}
                       >
-                        ⚡ Tailor Resume & Cover Letter
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                        Tailor Resume & Cover Letter
                       </button>
                       <button
                         className="btn btn-secondary"
-                        style={{ padding: '11px 20px', borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)', fontWeight: 600 }}
+                        style={{ padding: '10px 18px', borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)', fontWeight: 600, fontSize: '0.86rem', gap: '8px' }}
                         onClick={async () => {
                           setLoading(true);
                           setStatusMessage('Generating standalone cover letter...');
@@ -5677,21 +5767,13 @@ function App() {
                           </div>
                         </div>
                       ) : (
-                        <div className="panel-content" style={{ position: 'relative', background: '#090D1A' }}>
-                          <button
-                            className="btn"
-                            style={{ position: 'absolute', right: '15px', top: '15px', padding: '4px 10px', fontSize: '0.75rem', zIndex: 10 }}
-                            onClick={() => {
-                              navigator.clipboard.writeText(analysisResult.latex_code);
-                              setStatusMessage('Copied LaTeX source code to clipboard!');
-                            }}
-                          >
-                            Copy Code
-                          </button>
-                          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.8rem', color: '#CBD5E0', textAlign: 'left' }}>
-                            {analysisResult.latex_code}
-                          </pre>
-                        </div>
+                        <LatexCodeViewer
+                          code={analysisResult.latex_code}
+                          onCopy={() => {
+                            navigator.clipboard.writeText(analysisResult.latex_code);
+                            setStatusMessage('Copied LaTeX source code to clipboard!');
+                          }}
+                        />
                       )}
                     </div>
 
@@ -5803,8 +5885,16 @@ function App() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '0.88rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <span>Analyze & Tailor Resume</span>
+                <span>Analyze & Tailor Job</span>
                 <kbd style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600 }}>Cmd+Enter</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span>Save Master Archetype</span>
+                <kbd style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600 }}>Cmd+S</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span>Switch Modes (Tailor / Discover / History)</span>
+                <kbd style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600 }}>Cmd + 1 / 2 / 3</kbd>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                 <span>Show Keyboard Shortcuts</span>
@@ -5954,6 +6044,67 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Power-User Keyboard & Status Telemetry Strip */}
+      <footer
+        className="power-user-bar"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 24px',
+          marginTop: '32px',
+          borderTop: '1px solid #1E293B',
+          background: 'rgba(9, 13, 22, 0.75)',
+          backdropFilter: 'blur(8px)',
+          fontSize: '0.74rem',
+          color: 'var(--text-muted)',
+          fontFamily: 'var(--font-mono)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }} />
+            <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>SYSTEM READY</span>
+          </div>
+          <span>•</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘↵</kbd>
+            <span>Analyze & Tailor</span>
+          </div>
+          <span>•</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘S</kbd>
+            <span>Save Archetype</span>
+          </div>
+          <span>•</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘1-3</kbd>
+            <span>Switch Tabs</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={() => setShowKeyboardHelp(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--accent-cyan)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.74rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: 0
+            }}
+          >
+            <kbd style={{ background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '4px', padding: '1px 5px', color: 'var(--accent-cyan)' }}>?</kbd>
+            <span>All Shortcuts</span>
+          </button>
+        </div>
+      </footer>
 
     </div>
 
