@@ -638,6 +638,8 @@ input:focus, textarea:focus, select:focus {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+  flex-wrap: nowrap !important;
+  white-space: nowrap;
 }
 
 .panel-content {
