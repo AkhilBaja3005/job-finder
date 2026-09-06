@@ -8,13 +8,13 @@ app_port: 8000
 pinned: false
 ---
 
-# AI Job Finder Agent (v2.2.0)
+# AI Job Finder Agent (v3.0.0)
 
 An AI-powered job search, resume tailoring, and application assistant. Upload a resume once (in `.pdf`, `.docx`, or `.tex`), then let it discover matching job postings, score your ATS fit against job descriptions, tailor a pixel-perfect one-page LaTeX resume and cover letter for specific roles, generate personalized recruiter outreach messages, and auto-fill applications directly on the web.
 
 The project includes:
 1. **Full-Stack Web App** — Modular FastAPI backend + React 19 (Vite) dashboard.
-2. **Chrome Extension (`Job Finder ATS Tailor v2.1.0`)** — Persistent Chrome Side Panel to score jobs, tailor resumes, auto-fill forms with multimodal intelligence, and dispatch delivery packages on LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday, and custom career sites.
+2. **Chrome Extension (`Job Finder ATS Tailor v3.0.0`)** — Persistent Chrome Side Panel to score jobs, tailor resumes, auto-fill forms with multimodal intelligence, and dispatch delivery packages on LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday, and custom career sites.
 
 ---
 
@@ -55,7 +55,7 @@ The project includes:
 
 ---
 
-## 🧩 Chrome Extension (`Job Finder ATS Tailor v2.1.0`)
+## 🧩 Chrome Extension (`Job Finder ATS Tailor v3.0.0`)
 
 The project includes a Manifest V3 Chrome Extension located in the `/extension` directory for instant in-page analysis while browsing job boards.
 
@@ -105,7 +105,7 @@ Job Finder/
 │   └── utils/
 │       ├── latex_utils.py      # LaTeX sanitization, macro hotfixes, Tectonic compilation
 │       └── ssl_utils.py        # Verified TLS context handler
-└── extension/            # Chrome Extension (Manifest V3 - Side Panel v2.1.0)
+└── extension/            # Chrome Extension (Manifest V3 - Side Panel v3.0.0)
     ├── manifest.json     # Extension permissions, sidePanel, host rules, and metadata
     ├── popup.html / js   # Persistent side panel interface for ATS scoring & tailoring
     ├── content.js        # Universal job page extractor, iframe support & form autofiller
@@ -182,3 +182,61 @@ Run complete backend test suite:
 cd backend
 pytest tests/ -v
 ```
+
+---
+
+## 🤖 MCP Server & Universal Agent Skills (v3.0.0)
+
+Job Finder provides a production-grade **Model Context Protocol (MCP)** server and **8 Universal Agent Skills** enabling seamless integration with AI harnesses: **Antigravity**, **Claude Code**, **Claude Desktop**, **Cursor IDE**, and **Gemini CLI**.
+
+### ⚡ Low-Latency & High-Precision Architecture
+- **Sub-Second Execution (`flash-lite` Prioritization)**: All search grounding and LLM tasks prioritize `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, and `gemini-2.5-flash-lite`, providing ultra-high RPM allowances and eliminating `429 RESOURCE_EXHAUSTED` rate limits.
+- **Zero-Latency Profile Auto-Resolution**: When resume data or keyword arguments are omitted, tools automatically read from [`backend/config/candidate_profile.json`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/backend/config/candidate_profile.json) for instant in-memory scoring in `<10ms`.
+- **Precompiled Taxonomy & Deterministic Rules**: Regex and seniority matching are fully precompiled, avoiding runtime compilation overhead.
+
+### 🛠️ 18 Production MCP Tools
+The MCP server exposes 18 specialized tools across the end-to-end career lifecycle:
+- **Profile & Preferences**: `save_candidate_profile`, `get_candidate_profile`
+- **Discovery**: `search_jobs` (multi-role concurrent search), `scrape_job_posting`
+- **ATS & Fit**: `calculate_ats_score`, `analyze_skill_gap`, `extract_seniority_salary`
+- **Resume & LaTeX**: `parse_and_convert_to_latex` (PDF/DOCX/TXT to LaTeX), `tailor_resume_latex`, `compile_latex_metrics`, `export_overleaf_bundle`
+- **Networking**: `extract_recruiter_profile`, `generate_outreach_inmail`
+- **Interview Prep**: `generate_interview_pack`, `company_culture_brief`
+- **CRM & Tracking**: `track_application`, `list_applications`, `check_duplicate_application`
+
+### 🧠 8 Universal Agent Skills
+Located in `.agents/skills/` (with YAML frontmatter compatible across all major agent orchestrators):
+1. **`candidate-profile-config`**: Ingest and save profile, target roles, locations, 24h timeframe, and reference strategies.
+2. **`career-discovery`**: Multi-board job query orchestration with compensation & seniority filtering.
+3. **`ats-resume-tailor`**: Deterministic ATS keyword alignment and strict 1-page LaTeX optimization.
+4. **`company-intelligence`**: Deep-dive culture briefs, tech-stack analysis, and salary benchmarks.
+5. **`recruiter-networking`**: High-converting, 3-sentence recruiter cold outreach & InMails.
+6. **`cover-letter-crafting`**: Hyper-targeted 3-paragraph motivation letters.
+7. **`interview-mastery`**: Tailored behavioral, system design, and role-specific technical question packs.
+8. **`application-tracker-crm`**: Pipeline tracking, duplicate submission prevention, and stage updates.
+
+### 💻 Profile & Preferences CLI
+Users can also view and configure their preferences directly via the terminal:
+```bash
+# View active configuration
+python backend/mcp/cli_profile.py show
+
+# Update search preferences
+python backend/mcp/cli_profile.py set --roles "AI Engineer,LLM Engineer" --locations "London,Remote" --timeframe "past_24_hours" --ats 65
+```
+
+### 🔌 Connecting to AI Harnesses
+Pre-built configuration templates are located in [`harness_configs/`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/harness_configs/):
+
+- **Claude Desktop / Claude Code**: Copy snippet from [`harness_configs/claude_desktop_config.json`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/harness_configs/claude_desktop_config.json) into `claude_desktop_config.json`.
+- **Cursor IDE**: Place [`harness_configs/cursor_mcp.json`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/harness_configs/cursor_mcp.json) into `.cursor/mcp.json`.
+- **Antigravity / Gemini CLI**: Add snippet from [`harness_configs/gemini_mcp_config.json`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/harness_configs/gemini_mcp_config.json) into `~/.gemini/antigravity/mcp_config.json`.
+
+### 🧪 Running Comprehensive MCP Tests
+Verify all 18 MCP tools and 8 Skills end-to-end:
+```bash
+cd backend
+python mcp/comprehensive_test.py
+```
+
+

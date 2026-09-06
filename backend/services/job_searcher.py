@@ -121,6 +121,9 @@ Do not wrap in explanatory text. Only return the JSON array."""
         client = genai.Client(api_key=gemini_key)
         raw_text = ""
         ATS_SEARCH_MODELS = [
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-2.5-flash-lite",
             "gemini-3.8-flash",
             "gemini-3.7-flash",
             "gemini-3.6-flash",

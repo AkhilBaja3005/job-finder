@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "job-finder-career-engine": {
+      "command": "/Users/akhilbaja/Documents/Akhil/Job Finder/backend/venv/bin/python",
+      "args": [
+        "/Users/akhilbaja/Documents/Akhil/Job Finder/backend/mcp/server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/Users/akhilbaja/Documents/Akhil/Job Finder/backend"
+      }
+    }
+  }
+}
