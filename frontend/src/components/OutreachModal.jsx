@@ -122,12 +122,16 @@ const OutreachModal = ({
             )}
           </div>
         ) : (
-          <div className="recruiter-info-box" style={{ opacity: 0.7 }}>
-            <div className="recruiter-name" style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-              ℹ️ Recruiter info not available for this posting
-            </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-              The message will be addressed to the Hiring Team
+          <div className="recruiter-info-box" style={{ opacity: 0.85, display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-primary)', flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <div>
+              <div className="recruiter-name" style={{ fontSize: '0.86rem', color: 'var(--text-main)', margin: 0 }}>
+                Recruiter info not detected in posting — addressed to Hiring Team
+              </div>
             </div>
           </div>
         )}
@@ -255,68 +259,163 @@ const OutreachModal = ({
 
           {activeTab === 'linkedin' && (
             <div className="linkedin-section">
-              <div className="message-section">
-                <div className="section-header">
-                  <span className="section-title">LinkedIn Message</span>
-                  <button
-                    className="edit-button"
-                    onClick={() => handleEditSection('linkedin_message')}
-                  >
-                    Edit
-                  </button>
-                </div>
-                {editingSection === 'linkedin_message' ? (
-                  <div className="edit-form">
-                    <textarea
-                      value={displayData.linkedin_message}
-                      onChange={(e) => setEditedValues(prev => ({
-                        ...prev,
-                        linkedin_message: e.target.value
-                      }))}
-                      className="edit-textarea"
-                      rows="6"
-                    />
-                    <div className="edit-buttons">
-                      <button
-                        className="btn btn-small"
-                        onClick={() => handleSaveEdit('linkedin_message', displayData.linkedin_message)}
-                      >
-                        Save
-                      </button>
-                      <button
-                        className="btn btn-small btn-secondary"
-                        onClick={() => setEditingSection(null)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
+              <div className="message-section" style={{
+                background: 'rgba(15, 23, 42, 0.65)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '12px',
+                overflow: 'hidden'
+              }}>
+                <div className="section-header" style={{
+                  padding: '12px 16px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: 0
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0A66C2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path>
+                      <rect x="2" y="9" width="4" height="12"></rect>
+                      <circle cx="4" cy="4" r="2"></circle>
+                    </svg>
+                    <span style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.88rem' }}>LinkedIn Note / InMail</span>
+                    <span style={{
+                      fontSize: '0.74rem',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      background: (displayData.linkedin_message || '').length <= 300 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                      color: (displayData.linkedin_message || '').length <= 300 ? '#34D399' : '#FBBF24',
+                      fontWeight: 600
+                    }}>
+                      {(displayData.linkedin_message || '').length} / 300 chars
+                    </span>
                   </div>
-                ) : (
-                  <div className="message-text" style={{ whiteSpace: 'pre-wrap' }}>
-                    {displayData.linkedin_message}
-                  </div>
-                )}
-              </div>
 
-              <div className="action-buttons">
-                <button className="btn" onClick={handleCopyLinkedIn}>
-                  {copied ? 'Copied!' : 'Copy Message'}
-                </button>
-                {recruiterInfo?.recruiter_profile_url && (
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => {
-                      handleCopyLinkedIn();
-                      window.open(recruiterInfo.recruiter_profile_url, '_blank');
-                    }}
-                    title="Copies outreach note and opens LinkedIn Profile in a new tab"
-                  >
-                    Open LinkedIn Profile
-                  </button>
-                )}
-                <p className="linkedin-note" style={{ flexBasis: '100%', marginTop: '6px' }}>
-                  Paste this message in LinkedIn's message request box to connect with the recruiter.
-                </p>
+                  {editingSection !== 'linkedin_message' && (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 10px', fontSize: '0.76rem', gap: '4px' }}
+                      onClick={() => handleEditSection('linkedin_message')}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                      </svg>
+                      Edit
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ padding: '16px' }}>
+                  {editingSection === 'linkedin_message' ? (
+                    <div className="edit-form">
+                      <textarea
+                        value={displayData.linkedin_message}
+                        onChange={(e) => setEditedValues(prev => ({
+                          ...prev,
+                          linkedin_message: e.target.value
+                        }))}
+                        className="edit-textarea"
+                        rows="5"
+                        style={{
+                          width: '100%',
+                          background: 'rgba(0, 0, 0, 0.3)',
+                          border: '1px solid rgba(56, 189, 248, 0.3)',
+                          borderRadius: '8px',
+                          color: 'var(--text-main)',
+                          padding: '12px',
+                          fontSize: '0.9rem',
+                          lineHeight: 1.6,
+                          resize: 'vertical'
+                        }}
+                      />
+                      <div className="edit-buttons" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                        <button
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+                          onClick={() => setEditingSection(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="btn"
+                          style={{ padding: '6px 16px', fontSize: '0.8rem' }}
+                          onClick={() => handleSaveEdit('linkedin_message', displayData.linkedin_message)}
+                        >
+                          Save Changes
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      background: 'rgba(0, 0, 0, 0.25)',
+                      border: '1px solid rgba(255, 255, 255, 0.05)',
+                      borderRadius: '8px',
+                      padding: '14px 16px',
+                      color: 'var(--text-main)',
+                      fontSize: '0.9rem',
+                      lineHeight: 1.65,
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      {displayData.linkedin_message}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{
+                  padding: '12px 16px',
+                  background: 'rgba(0, 0, 0, 0.2)',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-primary)', flexShrink: 0 }}>
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="12" y1="16" x2="12" y2="12"></line>
+                      <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <span>Paste into the connection request note box</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      className="btn"
+                      style={{ padding: '7px 16px', fontSize: '0.82rem', gap: '6px', display: 'inline-flex', alignItems: 'center' }}
+                      onClick={handleCopyLinkedIn}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                      {copied ? 'Copied!' : 'Copy Message'}
+                    </button>
+
+                    {recruiterInfo?.recruiter_profile_url && (
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: '7px 16px', fontSize: '0.82rem', gap: '6px', display: 'inline-flex', alignItems: 'center' }}
+                        onClick={() => {
+                          handleCopyLinkedIn();
+                          window.open(recruiterInfo.recruiter_profile_url, '_blank');
+                        }}
+                        title="Copies note and opens recruiter profile in new tab"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#0A66C2' }}>
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                          <polyline points="15 3 21 3 21 9"></polyline>
+                          <line x1="10" y1="14" x2="21" y2="3"></line>
+                        </svg>
+                        Open Profile
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
