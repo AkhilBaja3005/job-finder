@@ -1,33 +1,37 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-  /* This app has one fixed dark theme, not a light/dark toggle. Without this,
-     browsers whose OS/browser preference is light-mode render native form
-     controls (particularly <select> dropdown option popups, which mostly
-     ignore inline CSS) using light UI chrome — white background, near-white
-     text — making them unreadable against our dark-styled controls. */
+  /* Enterprise Dark Theme System */
   color-scheme: dark;
 
-  --bg-primary: #0A0D14;
-  --bg-secondary: rgba(16, 22, 35, 0.65);
+  --bg-primary: #07090E;
+  --bg-secondary: rgba(13, 18, 30, 0.72);
+  --panel-bg: rgba(10, 14, 24, 0.65);
   --border-color: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-focus: rgba(56, 189, 248, 0.4);
+
   --accent-primary: #2563EB;
   --accent-secondary: #38BDF8;
   --accent-cyan: #7DD3FC;
   --accent-gradient: linear-gradient(135deg, #38BDF8 0%, #2563EB 100%);
-  --accent-glow: 0 0 20px rgba(56, 189, 248, 0.3);
+  --accent-glow: 0 4px 24px rgba(56, 189, 248, 0.28);
   --accent-green: #10B981;
   --accent-red: #EF4444;
   --accent-amber: #F59E0B;
   --accent-overleaf: #4CAF50;
-  --text-main: #F3F4F6;
-  --text-muted: #9CA3AF;
-  --glass-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7);
-  --font-display: 'Plus Jakarta Sans', sans-serif;
-  --font-sans: 'Plus Jakarta Sans', sans-serif;
+
+  --text-main: #F8FAFC;
+  --text-muted: #94A3B8;
+  --text-dim: #64748B;
+
+  --glass-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --glass-hover-shadow: 0 24px 50px -12px rgba(0, 0, 0, 0.85), 0 0 24px rgba(56, 189, 248, 0.12), 0 0 0 1px rgba(56, 189, 248, 0.25);
+
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
-  --panel-bg: rgba(7, 10, 19, 0.5);
-  --input-bg: rgba(255, 255, 255, 0.03);
+  --input-bg: rgba(255, 255, 255, 0.035);
 }
 
 * {
@@ -37,19 +41,13 @@
   font-family: var(--font-sans);
 }
 
-/* `color-scheme: dark` on :root alone doesn't reliably force every browser's
-   native <select> popup (and its <option> list) into dark UA styling — some
-   Chromium/Firefox versions still render the open dropdown and its hover
-   state with light chrome when the OS/browser preference is light. Setting
-   color-scheme directly on the form controls, plus explicit option colors as
-   a fallback net, covers both. */
 select {
   color-scheme: dark;
 }
 
 select option {
-  background-color: #151a26;
-  color: #fff;
+  background-color: #0F172A;
+  color: #F8FAFC;
 }
 
 body {
@@ -58,6 +56,8 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   position: relative;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Sleek custom scrollbars for inner containers */
@@ -84,21 +84,22 @@ body::before {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background-image:
-    radial-gradient(circle at 12% 18%, rgba(56, 189, 248, 0.12) 0%, transparent 45%),
-    radial-gradient(circle at 85% 75%, rgba(16, 185, 129, 0.08) 0%, transparent 40%),
-    linear-gradient(rgba(255, 255, 255, 0.007) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.007) 1px, transparent 1px);
-  background-size: 200% 200%, 200% 200%, 40px 40px, 40px 40px;
+    radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.09) 0%, transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(16, 185, 129, 0.07) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.04) 0%, transparent 60%),
+    linear-gradient(rgba(255, 255, 255, 0.008) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.008) 1px, transparent 1px);
+  background-size: 200% 200%, 200% 200%, 200% 200%, 36px 36px, 36px 36px;
   pointer-events: none;
   z-index: -1;
-  animation: bgShift 20s ease infinite;
+  animation: bgShift 25s ease infinite;
 }
 
 /* ─── Layout ─────────────────────────────────────────────── */
 .app-container {
-  max-width: 1200px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 30px 24px;
+  padding: 24px 28px;
   animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -108,11 +109,11 @@ header.app-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 35px;
+  margin-bottom: 24px;
   padding: 14px 24px;
   background: var(--bg-secondary);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   box-shadow: var(--glass-shadow);
@@ -120,7 +121,7 @@ header.app-header {
 
 h1.title {
   font-family: var(--font-display);
-  font-size: 1.8rem;
+  font-size: 1.5rem;
   font-weight: 800;
   letter-spacing: -0.03em;
   background: linear-gradient(135deg, #FFFFFF 20%, #7DD3FC 100%);
@@ -153,34 +154,34 @@ h1.title {
 
 .card {
   background: var(--bg-secondary);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--border-color);
-  border-radius: 20px;
-  padding: 28px;
+  border-radius: 16px;
+  padding: 24px;
   box-shadow: var(--glass-shadow);
-  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s ease, box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease, box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   min-width: 0;
 }
 
 .card:hover {
   transform: translateY(-2px);
-  border-color: rgba(56, 189, 248, 0.3);
-  box-shadow: 0 20px 40px -15px rgba(56, 189, 248, 0.15), var(--glass-shadow);
+  border-color: rgba(56, 189, 248, 0.25);
+  box-shadow: var(--glass-hover-shadow);
 }
 
 h2 {
   font-family: var(--font-display);
   font-size: 1.15rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   margin-bottom: 12px;
   color: #FFF;
 }
 
 /* ─── Section Labels ─────────────────────────────────────── */
 .section-label {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -188,14 +189,14 @@ h2 {
   margin-bottom: 10px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .section-label::after {
   content: '';
   flex: 1;
   height: 1px;
-  background: var(--border-color);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0%, transparent 100%);
 }
 
 /* ─── Form inputs ────────────────────────────────────────── */
@@ -204,17 +205,17 @@ input, textarea, select {
   background: var(--input-bg);
   border: 1px solid var(--border-color);
   border-radius: 10px;
-  padding: 13px 16px;
+  padding: 12px 14px;
   color: var(--text-main);
-  font-size: 0.92rem;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  font-size: 0.9rem;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   margin-bottom: 12px;
 }
 
 input:focus, textarea:focus, select:focus {
   outline: none;
-  border-color: #38BDF8;
-  background: rgba(56, 189, 248, 0.03);
+  border-color: var(--border-focus);
+  background: rgba(56, 189, 248, 0.04);
   box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
 }
 
@@ -224,46 +225,49 @@ input:focus, textarea:focus, select:focus {
   color: #fff;
   border: none;
   border-radius: 10px;
-  padding: 12px 24px;
+  padding: 10px 20px;
   font-weight: 600;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  letter-spacing: 0.01em;
 }
 
 .btn:hover:not(:disabled) {
-  transform: scale(1.02);
+  transform: translateY(-1px);
   box-shadow: var(--accent-glow);
+  filter: brightness(1.06);
 }
 
 .btn:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: translateY(0);
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-color);
   color: var(--text-main);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Overleaf-branded export button */
 .btn-overleaf {
-  background: linear-gradient(135deg, #4CAF50 0%, #388E3C 100%);
+  background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
   color: #fff;
   border: none;
   border-radius: 10px;
@@ -271,7 +275,7 @@ input:focus, textarea:focus, select:focus {
   font-weight: 700;
   font-size: 0.85rem;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -280,16 +284,16 @@ input:focus, textarea:focus, select:focus {
 }
 
 .btn-overleaf:hover:not(:disabled) {
-  transform: scale(1.03);
+  transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
 }
 
 .btn-overleaf:active:not(:disabled) {
-  transform: scale(0.97);
+  transform: translateY(0);
 }
 
 .btn-overleaf:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 

@@ -114,7 +114,7 @@ const DiscoverMode = ({
 
         {/* Platform Filter Pills */}
         <div>
-          <span style={{ fontSize: '0.74rem', color: '#94A3B8', fontWeight: 600, display: 'block', marginBottom: '6px', letterSpacing: '0.02em' }}>FILTER BY ATS PLATFORM</span>
+          <span style={{ fontSize: '0.74rem', color: '#94A3B8', fontWeight: 600, display: 'block', marginBottom: '8px', letterSpacing: '0.04em' }}>FILTER BY ATS PLATFORMS</span>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {platformPills.map((pill) => {
               const active = (targetPlatform || 'all').toLowerCase() === pill.id.toLowerCase();
@@ -124,19 +124,30 @@ const DiscoverMode = ({
                   type="button"
                   onClick={() => setTargetPlatform && setTargetPlatform(pill.id)}
                   style={{
-                    padding: '4px 10px',
+                    padding: '5px 11px',
                     borderRadius: '8px',
-                    fontSize: '0.72rem',
-                    fontWeight: 600,
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
                     cursor: 'pointer',
                     background: active
-                      ? 'rgba(56, 189, 248, 0.2)'
+                      ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.25) 0%, rgba(37, 99, 235, 0.2) 100%)'
                       : 'rgba(255, 255, 255, 0.03)',
                     border: `1px solid ${active ? '#38BDF8' : 'rgba(255, 255, 255, 0.08)'}`,
                     color: active ? '#FFFFFF' : '#94A3B8',
-                    transition: 'all 0.15s ease'
+                    boxShadow: active ? '0 0 12px rgba(56, 189, 248, 0.25)' : 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    transition: 'all 0.2s ease'
                   }}
                 >
+                  <span style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: active ? '#38BDF8' : 'rgba(255, 255, 255, 0.2)',
+                    boxShadow: active ? '0 0 6px #38BDF8' : 'none'
+                  }} />
                   {pill.label}
                 </button>
               );

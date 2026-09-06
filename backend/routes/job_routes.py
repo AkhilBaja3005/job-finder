@@ -165,6 +165,9 @@ class ApplyRequest(BaseModel):
 class UpdateStatusRequest(BaseModel):
     job_url: str
     status: str
+    job_title: Optional[str] = None
+    company: Optional[str] = None
+    score: Optional[int] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -365,7 +368,15 @@ async def get_applications(authorization: Optional[str] = Header(None)):
 @router.post("/update_application_status")
 async def update_status_endpoint(request: UpdateStatusRequest, authorization: Optional[str] = Header(None)):
     token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
-    success = await asyncio.to_thread(update_application_status, token, request.job_url, request.status)
+    success = await asyncio.to_thread(
+        update_application_status,
+        token,
+        request.job_url,
+        request.status,
+        request.job_title,
+        request.company,
+        request.score
+    )
     return {"status": "success" if success else "not_found"}
 
 
