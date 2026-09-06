@@ -8,7 +8,7 @@ import os
 import json
 import asyncio
 import traceback
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 # Ensure backend root is on sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
