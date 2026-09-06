@@ -1624,6 +1624,82 @@ function App() {
     }
   };
 
+  const handleViewTailoredPdf = async () => {
+    if (!analysisResult) return;
+    const directUrl = analysisResult.pdf_url || analysisResult.download_pdf_url;
+    if (directUrl) {
+      window.open(`${API_BASE}${directUrl}`, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const newTab = window.open('', '_blank');
+    setLoading(true);
+    setStatusMessage('Compiling tailored resume PDF…');
+    try {
+      const res = await fetch(`${API_BASE}/compile_master_pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resume_data: tailoredResumeData || resumeData,
+          job_title: jobTitle || 'Tailored Role',
+          company: company || '',
+        }),
+      });
+      if (!res.ok) throw new Error('PDF compilation failed');
+      const data = await res.json();
+      if (data.pdf_url) {
+        setAnalysisResult(prev => ({ ...prev, pdf_url: data.pdf_url }));
+        if (newTab) {
+          newTab.location.href = `${API_BASE}${data.pdf_url}`;
+        } else {
+          window.open(`${API_BASE}${data.pdf_url}`, '_blank', 'noopener,noreferrer');
+        }
+        setStatusMessage('Tailored PDF opened!');
+      } else if (newTab) {
+        newTab.close();
+      }
+    } catch (err) {
+      if (newTab) newTab.close();
+      setStatusMessage(`Failed to compile PDF: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper to dynamically deduce where in candidate's resume a missing skill will be injected
+  const getSkillTargetSection = (skillName) => {
+    if (!skillName) return 'Skills & Experience';
+    const s = skillName.toLowerCase();
+    const exps = resumeData?.experience || tailoredResumeData?.experience || [];
+    
+    // Check if skill aligns with specific employers or roles
+    for (const exp of exps) {
+      const co = (exp.company || '').toLowerCase();
+      const role = (exp.role || '').toLowerCase();
+      if ((s.includes('system') || s.includes('c++') || s.includes('hardware') || s.includes('kernel') || s.includes('embedded') || s.includes('linux') || s.includes('cuda') || s.includes('distributed')) && co.includes('qualcomm')) {
+        return `Appends under ${exp.company} (${exp.role || 'Systems'})`;
+      }
+      if ((s.includes('llm') || s.includes('genai') || s.includes('rag') || s.includes('nlp') || s.includes('agent') || s.includes('finetuning') || s.includes('langchain') || s.includes('prompt')) && (co.includes('axis') || role.includes('ai') || role.includes('engineer'))) {
+        return `Emphasizes in ${exp.company} (${exp.role || 'GenAI'})`;
+      }
+    }
+
+    if (exps.length > 0) {
+      if (s.includes('cloud') || s.includes('aws') || s.includes('docker') || s.includes('kubernetes') || s.includes('k8s') || s.includes('ci/cd') || s.includes('pipeline')) {
+        return `Injects into ${exps[0].company} & Projects`;
+      }
+      if (s.includes('c++') || s.includes('python') || s.includes('golang') || s.includes('rust') || s.includes('java') || s.includes('backend') || s.includes('api') || s.includes('rest') || s.includes('fastapi')) {
+        return `Enhances Core Skills & ${exps[0].company}`;
+      }
+    }
+
+    const projects = resumeData?.projects || tailoredResumeData?.projects || [];
+    if (projects.length > 0) {
+      return `Injects into Core Skills & ${projects[0].title || 'Projects'}`;
+    }
+
+    return 'Injects into Core Skills & Experience';
+  };
+
   // Generate personalized recruiter outreach message
   const handleGenerateOutreach = async () => {
     console.log('[handleGenerateOutreach] Called', {
@@ -5612,7 +5688,16 @@ function App() {
                                   <line x1="5" y1="12" x2="19" y2="12"></line>
                                 </svg>
                               )}
-                              {skill}
+                              <span>{skill}</span>
+                              
+                              {/* Contextual Injection Preview Tooltip */}
+                              <div className="skill-injection-tooltip">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="9 11 12 14 22 4"></polyline>
+                                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                                </svg>
+                                <span>{isSelected ? 'Force-tailoring enabled' : getSkillTargetSection(skill)}</span>
+                              </div>
                             </span>
                           );
                         })}
@@ -5974,46 +6059,7 @@ function App() {
                                 alignItems: 'center',
                                 gap: '6px'
                               }}
-                              onClick={async () => {
-                                const directUrl = analysisResult.pdf_url || analysisResult.download_pdf_url;
-                                if (directUrl) {
-                                  window.open(`${API_BASE}${directUrl}`, '_blank', 'noopener,noreferrer');
-                                  return;
-                                }
-                                // Open placeholder window synchronously to guarantee popup is permitted
-                                const newTab = window.open('', '_blank');
-                                setLoading(true);
-                                setStatusMessage('Compiling tailored resume PDF…');
-                                try {
-                                  const res = await fetch(`${API_BASE}/compile_master_pdf`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                      resume_data: tailoredResumeData || resumeData,
-                                      job_title: jobTitle || 'Tailored Role',
-                                      company: company || '',
-                                    }),
-                                  });
-                                  if (!res.ok) throw new Error('PDF compilation failed');
-                                  const data = await res.json();
-                                  if (data.pdf_url) {
-                                    setAnalysisResult(prev => ({ ...prev, pdf_url: data.pdf_url }));
-                                    if (newTab) {
-                                      newTab.location.href = `${API_BASE}${data.pdf_url}`;
-                                    } else {
-                                      window.open(`${API_BASE}${data.pdf_url}`, '_blank', 'noopener,noreferrer');
-                                    }
-                                    setStatusMessage('Tailored PDF opened!');
-                                  } else if (newTab) {
-                                    newTab.close();
-                                  }
-                                } catch (err) {
-                                  if (newTab) newTab.close();
-                                  setStatusMessage(`Failed to compile PDF: ${err.message}`);
-                                } finally {
-                                  setLoading(false);
-                                }
-                              }}
+                              onClick={handleViewTailoredPdf}
                               title="Open compiled 1-page PDF in a new tab"
                             >
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -6262,6 +6308,118 @@ function App() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Sticky Floating Action Bar for Long Job Descriptions & Analysis */}
+            {analysisResult && dashboardMode === 'tailor' && (
+              <div className="sticky-action-bar">
+                {/* 1. View PDF */}
+                <button
+                  onClick={handleViewTailoredPdf}
+                  disabled={loading}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    borderRadius: '9999px',
+                    background: 'rgba(56, 189, 248, 0.14)',
+                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                    color: '#38BDF8',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title="Open compiled 1-page tailored PDF"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                  </svg>
+                  View PDF
+                </button>
+
+                {/* 2. Overleaf Direct Export */}
+                <button
+                  onClick={openInOverleaf}
+                  disabled={loading}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    borderRadius: '9999px',
+                    background: 'rgba(16, 185, 129, 0.14)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    color: '#34D399',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title="Export LaTeX project bundle to Overleaf"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
+                  Overleaf
+                </button>
+
+                {/* 3. Personalized Outreach Note */}
+                <button
+                  onClick={handleGenerateOutreach}
+                  disabled={loading || outreachLoading}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    borderRadius: '9999px',
+                    background: 'rgba(99, 102, 241, 0.14)',
+                    border: '1px solid rgba(99, 102, 241, 0.35)',
+                    color: '#A5B4FC',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title="Generate or view tailored recruiter outreach message"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                    <polyline points="22,6 12,13 2,6"></polyline>
+                  </svg>
+                  {outreachLoading ? 'Generating…' : 'Outreach Note'}
+                </button>
+
+                {/* 4. Quick Scroll-to-Top Anchor */}
+                <button
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                  style={{
+                    padding: '6px 8px',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    borderRadius: '9999px',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title="Scroll back to top"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                    <polyline points="5 12 12 5 19 12"></polyline>
+                  </svg>
+                </button>
               </div>
             )}
           </div>
