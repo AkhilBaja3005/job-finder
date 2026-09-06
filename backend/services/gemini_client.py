@@ -624,10 +624,15 @@ def generate_latex_with_strong_model(
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Grounded Search Generation (Google Search Tool)
+# Prioritize Gemini 2.5 and 2.0 models where Google Search Grounding has 1,500 free queries/day
 # ─────────────────────────────────────────────────────────────────────────────
 GROUNDED_SEARCH_MODELS = [
-    "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite",
-    "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash"
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite"
 ]
 
 def call_gemini_grounded(
