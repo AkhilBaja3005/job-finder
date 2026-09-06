@@ -5834,15 +5834,17 @@ function App() {
                     <div className="workspace-panel">
                       <div className="panel-toolbar" style={{
                         display: 'flex',
-                        flexWrap: 'wrap',
+                        flexWrap: 'nowrap',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        gap: '12px',
-                        padding: '8px 12px',
+                        gap: '10px',
+                        padding: '6px 10px',
                         background: 'rgba(15, 23, 42, 0.65)',
                         border: '1px solid rgba(255, 255, 255, 0.08)',
                         borderRadius: '10px',
-                        marginBottom: '14px'
+                        marginBottom: '14px',
+                        overflowX: 'auto',
+                        whiteSpace: 'nowrap'
                       }}>
                         {/* Left: View Mode Segmented Switcher */}
                         <div style={{
@@ -5890,8 +5892,8 @@ function App() {
                           </button>
                         </div>
 
-                        {/* Right: Clean Action Buttons Group */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        {/* Right: Clean Action Buttons Group (Single Line) */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap', flexShrink: 0 }}>
                           {/* 1. View & Open Compiled 1-Page PDF */}
                           {analysisResult && (
                             <div style={{ display: 'inline-flex', alignItems: 'center', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(56, 189, 248, 0.35)', background: 'rgba(56, 189, 248, 0.1)' }}>
