@@ -592,41 +592,41 @@ input:focus, textarea:focus, select:focus {
   opacity: 0;
   position: absolute;
   bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
-  background: rgba(15, 23, 42, 0.95);
-  border: 1px solid rgba(56, 189, 248, 0.35);
+  left: 0;
+  transform: translateY(4px);
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(56, 189, 248, 0.38);
   color: #F8FAFC;
-  padding: 6px 10px;
+  padding: 6px 11px;
   border-radius: 7px;
   font-size: 0.72rem;
   font-weight: 500;
   white-space: nowrap;
   pointer-events: none;
   z-index: 1000;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
   transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
   display: flex;
   align-items: center;
   gap: 6px;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .skill-injection-tooltip::after {
   content: '';
   position: absolute;
   top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 18px;
   border-width: 5px;
   border-style: solid;
-  border-color: rgba(15, 23, 42, 0.95) transparent transparent transparent;
+  border-color: rgba(15, 23, 42, 0.96) transparent transparent transparent;
 }
 
 .tag-missing:hover .skill-injection-tooltip {
   visibility: visible;
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 
 /* Floating Sticky Action Bar */

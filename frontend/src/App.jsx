@@ -2351,9 +2351,19 @@ function App() {
             gap: '20px',
             padding: '32px'
           }}>
-            <div>
-              <h2 style={{ marginBottom: '4px' }}>Setup & Configuration</h2>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.87rem' }}>Configure your AI key and upload your master resume to get started.</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h2 style={{ marginBottom: '4px' }}>Setup & Configuration</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.87rem' }}>Configure your AI key and upload your master resume to get started.</p>
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '6px 10px', fontSize: '0.78rem', borderRadius: '6px' }}
+                onClick={() => setConfigStepActive(false)}
+                title="Exit configuration modal"
+              >
+                ✕
+              </button>
             </div>
 
             {/* API Key section */}
@@ -2399,7 +2409,15 @@ function App() {
                 <input type="file" accept=".tex,.pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
                 {resumeData ? (
                   <>
-                    <div style={{ color: 'var(--accent-green)', fontWeight: 700 }}>✓</div>
+                    <div style={{
+                      width: '38px', height: '38px', borderRadius: '50%',
+                      background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-green)'
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                    </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 700, color: 'var(--accent-green)', fontSize: '0.92rem' }}>{resumeData.name}</div>
                       <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>Click to replace master resume (.TEX, .PDF, .DOCX)</div>
@@ -2407,7 +2425,18 @@ function App() {
                   </>
                 ) : (
                   <>
-                    <div style={{ color: 'var(--text-muted)', fontWeight: 700 }}>[DOC]</div>
+                    <div style={{
+                      width: '42px', height: '42px', borderRadius: '10px',
+                      background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38BDF8'
+                    }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="12" y1="18" x2="12" y2="12"></line>
+                        <line x1="9" y1="15" x2="15" y2="15"></line>
+                      </svg>
+                    </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Drop your resume here or click to browse</div>
                       <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>LaTeX (.tex), PDF, or DOCX — becomes your master profile</div>
