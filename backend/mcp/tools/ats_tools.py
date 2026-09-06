@@ -91,14 +91,24 @@ async def handle_calculate_ats_score(arguments: Dict[str, Any]) -> Dict[str, Any
                 "skills": cand.get("core_skills", []),
                 "experience": [
                     {
-                        "role": "Senior AI Engineer",
-                        "company": "Tech Solutions",
-                        "start_date": "June 2023",
-                        "end_date": "Present",
+                        "role": exp.get("role", ""),
+                        "company": exp.get("company", ""),
+                        "start_date": exp.get("timeline", "").split("–")[0].strip() if "–" in exp.get("timeline", "") else exp.get("timeline", "").split("-")[0].strip(),
+                        "end_date": exp.get("timeline", "").split("–")[1].strip() if "–" in exp.get("timeline", "") else (exp.get("timeline", "").split("-")[1].strip() if "-" in exp.get("timeline", "") else "Present"),
+                        "description": exp.get("highlights", [])
+                    }
+                    for exp in cand.get("work_experience", [])
+                ] if cand.get("work_experience") else [
+                    {
+                        "role": "Software Engineer (GenAI / Systems)",
+                        "company": "Qualcomm",
+                        "start_date": "Dec 2024",
+                        "end_date": "Aug 2026",
                         "description": [cand.get("experience_summary", "")]
                     }
                 ],
-                "education": cand.get("education", [])
+                "education": cand.get("education", []),
+                "projects": cand.get("projects", [])
             }
         else:
             resume_data = {}

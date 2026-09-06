@@ -4,37 +4,151 @@
     "email": "akhilbaja.work@gmail.com",
     "linkedin": "https://linkedin.com/in/akhilbaja",
     "location": "London, UK",
+    "experience_summary": "AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML and developer infrastructure at Qualcomm and Axis Bank. Engineered cross-language LLM context pipelines cutting retrieval latency by 60% and improving LLM accuracy by 46%, alongside enterprise GenAI systems serving 1,000+ users. Strong in Python, LLMs, RAG, machine learning, and distributed systems; MSc student in Artificial Intelligence Applications and Innovation at Imperial College London.",
     "education": [
       {
         "institution": "Imperial College London",
-        "degree": "MSc Artificial Intelligence",
+        "degree": "MSc in Artificial Intelligence Applications and Innovation",
         "timeline": "Sept 2026 - Sept 2027",
         "location": "London, UK"
       },
       {
         "institution": "IIT Hyderabad",
-        "degree": "B.Tech in Computer Science and Engineering",
+        "degree": "B.Tech in Engineering Science",
+        "cpi": "8.04 / 10.0",
         "timeline": "Aug 2019 - May 2023",
-        "location": "Hyderabad, India"
+        "location": "Hyderabad, India",
+        "highlights": [
+          "Internship and Placement Cell Coordinator — Managed corporate outreach and recruitment operations for 100+ technology and engineering firms."
+        ]
       }
     ],
-    "experience_summary": "Senior AI Engineer with 3+ years experience building production Agentic AI workflows, LLM systems, RAG pipelines, and cloud microservices.",
+    "work_experience": [
+      {
+        "company": "Qualcomm",
+        "role": "Software Engineer (GenAI / Systems)",
+        "timeline": "Dec 2024 – Aug 2026",
+        "technologies": [
+          "Python",
+          "C++",
+          "Jedi",
+          "Jenkins",
+          "RabbitMQ",
+          "Docker",
+          "Rancher",
+          "SQL",
+          "Git"
+        ],
+        "highlights": [
+          "Engineered a cross-language LLM context engineering pipeline using AST-based dependency extraction across Java, Python, C and C++, reducing retrieval latency by 60% and improving LLM accuracy by 46% — Qualcomm Certificate of Recognition.",
+          "Re-architected a central data-harvesting pipeline for 1,000+ users, cutting deployment failure rate by 84% by replacing legacy Jenkins workflows with asynchronous RabbitMQ queues and containerizing microservices via Docker/Rancher for cross-OS deployment stability.",
+          "Slashed static analysis parser execution latency by 93% and consolidated 200+ unit tests into a Linux-compatible test harness, cutting ongoing maintenance overhead by 60%."
+        ]
+      },
+      {
+        "company": "Axis Bank",
+        "role": "Data Scientist (AI / ML)",
+        "timeline": "July 2023 – Dec 2024",
+        "technologies": [
+          "Python",
+          "Azure OpenAI",
+          "PySpark",
+          "Cloudera ML",
+          "SAS EG",
+          "SQL",
+          "XGBoost"
+        ],
+        "highlights": [
+          "Built and deployed an enterprise GenAI assistant using Azure OpenAI and Cloudera ML, serving 1,000+ active employees and reducing internal query resolution time by 70%.",
+          "Engineered an Isolation Forest anomaly detection model for Gold Loans, flagging branch-level risk patterns tied to £30M+ in projected annual portfolio loss exposure and cutting manual review time by 80% — BIU Star Award.",
+          "Automated customer Dynamic Risk Rating via XGBoost and Naive Bayes pipelines, reducing manual processing effort by ~40% and aligning the automated risk-rating process with RBI (Reserve Bank of India) regulatory requirements."
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "title": "Cosmic Ray Segmentation",
+        "category": "Deep Learning",
+        "description": "Enhanced the deepCR model for cosmic-ray detection in astronomical images; evaluated U-Net and implemented residual connections, improving pixel-level segmentation precision by 15%."
+      },
+      {
+        "title": "Tuberculosis Detection Pipeline",
+        "category": "Computer Vision",
+        "description": "Implemented a transfer-learning pipeline combining U-Net segmentation and DenseNet classification across 5,000+ chest X-rays (+12% accuracy over baseline)."
+      },
+      {
+        "title": "Scientific Publications Database",
+        "category": "Data Infrastructure",
+        "description": "Designed and optimized a PostgreSQL database and custom ER schema for 2M+ research papers, accelerating query execution time by 45% via targeted indexing."
+      }
+    ],
     "core_skills": [
-      "Agentic AI",
-      "LLM Systems",
-      "LangChain",
-      "RAG",
-      "PyTorch",
-      "Vector Databases",
       "Python",
-      "C++",
-      "TypeScript",
       "SQL",
+      "C++",
+      "Java",
+      "Generative AI",
+      "Large Language Models (LLMs)",
+      "RAG",
+      "LLM Context Engineering",
+      "Machine Learning",
+      "Deep Learning",
+      "Anomaly Detection",
+      "XGBoost",
+      "Naive Bayes",
+      "Computer Vision (U-Net, DenseNet)",
+      "PySpark",
+      "Azure OpenAI",
+      "Cloudera ML",
+      "PostgreSQL",
+      "SAS EG",
       "Docker",
-      "Kubernetes",
-      "Azure AKS",
-      "CI/CD"
-    ]
+      "Rancher",
+      "RabbitMQ",
+      "Jenkins",
+      "Git",
+      "AST Parsing",
+      "Static Analysis",
+      "Distributed Systems",
+      "Microservices",
+      "CI/CD",
+      "Unit Testing"
+    ],
+    "skill_categories": {
+      "Languages": ["Python", "SQL", "C++", "Java"],
+      "AI/ML & GenAI": [
+        "Generative AI",
+        "Large Language Models (LLMs)",
+        "RAG",
+        "LLM Context Engineering",
+        "Machine Learning",
+        "Deep Learning",
+        "Anomaly Detection",
+        "XGBoost",
+        "Naive Bayes",
+        "Computer Vision (U-Net, DenseNet)"
+      ],
+      "Data & Platforms": [
+        "PySpark",
+        "Azure OpenAI",
+        "Cloudera ML",
+        "PostgreSQL",
+        "SAS EG"
+      ],
+      "Software & Infrastructure": [
+        "Docker",
+        "Rancher",
+        "RabbitMQ",
+        "Jenkins",
+        "Git",
+        "AST Parsing",
+        "Static Analysis",
+        "Distributed Systems",
+        "Microservices",
+        "CI/CD",
+        "Unit Testing"
+      ]
+    }
   },
   "search_preferences": {
     "target_roles": [
@@ -70,18 +184,18 @@
     "reference_personas": [
       {
         "tier": "Tier 1 - Primary Verification",
-        "persona": "Engineering Manager / Tech Lead",
-        "context": "Direct managers who supervised your Agentic AI, RAG latency SLA (<150ms), and production Azure/Docker deployments."
+        "persona": "Engineering Manager / Tech Lead (Qualcomm / Axis Bank)",
+        "context": "Direct managers who supervised your LLM context engineering pipeline, RabbitMQ/Docker infrastructure, and enterprise Azure OpenAI / Cloudera ML deployments."
       },
       {
         "tier": "Tier 2 - Academic & Research",
         "persona": "Imperial College & IIT Hyderabad Professors / Thesis Advisors",
-        "context": "Validates core ML/DL foundation, algorithmic rigor, and deep learning competencies."
+        "context": "Validates core ML/DL foundation, deepCR/U-Net vision research, algorithmic rigor, and mathematical competencies."
       },
       {
         "tier": "Tier 3 - Peer Collaborators",
-        "persona": "Senior Backend/ML Peers & Product Managers",
-        "context": "Confirms sprint delivery, team synergy, system design communication, and unblocking teammates."
+        "persona": "Senior Systems/Data Peers & Placement Team Leads",
+        "context": "Confirms sprint delivery, cross-language parsing, cross-functional corporate relations, and high team velocity."
       }
     ],
     "referral_targets": [
@@ -89,9 +203,10 @@
         "group": "Alumni Network",
         "targets": [
           "IIT Hyderabad Alumni",
-          "Imperial College London Alumni"
+          "Imperial College London Alumni",
+          "Qualcomm Alumni"
         ],
-        "focus": "Engineers and Staff ML Engineers at target labs/scale-ups (high trust, internal bonus incentive)."
+        "focus": "Engineers and Staff ML/GenAI Engineers at target labs and scale-ups."
       },
       {
         "group": "Hiring Managers & Recruiters",
@@ -99,7 +214,7 @@
           "Technical Recruiters",
           "Head of AI / AI Engineering Leads"
         ],
-        "focus": "Direct outreach using 3-sentence personalized InMail highlighting your specific latency/throughput achievements."
+        "focus": "Direct outreach using 3-sentence personalized InMail highlighting AST LLM context engineering (60% latency reduction) and enterprise GenAI systems."
       }
     ]
   }
