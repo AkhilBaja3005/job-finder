@@ -367,8 +367,8 @@ const OutreachModal = ({
           background: var(--bg-secondary);
           border: 1px solid var(--border-color);
           border-radius: 20px;
-          max-width: 800px;
-          width: 100%;
+          max-width: 1040px;
+          width: 92vw;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
           margin-bottom: 40px;
           pointer-events: auto; /* Keep modal interactive */

@@ -3738,7 +3738,7 @@ function App() {
                   </div>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '560px', overflowY: 'auto', paddingRight: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, minHeight: 0, paddingRight: '4px' }}>
                   {/* Funnel Metrics Dashboard Card */}
                   {(() => {
                     const tailoredCount = applicationHistory.filter(e => e.status === 'tailored').length;
@@ -5795,7 +5795,7 @@ function App() {
             aria-label="Interview Preparation Guide"
             tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '800px', width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+            style={{ maxWidth: '1040px', width: '92vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
           >
             {/* Header */}
             <div className="modal-header">
@@ -5856,7 +5856,7 @@ function App() {
             aria-label="Tailored Cover Letter"
             tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: '800px', width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+            style={{ maxWidth: '1040px', width: '92vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
           >
             {/* Header */}
             <div className="modal-header">
