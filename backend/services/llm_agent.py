@@ -685,7 +685,12 @@ def review_tailored_resume(
         "skills": list(set(flat_skills + (user_selected_skills or []))),
         "education": [{"institution": e.get("institution", ""), "degree": e.get("degree", "")} for e in original_resume_data.get("education", [])],
         "experience": [
-            {"company": e.get("company", ""), "role": e.get("role", ""), "bullets": e.get("description", [])}
+            {
+                "company": e.get("company", ""),
+                "role": e.get("role", ""),
+                "technologies": e.get("technologies", ""),
+                "bullets": e.get("description", [])
+            }
             for e in original_resume_data.get("experience", [])
         ],
         "projects": [
@@ -707,12 +712,12 @@ QUALITY RUBRIC — evaluate each item independently and set its boolean field ac
    (Check for contextual use, NOT verbatim copy-paste from JD. NOTE: If the JD excerpt below is empty or not provided, automatically set ats_fit_ok = true.)
 2. impact_metrics_ok: Do the majority of bullets contain at least one quantified result (%, numbers, scale)?
 3. truthfulness_ok: Does tailored content stay within the candidate's real background?
-   - The CANDIDATE ORIGINAL PROFILE below — including each job's/project's "bullets" field and the USER EXPLICITLY APPROVED SKILLS list above —
+   - The CANDIDATE ORIGINAL PROFILE below — including each job's/project's "technologies" and "bullets" fields, and the USER EXPLICITLY APPROVED SKILLS list above —
      is the FULL ground truth of the candidate's real experience. A skill or tool is
-     NOT fabricated if it appears ANYWHERE in the profile, including inside bullets,
-     even if it is not also listed in the flat "skills" array.
+     NOT fabricated if it appears ANYWHERE in the profile (e.g. inside "technologies", "bullets", or "skills").
+   - REAL-WORLD DEVELOPER TOOLS: Note that terms like "Jedi" (Python static analysis / autocompletion / AST parser library), "JPype", "ccls", "Doxygen", "Tree-sitter", and "AST" are real technical tools/libraries. If the candidate used them under their experience (such as at Qualcomm), they are 100% authentic and must NOT be flagged as fiction, pop culture, or fabrication!
    - USER EXPLICIT OVERRIDE: Any skills listed in the candidate's "skills" array below (e.g. AWS, GCP, RAG, Vector Databases, Hugging Face) have been explicitly approved by the user for inclusion. DO NOT flag these user-selected skills as fabrication or untruthful under any circumstances!
-   - Only flag truthfulness if the tailored resume mentions an unapproved company, degree, or unapproved tool that appears NOWHERE in the candidate profile.
+   - Only flag truthfulness if the tailored resume mentions an unapproved company, degree, or completely unapproved tool that appears NOWHERE in the candidate profile.
 4. conciseness_ok: Are bullets tight (1-1.5 lines)? No sprawling multi-line sentences?
 
 Set each boolean independently and truthfully — do NOT set all four to true just because most pass.
