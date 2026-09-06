@@ -19,7 +19,7 @@
         "timeline": "Aug 2019 - May 2023",
         "location": "Hyderabad, India",
         "highlights": [
-          "Internship and Placement Cell Coordinator — Managed corporate outreach and recruitment operations for 100+ technology and engineering firms."
+          "Internship and Placement Cell Coordinator \u2014 Managed corporate outreach and recruitment operations for 100+ technology and engineering firms."
         ]
       }
     ],
@@ -27,7 +27,7 @@
       {
         "company": "Qualcomm",
         "role": "Software Engineer (GenAI / Systems)",
-        "timeline": "Dec 2024 – Aug 2026",
+        "timeline": "Dec 2024 \u2013 Aug 2026",
         "technologies": [
           "Python",
           "C++",
@@ -40,7 +40,7 @@
           "Git"
         ],
         "highlights": [
-          "Engineered a cross-language LLM context engineering pipeline using AST-based dependency extraction across Java, Python, C and C++, reducing retrieval latency by 60% and improving LLM accuracy by 46% — Qualcomm Certificate of Recognition.",
+          "Engineered a cross-language LLM context engineering pipeline using AST-based dependency extraction across Java, Python, C and C++, reducing retrieval latency by 60% and improving LLM accuracy by 46% \u2014 Qualcomm Certificate of Recognition.",
           "Re-architected a central data-harvesting pipeline for 1,000+ users, cutting deployment failure rate by 84% by replacing legacy Jenkins workflows with asynchronous RabbitMQ queues and containerizing microservices via Docker/Rancher for cross-OS deployment stability.",
           "Slashed static analysis parser execution latency by 93% and consolidated 200+ unit tests into a Linux-compatible test harness, cutting ongoing maintenance overhead by 60%."
         ]
@@ -48,7 +48,7 @@
       {
         "company": "Axis Bank",
         "role": "Data Scientist (AI / ML)",
-        "timeline": "July 2023 – Dec 2024",
+        "timeline": "July 2023 \u2013 Dec 2024",
         "technologies": [
           "Python",
           "Azure OpenAI",
@@ -60,7 +60,7 @@
         ],
         "highlights": [
           "Built and deployed an enterprise GenAI assistant using Azure OpenAI and Cloudera ML, serving 1,000+ active employees and reducing internal query resolution time by 70%.",
-          "Engineered an Isolation Forest anomaly detection model for Gold Loans, flagging branch-level risk patterns tied to £30M+ in projected annual portfolio loss exposure and cutting manual review time by 80% — BIU Star Award.",
+          "Engineered an Isolation Forest anomaly detection model for Gold Loans, flagging branch-level risk patterns tied to \u00a330M+ in projected annual portfolio loss exposure and cutting manual review time by 80% \u2014 BIU Star Award.",
           "Automated customer Dynamic Risk Rating via XGBoost and Naive Bayes pipelines, reducing manual processing effort by ~40% and aligning the automated risk-rating process with RBI (Reserve Bank of India) regulatory requirements."
         ]
       }
@@ -115,7 +115,12 @@
       "Unit Testing"
     ],
     "skill_categories": {
-      "Languages": ["Python", "SQL", "C++", "Java"],
+      "Languages": [
+        "Python",
+        "SQL",
+        "C++",
+        "Java"
+      ],
       "AI/ML & GenAI": [
         "Generative AI",
         "Large Language Models (LLMs)",
@@ -152,18 +157,10 @@
   },
   "search_preferences": {
     "target_roles": [
-      "AI Engineer",
-      "Agentic AI Engineer",
-      "LLM Engineer",
-      "Machine Learning Engineer",
-      "Senior AI Engineer",
-      "Applied AI Scientist"
+      "AI Engineer"
     ],
     "target_locations": [
-      "London, UK",
-      "UK Remote",
-      "Hybrid London",
-      "Remote (Global/EU/US)"
+      "London, UK"
     ],
     "timeframe": "past_24_hours",
     "seniority": [
