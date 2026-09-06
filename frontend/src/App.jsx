@@ -5896,92 +5896,69 @@ function App() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap', flexShrink: 0 }}>
                           {/* 1. View & Open Compiled 1-Page PDF */}
                           {analysisResult && (
-                            <div style={{ display: 'inline-flex', alignItems: 'center', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(56, 189, 248, 0.35)', background: 'rgba(56, 189, 248, 0.1)' }}>
-                              <button
-                                disabled={loading}
-                                style={{
-                                  padding: '6px 12px',
-                                  fontSize: '0.78rem',
-                                  fontWeight: 700,
-                                  background: 'transparent',
-                                  border: 'none',
-                                  color: '#38BDF8',
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '6px'
-                                }}
-                                onClick={async () => {
-                                  const directUrl = analysisResult.pdf_url || analysisResult.download_pdf_url;
-                                  if (directUrl) {
-                                    window.open(`${API_BASE}${directUrl}`, '_blank', 'noopener,noreferrer');
-                                    return;
-                                  }
-                                  // Open placeholder window synchronously to guarantee popup is permitted
-                                  const newTab = window.open('', '_blank');
-                                  setLoading(true);
-                                  setStatusMessage('Compiling tailored resume PDF…');
-                                  try {
-                                    const res = await fetch(`${API_BASE}/compile_master_pdf`, {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({
-                                        resume_data: tailoredResumeData || resumeData,
-                                        job_title: jobTitle || 'Tailored Role',
-                                        company: company || '',
-                                      }),
-                                    });
-                                    if (!res.ok) throw new Error('PDF compilation failed');
-                                    const data = await res.json();
-                                    if (data.pdf_url) {
-                                      setAnalysisResult(prev => ({ ...prev, pdf_url: data.pdf_url }));
-                                      if (newTab) {
-                                        newTab.location.href = `${API_BASE}${data.pdf_url}`;
-                                      } else {
-                                        window.open(`${API_BASE}${data.pdf_url}`, '_blank', 'noopener,noreferrer');
-                                      }
-                                      setStatusMessage('Tailored PDF opened!');
-                                    } else if (newTab) {
-                                      newTab.close();
+                            <button
+                              disabled={loading}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                borderRadius: '6px',
+                                background: 'rgba(56, 189, 248, 0.1)',
+                                border: '1px solid rgba(56, 189, 248, 0.35)',
+                                color: '#38BDF8',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                              onClick={async () => {
+                                const directUrl = analysisResult.pdf_url || analysisResult.download_pdf_url;
+                                if (directUrl) {
+                                  window.open(`${API_BASE}${directUrl}`, '_blank', 'noopener,noreferrer');
+                                  return;
+                                }
+                                // Open placeholder window synchronously to guarantee popup is permitted
+                                const newTab = window.open('', '_blank');
+                                setLoading(true);
+                                setStatusMessage('Compiling tailored resume PDF…');
+                                try {
+                                  const res = await fetch(`${API_BASE}/compile_master_pdf`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      resume_data: tailoredResumeData || resumeData,
+                                      job_title: jobTitle || 'Tailored Role',
+                                      company: company || '',
+                                    }),
+                                  });
+                                  if (!res.ok) throw new Error('PDF compilation failed');
+                                  const data = await res.json();
+                                  if (data.pdf_url) {
+                                    setAnalysisResult(prev => ({ ...prev, pdf_url: data.pdf_url }));
+                                    if (newTab) {
+                                      newTab.location.href = `${API_BASE}${data.pdf_url}`;
+                                    } else {
+                                      window.open(`${API_BASE}${data.pdf_url}`, '_blank', 'noopener,noreferrer');
                                     }
-                                  } catch (err) {
-                                    if (newTab) newTab.close();
-                                    setStatusMessage(`Failed to compile PDF: ${err.message}`);
-                                  } finally {
-                                    setLoading(false);
+                                    setStatusMessage('Tailored PDF opened!');
+                                  } else if (newTab) {
+                                    newTab.close();
                                   }
-                                }}
-                                title="Open compiled 1-page PDF in a new tab"
-                              >
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                  <polyline points="14 2 14 8 20 8"></polyline>
-                                </svg>
-                                View PDF
-                              </button>
-                              {(analysisResult.pdf_url || analysisResult.download_pdf_url) && (
-                                <a
-                                  href={`${API_BASE}${analysisResult.pdf_url || analysisResult.download_pdf_url}`}
-                                  download
-                                  title="Download PDF file"
-                                  style={{
-                                    padding: '6px 9px',
-                                    borderLeft: '1px solid rgba(56, 189, 248, 0.35)',
-                                    color: '#38BDF8',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    textDecoration: 'none',
-                                    background: 'rgba(56, 189, 248, 0.08)'
-                                  }}
-                                >
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                    <polyline points="7 10 12 15 17 10"></polyline>
-                                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                                  </svg>
-                                </a>
-                              )}
-                            </div>
+                                } catch (err) {
+                                  if (newTab) newTab.close();
+                                  setStatusMessage(`Failed to compile PDF: ${err.message}`);
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                              title="Open compiled 1-page PDF in a new tab"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                              </svg>
+                              View PDF
+                            </button>
                           )}
 
                           {/* 2. Overleaf Direct Export */}
