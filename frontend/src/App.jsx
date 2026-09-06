@@ -5832,130 +5832,211 @@ function App() {
                 ) : (
                   <div className="workspace">
                     <div className="workspace-panel">
-                      <div className="panel-toolbar">
-                        <div className="mode-toggle">
+                      <div className="panel-toolbar" style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        padding: '8px 12px',
+                        background: 'rgba(15, 23, 42, 0.65)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: '10px',
+                        marginBottom: '14px'
+                      }}>
+                        {/* Left: View Mode Segmented Switcher */}
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          background: 'rgba(0, 0, 0, 0.35)',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: '8px',
+                          padding: '3px',
+                          gap: '2px'
+                        }}>
                           <button
-                            className={`mode-btn ${activeTab === 'preview' ? 'active' : ''}`}
+                            type="button"
                             onClick={() => setActiveTab('preview')}
+                            style={{
+                              padding: '5px 12px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              borderRadius: '6px',
+                              border: 'none',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              background: activeTab === 'preview' ? '#2563EB' : 'transparent',
+                              color: activeTab === 'preview' ? '#FFFFFF' : 'var(--text-muted)'
+                            }}
                           >
                             Preview
                           </button>
                           <button
-                            className={`mode-btn ${activeTab === 'latex' ? 'active' : ''}`}
+                            type="button"
                             onClick={() => setActiveTab('latex')}
+                            style={{
+                              padding: '5px 12px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              borderRadius: '6px',
+                              border: 'none',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              background: activeTab === 'latex' ? '#2563EB' : 'transparent',
+                              color: activeTab === 'latex' ? '#FFFFFF' : 'var(--text-muted)'
+                            }}
                           >
                             LaTeX
                           </button>
                         </div>
-                        <button className="btn-overleaf" onClick={openInOverleaf} disabled={loading}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z" /></svg>
-                          Open in Overleaf
-                        </button>
-                        {analysisResult && (
+
+                        {/* Right: Clean Action Buttons Group */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          {/* 1. View & Open Compiled 1-Page PDF */}
+                          {analysisResult && (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(56, 189, 248, 0.35)', background: 'rgba(56, 189, 248, 0.1)' }}>
+                              <button
+                                disabled={loading}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: '#38BDF8',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px'
+                                }}
+                                onClick={async () => {
+                                  const directUrl = analysisResult.pdf_url || analysisResult.download_pdf_url;
+                                  if (directUrl) {
+                                    window.open(`${API_BASE}${directUrl}`, '_blank', 'noopener,noreferrer');
+                                    return;
+                                  }
+                                  // Open placeholder window synchronously to guarantee popup is permitted
+                                  const newTab = window.open('', '_blank');
+                                  setLoading(true);
+                                  setStatusMessage('Compiling tailored resume PDF…');
+                                  try {
+                                    const res = await fetch(`${API_BASE}/compile_master_pdf`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({
+                                        resume_data: tailoredResumeData || resumeData,
+                                        job_title: jobTitle || 'Tailored Role',
+                                        company: company || '',
+                                      }),
+                                    });
+                                    if (!res.ok) throw new Error('PDF compilation failed');
+                                    const data = await res.json();
+                                    if (data.pdf_url) {
+                                      setAnalysisResult(prev => ({ ...prev, pdf_url: data.pdf_url }));
+                                      if (newTab) {
+                                        newTab.location.href = `${API_BASE}${data.pdf_url}`;
+                                      } else {
+                                        window.open(`${API_BASE}${data.pdf_url}`, '_blank', 'noopener,noreferrer');
+                                      }
+                                      setStatusMessage('Tailored PDF opened!');
+                                    } else if (newTab) {
+                                      newTab.close();
+                                    }
+                                  } catch (err) {
+                                    if (newTab) newTab.close();
+                                    setStatusMessage(`Failed to compile PDF: ${err.message}`);
+                                  } finally {
+                                    setLoading(false);
+                                  }
+                                }}
+                                title="Open compiled 1-page PDF in a new tab"
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                  <polyline points="14 2 14 8 20 8"></polyline>
+                                </svg>
+                                View PDF
+                              </button>
+                              {(analysisResult.pdf_url || analysisResult.download_pdf_url) && (
+                                <a
+                                  href={`${API_BASE}${analysisResult.pdf_url || analysisResult.download_pdf_url}`}
+                                  download
+                                  title="Download PDF file"
+                                  style={{
+                                    padding: '6px 9px',
+                                    borderLeft: '1px solid rgba(56, 189, 248, 0.35)',
+                                    color: '#38BDF8',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    textDecoration: 'none',
+                                    background: 'rgba(56, 189, 248, 0.08)'
+                                  }}
+                                >
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                  </svg>
+                                </a>
+                              )}
+                            </div>
+                          )}
+
+                          {/* 2. Overleaf Direct Export */}
                           <button
                             className="btn btn-secondary"
+                            onClick={openInOverleaf}
                             disabled={loading}
-                            style={{
-                              padding: '5px 12px',
-                              fontSize: '0.76rem',
-                              gap: '5px',
-                              fontWeight: 700,
-                              background: 'rgba(56, 189, 248, 0.12)',
-                              color: 'var(--accent-secondary)',
-                              border: '1px solid rgba(56, 189, 248, 0.3)'
-                            }}
-                            onClick={async () => {
-                              if (analysisResult.pdf_url) {
-                                window.open(`${API_BASE}${analysisResult.pdf_url}`, '_blank');
-                                return;
-                              }
-                              if (analysisResult.download_pdf_url) {
-                                window.open(`${API_BASE}${analysisResult.download_pdf_url}`, '_blank');
-                                return;
-                              }
-                              // Fallback on-demand compilation if direct pdf_url was not returned
-                              setLoading(true);
-                              setStatusMessage('Compiling tailored resume PDF…');
-                              try {
-                                const res = await fetch(`${API_BASE}/compile_master_pdf`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    resume_data: tailoredResumeData || resumeData,
-                                    job_title: jobTitle || 'Tailored Role',
-                                    company: company || '',
-                                  }),
-                                });
-                                if (!res.ok) throw new Error('PDF compilation failed');
-                                const data = await res.json();
-                                if (data.pdf_url) {
-                                  setAnalysisResult(prev => ({ ...prev, pdf_url: data.pdf_url }));
-                                  window.open(`${API_BASE}${data.pdf_url}`, '_blank');
-                                  setStatusMessage('Tailored PDF opened!');
-                                }
-                              } catch (err) {
-                                setStatusMessage(`Failed to compile PDF: ${err.message}`);
-                              } finally {
-                                setLoading(false);
-                              }
-                            }}
-                            title="Open compiled 1-page PDF in a new browser tab"
+                            style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px' }}
+                            title="Export LaTeX project bundle to Overleaf"
                           >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#10B981' }}>
                               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
                               <polyline points="15 3 21 3 21 9"></polyline>
                               <line x1="10" y1="14" x2="21" y2="3"></line>
                             </svg>
-                            View Compiled PDF
+                            Overleaf
                           </button>
-                        )}
-                        {analysisResult && (analysisResult.pdf_url || analysisResult.download_pdf_url) && (
-                          <a
-                            href={`${API_BASE}${analysisResult.pdf_url || analysisResult.download_pdf_url}`}
-                            download
-                            className="btn btn-secondary"
-                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px', textDecoration: 'none' }}
-                          >
-                            Download PDF
-                          </a>
-                        )}
-                        {analysisResult && analysisResult.latex_code && (
-                          <button
-                            className="btn btn-secondary"
-                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px', color: 'var(--accent-green)', borderColor: 'rgba(16,185,129,0.3)' }}
-                            disabled={loading}
-                            onClick={async () => {
-                              if (!window.confirm("Set this tailored resume as your new Master Resume profile?")) return;
-                              setLoading(true);
-                              setStatusMessage('Promoting tailored resume to Master Resume profile...');
-                              try {
-                                const res = await fetch(`${API_BASE}/user/update_master_from_tailored`, {
-                                  method: 'POST',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${getAuthHeader()}`
-                                  },
-                                  body: JSON.stringify({ latex_code: analysisResult.latex_code })
-                                });
-                                if (res.ok) {
-                                  const body = await res.json();
-                                  setResumeData(body.data);
-                                  setResumeEvaluation(body.evaluation);
-                                  setStatusMessage('Master Resume updated from tailored version!');
-                                } else {
-                                  throw new Error('Failed to promote resume');
+
+                          {/* 3. Set as Master Baseline */}
+                          {analysisResult && analysisResult.latex_code && (
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '5px', color: 'var(--accent-green)', borderColor: 'rgba(16,185,129,0.3)' }}
+                              disabled={loading}
+                              onClick={async () => {
+                                if (!window.confirm("Set this tailored resume as your new Master Resume profile?")) return;
+                                setLoading(true);
+                                setStatusMessage('Promoting tailored resume to Master Resume profile...');
+                                try {
+                                  const res = await fetch(`${API_BASE}/user/update_master_from_tailored`, {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${getAuthHeader()}`
+                                    },
+                                    body: JSON.stringify({ latex_code: analysisResult.latex_code })
+                                  });
+                                  if (res.ok) {
+                                    const body = await res.json();
+                                    setResumeData(body.data);
+                                    setResumeEvaluation(body.evaluation);
+                                    setStatusMessage('Master Resume updated from tailored version!');
+                                  } else {
+                                    throw new Error('Failed to promote resume');
+                                  }
+                                } catch (err) {
+                                  setStatusMessage(`Error updating master: ${err.message}`);
+                                } finally {
+                                  setLoading(false);
                                 }
-                              } catch (err) {
-                                setStatusMessage(`Error updating master: ${err.message}`);
-                              } finally {
-                                setLoading(false);
-                              }
-                            }}
-                            title="Promote this tailored version as your new Master Resume baseline"
-                          >
-                            Set as Master
-                          </button>
-                        )}
+                              }}
+                              title="Promote this tailored version as your new Master Resume baseline"
+                            >
+                              Set as Master
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {activeTab === 'preview' ? (
