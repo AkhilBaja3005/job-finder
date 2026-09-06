@@ -121,10 +121,18 @@ def _extract_company_from_jd(jd_text: str, page_url: Optional[str] = None) -> st
                 return domain.replace("-", " ").title()
 
     if jd_text:
-        match = re.search(r'(?:about|at|join)\s+([A-Z][A-Za-z0-9\s&.,-]{2,30}?)(?:\s+(?:is|are|we|team|to|for|where|who|\.|\n|,))', jd_text)
-        if match:
-            candidate = match.group(1).strip()
-            if candidate.lower() not in ["the", "this", "our", "a", "an"]:
+        # Pattern 1: "<Company> is a/an ..." at beginning of text or lines (e.g. "Hadean is a deep-tech company...")
+        m1 = re.search(r'(?:^|\n|\.\s+)([A-Z][A-Za-z0-9\s&.,-]{1,30}?)\s+(?:is|are)\s+(?:a|an)\s+', jd_text)
+        if m1:
+            candidate = m1.group(1).strip()
+            if candidate.lower() not in ["the", "this", "our", "a", "an", "there", "it", "here", "what", "who"]:
+                return candidate
+
+        # Pattern 2: "About <Company>", "At <Company>, we...", "Join <Company>"
+        m2 = re.search(r'(?:about|at|join|welcome to)\s+([A-Z][A-Za-z0-9\s&.,-]{2,30}?)(?:\s+(?:is|are|we|team|to|for|where|who|\.|\n|,|!))', jd_text, re.IGNORECASE)
+        if m2:
+            candidate = m2.group(1).strip()
+            if candidate.lower() not in ["the", "this", "our", "a", "an", "us"]:
                 return candidate
     return ""
 

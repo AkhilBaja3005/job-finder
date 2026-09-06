@@ -1150,6 +1150,7 @@ function App() {
         body: JSON.stringify({
           job_url: targetUrl || null,
           job_title: targetTitle || 'Target Role',
+          company: company || null,
           job_description: activeDescription || null,
           skip_tailoring: false, // Run full LaTeX tailoring + page checks + reviewer checks
           force_tailoring: overrideForce,
@@ -1188,6 +1189,8 @@ function App() {
         } else if (event.type === 'result') {
           const result = event;
           if (result.job_description) setJobDescription(result.job_description);
+          if (result.company) setCompany(result.company);
+          if (result.job_title) setJobTitle(result.job_title);
           const analysisObj = {
             ...result.analysis,
             pdf_url: result.analysis?.pdf_url || result.analysis?.download_pdf_url || result.download_pdf_url || result.pdf_url,
@@ -5418,14 +5421,29 @@ function App() {
             ) : (
               <div>
                 {/* ── Job context banner ── */}
-                {(jobTitle || company) && (
-                  <div className="job-banner" style={{ animation: 'slideDown 0.4s ease both' }}>
-                    
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Targeting:</span>
-                    {jobTitle && <span className="job-banner-chip job-banner-role">{jobTitle}</span>}
-                    {company && <span className="job-banner-chip job-banner-company">{company}</span>}
-                  </div>
-                )}
+                {/* ── Job context banner ── */}
+                {(() => {
+                  let effectiveCompany = company;
+                  if (!effectiveCompany && jobDescription) {
+                    const m = jobDescription.match(/(?:^|\n|\.\s+)([A-Z][A-Za-z0-9\s&.,-]{1,30}?)\s+(?:is|are)\s+(?:a|an)\s+/);
+                    if (m && !["the", "this", "our", "a", "an", "there", "it", "here"].includes(m[1].trim().toLowerCase())) {
+                      effectiveCompany = m[1].trim();
+                    }
+                  }
+                  if (!effectiveCompany && analysisResult?.company) {
+                    effectiveCompany = analysisResult.company;
+                  }
+
+                  if (!jobTitle && !effectiveCompany) return null;
+
+                  return (
+                    <div className="job-banner" style={{ animation: 'slideDown 0.4s ease both' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Targeting:</span>
+                      {jobTitle && <span className="job-banner-chip job-banner-role">{jobTitle}</span>}
+                      {effectiveCompany && <span className="job-banner-chip job-banner-company">{effectiveCompany}</span>}
+                    </div>
+                  );
+                })()}
 
                 {/* ── Job Description Display ── */}
                 {jobDescription && (
