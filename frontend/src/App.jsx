@@ -1188,8 +1188,12 @@ function App() {
         } else if (event.type === 'result') {
           const result = event;
           if (result.job_description) setJobDescription(result.job_description);
-          if (result.job_title) setJobTitle(result.job_title);
-          setAnalysisResult(result.analysis);
+          const analysisObj = {
+            ...result.analysis,
+            pdf_url: result.analysis?.pdf_url || result.analysis?.download_pdf_url || result.download_pdf_url || result.pdf_url,
+            overleaf_url: result.analysis?.overleaf_url || result.overleaf_url
+          };
+          setAnalysisResult(analysisObj);
           const updates = result.analysis.suggested_resume_updates || {};
           const tailored = {
             ...resumeData,
@@ -5847,9 +5851,10 @@ function App() {
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z" /></svg>
                           Open in Overleaf
                         </button>
-                        {analysisResult && analysisResult.pdf_url && (
+                        {analysisResult && (
                           <button
                             className="btn btn-secondary"
+                            disabled={loading}
                             style={{
                               padding: '5px 12px',
                               fontSize: '0.76rem',
@@ -5859,8 +5864,42 @@ function App() {
                               color: 'var(--accent-secondary)',
                               border: '1px solid rgba(56, 189, 248, 0.3)'
                             }}
-                            onClick={() => window.open(`${API_BASE}${analysisResult.pdf_url}`, '_blank')}
-                            title="Open compiled PDF in a new browser tab"
+                            onClick={async () => {
+                              if (analysisResult.pdf_url) {
+                                window.open(`${API_BASE}${analysisResult.pdf_url}`, '_blank');
+                                return;
+                              }
+                              if (analysisResult.download_pdf_url) {
+                                window.open(`${API_BASE}${analysisResult.download_pdf_url}`, '_blank');
+                                return;
+                              }
+                              // Fallback on-demand compilation if direct pdf_url was not returned
+                              setLoading(true);
+                              setStatusMessage('Compiling tailored resume PDF…');
+                              try {
+                                const res = await fetch(`${API_BASE}/compile_master_pdf`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    resume_data: tailoredResumeData || resumeData,
+                                    job_title: jobTitle || 'Tailored Role',
+                                    company: company || '',
+                                  }),
+                                });
+                                if (!res.ok) throw new Error('PDF compilation failed');
+                                const data = await res.json();
+                                if (data.pdf_url) {
+                                  setAnalysisResult(prev => ({ ...prev, pdf_url: data.pdf_url }));
+                                  window.open(`${API_BASE}${data.pdf_url}`, '_blank');
+                                  setStatusMessage('Tailored PDF opened!');
+                                }
+                              } catch (err) {
+                                setStatusMessage(`Failed to compile PDF: ${err.message}`);
+                              } finally {
+                                setLoading(false);
+                              }
+                            }}
+                            title="Open compiled 1-page PDF in a new browser tab"
                           >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
@@ -5870,9 +5909,9 @@ function App() {
                             View Compiled PDF
                           </button>
                         )}
-                        {analysisResult && analysisResult.pdf_url && (
+                        {analysisResult && (analysisResult.pdf_url || analysisResult.download_pdf_url) && (
                           <a
-                            href={`${API_BASE}${analysisResult.pdf_url}`}
+                            href={`${API_BASE}${analysisResult.pdf_url || analysisResult.download_pdf_url}`}
                             download
                             className="btn btn-secondary"
                             style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px', textDecoration: 'none' }}
