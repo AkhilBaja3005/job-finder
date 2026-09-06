@@ -30,14 +30,16 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
   };
 
   const navItems = [
-    { id: 'quickstart', label: '🚀 Quickstart', icon: '⚡' },
-    { id: 'extension', label: '🧩 Chrome Extension v3.0', icon: '💻' },
-    { id: 'sync-key', label: '🔑 Sync Key & Pairing', icon: '🔗' },
-    { id: 'master-resume', label: '👥 Multi-Archetypes & Master Resume', icon: '📝' },
-    { id: 'ats-scoring', label: '🎯 ATS Scoring & Strategies', icon: '📊' },
-    { id: 'autofill', label: '✨ In-Page AI Autofill & PDF Drop', icon: '🤖' },
-    { id: 'discovery', label: '🔍 Job Discovery Search', icon: '🌐' },
-    { id: 'api-setup', label: '⚙️ API & Deployment', icon: '🛠️' },
+    { id: 'quickstart', label: 'Quickstart', icon: '⚡' },
+    { id: 'extension', label: 'Chrome Extension v3.0', icon: '💻' },
+    { id: 'sync-key', label: 'Sync Key & Pairing', icon: '🔗' },
+    { id: 'master-resume', label: 'Multi-Archetypes & Master Resume', icon: '📝' },
+    { id: 'ats-scoring', label: 'ATS Matrix & Keyword Badges', icon: '📊' },
+    { id: 'latex-engine', label: 'XeLaTeX Engine & Code Viewer', icon: '📄' },
+    { id: 'shortcuts', label: 'Keyboard Shortcuts', icon: '⌨️' },
+    { id: 'autofill', label: 'In-Page AI Autofill & PDF Drop', icon: '🤖' },
+    { id: 'discovery', label: 'Job Discovery Search', icon: '🌐' },
+    { id: 'api-setup', label: 'API & Deployment', icon: '🛠️' },
   ];
 
   return (
@@ -426,10 +428,10 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
           <section id="ats-scoring" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <span style={{ fontSize: '1.5rem' }}>🎯</span>
-              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>ATS Scoring & Tailoring Strategies</h2>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>ATS Scoring, Keyword Matrix & Strategies</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
-              Choose your tailoring strategy and let our multi-pass compensation engine produce a strictly 1-page PDF.
+              Choose your tailoring strategy and interact directly with our deterministic keyword matrix to produce an ATS-optimized, strictly 1-page PDF.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
@@ -465,9 +467,9 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
                 <div>
-                  <h4 style={{ color: '#10b981', margin: '0 0 8px', fontSize: '1rem' }}>✓ Deterministic Keyword Matching</h4>
+                  <h4 style={{ color: '#10b981', margin: '0 0 8px', fontSize: '1rem' }}>✓ Interactive Keyword Pill Matrix</h4>
                   <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
-                    Identifies hard technical requirements, preferred qualifications, seniority levels, and calculates timeline flattening to prevent duplicate date inflation.
+                    Matched keywords render as soft emerald pills with checkmarks. Missing keywords render as dashed amber badges with a <code>+ Add to LaTeX</code> action that immediately recalculates the projected ATS score in real-time.
                   </p>
                 </div>
                 <div>
@@ -477,11 +479,105 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                   </p>
                 </div>
                 <div>
-                  <h4 style={{ color: '#818cf8', margin: '0 0 8px', fontSize: '1rem' }}>✓ Missing Skills Selector</h4>
+                  <h4 style={{ color: '#818cf8', margin: '0 0 8px', fontSize: '1rem' }}>✓ Deterministic Keyword Matching</h4>
                   <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
-                    Click any missing keyword chip in the ATS breakdown to explicitly authorize and incorporate it into the tailored bullet points and skill section.
+                    Identifies hard technical requirements, preferred qualifications, seniority levels, and calculates timeline flattening to prevent duplicate date inflation.
                   </p>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          {/* SECTION: XeLaTeX Engine & Code Viewer */}
+          <section id="latex-engine" style={{ scrollMarginTop: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <span style={{ fontSize: '1.5rem' }}>📄</span>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>XeLaTeX Engine, Fonts & Syntax Viewer</h2>
+            </div>
+            <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
+              Every resume is rendered using the modern <strong>XeLaTeX</strong> typesetting engine with <code>TeX Gyre Termes</code> typography and dual-file compiler configuration for seamless local and Overleaf builds.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+              <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#38bdf8', marginBottom: '6px' }}>
+                  🔤 XeLaTeX & TeX Gyre Termes
+                </div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Resumes compile under <code>xelatex</code> with OpenType font support, providing crisp micro-typography and authentic font weights without missing-glyph errors.
+                </p>
+              </div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#34d399', marginBottom: '6px' }}>
+                  🍃 Dual Overleaf Compiler Directives
+                </div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Exported ZIP packages include both <code>latexmkrc</code> (<code>$pdf_mode = 5; $xelatex = 'xelatex ...'</code>) and <code>.latexmkrc</code> so Overleaf automatically selects XeLaTeX by default.
+                </p>
+              </div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#a78bfa', marginBottom: '6px' }}>
+                  💻 Code Viewer with Line Gutters
+                </div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Toggle to <code>TeX Code</code> mode to inspect your LaTeX with line numbers, color-coded TeX macros (blue), comments (green), and braces (amber), plus 1-click clipboard copy.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* SECTION: Keyboard Shortcuts */}
+          <section id="shortcuts" style={{ scrollMarginTop: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <span style={{ fontSize: '1.5rem' }}>⌨️</span>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Global Keyboard Shortcuts</h2>
+            </div>
+            <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
+              Accelerate your workflow with first-class keyboard navigation designed for developers:
+            </p>
+
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '14px',
+              padding: '20px'
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+                {[
+                  { keys: '⌘ / Ctrl + Enter', desc: 'Trigger 1-click ATS Job Analysis & Tailoring' },
+                  { keys: '⌘ / Ctrl + S', desc: 'Save current candidate profile snapshot / archetype' },
+                  { keys: '⌘ / Ctrl + 1', desc: 'Switch to Master Profile & Setup Tab' },
+                  { keys: '⌘ / Ctrl + 2', desc: 'Switch to Job Tailor Workspace Tab' },
+                  { keys: '⌘ / Ctrl + 3', desc: 'Switch to Job Discovery Search Tab' },
+                  { keys: '?', desc: 'Toggle keyboard shortcut cheat-sheet dialog' },
+                  { keys: 'Esc', desc: 'Dismiss active modal or full-screen overlay' }
+                ].map((sc) => (
+                  <div key={sc.keys} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    background: 'rgba(2, 6, 23, 0.5)',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.05)'
+                  }}>
+                    <span style={{ color: '#cbd5e1', fontSize: '0.84rem' }}>{sc.desc}</span>
+                    <kbd style={{
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      color: '#38bdf8',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '0.74rem',
+                      fontFamily: 'var(--font-mono)',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {sc.keys}
+                    </kbd>
+                  </div>
+                ))}
               </div>
             </div>
           </section>

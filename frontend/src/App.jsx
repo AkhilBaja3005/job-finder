@@ -2417,41 +2417,228 @@ function App() {
               )}
             </div>
 
-            {/* Chrome Extension Pairing Key Card (hidden for now) */}
-            {/*
-            <div style={{
-              background: 'rgba(56, 189, 248, 0.05)',
-              borderRadius: '12px',
-              padding: '14px 16px',
-              border: '1px solid rgba(56, 189, 248, 0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px'
-            }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  ⚡ Chrome Extension Sync Key
+              {/* Candidate Identity & Contact Telemetry (when master resume is parsed) */}
+              {resumeData && (resumeData.name || resumeData.email || resumeData.phone || resumeData.location || resumeData.experience_years) && (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#38bdf8' }}>
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                      Candidate Telemetry
+                    </div>
+                    {resumeData.experience_years && (
+                      <span style={{
+                        fontSize: '0.70rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        background: 'rgba(56, 189, 248, 0.12)',
+                        color: '#38bdf8',
+                        border: '1px solid rgba(56, 189, 248, 0.25)',
+                        fontFamily: 'var(--font-mono)'
+                      }}>
+                        {resumeData.experience_years}+ Yrs Exp
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
+                    {resumeData.name && (
+                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Name</div>
+                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.name}</div>
+                      </div>
+                    )}
+                    {resumeData.email && (
+                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Email</div>
+                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={resumeData.email}>{resumeData.email}</div>
+                      </div>
+                    )}
+                    {resumeData.phone && (
+                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Phone</div>
+                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.phone}</div>
+                      </div>
+                    )}
+                    {resumeData.location && (
+                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Location</div>
+                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.location}</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Enter this 6-digit key in the Chrome Extension to pair your account instantly.
-                </div>
-              </div>
+              )}
+
+              {/* Master Profile Multi-Archetype Switcher & Manager */}
               <div style={{
-                fontSize: '1.1rem',
-                fontWeight: 800,
-                color: '#38bdf8',
-                background: 'rgba(56, 189, 248, 0.12)',
-                border: '1px solid rgba(56, 189, 248, 0.3)',
-                padding: '6px 14px',
-                borderRadius: '8px',
-                letterSpacing: '2px',
-                fontFamily: 'monospace'
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '12px',
+                padding: '14px 16px',
+                background: 'rgba(255, 255, 255, 0.02)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
               }}>
-                {(user && user.sync_code) ? user.sync_code : 'GUEST1'}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#818cf8' }}>
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                      </svg>
+                      Master Archetypes
+                    </div>
+                    <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      Switch or snapshot role variants (e.g. GenAI, Data Science, Fullstack)
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--accent-secondary)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                    Active: {activeArchetype}
+                  </span>
+                </div>
+
+                {/* Archetype Chips */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                  {userArchetypes.map((arch) => (
+                    <div
+                      key={arch.name}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        borderRadius: '6px',
+                        border: arch.name === activeArchetype ? '1px solid var(--accent-primary)' : '1px solid rgba(255,255,255,0.1)',
+                        background: arch.name === activeArchetype ? 'rgba(56, 189, 248, 0.16)' : 'rgba(0,0,0,0.3)',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <button
+                        type="button"
+                        disabled={archetypeLoading}
+                        onClick={() => handleSwitchArchetype(arch.name)}
+                        style={{
+                          padding: '5px 9px',
+                          background: 'transparent',
+                          border: 'none',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          color: arch.name === activeArchetype ? '#38bdf8' : 'var(--text-muted)'
+                        }}
+                      >
+                        <span>{arch.name === activeArchetype ? '✓' : '•'}</span>
+                        <span>{arch.name}</span>
+                        {arch.skills_count ? <span style={{ opacity: 0.6, fontSize: '0.68rem', fontFamily: 'var(--font-mono)' }}>({arch.skills_count})</span> : null}
+                      </button>
+                      {arch.name !== 'Primary' && (
+                        <button
+                          type="button"
+                          title={`Delete ${arch.name}`}
+                          disabled={archetypeLoading}
+                          onClick={(e) => handleDeleteArchetype(arch.name, e)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            borderLeft: '1px solid rgba(255,255,255,0.1)',
+                            color: '#94a3b8',
+                            padding: '5px 7px',
+                            cursor: 'pointer',
+                            fontSize: '0.72rem',
+                            lineHeight: 1
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Save Current as Archetype input */}
+                <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                  <input
+                    type="text"
+                    placeholder="New Archetype (e.g. GenAI Lead)"
+                    value={newArchetypeName}
+                    onChange={(e) => setNewArchetypeName(e.target.value)}
+                    style={{ flex: 1, padding: '6px 10px', fontSize: '0.76rem', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', borderRadius: '6px', color: '#fff', marginBottom: 0 }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveArchetype(); }}
+                  />
+                  <button
+                    className="btn btn-secondary"
+                    disabled={archetypeLoading || !newArchetypeName.trim()}
+                    onClick={handleSaveArchetype}
+                    style={{ padding: '6px 12px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+                  >
+                    {archetypeLoading ? 'Saving…' : '+ Save Archetype'}
+                  </button>
+                </div>
               </div>
-            </div>
-            */}
+
+              {/* Chrome Extension Pairing Key Card */}
+              <div style={{
+                background: 'rgba(56, 189, 248, 0.04)',
+                borderRadius: '12px',
+                padding: '14px 16px',
+                border: '1px solid rgba(56, 189, 248, 0.18)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px'
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.84rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                    </svg>
+                    Extension Sync Key
+                  </div>
+                  <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Pairs Web Dashboard with Chrome Side Panel for 1-click ATS injection.
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <div style={{
+                    fontSize: '0.98rem',
+                    fontWeight: 800,
+                    color: '#38bdf8',
+                    background: 'rgba(56, 189, 248, 0.12)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    letterSpacing: '1.5px',
+                    fontFamily: 'var(--font-mono)'
+                  }}>
+                    {(user && user.sync_code) ? user.sync_code : 'GUEST1'}
+                  </div>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 10px', fontSize: '0.72rem', fontWeight: 700 }}
+                    onClick={() => handleOneClickExtensionSync()}
+                    title="Download extension pre-configured with this key"
+                  >
+                    Sync & ZIP ⤓
+                  </button>
+                </div>
+              </div>
 
             {/* Daily Cron Match Mailer Subscription settings */}
             <div style={{ border: '1px solid rgba(56, 189, 248, 0.1)', borderRadius: '12px', overflow: 'hidden', background: 'rgba(56, 189, 248, 0.03)' }}>
