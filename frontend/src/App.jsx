@@ -209,7 +209,7 @@ function App() {
     const handleResponse = (event) => {
       if (event.data && event.data.type === "SYNC_JOB_FINDER_KEY_SUCCESS") {
         synced = true;
-        showToast(`🚀 Extension Auto-Synced to Key: ${targetKey}!`, "success");
+        showToast(`Extension Auto-Synced to Key: ${targetKey}!`, "success");
         window.removeEventListener("message", handleResponse);
       }
     };
@@ -225,7 +225,7 @@ function App() {
     a.click();
     document.body.removeChild(a);
 
-    showToast(`📦 Extension ZIP (${targetKey}) downloading! Unzip & load in chrome://extensions`, "success");
+    showToast(`Extension ZIP (${targetKey}) downloading! Unzip & load in chrome://extensions`, "success");
 
     setTimeout(() => {
       window.removeEventListener("message", handleResponse);
@@ -624,7 +624,7 @@ function App() {
         setUserArchetypes(body.archetypes || []);
         setActiveArchetype(body.active_archetype || name);
         setNewArchetypeName('');
-        showToast(`✅ Saved master archetype: ${name}`, 'success');
+        showToast(`Saved master archetype: ${name}`, 'success');
       } else {
         showToast('Failed to save archetype', 'error');
       }
@@ -651,7 +651,7 @@ function App() {
         setActiveArchetype(body.active_archetype || name);
         if (body.data) setResumeData(body.data);
         if (body.evaluation) setResumeEvaluation(body.evaluation);
-        showToast(`⚡ Switched active master profile to: ${name}`, 'success');
+        showToast(`Switched active master profile to: ${name}`, 'success');
         fetchArchetypes();
       }
     } catch (e) {
@@ -679,7 +679,7 @@ function App() {
         const body = await res.json();
         setUserArchetypes(body.archetypes || []);
         if (body.active_archetype) setActiveArchetype(body.active_archetype);
-        showToast(`🗑️ Deleted archetype "${name}"`, 'info');
+        showToast(`Deleted archetype "${name}"`, 'info');
         fetchArchetypes();
       } else {
         showToast('Failed to delete archetype', 'error');
@@ -887,12 +887,12 @@ function App() {
         setAfterPdfUrl(null);
         setShowReviewModal(false);
         setCoverLetterCopied(false);
-        setStatusMessage('✅ Baseline PDF generated & master resume evaluated successfully!');
+        setStatusMessage('Baseline PDF generated & master resume evaluated successfully!');
       } else {
-        setStatusMessage(`❌ Error parsing resume: ${result.detail}`);
+        setStatusMessage(`Error parsing resume: ${result.detail}`);
       }
     } catch (err) {
-      setStatusMessage(`❌ Error connecting to backend: ${err.message}`);
+      setStatusMessage(`Error connecting to backend: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -1749,7 +1749,7 @@ function App() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontWeight: 800, fontSize: '1.25rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>✨ Master Resume Profile Updated</span>
+                  <span>Master Resume Profile Updated</span>
                 </div>
                 <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '3px' }}>
                   The AI enhancement has been incorporated into your master profile. Review the exact additions highlighted in green below:
@@ -1776,7 +1776,7 @@ function App() {
                 }}
                 onClick={() => setReviewModalTab('pdf')}
               >
-                📄 PDF Comparison (Before vs After)
+                PDF Comparison (Before vs After)
               </button>
               <button
                 className="btn btn-secondary"
@@ -1788,7 +1788,7 @@ function App() {
                 }}
                 onClick={() => setReviewModalTab('diff')}
               >
-                📊 Structured Diff View
+                Structured Diff View
               </button>
               {reviewedLatex && (
                 <button
@@ -1801,7 +1801,7 @@ function App() {
                   }}
                   onClick={() => setReviewModalTab('latex')}
                 >
-                  📝 LaTeX Source Code
+                  LaTeX Source Code
                 </button>
               )}
             </div>
@@ -1812,7 +1812,7 @@ function App() {
                 {beforePdfUrl && (
                   <div style={{ background: '#090D1A', padding: '12px', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#F87171', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>🔴 BEFORE (Previous Baseline PDF)</span>
+                      <span>BEFORE (Previous Baseline PDF)</span>
                       <a href={beforePdfUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', color: '#F87171', textDecoration: 'underline' }}>Open Full PDF ↗</a>
                     </div>
                     <iframe
@@ -1825,7 +1825,7 @@ function App() {
 
                 <div style={{ background: '#090D1A', padding: '12px', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.4)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#34D399', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>🟢 AFTER (Updated Auto-Applied PDF)</span>
+                    <span>AFTER (Updated Auto-Applied PDF)</span>
                     {afterPdfUrl && <a href={afterPdfUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', color: '#34D399', textDecoration: 'underline' }}>Open Full PDF ↗</a>}
                   </div>
                   {afterPdfUrl ? (
@@ -1856,7 +1856,7 @@ function App() {
                       showToast('LaTeX code copied to clipboard!', 'success');
                     }}
                   >
-                    📋 Copy LaTeX Code
+                    Copy LaTeX Code
                   </button>
                 </div>
                 <pre style={{
@@ -1971,7 +1971,7 @@ function App() {
                 style={{ padding: '10px 24px', fontSize: '0.9rem', fontWeight: 700 }}
                 onClick={() => setShowReviewModal(false)}
               >
-                ✓ Looks Good, Done
+                Looks Good, Done
               </button>
             </div>
           </div>
@@ -2078,7 +2078,7 @@ function App() {
             }}
             title="View Setup Guide & Documentation"
           >
-            <span>📖</span>
+            
             <span>Docs & Guide</span>
           </button>
 
@@ -2104,7 +2104,7 @@ function App() {
                 }}
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
               >
-                <span>👤</span>
+                
                 <span style={{ color: '#fff' }}>{user.email ? user.email.split("@")[0] : "Account"}</span>
                 <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{profileDropdownOpen ? "▲" : "▼"}</span>
               </button>
@@ -2149,7 +2149,7 @@ function App() {
                       setProfileDropdownOpen(false);
                     }}
                   >
-                    <span>⚡ 1-Click Auto-Sync & Download</span>
+                    <span>1-Click Auto-Sync & Download</span>
                   </button>
 
                   <button
@@ -2160,7 +2160,7 @@ function App() {
                       setProfileDropdownOpen(false);
                     }}
                   >
-                    <span>📖 Setup Instructions</span>
+                    <span>Setup Instructions</span>
                   </button>
 
                   <button
@@ -2210,7 +2210,7 @@ function App() {
 
             {/* Value props */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {['🎯 Keyword-matched ATS scoring', '✍️ AI-tailored LaTeX resume & cover letter', '🔍 Recruiter truthfulness validation', '📄 One-click Overleaf export'].map(item => (
+              {['Keyword-matched ATS scoring', 'AI-tailored LaTeX resume & cover letter', '🔍 Recruiter truthfulness validation', '📄 One-click Overleaf export'].map(item => (
                 <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.84rem', color: 'var(--text-muted)', padding: '7px 12px', background: 'var(--panel-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   {item}
                 </div>
@@ -2283,7 +2283,7 @@ function App() {
                   rel="noopener noreferrer"
                   style={{ fontSize: '0.73rem', color: 'var(--accent-secondary)', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '3px' }}
                 >
-                  🔑 Get Free Gemini Key from Google ↗
+                  Get Free Gemini Key from Google ↗
                 </a>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -2316,7 +2316,7 @@ function App() {
                 <input type="file" accept=".tex,.pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
                 {resumeData ? (
                   <>
-                    <div style={{ fontSize: '1.5rem' }}>✅</div>
+                    <div style={{ color: 'var(--accent-green)', fontWeight: 700 }}>✓</div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 700, color: 'var(--accent-green)', fontSize: '0.92rem' }}>{resumeData.name}</div>
                       <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>Click to replace master resume (.TEX, .PDF, .DOCX)</div>
@@ -2324,7 +2324,7 @@ function App() {
                   </>
                 ) : (
                   <>
-                    <div style={{ fontSize: '1.5rem' }}>📄</div>
+                    <div style={{ color: 'var(--text-muted)', fontWeight: 700 }}>[DOC]</div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Drop your resume here or click to browse</div>
                       <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>LaTeX (.tex), PDF, or DOCX — becomes your master profile</div>
@@ -2357,7 +2357,7 @@ function App() {
                         const data = await res.json();
                         if (data.url) {
                           window.open(data.url, '_blank');
-                          setStatusMessage('✅ Master Resume opened in Overleaf!');
+                          setStatusMessage('Master Resume opened in Overleaf!');
                         }
                       } catch (err) {
                         setStatusMessage(`Failed to open in Overleaf: ${err.message}`);
@@ -2366,7 +2366,7 @@ function App() {
                       }
                     }}
                   >
-                    🍃 Open Master in Overleaf
+                    Open Master in Overleaf
                   </button>
                   <button
                     className="btn btn-secondary"
@@ -2402,7 +2402,7 @@ function App() {
                         const data = await res.json();
                         if (data.pdf_url) {
                           window.open(`${API_BASE}${data.pdf_url}`, '_blank');
-                          setStatusMessage('📄 Master PDF opened!');
+                          setStatusMessage('Master PDF opened!');
                         }
                       } catch (err) {
                         setStatusMessage(`Failed to compile Master PDF: ${err.message}`);
@@ -2411,7 +2411,7 @@ function App() {
                       }
                     }}
                   >
-                    📄 View Compiled Master PDF
+                    View Compiled Master PDF
                   </button>
                 </div>
               )}
@@ -2648,7 +2648,7 @@ function App() {
                   style={{ padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', gap: '12px' }}
                 >
                   <div style={{ flexGrow: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.94rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>📬 Daily Job Match Mailer</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.94rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>Daily Job Match Mailer</div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '3px', lineHeight: '1.4' }}>Get daily lists matching your resume automatically.</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
@@ -2732,7 +2732,7 @@ function App() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', marginTop: '4px' }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.78rem', color: '#fff' }}>📧 Email Tailored PDF Resumes</div>
+                        <div style={{ fontWeight: 600, fontSize: '0.78rem', color: '#fff' }}>Email Tailored PDF Resumes</div>
                         <div style={{ fontSize: '0.70rem', color: 'var(--text-muted)', marginTop: '1px' }}>Automatically email PDF attachment when tailoring via website.</div>
                       </div>
                       <label
@@ -2788,7 +2788,7 @@ function App() {
                         }
                       }}
                     >
-                      📬 Send Daily Digest Now
+                      Send Daily Digest Now
                     </button>
                   </div>
                 )}
@@ -2812,7 +2812,7 @@ function App() {
                 style={{ padding: '12px 14px', flex: 1, fontSize: '0.88rem', borderColor: 'var(--accent-red)', color: 'var(--accent-red)' }}
                 onClick={handleClearCache}
               >
-                🧹 Clear Caches & Data
+                Clear Caches & Data
               </button>
               <button
                 className="btn"
@@ -2835,7 +2835,7 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>📊 Master Resume ATS Health Score</span>
+                    <span>Master Resume ATS Health Score</span>
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                     Baseline evaluation calculated before job tailoring
@@ -2878,7 +2878,7 @@ function App() {
                   border: '1px solid rgba(255,255,255,0.06)'
                 }}>
                   <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    🔍 Detected Skills Profile
+                    Detected Skills Profile
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     {(showAllSkills ? resumeData.skills : resumeData.skills.slice(0, 12)).map((skill, i) => {
@@ -2940,7 +2940,7 @@ function App() {
               {resumeEvaluation.suggestions && resumeEvaluation.suggestions.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                   <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                    💡 Recommended Master Playbook Enhancements:
+                    Recommended Master Playbook Enhancements:
                   </div>
                   {resumeEvaluation.suggestions.map((sug, idx) => (
                     <div key={idx} style={{
@@ -2977,7 +2977,7 @@ function App() {
                           const needsUserInput = /phone|mobile|number|email|address|contact|location|linkedin|github|quantify|metric|impact|scale|volume|financial|dollars|\$/i.test(sug);
                           if (needsUserInput) {
                             setApplyingSugIdx(idx);
-                            setStatusMessage('🧠 Analyzing recommendation details...');
+                            setStatusMessage('Analyzing recommendation details...');
                             try {
                               const pRes = await fetch(`${API_BASE}/user/generate_prompt_query`, {
                                 method: 'POST',
@@ -3035,7 +3035,7 @@ function App() {
                               setAfterPdfUrl(body.after_pdf_url ? `${API_BASE}${body.after_pdf_url}` : null);
                               setReviewModalTab(body.after_pdf_url ? 'pdf' : 'diff');
                               setShowReviewModal(true);
-                              setStatusMessage('✨ Master resume profile updated successfully!');
+                              setStatusMessage('Master resume profile updated successfully!');
                             } else {
                               throw new Error('Failed to update resume');
                             }
@@ -3046,7 +3046,7 @@ function App() {
                           }
                         }}
                       >
-                        {applyingSugIdx === idx ? '⏳ Applying…' : '✨ Auto-Apply'}
+                        {applyingSugIdx === idx ? 'Applying…' : 'Auto-Apply'}
                       </button>
                     </div>
                   ))}
@@ -3612,7 +3612,7 @@ function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontWeight: 800, fontSize: '0.98rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>👥 Master Profile Archetypes</span>
+                        <span>Master Profile Archetypes</span>
                       </div>
                       <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                         Save and toggle distinct base profiles (e.g. GenAI vs. Data Science vs. Backend SWE)
@@ -3700,7 +3700,7 @@ function App() {
                       onClick={handleSaveArchetype}
                       style={{ padding: '7px 14px', fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap' }}
                     >
-                      {archetypeLoading ? '⏳ Saving...' : '💾 Save as Archetype'}
+                      {archetypeLoading ? 'Saving...' : 'Save Archetype'}
                     </button>
                   </div>
                 </div>
@@ -3719,7 +3719,7 @@ function App() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>📊 Master Resume ATS Health Score</span>
+                          <span>Master Resume ATS Health Score</span>
                         </div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                           Baseline evaluation calculated before job tailoring
@@ -3756,7 +3756,7 @@ function App() {
                     {resumeEvaluation.suggestions && resumeEvaluation.suggestions.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                         <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                          💡 Recommended Master Playbook Enhancements:
+                          Recommended Master Playbook Enhancements:
                         </div>
                         {resumeEvaluation.suggestions.map((sug, idx) => (
                           <div key={idx} style={{
@@ -3793,7 +3793,7 @@ function App() {
                                 const needsUserInput = /phone|mobile|number|email|address|contact|location|linkedin|github|quantify|metric|impact|scale|volume|financial|dollars|\$/i.test(sug);
                                 if (needsUserInput) {
                                   setApplyingSugIdx(idx);
-                                  setStatusMessage('🧠 Analyzing recommendation details...');
+                                  setStatusMessage('Analyzing recommendation details...');
                                   try {
                                     const pRes = await fetch(`${API_BASE}/user/generate_prompt_query`, {
                                       method: 'POST',
@@ -3851,7 +3851,7 @@ function App() {
                                     };
                                     setResumeEvaluation(updatedEvaluation);
                                     setShowReviewModal(true);
-                                    setStatusMessage('✨ Master resume profile updated successfully!');
+                                    setStatusMessage('Master resume profile updated successfully!');
                                   } else {
                                     throw new Error('Failed to update resume');
                                   }
@@ -3862,7 +3862,7 @@ function App() {
                                 }
                               }}
                             >
-                              {applyingSugIdx === idx ? '⏳ Applying…' : '✨ Auto-Apply'}
+                              {applyingSugIdx === idx ? 'Applying…' : 'Auto-Apply'}
                             </button>
                           </div>
                         ))}
@@ -3907,7 +3907,7 @@ function App() {
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                           <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span>🚀 Ready for instant 1-click tailoring against active job descriptions.</span>
+                            <span>Ready for instant 1-click tailoring against active job descriptions.</span>
                           </div>
                           <button
                             className="btn btn-primary"
@@ -3986,7 +3986,7 @@ function App() {
                 </div>
               ) : applicationHistory.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-state-icon">🕘</div>
+                  <div className="empty-state-icon">[HISTORY]</div>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>No history yet</div>
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Tailor a resume or apply to a job to see it recorded here.</div>
@@ -4166,8 +4166,8 @@ function App() {
                             background: '#0F172A', color: 'var(--accent-secondary)', border: '1px solid rgba(56, 189, 248, 0.3)', outline: 'none'
                           }}
                         >
-                          <option value="newest">📅 Newest First</option>
-                          <option value="oldest">📅 Oldest First</option>
+                          <option value="newest">Newest First</option>
+                          <option value="oldest">Oldest First</option>
                         </select>
                       </div>
                     </div>
@@ -4200,15 +4200,15 @@ function App() {
                         let platformBadge = null;
                         const urlLower = (entry.job_url || '').toLowerCase();
                         if (urlLower.includes('linkedin.com')) {
-                          platformBadge = { name: 'LinkedIn', color: '#0A66C2', icon: '💼' };
+                          platformBadge = { name: 'LinkedIn', color: '#0A66C2', icon: '' };
                         } else if (urlLower.includes('indeed.com')) {
-                          platformBadge = { name: 'Indeed', color: '#2557A7', icon: '🔍' };
+                          platformBadge = { name: 'Indeed', color: '#2557A7', icon: '' };
                         } else if (urlLower.includes('glassdoor.com')) {
-                          platformBadge = { name: 'Glassdoor', color: '#00A264', icon: '🏢' };
+                          platformBadge = { name: 'Glassdoor', color: '#00A264', icon: '' };
                         } else if (urlLower.includes('ziprecruiter.com')) {
-                          platformBadge = { name: 'ZipRecruiter', color: '#5B2C6F', icon: '⚡' };
+                          platformBadge = { name: 'ZipRecruiter', color: '#5B2C6F', icon: '' };
                         } else if (entry.job_url) {
-                          platformBadge = { name: 'Direct Web', color: '#64748B', icon: '🌐' };
+                          platformBadge = { name: 'Direct Web', color: '#64748B', icon: '' };
                         }
 
                         return (
@@ -4238,7 +4238,7 @@ function App() {
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
                                 {entry.recruiter_name && (
                                   <div style={{ fontSize: '0.75rem', color: 'var(--accent-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <span>👤 Recruiter:</span>
+                                    <span>Recruiter:</span>
                                     {entry.recruiter_profile_url ? (
                                       <a href={entry.recruiter_profile_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-secondary)', fontWeight: 600, textDecoration: 'underline' }}>
                                         {entry.recruiter_name}
@@ -4615,7 +4615,7 @@ function App() {
                       <div className="log-terminal-dot" style={{ background: '#FFBD2E' }} />
                       <div className="log-terminal-dot" style={{ background: '#28CA41' }} />
                     </div>
-                    📋 LIVE SEARCH PIPELINE LOGS
+                    LIVE SEARCH PIPELINE LOGS
                   </div>
                   <div
                     className="log-terminal-body"
@@ -4655,7 +4655,7 @@ function App() {
                 {discoveredJobs.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
                     <div style={{ fontSize: '0.8rem', color: 'var(--accent-green)', fontWeight: 700 }}>
-                      ⚡ Live Matches Arriving ({discoveredJobs.length}):
+                      Live Matches Arriving ({discoveredJobs.length}):
                     </div>
                     {discoveredJobs.map((job, idx) => {
                       const score = job.score || 0;
@@ -4739,7 +4739,7 @@ function App() {
                         {[
                           { id: 'all', label: 'All' },
                           { id: 'unapplied', label: '⏳ Unapplied' },
-                          { id: 'applied', label: '✅ Applied' },
+                          { id: 'applied', label: 'Applied' },
                           { id: 'saved', label: '⭐ Saved' },
                         ].map(tab => (
                           <button
@@ -4826,7 +4826,7 @@ function App() {
 
                     {sorted.length === 0 ? (
                       <div className="empty-state">
-                        <div className="empty-state-icon">🔍</div>
+                        <div className="empty-state-icon">[SEARCH]</div>
                         <div>
                           <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>No matching listings found</div>
                           <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Enter search keywords or location and scan matches.</div>
@@ -4928,14 +4928,14 @@ function App() {
                                       {job.title}
                                     </div>
                                     <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                      <span>📍 {job.location || 'Remote'}</span>
+                                      <span>{job.location || 'Remote'}</span>
                                       {job.seniority && (
                                         <span style={{
                                           fontSize: '0.68rem', padding: '1px 7px', borderRadius: '4px',
                                           background: 'rgba(56,189,248,0.12)', color: '#38bdf8',
                                           border: '1px solid rgba(56,189,248,0.25)', fontWeight: 700
                                         }}>
-                                          🎖️ {job.seniority}
+                                          {job.seniority}
                                         </span>
                                       )}
                                       {job.salary && (
@@ -4944,7 +4944,7 @@ function App() {
                                           background: 'rgba(234,179,8,0.12)', color: '#facc15',
                                           border: '1px solid rgba(234,179,8,0.25)', fontWeight: 700
                                         }}>
-                                          💰 {job.salary}
+                                          {job.salary}
                                         </span>
                                       )}
                                     </div>
@@ -5007,7 +5007,7 @@ function App() {
                                       window.scrollTo({ top: 0, behavior: 'smooth' });
                                     }}
                                   >
-                                    🎯 Tailor Resume
+                                    Tailor Resume
                                   </button>
                                 </div>
 
@@ -5022,7 +5022,7 @@ function App() {
                                         onClick={(e) => e.stopPropagation()}
                                         style={{ color: '#34d399', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                                       >
-                                        <span>🔗 Apply via {job.platform || 'Direct ATS'} ↗</span>
+                                        <span>Apply via {job.platform || 'Direct ATS'} ↗</span>
                                       </a>
                                     )}
                                     {job.platform === 'LinkedIn' && job.recruiter_profile_url && (
@@ -5066,19 +5066,19 @@ function App() {
                                             setOutreachRecruiterInfo(data.recruiter_info || (job.recruiter_name ? { recruiter_name: job.recruiter_name, recruiter_profile_url: job.recruiter_profile_url } : null));
                                             setOutreachData(data.message);
                                             setOutreachModalOpen(true);
-                                            showToast('✉️ Recruiter Outreach ready!', 'success');
+                                            showToast('Recruiter Outreach ready!', 'success');
                                           } else {
                                             // Fallback: generate high-converting client template directly
                                             const fallbackMsg = `Hi ${job.recruiter_name || 'Hiring Team'},\n\nI noticed the ${job.title} role at ${job.company} and wanted to reach out directly. With my experience matching ${job.score}% of your core requirements—specifically in ${(job.matched_skills || []).slice(0, 3).join(', ') || 'software engineering'}—I'd love to connect and discuss how I can contribute to the team.\n\nBest regards,\nCandidate`;
                                             setOutreachData(fallbackMsg);
                                             setOutreachModalOpen(true);
-                                            showToast('✉️ Outreach template ready!', 'success');
+                                            showToast('Outreach template ready!', 'success');
                                           }
                                         } catch (err) {
                                           const fallbackMsg = `Hi ${job.recruiter_name || 'Hiring Team'},\n\nI noticed the ${job.title} opening at ${job.company}. Given my background in ${(job.matched_skills || []).slice(0, 3).join(', ') || 'modern technology'}, I believe I'd be a strong addition to your team. Would love to connect!\n\nBest regards,\nCandidate`;
                                           setOutreachData(fallbackMsg);
                                           setOutreachModalOpen(true);
-                                          showToast('✉️ Outreach note opened!', 'success');
+                                          showToast('Outreach note opened!', 'success');
                                         } finally {
                                           setLoading(false);
                                         }
@@ -5099,7 +5099,7 @@ function App() {
                                       }}
                                       title="Generate tailored cold message / InMail for this role"
                                     >
-                                      ✉️ Outreach Note
+                                      Outreach Note
                                     </button>
                                   </div>
 
@@ -5289,7 +5289,7 @@ function App() {
             ) : rejectionWarning ? (
               <div className="rejection-warning-panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px', animation: 'slideDown 0.4s ease both' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+                  <span style={{ fontSize: '1rem', color: '#f59e0b', fontWeight: 700 }}>[ALERT]</span>
                   <h3 style={{ margin: 0, color: 'var(--accent-amber)', fontSize: '1rem' }}>Candidate Suitability Warning</h3>
                 </div>
                 <p style={{ maxWidth: '600px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
@@ -5307,7 +5307,7 @@ function App() {
                     style={{ padding: '10px 22px', fontWeight: 700, background: 'linear-gradient(135deg,#F59E0B,#D97706)', boxShadow: '0 4px 14px rgba(245,158,11,0.3)' }}
                     onClick={() => handleGenerateTailoredResume(true)}
                   >
-                    🚀 Yes, Generate Anyway
+                    Yes, Generate Anyway
                   </button>
                   <button
                     className="btn btn-secondary"
@@ -5339,7 +5339,7 @@ function App() {
                       <div className="log-terminal-dot" style={{ background: '#FFBD2E' }} />
                       <div className="log-terminal-dot" style={{ background: '#28CA41' }} />
                     </div>
-                    📋 PIPELINE LOGS
+                    PIPELINE LOGS
                   </div>
                   <div
                     className="log-terminal-body"
@@ -5394,7 +5394,7 @@ function App() {
                 </div>
               ) : (
                 <div className="empty-state">
-                  <div className="empty-state-icon">🎯</div>
+                  <div className="empty-state-icon">[READY]</div>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>Ready to find your fit</div>
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Upload your resume and paste a job description to get your ATS match score and a tailored resume in seconds.</div>
@@ -5416,7 +5416,7 @@ function App() {
                 {/* ── Job context banner ── */}
                 {(jobTitle || company) && (
                   <div className="job-banner" style={{ animation: 'slideDown 0.4s ease both' }}>
-                    <span style={{ fontSize: '0.85rem' }}>🎯</span>
+                    
                     <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Targeting:</span>
                     {jobTitle && <span className="job-banner-chip job-banner-role">{jobTitle}</span>}
                     {company && <span className="job-banner-chip job-banner-company">{company}</span>}
@@ -5426,7 +5426,7 @@ function App() {
                 {/* ── Job Description Display ── */}
                 {jobDescription && (
                   <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '12px', maxHeight: '300px', overflowY: 'auto' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '10px', color: 'var(--text-muted)' }}>📋 Job Description</div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '10px', color: 'var(--text-muted)' }}>Job Description</div>
                     <div style={{ fontSize: '0.82rem', lineHeight: '1.5', color: 'var(--text-main)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       {jobDescription.substring(0, 1000)}{jobDescription.length > 1000 ? '...' : ''}
                     </div>
@@ -5468,7 +5468,7 @@ function App() {
                             fontSize: '0.72rem',
                             fontWeight: 700
                           }}>
-                            <span>📈 +{analysisResult?.match_analysis?.score_delta || (analysisResult.match_analysis.overall_score - (window.baseOriginalAtsScore || analysisResult.match_analysis.overall_score)) || 7}% boost</span>
+                            <span>+{analysisResult?.match_analysis?.score_delta || (analysisResult.match_analysis.overall_score - (window.baseOriginalAtsScore || analysisResult.match_analysis.overall_score)) || 7}% boost</span>
                           </div>
                         )}
 
@@ -5607,7 +5607,7 @@ function App() {
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1.1rem' }}>🛡️</span>
+                            
                             <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#38BDF8', letterSpacing: '0.02em' }}>
                               Senior Recruiter Scrutiny Audit
                             </span>
@@ -5714,7 +5714,7 @@ function App() {
                                 cover_letter: data.cover_letter
                               }));
                               setKeepOriginalMode(true);
-                              setStatusMessage('📝 Tailored cover letter generated!');
+                              setStatusMessage('Tailored cover letter generated!');
                             } else {
                               const err = await res.json();
                               setStatusMessage(`❌ Error: ${err.detail || 'Failed to generate cover letter'}`);
@@ -5726,7 +5726,7 @@ function App() {
                           }
                         }}
                       >
-                        📝 Cover Letter Only
+                        Cover Letter Only
                       </button>
                       <button
                         className="btn btn-secondary"
@@ -5747,7 +5747,7 @@ function App() {
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', textAlign: 'center',
                     animation: 'slideDown 0.3s ease both'
                   }}>
-                    <div style={{ fontSize: '2rem' }}>📄</div>
+                    <div style={{ fontSize: '1.2rem', color: 'var(--accent-secondary)', fontWeight: 700 }}>[PDF]</div>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '6px' }}>Using Your Original Resume</div>
                       <div style={{ fontSize: '0.86rem', color: 'var(--text-muted)', maxWidth: '400px', lineHeight: 1.6 }}>
@@ -5803,7 +5803,7 @@ function App() {
                               style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
                               onClick={handleDownloadCoverLetter}
                             >
-                              ⬇️ Download
+                              Download
                             </button>
                             <button
                               className="btn btn-secondary"
@@ -5814,7 +5814,7 @@ function App() {
                                 setTimeout(() => setCoverLetterCopied(false), 2000);
                               }}
                             >
-                              {coverLetterCopied ? '✓ Copied!' : '📋 Copy'}
+                              {coverLetterCopied ? 'Copied!' : 'Copy'}
                             </button>
                           </div>
                         </div>
@@ -5854,7 +5854,7 @@ function App() {
                             className="btn btn-secondary"
                             style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px', textDecoration: 'none' }}
                           >
-                            ⬇️ Download PDF
+                            Download PDF
                           </a>
                         )}
                         {analysisResult && analysisResult.latex_code && (
@@ -5879,7 +5879,7 @@ function App() {
                                   const body = await res.json();
                                   setResumeData(body.data);
                                   setResumeEvaluation(body.evaluation);
-                                  setStatusMessage('📌 Master Resume updated from tailored version!');
+                                  setStatusMessage('Master Resume updated from tailored version!');
                                 } else {
                                   throw new Error('Failed to promote resume');
                                 }
@@ -5891,7 +5891,7 @@ function App() {
                             }}
                             title="Promote this tailored version as your new Master Resume baseline"
                           >
-                            📌 Set as Master
+                            Set as Master
                           </button>
                         )}
                       </div>
@@ -5973,7 +5973,7 @@ function App() {
                             style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
                             onClick={handleDownloadCoverLetter}
                           >
-                            ⬇️ Download
+                            Download
                           </button>
                           <button
                             className="btn btn-secondary"
@@ -5984,7 +5984,7 @@ function App() {
                               setTimeout(() => setCoverLetterCopied(false), 2000);
                             }}
                           >
-                            {coverLetterCopied ? '✓ Copied!' : '📋 Copy'}
+                            {coverLetterCopied ? 'Copied!' : 'Copy'}
                           </button>
                         </div>
                       </div>
@@ -6003,7 +6003,7 @@ function App() {
                         <div className="log-terminal-dot" style={{ background: '#FFBD2E' }} />
                         <div className="log-terminal-dot" style={{ background: '#28CA41' }} />
                       </div>
-                      📋 PIPELINE EXECUTION LOGS
+                      PIPELINE EXECUTION LOGS
                     </div>
                     <div
                       className="log-terminal-body"
@@ -6123,7 +6123,7 @@ function App() {
             {/* Header */}
             <div className="modal-header">
               <div>
-                <h2>🎤 Interview Preparation Guide</h2>
+                <h2>Interview Preparation Guide</h2>
                 <p className="modal-subtitle">
                   {prepJobInfo.jobTitle} at {prepJobInfo.company}
                 </p>
@@ -6154,7 +6154,7 @@ function App() {
                     navigator.clipboard.writeText(prepMarkdown);
                   }}
                 >
-                  📋 Copy Prep Guide
+                  Copy Prep Guide
                 </button>
                 <button
                   className="btn btn-secondary"
@@ -6184,7 +6184,7 @@ function App() {
             {/* Header */}
             <div className="modal-header">
               <div>
-                <h2>📝 Tailored Cover Letter</h2>
+                <h2>Tailored Cover Letter</h2>
                 <p className="modal-subtitle">
                   {coverLetterJobInfo.jobTitle} at {coverLetterJobInfo.company}
                 </p>
@@ -6217,7 +6217,7 @@ function App() {
                     setTimeout(() => setCoverLetterCopiedModal(false), 2000);
                   }}
                 >
-                  {coverLetterCopiedModal ? '✓ Copied to Clipboard!' : '📋 Copy Cover Letter'}
+                  {coverLetterCopiedModal ? 'Copied to Clipboard!' : 'Copy Cover Letter'}
                 </button>
                 <button
                   className="btn btn-secondary"
@@ -6305,7 +6305,7 @@ function App() {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
               <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🎯 Chrome Extension Setup Guide</span>
+                <span>Chrome Extension Setup Guide</span>
               </div>
               <button
                 className="btn btn-secondary"
@@ -6329,7 +6329,7 @@ function App() {
                     handleOneClickExtensionSync(user ? user.sync_code : "GABY48");
                   }}
                 >
-                  📥 Re-Download ZIP
+                  Re-Download ZIP
                 </button>
               </div>
 
@@ -6374,7 +6374,7 @@ function App() {
                 style={{ width: '100%', padding: '10px', fontSize: '0.86rem', fontWeight: 700, background: 'linear-gradient(135deg, #0284c7 0%, #10b981 100%)', color: '#fff' }}
                 onClick={() => setShowExtensionGuide(false)}
               >
-                ✓ Got it! Start Tailoring Jobs
+                Got it! Start Tailoring Jobs
               </button>
             </div>
           </div>

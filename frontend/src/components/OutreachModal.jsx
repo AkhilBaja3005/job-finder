@@ -160,7 +160,7 @@ const OutreachModal = ({
                     className="edit-button"
                     onClick={() => handleEditSection('email_subject')}
                   >
-                    ✎ Edit
+                    Edit
                   </button>
                 </div>
                 {editingSection === 'email_subject' ? (
@@ -202,7 +202,7 @@ const OutreachModal = ({
                     className="edit-button"
                     onClick={() => handleEditSection('email_body')}
                   >
-                    ✎ Edit
+                    Edit
                   </button>
                 </div>
                 {editingSection === 'email_body' ? (
@@ -241,13 +241,13 @@ const OutreachModal = ({
               {/* Action Buttons */}
               <div className="action-buttons" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button className="btn" onClick={handleCopyEmail} style={{ flex: '1 1 auto' }}>
-                  {copied ? '✓ Copied!' : '📋 Copy Email'}
+                  {copied ? 'Copied!' : 'Copy Email'}
                 </button>
                 <button className="btn btn-secondary" onClick={handleSendEmail} style={{ flex: '1 1 auto' }} title="Opens Gmail with pre-filled draft">
-                  📧 Open in Gmail
+                  Open in Gmail
                 </button>
                 <button className="btn btn-secondary" onClick={handleMailtoFallback} style={{ flex: '1 1 auto' }} title="Opens your default mail client (Outlook, Apple Mail, etc.)">
-                  ✉️ Open Default Mail Client
+                  Open Default Mail Client
                 </button>
               </div>
             </div>
@@ -262,7 +262,7 @@ const OutreachModal = ({
                     className="edit-button"
                     onClick={() => handleEditSection('linkedin_message')}
                   >
-                    ✎ Edit
+                    Edit
                   </button>
                 </div>
                 {editingSection === 'linkedin_message' ? (
@@ -300,7 +300,7 @@ const OutreachModal = ({
 
               <div className="action-buttons">
                 <button className="btn" onClick={handleCopyLinkedIn}>
-                  {copied ? '✓ Copied!' : '📋 Copy Message'}
+                  {copied ? 'Copied!' : 'Copy Message'}
                 </button>
                 {recruiterInfo?.recruiter_profile_url && (
                   <button
@@ -311,7 +311,7 @@ const OutreachModal = ({
                     }}
                     title="Copies outreach note and opens LinkedIn Profile in a new tab"
                   >
-                    🚀 Open LinkedIn Profile
+                    Open LinkedIn Profile
                   </button>
                 )}
                 <p className="linkedin-note" style={{ flexBasis: '100%', marginTop: '6px' }}>
