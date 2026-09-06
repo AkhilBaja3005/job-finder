@@ -5,6 +5,8 @@ const TailorMode = ({
   setJobUrl,
   jobTitle,
   setJobTitle,
+  company = '',
+  setCompany,
   jobDescription,
   setJobDescription,
   analysisResult,
@@ -18,6 +20,21 @@ const TailorMode = ({
   tailoringIntensity = 'balanced',
   setTailoringIntensity,
 }) => {
+  const handleJdChange = (text) => {
+    setJobDescription(text);
+    if ((!company || company === '') && setCompany && text) {
+      // Auto-extract company name from text if not already populated
+      const m1 = text.match(/(?:^|\n|\.\s+)([A-Z][A-Za-z0-9\s&.,-]{1,30}?)\s+(?:is|are)\s+(?:a|an)\s+/);
+      if (m1 && !["the", "this", "our", "a", "an", "there", "it", "here", "what", "who"].includes(m1[1].trim().toLowerCase())) {
+        setCompany(m1[1].trim());
+      } else {
+        const m2 = text.match(/(?:about|at|join|welcome to)\s+([A-Z][A-Za-z0-9\s&.,-]{2,30}?)(?:\s+(?:is|are|we|team|to|for|where|who|\.|\n|,|!))/i);
+        if (m2 && !["the", "this", "our", "a", "an", "us"].includes(m2[1].trim().toLowerCase())) {
+          setCompany(m2[1].trim());
+        }
+      }
+    }
+  };
   return (
     <>
       <div className="section-label">Target Specification</div>
@@ -99,7 +116,7 @@ const TailorMode = ({
           placeholder="Paste Job Description (optional if URL provided)"
           rows="6"
           value={jobDescription}
-          onChange={(e) => setJobDescription(e.target.value)}
+          onChange={(e) => handleJdChange(e.target.value)}
         />
         <div style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: jobDescription.length > 500 ? 'var(--accent-green)' : 'var(--text-muted)', marginTop: '-8px', marginBottom: '10px', textAlign: 'right' }}>
           {jobDescription.length.toLocaleString()} chars{jobDescription.length < 200 ? ' (paste more for higher accuracy)' : jobDescription.length < 500 ? ' (standard)' : ' (complete spec)'}

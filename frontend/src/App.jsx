@@ -3513,6 +3513,8 @@ function App() {
                   setJobUrl={handleJobUrlChange}
                   jobTitle={jobTitle}
                   setJobTitle={setJobTitle}
+                  company={company}
+                  setCompany={setCompany}
                   jobDescription={jobDescription}
                   setJobDescription={setJobDescription}
                   analysisResult={analysisResult}
@@ -5817,25 +5819,68 @@ function App() {
 
                     {analysisResult?.cover_letter && (
                       <div className="workspace-panel" style={{ width: '100%', maxWidth: '700px', marginTop: '16px' }}>
-                        <div className="panel-toolbar">
-                          <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Generated Cover Letter</h3>
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                        <div className="panel-toolbar" style={{
+                          display: 'flex',
+                          flexWrap: 'nowrap',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '10px',
+                          padding: '6px 12px',
+                          background: 'rgba(15, 23, 42, 0.65)',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: '10px',
+                          marginBottom: '14px',
+                          overflowX: 'auto',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-primary)' }}>
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                              <polyline points="14 2 14 8 20 8"></polyline>
+                              <line x1="16" y1="13" x2="8" y2="13"></line>
+                              <line x1="16" y1="17" x2="8" y2="17"></line>
+                            </svg>
+                            <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#fff' }}>Cover Letter</span>
+                            <span style={{
+                              fontSize: '0.72rem',
+                              fontFamily: 'var(--font-mono)',
+                              color: 'var(--text-muted)',
+                              background: 'rgba(255,255,255,0.04)',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(255,255,255,0.06)'
+                            }}>
+                              {(analysisResult.cover_letter || '').trim().split(/\s+/).filter(Boolean).length} words
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                             <button
                               className="btn btn-secondary"
-                              style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                              style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px', display: 'inline-flex', alignItems: 'center' }}
                               onClick={handleDownloadCoverLetter}
+                              title="Download cover letter as text file"
                             >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                              </svg>
                               Download
                             </button>
                             <button
                               className="btn btn-secondary"
-                              style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                              style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px', display: 'inline-flex', alignItems: 'center' }}
                               onClick={() => {
                                 navigator.clipboard.writeText(analysisResult.cover_letter || '');
                                 setCoverLetterCopied(true);
                                 setTimeout(() => setCoverLetterCopied(false), 2000);
                               }}
+                              title="Copy cover letter text"
                             >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                              </svg>
                               {coverLetterCopied ? 'Copied!' : 'Copy'}
                             </button>
                           </div>
@@ -6105,25 +6150,68 @@ function App() {
                     </div>
 
                     <div className="workspace-panel">
-                      <div className="panel-toolbar">
-                        <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Generated Cover Letter</h3>
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                      <div className="panel-toolbar" style={{
+                        display: 'flex',
+                        flexWrap: 'nowrap',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        padding: '6px 12px',
+                        background: 'rgba(15, 23, 42, 0.65)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: '10px',
+                        marginBottom: '14px',
+                        overflowX: 'auto',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-primary)' }}>
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                          </svg>
+                          <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#fff' }}>Cover Letter</span>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontFamily: 'var(--font-mono)',
+                            color: 'var(--text-muted)',
+                            background: 'rgba(255,255,255,0.04)',
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(255,255,255,0.06)'
+                          }}>
+                            {(analysisResult.cover_letter || '').trim().split(/\s+/).filter(Boolean).length} words
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                           <button
                             className="btn btn-secondary"
-                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                            style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px', display: 'inline-flex', alignItems: 'center' }}
                             onClick={handleDownloadCoverLetter}
+                            title="Download cover letter as text file"
                           >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                              <polyline points="7 10 12 15 17 10"></polyline>
+                              <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
                             Download
                           </button>
                           <button
                             className="btn btn-secondary"
-                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                            style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px', display: 'inline-flex', alignItems: 'center' }}
                             onClick={() => {
                               navigator.clipboard.writeText(analysisResult.cover_letter || '');
                               setCoverLetterCopied(true);
                               setTimeout(() => setCoverLetterCopied(false), 2000);
                             }}
+                            title="Copy cover letter text"
                           >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
                             {coverLetterCopied ? 'Copied!' : 'Copy'}
                           </button>
                         </div>
