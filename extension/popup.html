@@ -55,6 +55,33 @@
       box-shadow: 0 0 6px #34d399;
     }
 
+    .update-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      background: rgba(245, 158, 11, 0.14);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+      font-size: 10px;
+      margin-bottom: 10px;
+      animation: fadeIn 0.3s ease;
+    }
+    .update-banner a {
+      color: #fff;
+      background: #d97706;
+      padding: 3px 7px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .update-banner a:hover {
+      background: #b45309;
+    }
+
     /* Top Navigation Tabs */
     .nav-tabs {
       display: flex;
@@ -250,6 +277,15 @@
       <span class="status-dot"></span>
       <span>Connected</span>
     </span>
+  </div>
+
+  <!-- Optional Extension Update Available Notification -->
+  <div id="ext-update-banner" class="update-banner">
+    <div>
+      <strong>⚠️ Update Available:</strong>
+      <span id="ext-update-text">Newer version available on server.</span>
+    </div>
+    <a id="ext-update-btn" href="#" target="_blank">Download ZIP ⤓</a>
   </div>
 
   <!-- Top Navigation Tabs (3 Sections) -->

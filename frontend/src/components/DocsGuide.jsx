@@ -30,14 +30,16 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
   };
 
   const navItems = [
-    { id: 'quickstart', label: '🚀 Quickstart', icon: '⚡' },
-    { id: 'extension', label: '🧩 Chrome Extension v3.0', icon: '💻' },
-    { id: 'sync-key', label: '🔑 Sync Key & Pairing', icon: '🔗' },
-    { id: 'master-resume', label: '👥 Multi-Archetypes & Master Resume', icon: '📝' },
-    { id: 'ats-scoring', label: '🎯 ATS Scoring & Strategies', icon: '📊' },
-    { id: 'autofill', label: '✨ In-Page AI Autofill & PDF Drop', icon: '🤖' },
-    { id: 'discovery', label: '🔍 Job Discovery Search', icon: '🌐' },
-    { id: 'api-setup', label: '⚙️ API & Deployment', icon: '🛠️' },
+    { id: 'quickstart', label: 'Quickstart', icon: '' },
+    { id: 'extension', label: 'Chrome Extension v3.0', icon: '' },
+    { id: 'sync-key', label: 'Sync Key & Pairing', icon: '' },
+    { id: 'master-resume', label: 'Multi-Archetypes & Master Resume', icon: '' },
+    { id: 'ats-scoring', label: 'ATS Matrix & Keyword Badges', icon: '' },
+    { id: 'latex-engine', label: 'XeLaTeX Engine & Code Viewer', icon: '' },
+    { id: 'shortcuts', label: 'Keyboard Shortcuts', icon: '' },
+    { id: 'autofill', label: 'In-Page AI Autofill & PDF Drop', icon: '' },
+    { id: 'discovery', label: 'Job Discovery Search', icon: '' },
+    { id: 'api-setup', label: 'API & Deployment', icon: '' },
   ];
 
   return (
@@ -111,7 +113,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                 transition: 'all 0.2s ease'
               }}
             >
-              <span>📥</span> Download Extension (.zip)
+              Download Extension (.zip)
             </button>
           )}
           {onNavigateMode && (
@@ -129,7 +131,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                 transition: 'all 0.2s ease'
               }}
             >
-              Open Dashboard 🚀
+              Open Dashboard →
             </button>
           )}
         </div>
@@ -179,7 +181,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                       transition: 'all 0.15s ease'
                     }}
                   >
-                    <span>{item.icon}</span>
+                    
                     <span>{item.label.replace(/^[^\s]+\s/, '')}</span>
                   </button>
                 );
@@ -238,7 +240,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
           {/* SECTION: Quickstart */}
           <section id="quickstart" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '1.5rem' }}>🚀</span>
+              
               <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Quickstart Workflow</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '20px' }}>
@@ -282,7 +284,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
           {/* SECTION: Chrome Extension v3.0.0 */}
           <section id="extension" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '1.5rem' }}>🧩</span>
+              
               <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Chrome Extension v3.0.0 (Side Panel & Automation)</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '20px' }}>
@@ -298,7 +300,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               marginBottom: '20px'
             }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px', color: '#38bdf8' }}>
-                📦 Zero-Config Installation Guide
+                Zero-Config Installation Guide
               </h3>
               <ol style={{ margin: 0, paddingLeft: '20px', color: '#cbd5e1', lineHeight: 1.8, fontSize: '0.92rem' }}>
                 <li>
@@ -315,25 +317,25 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             {/* In-Page Capabilities */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
               <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>🏷️ Live Toolbar ATS Badge</div>
+                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>Live Toolbar ATS Badge</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
-                  Shows your live match percentage (🟢 <code>94%</code>, 🟡 <code>76%</code>) on the browser toolbar icon in real time as you navigate job tabs without opening the panel.
+                  Shows your live match percentage (e.g. <code>94%</code>, <code>76%</code>) on the browser toolbar icon in real time as you navigate job tabs without opening the panel.
                 </p>
               </div>
               <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>📎 1-Click File Auto-Attach</div>
+                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>1-Click File Auto-Attach</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
-                  Click <code>📎 Attach PDF</code> in the side panel to compile and programmatically inject your tailored PDF into ATS dropzones on Ashby, Greenhouse, Lever, and Workday via DataTransfer.
+                  Click <code>Attach PDF</code> in the side panel to compile and programmatically inject your tailored PDF into ATS dropzones on Ashby, Greenhouse, Lever, and Workday via DataTransfer.
                 </p>
               </div>
               <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>🔄 Live Tab Sync & Rescan</div>
+                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>Live Tab Sync & Rescan</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
-                  Switching tabs automatically scans the newly active job posting. If you edit custom job details, clicking <code>🔄 Rescan Tab</code> clears stale cache and re-extracts the live page DOM.
+                  Switching tabs automatically scans the newly active job posting. If you edit custom job details, clicking <code>Rescan Tab</code> clears stale cache and re-extracts the live page DOM.
                 </p>
               </div>
               <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>✉️ 1-Click Email Package</div>
+                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>1-Click Email Package</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                   Sends a formatted delivery email with the compiled PDF attached, ATS score breakdown, role title, company name, and direct Overleaf editing links straight to your inbox.
                 </p>
@@ -344,7 +346,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
           {/* SECTION: Sync Key & Pairing */}
           <section id="sync-key" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '1.5rem' }}>🔑</span>
+              
               <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Sync Key & Web-to-Extension Pairing</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
@@ -382,7 +384,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                     cursor: 'pointer'
                   }}
                 >
-                  {copiedKey ? '✓ Copied to Clipboard' : '📋 Copy Sync Key'}
+                  {copiedKey ? '✓ Copied to Clipboard' : 'Copy Sync Key'}
                 </button>
               </div>
 
@@ -395,7 +397,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
           {/* SECTION: Multi-Archetypes & Master Resume */}
           <section id="master-resume" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '1.5rem' }}>👥</span>
+              
               <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Multi-Archetype Profiles & Category Lockdown</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
@@ -425,28 +427,28 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
           {/* SECTION: ATS Scoring & Tailoring Strategies */}
           <section id="ats-scoring" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '1.5rem' }}>🎯</span>
-              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>ATS Scoring & Tailoring Strategies</h2>
+              
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>ATS Scoring, Keyword Matrix & Strategies</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
-              Choose your tailoring strategy and let our multi-pass compensation engine produce a strictly 1-page PDF.
+              Choose your tailoring strategy and interact directly with our deterministic keyword matrix to produce an ATS-optimized, strictly 1-page PDF.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
               <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#38bdf8', marginBottom: '6px' }}>🛡️ Strict Conservative</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#38bdf8', marginBottom: '6px' }}>Strict Conservative</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                   Preserves original bullet structure verbatim and only replaces technical keywords where direct equivalents exist.
                 </p>
               </div>
               <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#34d399', marginBottom: '6px' }}>⚖️ Balanced (Recommended)</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#34d399', marginBottom: '6px' }}>Balanced (Recommended)</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                   Aligns terminology, weaves missing target skills, and highlights relevant systems while strictly preserving candidate facts.
                 </p>
               </div>
               <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f59e0b', marginBottom: '6px' }}>🚀 Impact-Driven</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f59e0b', marginBottom: '6px' }}>Impact-Driven</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                   Emphasizes business throughput, latency reductions, scalability, and measurable ROI metrics in every bullet point.
                 </p>
@@ -465,9 +467,9 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
                 <div>
-                  <h4 style={{ color: '#10b981', margin: '0 0 8px', fontSize: '1rem' }}>✓ Deterministic Keyword Matching</h4>
+                  <h4 style={{ color: '#10b981', margin: '0 0 8px', fontSize: '1rem' }}>✓ Interactive Keyword Pill Matrix</h4>
                   <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
-                    Identifies hard technical requirements, preferred qualifications, seniority levels, and calculates timeline flattening to prevent duplicate date inflation.
+                    Matched keywords render as soft emerald pills with checkmarks. Missing keywords render as dashed amber badges with a <code>+ Add to LaTeX</code> action that immediately recalculates the projected ATS score in real-time.
                   </p>
                 </div>
                 <div>
@@ -477,11 +479,105 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                   </p>
                 </div>
                 <div>
-                  <h4 style={{ color: '#818cf8', margin: '0 0 8px', fontSize: '1rem' }}>✓ Missing Skills Selector</h4>
+                  <h4 style={{ color: '#818cf8', margin: '0 0 8px', fontSize: '1rem' }}>✓ Deterministic Keyword Matching</h4>
                   <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
-                    Click any missing keyword chip in the ATS breakdown to explicitly authorize and incorporate it into the tailored bullet points and skill section.
+                    Identifies hard technical requirements, preferred qualifications, seniority levels, and calculates timeline flattening to prevent duplicate date inflation.
                   </p>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          {/* SECTION: XeLaTeX Engine & Code Viewer */}
+          <section id="latex-engine" style={{ scrollMarginTop: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>XeLaTeX Engine, Fonts & Syntax Viewer</h2>
+            </div>
+            <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
+              Every resume is rendered using the modern <strong>XeLaTeX</strong> typesetting engine with <code>TeX Gyre Termes</code> typography and dual-file compiler configuration for seamless local and Overleaf builds.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+              <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#38bdf8', marginBottom: '6px' }}>
+                  XeLaTeX & TeX Gyre Termes
+                </div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Resumes compile under <code>xelatex</code> with OpenType font support, providing crisp micro-typography and authentic font weights without missing-glyph errors.
+                </p>
+              </div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#34d399', marginBottom: '6px' }}>
+                  Dual Overleaf Compiler Directives
+                </div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Exported ZIP packages include both <code>latexmkrc</code> (<code>$pdf_mode = 5; $xelatex = 'xelatex ...'</code>) and <code>.latexmkrc</code> so Overleaf automatically selects XeLaTeX by default.
+                </p>
+              </div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
+                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#a78bfa', marginBottom: '6px' }}>
+                  Code Viewer with Line Gutters
+                </div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Toggle to <code>TeX Code</code> mode to inspect your LaTeX with line numbers, color-coded TeX macros (blue), comments (green), and braces (amber), plus 1-click clipboard copy.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* SECTION: Keyboard Shortcuts */}
+          <section id="shortcuts" style={{ scrollMarginTop: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Global Keyboard Shortcuts</h2>
+            </div>
+            <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
+              Accelerate your workflow with first-class keyboard navigation designed for developers:
+            </p>
+
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '14px',
+              padding: '20px'
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+                {[
+                  { keys: '⌘ / Ctrl + Enter', desc: 'Trigger 1-click ATS Job Analysis & Tailoring' },
+                  { keys: '⌘ / Ctrl + S', desc: 'Save current candidate profile snapshot / archetype' },
+                  { keys: '⌘ / Ctrl + 1', desc: 'Switch to Master Profile & Setup Tab' },
+                  { keys: '⌘ / Ctrl + 2', desc: 'Switch to Job Tailor Workspace Tab' },
+                  { keys: '⌘ / Ctrl + 3', desc: 'Switch to Job Discovery Search Tab' },
+                  { keys: '?', desc: 'Toggle keyboard shortcut cheat-sheet dialog' },
+                  { keys: 'Esc', desc: 'Dismiss active modal or full-screen overlay' }
+                ].map((sc) => (
+                  <div key={sc.keys} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    background: 'rgba(2, 6, 23, 0.5)',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.05)'
+                  }}>
+                    <span style={{ color: '#cbd5e1', fontSize: '0.84rem' }}>{sc.desc}</span>
+                    <kbd style={{
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      color: '#38bdf8',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '0.74rem',
+                      fontFamily: 'var(--font-mono)',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {sc.keys}
+                    </kbd>
+                  </div>
+                ))}
               </div>
             </div>
           </section>
@@ -489,7 +585,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
           {/* SECTION: In-Page AI Autofill */}
           <section id="autofill" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '1.5rem' }}>✨</span>
+              
               <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>In-Page AI Autofill & Screening Questions</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
@@ -504,13 +600,13 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                  <span style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '4px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>✨ AI Answer</span>
+                  <span style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '4px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>AI Answer</span>
                   <div style={{ color: '#cbd5e1', fontSize: '0.9rem', lineHeight: 1.6 }}>
                     Inline buttons appear beside screening question textareas (e.g. <em>"Why are you interested in this role?"</em>, <em>"Describe your experience with distributed systems"</em>). Clicking generates contextual answers tailored to the company and role.
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                  <span style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '4px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>⚡ Auto-Fill</span>
+                  <span style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '4px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>Auto-Fill</span>
                   <div style={{ color: '#cbd5e1', fontSize: '0.9rem', lineHeight: 1.6 }}>
                     Standard fields like Name, Email, Phone, LinkedIn, GitHub, Portfolio, Notice Period, and Sponsorship are filled deterministically from your synced Candidate Profile.
                   </div>
@@ -522,7 +618,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
           {/* SECTION: Job Discovery */}
           <section id="discovery" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '1.5rem' }}>🔍</span>
+              
               <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Automated Job Discovery & Search</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
@@ -545,7 +641,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
           {/* SECTION: API & Deployment */}
           <section id="api-setup" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '1.5rem' }}>⚙️</span>
+              
               <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>API Configuration & Deployment</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>

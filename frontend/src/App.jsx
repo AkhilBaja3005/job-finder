@@ -8,6 +8,7 @@ const HistoryMode = lazy(() => import('./components/HistoryMode'));
 const SkeletonLoader = lazy(() => import('./components/SkeletonLoader').then(m => ({ default: m.SkeletonLoader })));
 const OutreachModal = lazy(() => import('./components/OutreachModal'));
 const DocsGuide = lazy(() => import('./components/DocsGuide'));
+import LatexCodeViewer from './components/LatexCodeViewer';
 
 // Automatically inject ngrok-skip-browser-warning header into all frontend fetch requests
 const originalFetch = window.fetch;
@@ -208,7 +209,7 @@ function App() {
     const handleResponse = (event) => {
       if (event.data && event.data.type === "SYNC_JOB_FINDER_KEY_SUCCESS") {
         synced = true;
-        showToast(`🚀 Extension Auto-Synced to Key: ${targetKey}!`, "success");
+        showToast(`Extension Auto-Synced to Key: ${targetKey}!`, "success");
         window.removeEventListener("message", handleResponse);
       }
     };
@@ -224,7 +225,7 @@ function App() {
     a.click();
     document.body.removeChild(a);
 
-    showToast(`📦 Extension ZIP (${targetKey}) downloading! Unzip & load in chrome://extensions`, "success");
+    showToast(`Extension ZIP (${targetKey}) downloading! Unzip & load in chrome://extensions`, "success");
 
     setTimeout(() => {
       window.removeEventListener("message", handleResponse);
@@ -430,18 +431,62 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Optimization #2: Keyboard shortcut - '?' opens the help modal.
-  // Escape-to-close and focus trapping for the modal itself are handled by
-  // useModalA11y (shared across all modals) once it's open.
+  // Keyboard Shortcuts:
+  // - Cmd/Ctrl + Enter: Trigger Analyze & Tailor Job
+  // - Cmd/Ctrl + S: Save Master Archetype
+  // - Cmd/Ctrl + 1: Switch to Tailor mode
+  // - Cmd/Ctrl + 2: Switch to Discover mode
+  // - Cmd/Ctrl + 3: Switch to History mode
+  // - ?: Open Keyboard Shortcuts modal
   useEffect(() => {
     const handler = (e) => {
-      if (e.key === '?' && !showKeyboardHelp) {
+      // Allow Esc to close or ? to open help when not in inputs
+      const isInputFocused = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!loading) {
+          if (analysisResult?.latex_code) {
+            handleGenerateTailoredResume(false);
+          } else {
+            handleAnalyzeJob();
+          }
+        }
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        if (!archetypeLoading) {
+          handleSaveArchetype();
+        }
+        return;
+      }
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === '1' || e.key === '2' || e.key === '3')) {
+        e.preventDefault();
+        if (e.key === '1') {
+          setDashboardMode('tailor');
+          setIsDiscoveryView(false);
+        } else if (e.key === '2') {
+          setDashboardMode('discover');
+          setIsDiscoveryView(true);
+        } else if (e.key === '3') {
+          setDashboardMode('history');
+          setIsDiscoveryView(false);
+          handleFetchHistory();
+        }
+        return;
+      }
+
+      if (e.key === '?' && !isInputFocused && !showKeyboardHelp) {
+        e.preventDefault();
         setShowKeyboardHelp(true);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [showKeyboardHelp]);
+  }, [showKeyboardHelp, loading, archetypeLoading, analysisResult, jobUrl, jobTitle, jobDescription, resumeData, newArchetypeName]);
 
   const handleApiKeyChange = (e) => {
     const val = e.target.value;
@@ -579,7 +624,7 @@ function App() {
         setUserArchetypes(body.archetypes || []);
         setActiveArchetype(body.active_archetype || name);
         setNewArchetypeName('');
-        showToast(`✅ Saved master archetype: ${name}`, 'success');
+        showToast(`Saved master archetype: ${name}`, 'success');
       } else {
         showToast('Failed to save archetype', 'error');
       }
@@ -606,7 +651,7 @@ function App() {
         setActiveArchetype(body.active_archetype || name);
         if (body.data) setResumeData(body.data);
         if (body.evaluation) setResumeEvaluation(body.evaluation);
-        showToast(`⚡ Switched active master profile to: ${name}`, 'success');
+        showToast(`Switched active master profile to: ${name}`, 'success');
         fetchArchetypes();
       }
     } catch (e) {
@@ -634,7 +679,7 @@ function App() {
         const body = await res.json();
         setUserArchetypes(body.archetypes || []);
         if (body.active_archetype) setActiveArchetype(body.active_archetype);
-        showToast(`🗑️ Deleted archetype "${name}"`, 'info');
+        showToast(`Deleted archetype "${name}"`, 'info');
         fetchArchetypes();
       } else {
         showToast('Failed to delete archetype', 'error');
@@ -842,12 +887,12 @@ function App() {
         setAfterPdfUrl(null);
         setShowReviewModal(false);
         setCoverLetterCopied(false);
-        setStatusMessage('✅ Baseline PDF generated & master resume evaluated successfully!');
+        setStatusMessage('Baseline PDF generated & master resume evaluated successfully!');
       } else {
-        setStatusMessage(`❌ Error parsing resume: ${result.detail}`);
+        setStatusMessage(`Error parsing resume: ${result.detail}`);
       }
     } catch (err) {
-      setStatusMessage(`❌ Error connecting to backend: ${err.message}`);
+      setStatusMessage(`Error connecting to backend: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -1105,6 +1150,7 @@ function App() {
         body: JSON.stringify({
           job_url: targetUrl || null,
           job_title: targetTitle || 'Target Role',
+          company: company || null,
           job_description: activeDescription || null,
           skip_tailoring: false, // Run full LaTeX tailoring + page checks + reviewer checks
           force_tailoring: overrideForce,
@@ -1143,8 +1189,14 @@ function App() {
         } else if (event.type === 'result') {
           const result = event;
           if (result.job_description) setJobDescription(result.job_description);
+          if (result.company) setCompany(result.company);
           if (result.job_title) setJobTitle(result.job_title);
-          setAnalysisResult(result.analysis);
+          const analysisObj = {
+            ...result.analysis,
+            pdf_url: result.analysis?.pdf_url || result.analysis?.download_pdf_url || result.download_pdf_url || result.pdf_url,
+            overleaf_url: result.analysis?.overleaf_url || result.overleaf_url
+          };
+          setAnalysisResult(analysisObj);
           const updates = result.analysis.suggested_resume_updates || {};
           const tailored = {
             ...resumeData,
@@ -1572,6 +1624,82 @@ function App() {
     }
   };
 
+  const handleViewTailoredPdf = async () => {
+    if (!analysisResult) return;
+    const directUrl = analysisResult.pdf_url || analysisResult.download_pdf_url;
+    if (directUrl) {
+      window.open(`${API_BASE}${directUrl}`, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const newTab = window.open('', '_blank');
+    setLoading(true);
+    setStatusMessage('Compiling tailored resume PDF…');
+    try {
+      const res = await fetch(`${API_BASE}/compile_master_pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resume_data: tailoredResumeData || resumeData,
+          job_title: jobTitle || 'Tailored Role',
+          company: company || '',
+        }),
+      });
+      if (!res.ok) throw new Error('PDF compilation failed');
+      const data = await res.json();
+      if (data.pdf_url) {
+        setAnalysisResult(prev => ({ ...prev, pdf_url: data.pdf_url }));
+        if (newTab) {
+          newTab.location.href = `${API_BASE}${data.pdf_url}`;
+        } else {
+          window.open(`${API_BASE}${data.pdf_url}`, '_blank', 'noopener,noreferrer');
+        }
+        setStatusMessage('Tailored PDF opened!');
+      } else if (newTab) {
+        newTab.close();
+      }
+    } catch (err) {
+      if (newTab) newTab.close();
+      setStatusMessage(`Failed to compile PDF: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper to dynamically deduce where in candidate's resume a missing skill will be injected
+  const getSkillTargetSection = (skillName) => {
+    if (!skillName) return 'Skills & Experience';
+    const s = skillName.toLowerCase();
+    const exps = resumeData?.experience || tailoredResumeData?.experience || [];
+    
+    // Check if skill aligns with specific employers or roles
+    for (const exp of exps) {
+      const co = (exp.company || '').toLowerCase();
+      const role = (exp.role || '').toLowerCase();
+      if ((s.includes('system') || s.includes('c++') || s.includes('hardware') || s.includes('kernel') || s.includes('embedded') || s.includes('linux') || s.includes('cuda') || s.includes('distributed')) && co.includes('qualcomm')) {
+        return `Appends under ${exp.company} (${exp.role || 'Systems'})`;
+      }
+      if ((s.includes('llm') || s.includes('genai') || s.includes('rag') || s.includes('nlp') || s.includes('agent') || s.includes('finetuning') || s.includes('langchain') || s.includes('prompt')) && (co.includes('axis') || role.includes('ai') || role.includes('engineer'))) {
+        return `Emphasizes in ${exp.company} (${exp.role || 'GenAI'})`;
+      }
+    }
+
+    if (exps.length > 0) {
+      if (s.includes('cloud') || s.includes('aws') || s.includes('docker') || s.includes('kubernetes') || s.includes('k8s') || s.includes('ci/cd') || s.includes('pipeline')) {
+        return `Injects into ${exps[0].company} & Projects`;
+      }
+      if (s.includes('c++') || s.includes('python') || s.includes('golang') || s.includes('rust') || s.includes('java') || s.includes('backend') || s.includes('api') || s.includes('rest') || s.includes('fastapi')) {
+        return `Enhances Core Skills & ${exps[0].company}`;
+      }
+    }
+
+    const projects = resumeData?.projects || tailoredResumeData?.projects || [];
+    if (projects.length > 0) {
+      return `Injects into Core Skills & ${projects[0].title || 'Projects'}`;
+    }
+
+    return 'Injects into Core Skills & Experience';
+  };
+
   // Generate personalized recruiter outreach message
   const handleGenerateOutreach = async () => {
     console.log('[handleGenerateOutreach] Called', {
@@ -1704,7 +1832,7 @@ function App() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontWeight: 800, fontSize: '1.25rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>✨ Master Resume Profile Updated</span>
+                  <span>Master Resume Profile Updated</span>
                 </div>
                 <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '3px' }}>
                   The AI enhancement has been incorporated into your master profile. Review the exact additions highlighted in green below:
@@ -1731,7 +1859,7 @@ function App() {
                 }}
                 onClick={() => setReviewModalTab('pdf')}
               >
-                📄 PDF Comparison (Before vs After)
+                PDF Comparison (Before vs After)
               </button>
               <button
                 className="btn btn-secondary"
@@ -1743,7 +1871,7 @@ function App() {
                 }}
                 onClick={() => setReviewModalTab('diff')}
               >
-                📊 Structured Diff View
+                Structured Diff View
               </button>
               {reviewedLatex && (
                 <button
@@ -1756,7 +1884,7 @@ function App() {
                   }}
                   onClick={() => setReviewModalTab('latex')}
                 >
-                  📝 LaTeX Source Code
+                  LaTeX Source Code
                 </button>
               )}
             </div>
@@ -1767,7 +1895,7 @@ function App() {
                 {beforePdfUrl && (
                   <div style={{ background: '#090D1A', padding: '12px', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#F87171', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>🔴 BEFORE (Previous Baseline PDF)</span>
+                      <span>BEFORE (Previous Baseline PDF)</span>
                       <a href={beforePdfUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', color: '#F87171', textDecoration: 'underline' }}>Open Full PDF ↗</a>
                     </div>
                     <iframe
@@ -1780,7 +1908,7 @@ function App() {
 
                 <div style={{ background: '#090D1A', padding: '12px', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.4)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#34D399', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>🟢 AFTER (Updated Auto-Applied PDF)</span>
+                    <span>AFTER (Updated Auto-Applied PDF)</span>
                     {afterPdfUrl && <a href={afterPdfUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', color: '#34D399', textDecoration: 'underline' }}>Open Full PDF ↗</a>}
                   </div>
                   {afterPdfUrl ? (
@@ -1811,7 +1939,7 @@ function App() {
                       showToast('LaTeX code copied to clipboard!', 'success');
                     }}
                   >
-                    📋 Copy LaTeX Code
+                    Copy LaTeX Code
                   </button>
                 </div>
                 <pre style={{
@@ -1926,7 +2054,7 @@ function App() {
                 style={{ padding: '10px 24px', fontSize: '0.9rem', fontWeight: 700 }}
                 onClick={() => setShowReviewModal(false)}
               >
-                ✓ Looks Good, Done
+                Looks Good, Done
               </button>
             </div>
           </div>
@@ -1934,43 +2062,43 @@ function App() {
       )}
 
       <header className="app-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, #38BDF8 0%, #2563EB 100%)',
+            width: '32px',
+            height: '32px',
+            borderRadius: '6px',
+            background: '#2563EB',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 0 16px rgba(56, 189, 248, 0.4)',
             color: '#FFFFFF'
           }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
               <line x1="16" y1="13" x2="8" y2="13"></line>
               <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
             </svg>
           </div>
           <div>
-            <h1 className="title" style={{ fontSize: '1.25rem', margin: 0 }}>
-              Resume Tailor Suite
+            <h1 className="title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 700, letterSpacing: '-0.02em' }}>
+              JobFinder <span style={{ color: '#38BDF8', fontWeight: 500, fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}>Pro v3.0</span>
             </h1>
-            <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--accent-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              Enterprise Career Intelligence
+            <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+              Autonomous ATS Tailoring Engine
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {/* Hugging Face / Backend Health Badge */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '4px 10px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: 600,
-            background: backendHealth === 'healthy' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.15)',
-            border: `1px solid ${backendHealth === 'healthy' ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.3)'}`,
-            color: backendHealth === 'healthy' ? 'var(--accent-green)' : 'var(--accent-amber)',
+            padding: '3px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600,
+            background: backendHealth === 'healthy' ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.15)',
+            border: `1px solid ${backendHealth === 'healthy' ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`,
+            color: backendHealth === 'healthy' ? '#10B981' : '#F59E0B',
+            fontFamily: 'var(--font-mono)',
             cursor: 'default'
           }} title={
             backendHealth === 'healthy'
@@ -1979,11 +2107,9 @@ function App() {
           }>
             <span style={{
               width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
-              background: backendHealth === 'healthy' ? 'var(--accent-green)' : 'var(--accent-amber)',
-              boxShadow: backendHealth === 'healthy' ? '0 0 8px rgba(16,185,129,0.6)' : '0 0 8px rgba(245,158,11,0.6)',
-              animation: backendHealth === 'healthy' ? 'none' : 'pulseGlow 1.5s infinite'
+              background: backendHealth === 'healthy' ? '#10B981' : '#F59E0B'
             }} />
-            {backendHealth === 'healthy' ? 'HF Space Active' : 'HF Warming Up...'}
+            {backendHealth === 'healthy' ? 'Engine Online' : 'Warming Up…'}
           </div>
 
           {statusMessage && (
@@ -2035,7 +2161,7 @@ function App() {
             }}
             title="View Setup Guide & Documentation"
           >
-            <span>📖</span>
+            
             <span>Docs & Guide</span>
           </button>
 
@@ -2061,7 +2187,7 @@ function App() {
                 }}
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
               >
-                <span>👤</span>
+                
                 <span style={{ color: '#fff' }}>{user.email ? user.email.split("@")[0] : "Account"}</span>
                 <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{profileDropdownOpen ? "▲" : "▼"}</span>
               </button>
@@ -2106,7 +2232,7 @@ function App() {
                       setProfileDropdownOpen(false);
                     }}
                   >
-                    <span>⚡ 1-Click Auto-Sync & Download</span>
+                    <span>1-Click Auto-Sync & Download</span>
                   </button>
 
                   <button
@@ -2117,7 +2243,7 @@ function App() {
                       setProfileDropdownOpen(false);
                     }}
                   >
-                    <span>📖 Setup Instructions</span>
+                    <span>Setup Instructions</span>
                   </button>
 
                   <button
@@ -2167,7 +2293,7 @@ function App() {
 
             {/* Value props */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {['🎯 Keyword-matched ATS scoring', '✍️ AI-tailored LaTeX resume & cover letter', '🔍 Recruiter truthfulness validation', '📄 One-click Overleaf export'].map(item => (
+              {['Keyword-matched ATS scoring', 'AI-tailored LaTeX resume & cover letter', '🔍 Recruiter truthfulness validation', '📄 One-click Overleaf export'].map(item => (
                 <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.84rem', color: 'var(--text-muted)', padding: '7px 12px', background: 'var(--panel-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   {item}
                 </div>
@@ -2225,9 +2351,19 @@ function App() {
             gap: '20px',
             padding: '32px'
           }}>
-            <div>
-              <h2 style={{ marginBottom: '4px' }}>Setup & Configuration</h2>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.87rem' }}>Configure your AI key and upload your master resume to get started.</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h2 style={{ marginBottom: '4px' }}>Setup & Configuration</h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.87rem' }}>Configure your AI key and upload your master resume to get started.</p>
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '6px 10px', fontSize: '0.78rem', borderRadius: '6px' }}
+                onClick={() => setConfigStepActive(false)}
+                title="Exit configuration modal"
+              >
+                ✕
+              </button>
             </div>
 
             {/* API Key section */}
@@ -2240,7 +2376,7 @@ function App() {
                   rel="noopener noreferrer"
                   style={{ fontSize: '0.73rem', color: 'var(--accent-secondary)', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '3px' }}
                 >
-                  🔑 Get Free Gemini Key from Google ↗
+                  Get Free Gemini Key from Google ↗
                 </a>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -2273,7 +2409,15 @@ function App() {
                 <input type="file" accept=".tex,.pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
                 {resumeData ? (
                   <>
-                    <div style={{ fontSize: '1.5rem' }}>✅</div>
+                    <div style={{
+                      width: '38px', height: '38px', borderRadius: '50%',
+                      background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-green)'
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                    </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 700, color: 'var(--accent-green)', fontSize: '0.92rem' }}>{resumeData.name}</div>
                       <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>Click to replace master resume (.TEX, .PDF, .DOCX)</div>
@@ -2281,7 +2425,18 @@ function App() {
                   </>
                 ) : (
                   <>
-                    <div style={{ fontSize: '1.5rem' }}>📄</div>
+                    <div style={{
+                      width: '42px', height: '42px', borderRadius: '10px',
+                      background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38BDF8'
+                    }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="12" y1="18" x2="12" y2="12"></line>
+                        <line x1="9" y1="15" x2="15" y2="15"></line>
+                      </svg>
+                    </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Drop your resume here or click to browse</div>
                       <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '3px' }}>LaTeX (.tex), PDF, or DOCX — becomes your master profile</div>
@@ -2314,7 +2469,7 @@ function App() {
                         const data = await res.json();
                         if (data.url) {
                           window.open(data.url, '_blank');
-                          setStatusMessage('✅ Master Resume opened in Overleaf!');
+                          setStatusMessage('Master Resume opened in Overleaf!');
                         }
                       } catch (err) {
                         setStatusMessage(`Failed to open in Overleaf: ${err.message}`);
@@ -2323,7 +2478,7 @@ function App() {
                       }
                     }}
                   >
-                    🍃 Open Master in Overleaf
+                    Open Master in Overleaf
                   </button>
                   <button
                     className="btn btn-secondary"
@@ -2359,7 +2514,7 @@ function App() {
                         const data = await res.json();
                         if (data.pdf_url) {
                           window.open(`${API_BASE}${data.pdf_url}`, '_blank');
-                          setStatusMessage('📄 Master PDF opened!');
+                          setStatusMessage('Master PDF opened!');
                         }
                       } catch (err) {
                         setStatusMessage(`Failed to compile Master PDF: ${err.message}`);
@@ -2368,47 +2523,75 @@ function App() {
                       }
                     }}
                   >
-                    📄 View Compiled Master PDF
+                    View Compiled Master PDF
                   </button>
                 </div>
               )}
             </div>
 
-            {/* Chrome Extension Pairing Key Card (hidden for now) */}
-            {/*
-            <div style={{
-              background: 'rgba(56, 189, 248, 0.05)',
-              borderRadius: '12px',
-              padding: '14px 16px',
-              border: '1px solid rgba(56, 189, 248, 0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px'
-            }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  ⚡ Chrome Extension Sync Key
+              {/* Candidate Identity & Contact Telemetry (when master resume is parsed) */}
+              {resumeData && (resumeData.name || resumeData.email || resumeData.phone || resumeData.location || resumeData.experience_years) && (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#38bdf8' }}>
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                      Candidate Telemetry
+                    </div>
+                    {resumeData.experience_years && (
+                      <span style={{
+                        fontSize: '0.70rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        background: 'rgba(56, 189, 248, 0.12)',
+                        color: '#38bdf8',
+                        border: '1px solid rgba(56, 189, 248, 0.25)',
+                        fontFamily: 'var(--font-mono)'
+                      }}>
+                        {resumeData.experience_years}+ Yrs Exp
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
+                    {resumeData.name && (
+                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Name</div>
+                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.name}</div>
+                      </div>
+                    )}
+                    {resumeData.email && (
+                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Email</div>
+                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={resumeData.email}>{resumeData.email}</div>
+                      </div>
+                    )}
+                    {resumeData.phone && (
+                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Phone</div>
+                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.phone}</div>
+                      </div>
+                    )}
+                    {resumeData.location && (
+                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Location</div>
+                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.location}</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Enter this 6-digit key in the Chrome Extension to pair your account instantly.
-                </div>
-              </div>
-              <div style={{
-                fontSize: '1.1rem',
-                fontWeight: 800,
-                color: '#38bdf8',
-                background: 'rgba(56, 189, 248, 0.12)',
-                border: '1px solid rgba(56, 189, 248, 0.3)',
-                padding: '6px 14px',
-                borderRadius: '8px',
-                letterSpacing: '2px',
-                fontFamily: 'monospace'
-              }}>
-                {(user && user.sync_code) ? user.sync_code : 'GUEST1'}
-              </div>
-            </div>
-            */}
+              )}
+
 
             {/* Daily Cron Match Mailer Subscription settings */}
             <div style={{ border: '1px solid rgba(56, 189, 248, 0.1)', borderRadius: '12px', overflow: 'hidden', background: 'rgba(56, 189, 248, 0.03)' }}>
@@ -2418,7 +2601,7 @@ function App() {
                   style={{ padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none', gap: '12px' }}
                 >
                   <div style={{ flexGrow: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.94rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>📬 Daily Job Match Mailer</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.94rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>Daily Job Match Mailer</div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '3px', lineHeight: '1.4' }}>Get daily lists matching your resume automatically.</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
@@ -2502,7 +2685,7 @@ function App() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', marginTop: '4px' }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.78rem', color: '#fff' }}>📧 Email Tailored PDF Resumes</div>
+                        <div style={{ fontWeight: 600, fontSize: '0.78rem', color: '#fff' }}>Email Tailored PDF Resumes</div>
                         <div style={{ fontSize: '0.70rem', color: 'var(--text-muted)', marginTop: '1px' }}>Automatically email PDF attachment when tailoring via website.</div>
                       </div>
                       <label
@@ -2558,7 +2741,7 @@ function App() {
                         }
                       }}
                     >
-                      📬 Send Daily Digest Now
+                      Send Daily Digest Now
                     </button>
                   </div>
                 )}
@@ -2582,7 +2765,7 @@ function App() {
                 style={{ padding: '12px 14px', flex: 1, fontSize: '0.88rem', borderColor: 'var(--accent-red)', color: 'var(--accent-red)' }}
                 onClick={handleClearCache}
               >
-                🧹 Clear Caches & Data
+                Clear Caches & Data
               </button>
               <button
                 className="btn"
@@ -2605,7 +2788,7 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>📊 Master Resume ATS Health Score</span>
+                    <span>Master Resume ATS Health Score</span>
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                     Baseline evaluation calculated before job tailoring
@@ -2648,7 +2831,7 @@ function App() {
                   border: '1px solid rgba(255,255,255,0.06)'
                 }}>
                   <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    🔍 Detected Skills Profile
+                    Detected Skills Profile
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     {(showAllSkills ? resumeData.skills : resumeData.skills.slice(0, 12)).map((skill, i) => {
@@ -2710,7 +2893,7 @@ function App() {
               {resumeEvaluation.suggestions && resumeEvaluation.suggestions.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                   <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                    💡 Recommended Master Playbook Enhancements:
+                    Recommended Master Playbook Enhancements:
                   </div>
                   {resumeEvaluation.suggestions.map((sug, idx) => (
                     <div key={idx} style={{
@@ -2747,7 +2930,7 @@ function App() {
                           const needsUserInput = /phone|mobile|number|email|address|contact|location|linkedin|github|quantify|metric|impact|scale|volume|financial|dollars|\$/i.test(sug);
                           if (needsUserInput) {
                             setApplyingSugIdx(idx);
-                            setStatusMessage('🧠 Analyzing recommendation details...');
+                            setStatusMessage('Analyzing recommendation details...');
                             try {
                               const pRes = await fetch(`${API_BASE}/user/generate_prompt_query`, {
                                 method: 'POST',
@@ -2805,7 +2988,7 @@ function App() {
                               setAfterPdfUrl(body.after_pdf_url ? `${API_BASE}${body.after_pdf_url}` : null);
                               setReviewModalTab(body.after_pdf_url ? 'pdf' : 'diff');
                               setShowReviewModal(true);
-                              setStatusMessage('✨ Master resume profile updated successfully!');
+                              setStatusMessage('Master resume profile updated successfully!');
                             } else {
                               throw new Error('Failed to update resume');
                             }
@@ -2816,7 +2999,7 @@ function App() {
                           }
                         }}
                       >
-                        {applyingSugIdx === idx ? '⏳ Applying…' : '✨ Auto-Apply'}
+                        {applyingSugIdx === idx ? 'Applying…' : 'Auto-Apply'}
                       </button>
                     </div>
                   ))}
@@ -2922,11 +3105,15 @@ function App() {
               <h2 style={{ marginBottom: 0 }}>Active Profile</h2>
               <button
                 className="btn btn-secondary"
-                style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                style={{ padding: '5px 10px', fontSize: '0.74rem', gap: '6px' }}
                 onClick={() => setConfigStepActive(true)}
                 aria-label="Open settings"
               >
-                ⚙️ Settings
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+                <span>Settings</span>
               </button>
             </div>
 
@@ -2987,76 +3174,69 @@ function App() {
 
             {/* ATS Performance Widget matching Enterprise Design */}
             <div style={{
-              background: 'rgba(10, 15, 29, 0.7)',
-              border: '1px solid rgba(56, 189, 248, 0.15)',
-              borderRadius: '14px',
-              padding: '16px',
+              background: 'var(--panel-bg-subtle)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              padding: '14px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '12px',
-              boxShadow: '0 4px 20px -5px rgba(0,0,0,0.5)'
+              gap: '12px'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
                   ATS Performance
                 </span>
                 <span style={{
                   fontSize: '0.68rem',
                   fontWeight: 700,
                   padding: '2px 8px',
-                  borderRadius: '12px',
-                  background: 'rgba(16, 185, 129, 0.15)',
-                  color: '#34d399',
-                  border: '1px solid rgba(16, 185, 129, 0.3)'
+                  borderRadius: '4px',
+                  background: 'rgba(16, 185, 129, 0.12)',
+                  color: '#10B981',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  fontFamily: 'var(--font-mono)'
                 }}>
                   {resumeEvaluation ? `${resumeEvaluation.ats_score || 93}% Match` : 'Calibrated'}
                 </span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                {/* Glowing Semi-Circle / Circle Dial */}
-                <div style={{ position: 'relative', width: '90px', height: '90px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg width="90" height="90" viewBox="0 0 90 90">
-                    <circle cx="45" cy="45" r="36" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="7" />
+                {/* Minimalist Precision Gauge */}
+                <div style={{ position: 'relative', width: '84px', height: '84px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="84" height="84" viewBox="0 0 84 84">
+                    <circle cx="42" cy="42" r="34" fill="none" stroke="#1E293B" strokeWidth="6" />
                     <circle
-                      cx="45" cy="45" r="36" fill="none"
-                      stroke="url(#atsScoreGradient)"
-                      strokeWidth="7"
-                      strokeDasharray={`${((resumeEvaluation?.ats_score || 93) / 100) * (2 * Math.PI * 36)} ${2 * Math.PI * 36}`}
+                      cx="42" cy="42" r="34" fill="none"
+                      stroke="#10B981"
+                      strokeWidth="6"
+                      strokeDasharray={`${((resumeEvaluation?.ats_score || 93) / 100) * (2 * Math.PI * 34)} ${2 * Math.PI * 34}`}
                       strokeLinecap="round"
-                      transform="rotate(-90 45 45)"
-                      style={{ filter: 'drop-shadow(0 0 8px rgba(56, 189, 248, 0.6))' }}
+                      transform="rotate(-90 42 42)"
                     />
-                    <defs>
-                      <linearGradient id="atsScoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#38bdf8" />
-                        <stop offset="100%" stopColor="#10b981" />
-                      </linearGradient>
-                    </defs>
                   </svg>
                   <div style={{ position: 'absolute', textAlign: 'center' }}>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#FFFFFF', lineHeight: 1 }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1, fontFamily: 'var(--font-mono)' }}>
                       {resumeEvaluation?.ats_score || 93}%
                     </div>
-                    <div style={{ fontSize: '0.55rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginTop: '2px' }}>
+                    <div style={{ fontSize: '0.52rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.04em' }}>
                       Overall
                     </div>
                   </div>
                 </div>
 
                 {/* Performance Metrics Breakdown */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
-                    <span style={{ color: '#94a3b8' }}>Readability:</span>
-                    <span style={{ fontWeight: 700, color: '#34d399' }}>96%</span>
+                    <span style={{ color: '#94a3b8' }}>Readability</span>
+                    <span style={{ fontWeight: 600, color: '#10B981', fontFamily: 'var(--font-mono)' }}>96%</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
-                    <span style={{ color: '#94a3b8' }}>Keywords:</span>
-                    <span style={{ fontWeight: 700, color: '#38bdf8' }}>{resumeEvaluation ? `${resumeEvaluation.skills_count ? Math.min(99, resumeEvaluation.skills_count * 5) : 91}%` : '91%'}</span>
+                    <span style={{ color: '#94a3b8' }}>Keywords</span>
+                    <span style={{ fontWeight: 600, color: '#38BDF8', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation ? `${resumeEvaluation.skills_count ? Math.min(99, resumeEvaluation.skills_count * 5) : 91}%` : '91%'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
-                    <span style={{ color: '#94a3b8' }}>Formatting:</span>
-                    <span style={{ fontWeight: 700, color: '#34d399' }}>95%</span>
+                    <span style={{ color: '#94a3b8' }}>Formatting</span>
+                    <span style={{ fontWeight: 600, color: '#10B981', fontFamily: 'var(--font-mono)' }}>95%</span>
                   </div>
                 </div>
               </div>
@@ -3066,108 +3246,117 @@ function App() {
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
-              gap: '8px',
-              borderRadius: '12px',
-              background: 'rgba(0, 0, 0, 0.25)',
-              padding: '6px',
-              border: '1px solid rgba(255, 255, 255, 0.07)',
-              marginTop: '4px'
+              gap: '6px',
+              borderRadius: '8px',
+              background: '#0B1220',
+              padding: '5px',
+              border: '1px solid var(--border-color)',
+              marginTop: '2px'
             }}>
               <button
                 className={`mode-btn ${dashboardMode === 'master' ? 'active' : ''}`}
                 style={{
-                  padding: '9px 12px',
-                  fontSize: '0.82rem',
-                  borderRadius: '9px',
-                  fontWeight: 700,
-                  border: '1px solid ' + (dashboardMode === 'master' ? 'rgba(56, 189, 248, 0.4)' : 'transparent'),
-                  background: dashboardMode === 'master' ? 'rgba(37, 99, 235, 0.22)' : 'transparent',
+                  padding: '8px 10px',
+                  fontSize: '0.78rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: '1px solid ' + (dashboardMode === 'master' ? '#2563EB' : 'transparent'),
+                  background: dashboardMode === 'master' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
                   color: dashboardMode === 'master' ? '#FFFFFF' : 'var(--text-muted)',
                   cursor: 'pointer',
-                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  transition: 'all 0.15s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '7px',
-                  boxShadow: dashboardMode === 'master' ? '0 2px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  gap: '6px'
                 }}
                 onClick={() => {
                   setDashboardMode('master');
                   setIsDiscoveryView(false);
                 }}
               >
-                <span style={{ fontSize: '0.95rem' }}>📊</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="3" y1="9" x2="21" y2="9"></line>
+                  <line x1="9" y1="21" x2="9" y2="9"></line>
+                </svg>
                 <span>Master Profile</span>
               </button>
               <button
                 className={`mode-btn ${dashboardMode === 'tailor' ? 'active' : ''}`}
                 style={{
-                  padding: '9px 12px',
-                  fontSize: '0.82rem',
-                  borderRadius: '9px',
-                  fontWeight: 700,
-                  border: '1px solid ' + (dashboardMode === 'tailor' ? 'rgba(56, 189, 248, 0.4)' : 'transparent'),
-                  background: dashboardMode === 'tailor' ? 'rgba(37, 99, 235, 0.22)' : 'transparent',
+                  padding: '8px 10px',
+                  fontSize: '0.78rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: '1px solid ' + (dashboardMode === 'tailor' ? '#2563EB' : 'transparent'),
+                  background: dashboardMode === 'tailor' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
                   color: dashboardMode === 'tailor' ? '#FFFFFF' : 'var(--text-muted)',
                   cursor: 'pointer',
-                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  transition: 'all 0.15s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '7px',
-                  boxShadow: dashboardMode === 'tailor' ? '0 2px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  gap: '6px'
                 }}
                 onClick={() => {
                   setDashboardMode('tailor');
                   setIsDiscoveryView(false);
                 }}
               >
-                <span style={{ fontSize: '0.95rem' }}>🎯</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="22" y1="12" x2="18" y2="12"></line>
+                  <line x1="6" y1="12" x2="2" y2="12"></line>
+                  <line x1="12" y1="6" x2="12" y2="2"></line>
+                  <line x1="12" y1="22" x2="12" y2="18"></line>
+                </svg>
                 <span>Tailor Resume</span>
               </button>
               <button
                 className={`mode-btn ${dashboardMode === 'discover' ? 'active' : ''}`}
                 style={{
-                  padding: '9px 12px',
-                  fontSize: '0.82rem',
-                  borderRadius: '9px',
-                  fontWeight: 700,
-                  border: '1px solid ' + (dashboardMode === 'discover' ? 'rgba(56, 189, 248, 0.4)' : 'transparent'),
-                  background: dashboardMode === 'discover' ? 'rgba(37, 99, 235, 0.22)' : 'transparent',
+                  padding: '8px 10px',
+                  fontSize: '0.78rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: '1px solid ' + (dashboardMode === 'discover' ? '#2563EB' : 'transparent'),
+                  background: dashboardMode === 'discover' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
                   color: dashboardMode === 'discover' ? '#FFFFFF' : 'var(--text-muted)',
                   cursor: 'pointer',
-                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  transition: 'all 0.15s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '7px',
-                  boxShadow: dashboardMode === 'discover' ? '0 2px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  gap: '6px'
                 }}
                 onClick={() => {
                   setDashboardMode('discover');
                   setIsDiscoveryView(true);
                 }}
               >
-                <span style={{ fontSize: '0.95rem' }}>🔍</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
                 <span>Discover Jobs</span>
               </button>
               <button
                 className={`mode-btn ${dashboardMode === 'history' ? 'active' : ''}`}
                 style={{
-                  padding: '9px 12px',
-                  fontSize: '0.82rem',
-                  borderRadius: '9px',
-                  fontWeight: 700,
-                  border: '1px solid ' + (dashboardMode === 'history' ? 'rgba(56, 189, 248, 0.4)' : 'transparent'),
-                  background: dashboardMode === 'history' ? 'rgba(37, 99, 235, 0.22)' : 'transparent',
+                  padding: '8px 10px',
+                  fontSize: '0.78rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: '1px solid ' + (dashboardMode === 'history' ? '#2563EB' : 'transparent'),
+                  background: dashboardMode === 'history' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
                   color: dashboardMode === 'history' ? '#FFFFFF' : 'var(--text-muted)',
                   cursor: 'pointer',
-                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  transition: 'all 0.15s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '7px',
-                  boxShadow: dashboardMode === 'history' ? '0 2px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  gap: '6px'
                 }}
                 onClick={() => {
                   setDashboardMode('history');
@@ -3175,7 +3364,10 @@ function App() {
                   handleFetchHistory();
                 }}
               >
-                <span style={{ fontSize: '0.95rem' }}>🕘</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                  <circle cx="12" cy="12" r="10"></circle>
+                </svg>
                 <span>History</span>
               </button>
             </div>
@@ -3201,40 +3393,56 @@ function App() {
                 onClick={() => { setDashboardMode('tailor'); setIsDiscoveryView(false); }}
                 style={{
                   flex: 1, background: 'none', border: 'none', color: dashboardMode === 'tailor' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600,
+                  cursor: 'pointer'
                 }}
               >
-                <span style={{ fontSize: '1.2rem' }}>🎯</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <circle cx="12" cy="12" r="6"></circle>
+                  <circle cx="12" cy="12" r="2"></circle>
+                </svg>
                 Tailor
               </button>
               <button
                 onClick={() => { setDashboardMode('discover'); setIsDiscoveryView(true); }}
                 style={{
                   flex: 1, background: 'none', border: 'none', color: dashboardMode === 'discover' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600,
+                  cursor: 'pointer'
                 }}
               >
-                <span style={{ fontSize: '1.2rem' }}>🔍</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
                 Discover
               </button>
               <button
                 onClick={() => { setDashboardMode('history'); setIsDiscoveryView(false); handleFetchHistory(); }}
                 style={{
                   flex: 1, background: 'none', border: 'none', color: dashboardMode === 'history' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600,
+                  cursor: 'pointer'
                 }}
               >
-                <span style={{ fontSize: '1.2rem' }}>📂</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                </svg>
                 History
               </button>
               <button
                 onClick={() => { setDashboardMode('docs'); setIsDiscoveryView(false); window.history.pushState(null, '', '/docs'); }}
                 style={{
                   flex: 1, background: 'none', border: 'none', color: dashboardMode === 'docs' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: 600
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 600,
+                  cursor: 'pointer'
                 }}
               >
-                <span style={{ fontSize: '1.2rem' }}>📖</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                </svg>
                 Docs
               </button>
             </div>
@@ -3251,6 +3459,8 @@ function App() {
                   setJobUrl={handleJobUrlChange}
                   jobTitle={jobTitle}
                   setJobTitle={setJobTitle}
+                  company={company}
+                  setCompany={setCompany}
                   jobDescription={jobDescription}
                   setJobDescription={setJobDescription}
                   analysisResult={analysisResult}
@@ -3293,6 +3503,186 @@ function App() {
                 />
               </Suspense>
             )}
+            {dashboardMode === 'master' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', animation: 'fadeIn 0.25s ease' }}>
+                <div className="section-label">Master Profile Controls</div>
+                
+                {/* Upload & Re-calibrate Box */}
+                <label style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                  padding: '18px 16px', borderRadius: '10px', cursor: 'pointer',
+                  border: resumeData ? '1.5px solid rgba(16,185,129,0.35)' : '1.5px dashed var(--border-color)',
+                  background: resumeData ? 'rgba(16,185,129,0.04)' : 'rgba(255,255,255,0.02)',
+                  transition: 'all 0.2s ease',
+                  textAlign: 'center'
+                }}>
+                  <input type="file" accept=".tex,.pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '8px',
+                    background: resumeData ? 'rgba(16,185,129,0.15)' : 'rgba(56,189,248,0.1)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: resumeData ? '#34D399' : '#38BDF8'
+                  }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: resumeData ? '#34D399' : '#FFFFFF' }}>
+                      {resumeData ? resumeData.name : 'Upload Master Resume'}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      {resumeData ? 'Click to replace (.TEX, .PDF, .DOCX)' : 'Drop .TEX, .PDF, or .DOCX to calibrate'}
+                    </div>
+                  </div>
+                </label>
+
+                {/* Master Resume Action Buttons */}
+                {resumeData && (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      className="btn btn-secondary"
+                      disabled={loading}
+                      style={{ flex: 1, padding: '8px 10px', fontSize: '0.75rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        setLoading(true);
+                        setStatusMessage('Preparing Master Resume LaTeX for Overleaf…');
+                        try {
+                          const res = await fetch(`${API_BASE}/open_original_in_overleaf`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              resume_data: resumeData,
+                              job_title: 'Master Resume',
+                              company: '',
+                            }),
+                          });
+                          if (!res.ok) throw new Error('Overleaf export failed');
+                          const data = await res.json();
+                          if (data.url) {
+                            window.open(data.url, '_blank');
+                            setStatusMessage('Master Resume opened in Overleaf!');
+                          }
+                        } catch (err) {
+                          setStatusMessage(`Failed to open in Overleaf: ${err.message}`);
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      title="Export Master Resume to Overleaf"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                        <polyline points="15 3 21 3 21 9"></polyline>
+                        <line x1="10" y1="14" x2="21" y2="3"></line>
+                      </svg>
+                      Overleaf
+                    </button>
+
+                    <button
+                      className="btn btn-secondary"
+                      disabled={loading}
+                      style={{
+                        flex: 1, padding: '8px 10px', fontSize: '0.75rem', fontWeight: 600,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
+                        background: 'rgba(56, 189, 248, 0.12)', color: '#38BDF8', borderColor: 'rgba(56, 189, 248, 0.3)'
+                      }}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        setLoading(true);
+                        setStatusMessage('Compiling Master Resume PDF…');
+                        try {
+                          const res = await fetch(`${API_BASE}/compile_master_pdf`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              resume_data: resumeData,
+                              job_title: 'Master Resume',
+                              company: '',
+                            }),
+                          });
+                          if (!res.ok) throw new Error('Master PDF compilation failed');
+                          const data = await res.json();
+                          if (data.pdf_url) {
+                            window.open(`${API_BASE}${data.pdf_url}`, '_blank');
+                            setStatusMessage('Master PDF opened!');
+                          }
+                        } catch (err) {
+                          setStatusMessage(`Failed to compile Master PDF: ${err.message}`);
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      title="View compiled 1-page PDF"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                      </svg>
+                      View PDF
+                    </button>
+                  </div>
+                )}
+
+                {/* Candidate Contact Telemetry */}
+                {resumeData && (
+                  <div style={{
+                    background: 'rgba(0,0,0,0.25)',
+                    borderRadius: '10px',
+                    padding: '12px 14px',
+                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Profile Telemetry
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.74rem' }}>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.66rem' }}>Experience</div>
+                        <div style={{ fontWeight: 600, color: '#fff', marginTop: '1px' }}>
+                          {resumeEvaluation?.candidate_years ? `${resumeEvaluation.candidate_years} Years` : 'Calibrated'}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.66rem' }}>Quantified Bullets</div>
+                        <div style={{ fontWeight: 600, color: '#34D399', marginTop: '1px' }}>
+                          {resumeEvaluation ? `${resumeEvaluation.quantified_percentage}%` : 'High'}
+                        </div>
+                      </div>
+                      {resumeData.email && (
+                        <div style={{ gridColumn: 'span 2' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.66rem' }}>Contact</div>
+                          <div style={{ fontWeight: 500, color: '#94A3B8', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {resumeData.email}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick CTA to jump into Tailoring */}
+                <button
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '10px', fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  onClick={() => {
+                    setDashboardMode('tailor');
+                    setIsDiscoveryView(false);
+                  }}
+                >
+                  <span>Target Active Job</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                    <polyline points="12 5 19 12 12 19"></polyline>
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Right Analysis Panel */}
@@ -3301,9 +3691,11 @@ function App() {
               <h2 style={{ marginBottom: 0 }}>
                 {dashboardMode === 'history'
                   ? 'Application History'
-                  : isDiscoveryView
-                    ? `Job Discoveries (${searchTimeframe === '24h' ? 'Last 24h' : searchTimeframe === '48h' ? 'Last 48h' : searchTimeframe === '1w' ? 'Last 1 Week' : 'Last 1 Month'})`
-                    : 'Analysis & Preview'}
+                  : dashboardMode === 'master'
+                    ? 'Master Profile Overview'
+                    : isDiscoveryView
+                      ? `Job Discoveries (${searchTimeframe === '24h' ? 'Last 24h' : searchTimeframe === '48h' ? 'Last 48h' : searchTimeframe === '1w' ? 'Last 1 Week' : 'Last 1 Month'})`
+                      : 'Analysis & Preview'}
               </h2>
               {dashboardMode !== 'history' && (analysisResult || isDiscoveryView) && (
                 <button
@@ -3357,7 +3749,7 @@ function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontWeight: 800, fontSize: '0.98rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>👥 Master Profile Archetypes</span>
+                        <span>Master Profile Archetypes</span>
                       </div>
                       <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                         Save and toggle distinct base profiles (e.g. GenAI vs. Data Science vs. Backend SWE)
@@ -3445,7 +3837,7 @@ function App() {
                       onClick={handleSaveArchetype}
                       style={{ padding: '7px 14px', fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap' }}
                     >
-                      {archetypeLoading ? '⏳ Saving...' : '💾 Save as Archetype'}
+                      {archetypeLoading ? 'Saving...' : 'Save Archetype'}
                     </button>
                   </div>
                 </div>
@@ -3464,7 +3856,7 @@ function App() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>📊 Master Resume ATS Health Score</span>
+                          <span>Master Resume ATS Health Score</span>
                         </div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                           Baseline evaluation calculated before job tailoring
@@ -3501,7 +3893,7 @@ function App() {
                     {resumeEvaluation.suggestions && resumeEvaluation.suggestions.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                         <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                          💡 Recommended Master Playbook Enhancements:
+                          Recommended Master Playbook Enhancements:
                         </div>
                         {resumeEvaluation.suggestions.map((sug, idx) => (
                           <div key={idx} style={{
@@ -3538,7 +3930,7 @@ function App() {
                                 const needsUserInput = /phone|mobile|number|email|address|contact|location|linkedin|github|quantify|metric|impact|scale|volume|financial|dollars|\$/i.test(sug);
                                 if (needsUserInput) {
                                   setApplyingSugIdx(idx);
-                                  setStatusMessage('🧠 Analyzing recommendation details...');
+                                  setStatusMessage('Analyzing recommendation details...');
                                   try {
                                     const pRes = await fetch(`${API_BASE}/user/generate_prompt_query`, {
                                       method: 'POST',
@@ -3596,7 +3988,7 @@ function App() {
                                     };
                                     setResumeEvaluation(updatedEvaluation);
                                     setShowReviewModal(true);
-                                    setStatusMessage('✨ Master resume profile updated successfully!');
+                                    setStatusMessage('Master resume profile updated successfully!');
                                   } else {
                                     throw new Error('Failed to update resume');
                                   }
@@ -3607,7 +3999,7 @@ function App() {
                                 }
                               }}
                             >
-                              {applyingSugIdx === idx ? '⏳ Applying…' : '✨ Auto-Apply'}
+                              {applyingSugIdx === idx ? 'Applying…' : 'Auto-Apply'}
                             </button>
                           </div>
                         ))}
@@ -3652,7 +4044,7 @@ function App() {
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                           <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span>🚀 Ready for instant 1-click tailoring against active job descriptions.</span>
+                            <span>Ready for instant 1-click tailoring against active job descriptions.</span>
                           </div>
                           <button
                             className="btn btn-primary"
@@ -3731,7 +4123,7 @@ function App() {
                 </div>
               ) : applicationHistory.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-state-icon">🕘</div>
+                  <div className="empty-state-icon">[HISTORY]</div>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>No history yet</div>
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Tailor a resume or apply to a job to see it recorded here.</div>
@@ -3749,27 +4141,29 @@ function App() {
                     const appliedPct = Math.round((appliedCount / total) * 100);
 
                     return (
-                      <div className="card" style={{ padding: '14px', background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.8))', border: '1px solid rgba(56, 189, 248, 0.15)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📊 Application Pipeline Funnel</div>
+                      <div className="card" style={{ padding: '14px', background: 'var(--panel-bg-subtle)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'var(--font-mono)' }}>
+                          Application Pipeline Funnel
+                        </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
-                              <span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>🎯 Resumes Tailored</span>
-                              <span style={{ color: '#fff', fontWeight: 700 }}>{tailoredCount} ({tailoredPct}%)</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '4px' }}>
+                              <span style={{ color: '#38BDF8', fontWeight: 600 }}>Tailored Resumes</span>
+                              <span style={{ color: '#fff', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{tailoredCount} ({tailoredPct}%)</span>
                             </div>
-                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${tailoredPct}%`, background: 'var(--accent-cyan)', borderRadius: '999px' }} />
+                            <div style={{ height: '5px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${tailoredPct}%`, background: '#38BDF8', borderRadius: '4px' }} />
                             </div>
                           </div>
 
                           <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
-                              <span style={{ color: 'var(--accent-green)', fontWeight: 600 }}>✅ Submitted / Applied</span>
-                              <span style={{ color: '#fff', fontWeight: 700 }}>{appliedCount} ({appliedPct}%)</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '4px' }}>
+                              <span style={{ color: '#10B981', fontWeight: 600 }}>Submitted Applications</span>
+                              <span style={{ color: '#fff', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{appliedCount} ({appliedPct}%)</span>
                             </div>
-                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${appliedPct}%`, background: 'var(--accent-green)', borderRadius: '999px' }} />
+                            <div style={{ height: '5px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${appliedPct}%`, background: '#10B981', borderRadius: '4px' }} />
                             </div>
                           </div>
                         </div>
@@ -3779,15 +4173,16 @@ function App() {
 
                   {/* Filter / Sort Control Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 2px', flexWrap: 'wrap', gap: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Filter:</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter:</span>
                       <button
                         onClick={() => setHistoryFilter('all')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'all' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)',
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'all' ? '#2563EB' : 'rgba(255,255,255,0.03)',
                           color: historyFilter === 'all' ? '#fff' : 'var(--text-muted)',
-                          border: historyFilter === 'all' ? '1px solid var(--accent-primary)' : '1px solid rgba(255,255,255,0.1)'
+                          border: historyFilter === 'all' ? '1px solid #2563EB' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
                         All ({applicationHistory.length})
@@ -3795,57 +4190,62 @@ function App() {
                       <button
                         onClick={() => setHistoryFilter('tailored')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'tailored' ? '#7dd3fc22' : 'rgba(255,255,255,0.05)',
-                          color: historyFilter === 'tailored' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                          border: historyFilter === 'tailored' ? '1px solid var(--accent-cyan)' : '1px solid rgba(255,255,255,0.1)'
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'tailored' ? 'rgba(56,189,248,0.2)' : 'rgba(255,255,255,0.03)',
+                          color: historyFilter === 'tailored' ? '#38BDF8' : 'var(--text-muted)',
+                          border: historyFilter === 'tailored' ? '1px solid #38BDF8' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
-                        🎯 Tailored ({applicationHistory.filter(e => e.status !== 'applied').length})
+                        Tailored ({applicationHistory.filter(e => e.status !== 'applied').length})
                       </button>
                       <button
                         onClick={() => setHistoryFilter('applied')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'applied' ? '#10B98122' : 'rgba(255,255,255,0.05)',
-                          color: historyFilter === 'applied' ? 'var(--accent-green)' : 'var(--text-muted)',
-                          border: historyFilter === 'applied' ? '1px solid var(--accent-green)' : '1px solid rgba(255,255,255,0.1)'
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'applied' ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.03)',
+                          color: historyFilter === 'applied' ? '#10B981' : 'var(--text-muted)',
+                          border: historyFilter === 'applied' ? '1px solid #10B981' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
-                        ✅ Submitted ({applicationHistory.filter(e => e.status === 'applied').length})
+                        Submitted ({applicationHistory.filter(e => e.status === 'applied').length})
                       </button>
                       <button
                         onClick={() => setHistoryFilter('extension')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'extension' ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.05)',
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'extension' ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.03)',
                           color: historyFilter === 'extension' ? '#c084fc' : 'var(--text-muted)',
-                          border: historyFilter === 'extension' ? '1px solid #c084fc' : '1px solid rgba(255,255,255,0.1)'
+                          border: historyFilter === 'extension' ? '1px solid #c084fc' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
-                        🧩 Extension Mode ({applicationHistory.filter(e => e.source_mode === 'extension').length})
+                        Extension ({applicationHistory.filter(e => e.source_mode === 'extension').length})
                       </button>
                       <button
                         onClick={() => setHistoryFilter('website')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'website' ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.05)',
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'website' ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.03)',
                           color: historyFilter === 'website' ? '#fbbf24' : 'var(--text-muted)',
-                          border: historyFilter === 'website' ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)'
+                          border: historyFilter === 'website' ? '1px solid #fbbf24' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
-                        💻 Website Mode ({applicationHistory.filter(e => e.source_mode !== 'extension' && e.source_mode !== 'email').length})
+                        Website ({applicationHistory.filter(e => e.source_mode !== 'extension' && e.source_mode !== 'email').length})
                       </button>
                       <button
                         onClick={() => setHistoryFilter('email')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'email' ? 'rgba(236,72,153,0.2)' : 'rgba(255,255,255,0.05)',
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'email' ? 'rgba(236,72,153,0.2)' : 'rgba(255,255,255,0.03)',
                           color: historyFilter === 'email' ? '#f472b6' : 'var(--text-muted)',
-                          border: historyFilter === 'email' ? '1px solid #f472b6' : '1px solid rgba(255,255,255,0.1)'
+                          border: historyFilter === 'email' ? '1px solid #f472b6' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
-                        📧 Email Mode ({applicationHistory.filter(e => e.source_mode === 'email').length})
+                        Email ({applicationHistory.filter(e => e.source_mode === 'email').length})
                       </button>
                     </div>
 
@@ -3903,8 +4303,8 @@ function App() {
                             background: '#0F172A', color: 'var(--accent-secondary)', border: '1px solid rgba(56, 189, 248, 0.3)', outline: 'none'
                           }}
                         >
-                          <option value="newest">📅 Newest First</option>
-                          <option value="oldest">📅 Oldest First</option>
+                          <option value="newest">Newest First</option>
+                          <option value="oldest">Oldest First</option>
                         </select>
                       </div>
                     </div>
@@ -3937,15 +4337,15 @@ function App() {
                         let platformBadge = null;
                         const urlLower = (entry.job_url || '').toLowerCase();
                         if (urlLower.includes('linkedin.com')) {
-                          platformBadge = { name: 'LinkedIn', color: '#0A66C2', icon: '💼' };
+                          platformBadge = { name: 'LinkedIn', color: '#0A66C2', icon: '' };
                         } else if (urlLower.includes('indeed.com')) {
-                          platformBadge = { name: 'Indeed', color: '#2557A7', icon: '🔍' };
+                          platformBadge = { name: 'Indeed', color: '#2557A7', icon: '' };
                         } else if (urlLower.includes('glassdoor.com')) {
-                          platformBadge = { name: 'Glassdoor', color: '#00A264', icon: '🏢' };
+                          platformBadge = { name: 'Glassdoor', color: '#00A264', icon: '' };
                         } else if (urlLower.includes('ziprecruiter.com')) {
-                          platformBadge = { name: 'ZipRecruiter', color: '#5B2C6F', icon: '⚡' };
+                          platformBadge = { name: 'ZipRecruiter', color: '#5B2C6F', icon: '' };
                         } else if (entry.job_url) {
-                          platformBadge = { name: 'Direct Web', color: '#64748B', icon: '🌐' };
+                          platformBadge = { name: 'Direct Web', color: '#64748B', icon: '' };
                         }
 
                         return (
@@ -3975,7 +4375,7 @@ function App() {
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
                                 {entry.recruiter_name && (
                                   <div style={{ fontSize: '0.75rem', color: 'var(--accent-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <span>👤 Recruiter:</span>
+                                    <span>Recruiter:</span>
                                     {entry.recruiter_profile_url ? (
                                       <a href={entry.recruiter_profile_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-secondary)', fontWeight: 600, textDecoration: 'underline' }}>
                                         {entry.recruiter_name}
@@ -4022,7 +4422,7 @@ function App() {
                                 {typeof entry.score === 'number' && (
                                   <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#fff' }}>{entry.score}% match</span>
                                 )}
-                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                                   {entry.overleaf_url ? (
                                     <a
                                       href={entry.overleaf_url}
@@ -4030,26 +4430,31 @@ function App() {
                                       rel="noreferrer"
                                       className="btn-overleaf"
                                       style={{
-                                        fontSize: '0.72rem',
-                                        padding: '5px 11px',
-                                        borderRadius: '6px',
+                                        fontSize: '0.7rem',
+                                        padding: '4px 10px',
+                                        borderRadius: '4px',
                                         fontWeight: 600,
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         gap: '5px',
-                                        textDecoration: 'none',
-                                        boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)'
+                                        textDecoration: 'none'
                                       }}
                                     >
-                                      🍃 Overleaf
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                                      </svg>
+                                      <span>Overleaf</span>
                                     </a>
                                   ) : (
                                     <button
                                       className="btn-overleaf"
-                                      style={{ fontSize: '0.72rem', padding: '5px 11px', borderRadius: '6px', opacity: 0.9, fontWeight: 600 }}
+                                      style={{ fontSize: '0.7rem', padding: '4px 10px', borderRadius: '4px', opacity: 0.9, fontWeight: 600 }}
                                       onClick={() => handleGenerateTailoredResume(false, entry.job_url, entry.job_title)}
                                     >
-                                      🍃 Overleaf
+                                      <span>Overleaf</span>
                                     </button>
                                   )}
                                   {entry.job_url && (
@@ -4058,21 +4463,26 @@ function App() {
                                       target="_blank"
                                       rel="noreferrer"
                                       style={{
-                                        fontSize: '0.72rem',
-                                        padding: '5px 11px',
-                                        borderRadius: '6px',
+                                        fontSize: '0.7rem',
+                                        padding: '4px 10px',
+                                        borderRadius: '4px',
                                         fontWeight: 600,
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         gap: '4px',
                                         textDecoration: 'none',
-                                        background: 'rgba(255, 255, 255, 0.05)',
+                                        background: 'rgba(255, 255, 255, 0.03)',
                                         color: '#e2e8f0',
-                                        border: '1px solid rgba(255, 255, 255, 0.12)'
+                                        border: '1px solid var(--border-color)'
                                       }}
                                       title="Open original job posting"
                                     >
-                                      🔗 Job Link
+                                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                        <polyline points="15 3 21 3 21 9"></polyline>
+                                        <line x1="10" y1="14" x2="21" y2="3"></line>
+                                      </svg>
+                                      <span>Posting</span>
                                     </a>
                                   )}
                                    {entry.pdf_url ? (
@@ -4081,52 +4491,56 @@ function App() {
                                        target="_blank"
                                        rel="noreferrer"
                                        style={{
-                                         fontSize: '0.72rem',
-                                         padding: '5px 11px',
-                                         borderRadius: '6px',
-                                         fontWeight: 700,
+                                         fontSize: '0.7rem',
+                                         padding: '4px 10px',
+                                         borderRadius: '4px',
+                                         fontWeight: 600,
                                          display: 'inline-flex',
                                          alignItems: 'center',
                                          gap: '5px',
                                          textDecoration: 'none',
-                                         background: 'rgba(56, 189, 248, 0.15)',
-                                         color: 'var(--accent-secondary)',
-                                         border: '1px solid rgba(56, 189, 248, 0.35)',
-                                         boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)'
+                                         background: 'rgba(37, 99, 235, 0.15)',
+                                         color: '#38BDF8',
+                                         border: '1px solid rgba(56, 189, 248, 0.3)'
                                        }}
                                        title="View & Download compiled PDF resume"
                                      >
-                                       📄 View & Download PDF
+                                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                         <polyline points="7 10 12 15 17 10"></polyline>
+                                         <line x1="12" y1="15" x2="12" y2="3"></line>
+                                       </svg>
+                                       <span>PDF Resume</span>
                                      </a>
                                    ) : (
                                      <button
                                        className="btn btn-secondary"
                                        style={{
-                                         fontSize: '0.72rem',
-                                         padding: '5px 11px',
-                                         borderRadius: '6px',
-                                         fontWeight: 700,
+                                         fontSize: '0.7rem',
+                                         padding: '4px 10px',
+                                         borderRadius: '4px',
+                                         fontWeight: 600,
                                          display: 'inline-flex',
                                          alignItems: 'center',
                                          gap: '5px',
-                                         background: 'rgba(56, 189, 248, 0.15)',
-                                         color: 'var(--accent-secondary)',
-                                         border: '1px solid rgba(56, 189, 248, 0.35)',
+                                         background: 'rgba(37, 99, 235, 0.15)',
+                                         color: '#38BDF8',
+                                         border: '1px solid rgba(56, 189, 248, 0.3)',
                                          cursor: 'pointer'
                                        }}
                                        onClick={() => handleGenerateTailoredResume(false, entry.job_url, entry.job_title)}
                                        title="Compile PDF for this role"
                                      >
-                                       📄 Compile PDF
+                                       <span>Compile PDF</span>
                                      </button>
                                    )}
                                    <button
                                      className="btn btn-secondary"
                                      style={{
-                                       fontSize: '0.72rem',
-                                       padding: '5px 11px',
-                                       borderRadius: '6px',
-                                       fontWeight: 700,
+                                       fontSize: '0.7rem',
+                                       padding: '4px 10px',
+                                       borderRadius: '4px',
+                                       fontWeight: 600,
                                        display: 'inline-flex',
                                        alignItems: 'center',
                                        gap: '5px',
@@ -4157,23 +4571,27 @@ function App() {
                                          });
                                          const data = await res.json();
                                          if (res.ok) {
-                                           setStatusMessage('📧 ' + (data.message || 'Email sent successfully!'));
+                                           setStatusMessage(data.message || 'Email sent successfully');
                                          } else {
-                                           setStatusMessage('❌ ' + (data.detail || 'Failed to send email'));
+                                           setStatusMessage(data.detail || 'Failed to send email');
                                          }
                                        } catch (err) {
-                                         setStatusMessage('❌ Error: ' + err.message);
+                                         setStatusMessage('Error: ' + err.message);
                                        }
                                      }}
                                      title="Send compiled PDF resume to your email"
                                    >
-                                     📧 Send Email
+                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                       <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                       <polyline points="22,6 12,13 2,6"></polyline>
+                                     </svg>
+                                     <span>Email</span>
                                    </button>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>
+                                <div style={{ display: 'flex', gap: '6px', width: '100%', marginTop: '6px' }}>
                                   <button
                                     className="btn btn-secondary"
-                                    style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', whiteSpace: 'nowrap' }}
+                                    style={{ flex: 1, padding: '5px 8px', fontSize: '0.68rem', minHeight: '30px', whiteSpace: 'nowrap', gap: '4px' }}
                                     onClick={async () => {
                                       setLoading(true);
                                       setStatusMessage('Preparing personalized interview pack...');
@@ -4198,20 +4616,26 @@ function App() {
                                           setStatusMessage('Interview preparation pack generated!');
                                         } else {
                                           const err = await res.json();
-                                          // showToast(`Error: ${err.detail}`, 'error');
+                                          setStatusMessage(`Error: ${err.detail}`);
                                         }
                                       } catch (e) {
-                                        // showToast(`Error: ${e.message}`, 'error');
+                                        setStatusMessage(`Error: ${e.message}`);
                                       } finally {
                                         setLoading(false);
                                       }
                                     }}
                                   >
-                                    🎤 Interview Prep
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                      <line x1="12" y1="19" x2="12" y2="23"></line>
+                                      <line x1="8" y1="23" x2="16" y2="23"></line>
+                                    </svg>
+                                    <span>Interview Prep</span>
                                   </button>
                                   <button
                                      className="btn btn-secondary"
-                                     style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)', whiteSpace: 'nowrap' }}
+                                     style={{ flex: 1, padding: '5px 8px', fontSize: '0.68rem', minHeight: '30px', borderColor: 'var(--border-color)', color: '#38BDF8', whiteSpace: 'nowrap', gap: '4px' }}
                                      onClick={async () => {
                                        setLoading(true);
                                        setStatusMessage('Generating tailored cover letter...');
@@ -4236,23 +4660,27 @@ function App() {
                                               company: entry.company || 'Target Company'
                                             });
                                             setCoverLetterModalOpen(true);
-                                            setStatusMessage('📝 Tailored cover letter generated!');
+                                            setStatusMessage('Tailored cover letter generated!');
                                          } else {
                                            const err = await res.json();
-                                           setStatusMessage(`❌ Error: ${err.detail}`);
+                                           setStatusMessage(`Error: ${err.detail}`);
                                          }
                                        } catch (e) {
-                                         setStatusMessage(`❌ Error: ${e.message}`);
+                                         setStatusMessage(`Error: ${e.message}`);
                                        } finally {
                                          setLoading(false);
                                        }
                                      }}
                                    >
-                                     📝 Cover Letter
+                                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                       <polyline points="14 2 14 8 20 8"></polyline>
+                                     </svg>
+                                     <span>Cover Letter</span>
                                    </button>
                                   <button
                                     className="btn btn-secondary"
-                                    style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', borderColor: 'var(--accent-primary)', color: '#fff', whiteSpace: 'nowrap' }}
+                                    style={{ flex: 1, padding: '5px 8px', fontSize: '0.68rem', minHeight: '30px', borderColor: 'var(--border-color)', color: '#fff', whiteSpace: 'nowrap', gap: '4px' }}
                                     onClick={async () => {
                                       setLoading(true);
                                       setStatusMessage('Generating outreach message...');
@@ -4282,19 +4710,22 @@ function App() {
                                           setOutreachData(data.message);
                                           setOutreachModalOpen(true);
                                           setStatusMessage('Outreach message generated!');
-                                          // showToast('Outreach message ready!', 'success');
                                         } else {
                                           const err = await res.json();
-                                          // showToast(`Error: ${err.detail}`, 'error');
+                                          setStatusMessage(`Error: ${err.detail}`);
                                         }
                                       } catch (e) {
-                                        // showToast(`Error: ${e.message}`, 'error');
+                                        setStatusMessage(`Error: ${e.message}`);
                                       } finally {
                                         setLoading(false);
                                       }
                                     }}
                                   >
-                                    ✉️ Outreach
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                      <polyline points="22,6 12,13 2,6"></polyline>
+                                    </svg>
+                                    <span>Outreach</span>
                                   </button>
                                 </div>
                               </div>
@@ -4321,7 +4752,7 @@ function App() {
                       <div className="log-terminal-dot" style={{ background: '#FFBD2E' }} />
                       <div className="log-terminal-dot" style={{ background: '#28CA41' }} />
                     </div>
-                    📋 LIVE SEARCH PIPELINE LOGS
+                    LIVE SEARCH PIPELINE LOGS
                   </div>
                   <div
                     className="log-terminal-body"
@@ -4361,7 +4792,7 @@ function App() {
                 {discoveredJobs.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
                     <div style={{ fontSize: '0.8rem', color: 'var(--accent-green)', fontWeight: 700 }}>
-                      ⚡ Live Matches Arriving ({discoveredJobs.length}):
+                      Live Matches Arriving ({discoveredJobs.length}):
                     </div>
                     {discoveredJobs.map((job, idx) => {
                       const score = job.score || 0;
@@ -4445,7 +4876,7 @@ function App() {
                         {[
                           { id: 'all', label: 'All' },
                           { id: 'unapplied', label: '⏳ Unapplied' },
-                          { id: 'applied', label: '✅ Applied' },
+                          { id: 'applied', label: 'Applied' },
                           { id: 'saved', label: '⭐ Saved' },
                         ].map(tab => (
                           <button
@@ -4532,7 +4963,7 @@ function App() {
 
                     {sorted.length === 0 ? (
                       <div className="empty-state">
-                        <div className="empty-state-icon">🔍</div>
+                        <div className="empty-state-icon">[SEARCH]</div>
                         <div>
                           <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>No matching listings found</div>
                           <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Enter search keywords or location and scan matches.</div>
@@ -4634,14 +5065,14 @@ function App() {
                                       {job.title}
                                     </div>
                                     <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                      <span>📍 {job.location || 'Remote'}</span>
+                                      <span>{job.location || 'Remote'}</span>
                                       {job.seniority && (
                                         <span style={{
                                           fontSize: '0.68rem', padding: '1px 7px', borderRadius: '4px',
                                           background: 'rgba(56,189,248,0.12)', color: '#38bdf8',
                                           border: '1px solid rgba(56,189,248,0.25)', fontWeight: 700
                                         }}>
-                                          🎖️ {job.seniority}
+                                          {job.seniority}
                                         </span>
                                       )}
                                       {job.salary && (
@@ -4650,7 +5081,7 @@ function App() {
                                           background: 'rgba(234,179,8,0.12)', color: '#facc15',
                                           border: '1px solid rgba(234,179,8,0.25)', fontWeight: 700
                                         }}>
-                                          💰 {job.salary}
+                                          {job.salary}
                                         </span>
                                       )}
                                     </div>
@@ -4690,18 +5121,18 @@ function App() {
                                   >
                                     {isExpanded ? 'Hide Details ▲' : 'View Job Description ▼'}
                                   </button>
-                                  <button
-                                    className="btn"
-                                    style={{
-                                      flex: 1.2,
-                                      padding: '9px 14px',
-                                      fontSize: '0.82rem',
-                                      fontWeight: 800,
-                                      borderRadius: '8px',
-                                      background: 'linear-gradient(135deg, #38BDF8 0%, #2563EB 100%)',
-                                      color: '#FFFFFF',
-                                      boxShadow: '0 4px 14px rgba(56, 189, 248, 0.3)'
-                                    }}
+                                    <button
+                                      className="btn"
+                                      style={{
+                                        flex: 1.2,
+                                        padding: '8px 14px',
+                                        fontSize: '0.82rem',
+                                        fontWeight: 600,
+                                        borderRadius: '6px',
+                                        background: '#2563EB',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        color: '#FFFFFF'
+                                      }}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setJobUrl(job.url || '');
@@ -4713,7 +5144,7 @@ function App() {
                                       window.scrollTo({ top: 0, behavior: 'smooth' });
                                     }}
                                   >
-                                    🎯 Tailor Resume
+                                    Tailor Resume
                                   </button>
                                 </div>
 
@@ -4728,7 +5159,7 @@ function App() {
                                         onClick={(e) => e.stopPropagation()}
                                         style={{ color: '#34d399', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                                       >
-                                        <span>🔗 Apply via {job.platform || 'Direct ATS'} ↗</span>
+                                        <span>Apply via {job.platform || 'Direct ATS'} ↗</span>
                                       </a>
                                     )}
                                     {job.platform === 'LinkedIn' && job.recruiter_profile_url && (
@@ -4772,19 +5203,19 @@ function App() {
                                             setOutreachRecruiterInfo(data.recruiter_info || (job.recruiter_name ? { recruiter_name: job.recruiter_name, recruiter_profile_url: job.recruiter_profile_url } : null));
                                             setOutreachData(data.message);
                                             setOutreachModalOpen(true);
-                                            showToast('✉️ Recruiter Outreach ready!', 'success');
+                                            showToast('Recruiter Outreach ready!', 'success');
                                           } else {
                                             // Fallback: generate high-converting client template directly
                                             const fallbackMsg = `Hi ${job.recruiter_name || 'Hiring Team'},\n\nI noticed the ${job.title} role at ${job.company} and wanted to reach out directly. With my experience matching ${job.score}% of your core requirements—specifically in ${(job.matched_skills || []).slice(0, 3).join(', ') || 'software engineering'}—I'd love to connect and discuss how I can contribute to the team.\n\nBest regards,\nCandidate`;
                                             setOutreachData(fallbackMsg);
                                             setOutreachModalOpen(true);
-                                            showToast('✉️ Outreach template ready!', 'success');
+                                            showToast('Outreach template ready!', 'success');
                                           }
                                         } catch (err) {
                                           const fallbackMsg = `Hi ${job.recruiter_name || 'Hiring Team'},\n\nI noticed the ${job.title} opening at ${job.company}. Given my background in ${(job.matched_skills || []).slice(0, 3).join(', ') || 'modern technology'}, I believe I'd be a strong addition to your team. Would love to connect!\n\nBest regards,\nCandidate`;
                                           setOutreachData(fallbackMsg);
                                           setOutreachModalOpen(true);
-                                          showToast('✉️ Outreach note opened!', 'success');
+                                          showToast('Outreach note opened!', 'success');
                                         } finally {
                                           setLoading(false);
                                         }
@@ -4805,7 +5236,7 @@ function App() {
                                       }}
                                       title="Generate tailored cold message / InMail for this role"
                                     >
-                                      ✉️ Outreach Note
+                                      Outreach Note
                                     </button>
                                   </div>
 
@@ -4995,7 +5426,7 @@ function App() {
             ) : rejectionWarning ? (
               <div className="rejection-warning-panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px', animation: 'slideDown 0.4s ease both' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+                  <span style={{ fontSize: '1rem', color: '#f59e0b', fontWeight: 700 }}>[ALERT]</span>
                   <h3 style={{ margin: 0, color: 'var(--accent-amber)', fontSize: '1rem' }}>Candidate Suitability Warning</h3>
                 </div>
                 <p style={{ maxWidth: '600px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
@@ -5013,7 +5444,7 @@ function App() {
                     style={{ padding: '10px 22px', fontWeight: 700, background: 'linear-gradient(135deg,#F59E0B,#D97706)', boxShadow: '0 4px 14px rgba(245,158,11,0.3)' }}
                     onClick={() => handleGenerateTailoredResume(true)}
                   >
-                    🚀 Yes, Generate Anyway
+                    Yes, Generate Anyway
                   </button>
                   <button
                     className="btn btn-secondary"
@@ -5045,7 +5476,7 @@ function App() {
                       <div className="log-terminal-dot" style={{ background: '#FFBD2E' }} />
                       <div className="log-terminal-dot" style={{ background: '#28CA41' }} />
                     </div>
-                    📋 PIPELINE LOGS
+                    PIPELINE LOGS
                   </div>
                   <div
                     className="log-terminal-body"
@@ -5099,20 +5530,215 @@ function App() {
                   </div>
                 </div>
               ) : (
-                <div className="empty-state">
-                  <div className="empty-state-icon">🎯</div>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>Ready to find your fit</div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Upload your resume and paste a job description to get your ATS match score and a tailored resume in seconds.</div>
-                  </div>
-                  <div className="empty-state-steps">
-                    <div className="empty-step">
-                      <div className="empty-step-num">1</div>
-                      <div className="empty-step-label">Paste job URL or description</div>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '20px',
+                  animation: 'fadeIn 0.3s ease'
+                }}>
+                  {/* Readiness Banner Card */}
+                  <div style={{
+                    padding: '22px 24px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.4) 100%)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.35)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
+                      <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+                        <div style={{
+                          width: '46px',
+                          height: '46px',
+                          borderRadius: '10px',
+                          background: 'rgba(56, 189, 248, 0.1)',
+                          border: '1px solid rgba(56, 189, 248, 0.25)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#38BDF8',
+                          flexShrink: 0
+                        }}>
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                          </svg>
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '1rem', color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>ATS Engine Standby</span>
+                            <span style={{
+                              fontSize: '0.66rem',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.06em',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: resumeData ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                              color: resumeData ? '#34D399' : '#FBBF24',
+                              border: `1px solid ${resumeData ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                              fontFamily: 'var(--font-mono)'
+                            }}>
+                              {resumeData ? 'Profile Armed' : 'Awaiting Resume'}
+                            </span>
+                          </div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '3px', lineHeight: 1.4 }}>
+                            {resumeData
+                              ? `Master profile calibrated with ${resumeEvaluation?.skills_count || (resumeData.skills || []).length || 15} verified skills. Ready to analyze any job description.`
+                              : 'Upload a baseline resume in Settings to begin matching and tailoring.'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {resumeEvaluation && (
+                        <div style={{
+                          textAlign: 'right',
+                          flexShrink: 0,
+                          padding: '6px 12px',
+                          background: 'rgba(0,0,0,0.3)',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255,255,255,0.06)'
+                        }}>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Baseline ATS</div>
+                          <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#34D399', fontFamily: 'var(--font-mono)' }}>
+                            {resumeEvaluation.ats_score}%
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="empty-step">
-                      <div className="empty-step-num">2</div>
-                      <div className="empty-step-label">Get tailored resume & score</div>
+
+                    {/* Quick Metric Pills */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Target Role</div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#F8FAFC', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>
+                          {jobTitle || resumeData?.experience?.[0]?.role || 'Any Technical Role'}
+                        </div>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Target Employer</div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#38BDF8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>
+                          {company || 'Auto-Detected'}
+                        </div>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Tailor Mode</div>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#34D399', textTransform: 'capitalize', marginTop: '2px' }}>
+                          {tailoringIntensity} Strategy
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3-Step Execution Roadmap */}
+                  <div style={{
+                    padding: '20px 22px',
+                    borderRadius: '12px',
+                    background: 'rgba(15, 23, 42, 0.5)',
+                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px'
+                  }}>
+                    <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'var(--font-mono)' }}>
+                      How Instant Tailoring Works
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        padding: '12px 14px',
+                        background: 'rgba(255,255,255,0.02)',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        borderRadius: '8px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            background: 'rgba(56, 189, 248, 0.2)',
+                            color: '#38BDF8',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontFamily: 'var(--font-mono)'
+                          }}>1</span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#FFFFFF' }}>Target Job</span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                          Paste a posting URL or description on the left to extract requirements automatically.
+                        </p>
+                      </div>
+
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        padding: '12px 14px',
+                        background: 'rgba(255,255,255,0.02)',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        borderRadius: '8px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            background: 'rgba(16, 185, 129, 0.2)',
+                            color: '#34D399',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontFamily: 'var(--font-mono)'
+                          }}>2</span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#FFFFFF' }}>Analyze ATS Gap</span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                          Get instant verification of matched taxonomy keywords and missing skill scores.
+                        </p>
+                      </div>
+
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        padding: '12px 14px',
+                        background: 'rgba(255,255,255,0.02)',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        borderRadius: '8px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            background: 'rgba(99, 102, 241, 0.2)',
+                            color: '#A5B4FC',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontFamily: 'var(--font-mono)'
+                          }}>3</span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#FFFFFF' }}>1-Page PDF & Overleaf</span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                          Compile a tailored 1-page PDF or export the full LaTeX bundle in 1 click.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -5120,19 +5746,34 @@ function App() {
             ) : (
               <div>
                 {/* ── Job context banner ── */}
-                {(jobTitle || company) && (
-                  <div className="job-banner" style={{ animation: 'slideDown 0.4s ease both' }}>
-                    <span style={{ fontSize: '0.85rem' }}>🎯</span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Targeting:</span>
-                    {jobTitle && <span className="job-banner-chip job-banner-role">{jobTitle}</span>}
-                    {company && <span className="job-banner-chip job-banner-company">{company}</span>}
-                  </div>
-                )}
+                {/* ── Job context banner ── */}
+                {(() => {
+                  let effectiveCompany = company;
+                  if (!effectiveCompany && jobDescription) {
+                    const m = jobDescription.match(/(?:^|\n|\.\s+)([A-Z][A-Za-z0-9\s&.,-]{1,30}?)\s+(?:is|are)\s+(?:a|an)\s+/);
+                    if (m && !["the", "this", "our", "a", "an", "there", "it", "here"].includes(m[1].trim().toLowerCase())) {
+                      effectiveCompany = m[1].trim();
+                    }
+                  }
+                  if (!effectiveCompany && analysisResult?.company) {
+                    effectiveCompany = analysisResult.company;
+                  }
+
+                  if (!jobTitle && !effectiveCompany) return null;
+
+                  return (
+                    <div className="job-banner" style={{ animation: 'slideDown 0.4s ease both' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Targeting:</span>
+                      {jobTitle && <span className="job-banner-chip job-banner-role">{jobTitle}</span>}
+                      {effectiveCompany && <span className="job-banner-chip job-banner-company">{effectiveCompany}</span>}
+                    </div>
+                  );
+                })()}
 
                 {/* ── Job Description Display ── */}
                 {jobDescription && (
                   <div style={{ marginBottom: '20px', padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '12px', maxHeight: '300px', overflowY: 'auto' }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '10px', color: 'var(--text-muted)' }}>📋 Job Description</div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '10px', color: 'var(--text-muted)' }}>Job Description</div>
                     <div style={{ fontSize: '0.82rem', lineHeight: '1.5', color: 'var(--text-main)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       {jobDescription.substring(0, 1000)}{jobDescription.length > 1000 ? '...' : ''}
                     </div>
@@ -5174,7 +5815,7 @@ function App() {
                             fontSize: '0.72rem',
                             fontWeight: 700
                           }}>
-                            <span>📈 +{analysisResult?.match_analysis?.score_delta || (analysisResult.match_analysis.overall_score - (window.baseOriginalAtsScore || analysisResult.match_analysis.overall_score)) || 7}% boost</span>
+                            <span>+{analysisResult?.match_analysis?.score_delta || (analysisResult.match_analysis.overall_score - (window.baseOriginalAtsScore || analysisResult.match_analysis.overall_score)) || 7}% boost</span>
                           </div>
                         )}
 
@@ -5218,32 +5859,44 @@ function App() {
 
                     {/* Skills Tags */}
                     <div style={{ marginTop: '20px' }}>
-                      <h3>Matched Skills</h3>
-                      <div className="tag-list">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <h3 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>Matched ATS Taxonomy Keywords</h3>
+                        <span style={{ fontSize: '0.74rem', color: '#34D399', fontFamily: 'var(--font-mono)' }}>
+                          {(analysisResult.match_analysis.matched_skills || []).length} verified
+                        </span>
+                      </div>
+                      <div className="tag-list" style={{ gap: '6px' }}>
                         {(analysisResult.match_analysis.matched_skills || []).map((skill, i) => (
-                          <span key={i} className="tag tag-match">
+                          <span key={i} className="tag tag-match" title="Verified in resume">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
                             {skill}
                           </span>
                         ))}
                       </div>
                     </div>
 
-                    <div style={{ marginTop: '10px' }}>
-                      <h3>Missing Required Skills <span style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)', fontWeight: 500 }}>(Click to force-include in resume)</span></h3>
-                      <div className="tag-list">
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <h3 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                          Missing Target Skills
+                          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 400, marginLeft: '8px' }}>
+                            (click token to force-tailor into resume)
+                          </span>
+                        </h3>
+                        <span style={{ fontSize: '0.74rem', color: '#FBBF24', fontFamily: 'var(--font-mono)' }}>
+                          {userSelectedSkills.size > 0 ? `${userSelectedSkills.size} selected` : `${(analysisResult.match_analysis.missing_skills || []).length} unmapped`}
+                        </span>
+                      </div>
+                      <div className="tag-list" style={{ gap: '6px' }}>
                         {(analysisResult.match_analysis.missing_skills || []).map((skill, i) => {
                           const isSelected = userSelectedSkills.has(skill);
                           return (
                             <span
                               key={i}
                               className={`tag tag-missing ${isSelected ? 'selected-skill-chip' : ''}`}
-                              style={{
-                                cursor: 'pointer', userSelect: 'none', transition: 'all 0.2s ease',
-                                background: isSelected ? 'rgba(16, 185, 129, 0.25)' : undefined,
-                                border: isSelected ? '1px solid #10B981' : undefined,
-                                color: isSelected ? '#34D399' : undefined,
-                                fontWeight: isSelected ? 700 : 500
-                              }}
+                              title={isSelected ? 'Included in tailored resume' : 'Click to add to resume and boost score'}
                               onClick={() => {
                                 setUserSelectedSkills(prev => {
                                   const next = new Set(prev);
@@ -5272,7 +5925,26 @@ function App() {
                                 });
                               }}
                             >
-                              {isSelected ? '✓ ' : '+ '}{skill}
+                              {isSelected ? (
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                              ) : (
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                              )}
+                              <span>{skill}</span>
+                              
+                              {/* Contextual Injection Preview Tooltip */}
+                              <div className="skill-injection-tooltip">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="9 11 12 14 22 4"></polyline>
+                                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                                </svg>
+                                <span>{isSelected ? 'Force-tailoring enabled' : getSkillTargetSection(skill)}</span>
+                              </div>
                             </span>
                           );
                         })}
@@ -5291,7 +5963,7 @@ function App() {
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1.1rem' }}>🛡️</span>
+                            
                             <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#38BDF8', letterSpacing: '0.02em' }}>
                               Senior Recruiter Scrutiny Audit
                             </span>
@@ -5343,31 +6015,38 @@ function App() {
                 {/* Workspace Panels or Tailor Resume Decision Banner */}
                 {(!analysisResult.latex_code && !keepOriginalMode) ? (
                   <div style={{
-                    marginTop: '24px', padding: '32px 28px', borderRadius: '16px',
-                    background: 'linear-gradient(135deg, rgba(56,189,248,0.08) 0%, rgba(37,99,235,0.04) 100%)',
-                    border: '1px solid rgba(56,189,248,0.22)',
+                    marginTop: '24px', padding: '32px 28px', borderRadius: '14px',
+                    background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)',
+                    border: '1px solid #334155',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '18px', textAlign: 'center',
                     animation: 'slideDown 0.4s ease both'
                   }}>
-                    <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', boxShadow: '0 6px 20px rgba(56,189,248,0.3)' }}>🤖</div>
+                    <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-cyan)' }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                      </svg>
+                    </div>
                     <div>
-                      <h3 style={{ margin: '0 0 8px', fontSize: '1.05rem', color: '#fff' }}>ATS Score & Analysis Ready</h3>
-                      <p style={{ maxWidth: '520px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
-                        Keyword alignment, experience scoring, and role-fit analysis are complete.
-                        Ready to generate a tailored LaTeX resume and custom cover letter?
+                      <h3 style={{ margin: '0 0 8px', fontSize: '1.05rem', color: '#fff', fontWeight: 700, letterSpacing: '-0.01em' }}>ATS Score & Role Fit Analysis Ready</h3>
+                      <p style={{ maxWidth: '520px', margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
+                        Keyword taxonomy alignment, seniority scoring, and semantic gap analysis are complete.
+                        Ready to compile an ATS-compliant tailored LaTeX resume and role cover letter.
                       </p>
                     </div>
                     <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
                       <button
                         className="btn"
-                        style={{ padding: '11px 26px', fontWeight: 700, fontSize: '0.92rem', boxShadow: 'var(--accent-glow)' }}
+                        style={{ padding: '10px 24px', fontWeight: 600, fontSize: '0.88rem', gap: '8px' }}
                         onClick={() => handleGenerateTailoredResume(false)}
                       >
-                        ⚡ Tailor Resume & Cover Letter
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                        Tailor Resume & Cover Letter
                       </button>
                       <button
                         className="btn btn-secondary"
-                        style={{ padding: '11px 20px', borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)', fontWeight: 600 }}
+                        style={{ padding: '10px 18px', borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)', fontWeight: 600, fontSize: '0.86rem', gap: '8px' }}
                         onClick={async () => {
                           setLoading(true);
                           setStatusMessage('Generating standalone cover letter...');
@@ -5391,7 +6070,7 @@ function App() {
                                 cover_letter: data.cover_letter
                               }));
                               setKeepOriginalMode(true);
-                              setStatusMessage('📝 Tailored cover letter generated!');
+                              setStatusMessage('Tailored cover letter generated!');
                             } else {
                               const err = await res.json();
                               setStatusMessage(`❌ Error: ${err.detail || 'Failed to generate cover letter'}`);
@@ -5403,7 +6082,7 @@ function App() {
                           }
                         }}
                       >
-                        📝 Cover Letter Only
+                        Cover Letter Only
                       </button>
                       <button
                         className="btn btn-secondary"
@@ -5424,7 +6103,7 @@ function App() {
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', textAlign: 'center',
                     animation: 'slideDown 0.3s ease both'
                   }}>
-                    <div style={{ fontSize: '2rem' }}>📄</div>
+                    <div style={{ fontSize: '1.2rem', color: 'var(--accent-secondary)', fontWeight: 700 }}>[PDF]</div>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '6px' }}>Using Your Original Resume</div>
                       <div style={{ fontSize: '0.86rem', color: 'var(--text-muted)', maxWidth: '400px', lineHeight: 1.6 }}>
@@ -5472,26 +6151,69 @@ function App() {
 
                     {analysisResult?.cover_letter && (
                       <div className="workspace-panel" style={{ width: '100%', maxWidth: '700px', marginTop: '16px' }}>
-                        <div className="panel-toolbar">
-                          <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Generated Cover Letter</h3>
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                        <div className="panel-toolbar" style={{
+                          display: 'flex',
+                          flexWrap: 'nowrap',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '10px',
+                          padding: '6px 12px',
+                          background: 'rgba(15, 23, 42, 0.65)',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: '10px',
+                          marginBottom: '14px',
+                          overflowX: 'auto',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-primary)' }}>
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                              <polyline points="14 2 14 8 20 8"></polyline>
+                              <line x1="16" y1="13" x2="8" y2="13"></line>
+                              <line x1="16" y1="17" x2="8" y2="17"></line>
+                            </svg>
+                            <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#fff' }}>Cover Letter</span>
+                            <span style={{
+                              fontSize: '0.72rem',
+                              fontFamily: 'var(--font-mono)',
+                              color: 'var(--text-muted)',
+                              background: 'rgba(255,255,255,0.04)',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(255,255,255,0.06)'
+                            }}>
+                              {(analysisResult.cover_letter || '').trim().split(/\s+/).filter(Boolean).length} words
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                             <button
                               className="btn btn-secondary"
-                              style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                              style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px', display: 'inline-flex', alignItems: 'center' }}
                               onClick={handleDownloadCoverLetter}
+                              title="Download cover letter as text file"
                             >
-                              ⬇️ Download
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                              </svg>
+                              Download
                             </button>
                             <button
                               className="btn btn-secondary"
-                              style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                              style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px', display: 'inline-flex', alignItems: 'center' }}
                               onClick={() => {
                                 navigator.clipboard.writeText(analysisResult.cover_letter || '');
                                 setCoverLetterCopied(true);
                                 setTimeout(() => setCoverLetterCopied(false), 2000);
                               }}
+                              title="Copy cover letter text"
                             >
-                              {coverLetterCopied ? '✓ Copied!' : '📋 Copy'}
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                              </svg>
+                              {coverLetterCopied ? 'Copied!' : 'Copy'}
                             </button>
                           </div>
                         </div>
@@ -5505,72 +6227,151 @@ function App() {
                 ) : (
                   <div className="workspace">
                     <div className="workspace-panel">
-                      <div className="panel-toolbar">
-                        <div className="mode-toggle">
+                      <div className="panel-toolbar" style={{
+                        display: 'flex',
+                        flexWrap: 'nowrap',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        padding: '6px 10px',
+                        background: 'rgba(15, 23, 42, 0.65)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: '10px',
+                        marginBottom: '14px',
+                        overflowX: 'auto',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {/* Left: View Mode Segmented Switcher */}
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          background: 'rgba(0, 0, 0, 0.35)',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: '8px',
+                          padding: '3px',
+                          gap: '2px'
+                        }}>
                           <button
-                            className={`mode-btn ${activeTab === 'preview' ? 'active' : ''}`}
+                            type="button"
                             onClick={() => setActiveTab('preview')}
+                            style={{
+                              padding: '5px 12px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              borderRadius: '6px',
+                              border: 'none',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              background: activeTab === 'preview' ? '#2563EB' : 'transparent',
+                              color: activeTab === 'preview' ? '#FFFFFF' : 'var(--text-muted)'
+                            }}
                           >
                             Preview
                           </button>
                           <button
-                            className={`mode-btn ${activeTab === 'latex' ? 'active' : ''}`}
+                            type="button"
                             onClick={() => setActiveTab('latex')}
+                            style={{
+                              padding: '5px 12px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              borderRadius: '6px',
+                              border: 'none',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              background: activeTab === 'latex' ? '#2563EB' : 'transparent',
+                              color: activeTab === 'latex' ? '#FFFFFF' : 'var(--text-muted)'
+                            }}
                           >
                             LaTeX
                           </button>
                         </div>
-                        <button className="btn-overleaf" onClick={openInOverleaf} disabled={loading}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z" /></svg>
-                          Open in Overleaf
-                        </button>
-                        {analysisResult && analysisResult.pdf_url && (
-                          <a
-                            href={`${API_BASE}${analysisResult.pdf_url}`}
-                            download
-                            className="btn btn-secondary"
-                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px', textDecoration: 'none' }}
-                          >
-                            ⬇️ Download PDF
-                          </a>
-                        )}
-                        {analysisResult && analysisResult.latex_code && (
+
+                        {/* Right: Clean Action Buttons Group (Single Line) */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap', flexShrink: 0 }}>
+                          {/* 1. View & Open Compiled 1-Page PDF */}
+                          {analysisResult && (
+                            <button
+                              disabled={loading}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                borderRadius: '6px',
+                                background: 'rgba(56, 189, 248, 0.1)',
+                                border: '1px solid rgba(56, 189, 248, 0.35)',
+                                color: '#38BDF8',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                              onClick={handleViewTailoredPdf}
+                              title="Open compiled 1-page PDF in a new tab"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                              </svg>
+                              View PDF
+                            </button>
+                          )}
+
+                          {/* 2. Overleaf Direct Export */}
                           <button
                             className="btn btn-secondary"
-                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px', color: 'var(--accent-green)', borderColor: 'rgba(16,185,129,0.3)' }}
+                            onClick={openInOverleaf}
                             disabled={loading}
-                            onClick={async () => {
-                              if (!window.confirm("Set this tailored resume as your new Master Resume profile?")) return;
-                              setLoading(true);
-                              setStatusMessage('Promoting tailored resume to Master Resume profile...');
-                              try {
-                                const res = await fetch(`${API_BASE}/user/update_master_from_tailored`, {
-                                  method: 'POST',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${getAuthHeader()}`
-                                  },
-                                  body: JSON.stringify({ latex_code: analysisResult.latex_code })
-                                });
-                                if (res.ok) {
-                                  const body = await res.json();
-                                  setResumeData(body.data);
-                                  setResumeEvaluation(body.evaluation);
-                                  setStatusMessage('📌 Master Resume updated from tailored version!');
-                                } else {
-                                  throw new Error('Failed to promote resume');
-                                }
-                              } catch (err) {
-                                setStatusMessage(`Error updating master: ${err.message}`);
-                              } finally {
-                                setLoading(false);
-                              }
-                            }}
-                            title="Promote this tailored version as your new Master Resume baseline"
+                            style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px' }}
+                            title="Export LaTeX project bundle to Overleaf"
                           >
-                            📌 Set as Master
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#10B981' }}>
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                              <polyline points="15 3 21 3 21 9"></polyline>
+                              <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                            Overleaf
                           </button>
-                        )}
+
+                          {/* 3. Set as Master Baseline */}
+                          {analysisResult && analysisResult.latex_code && (
+                            <button
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '5px', color: 'var(--accent-green)', borderColor: 'rgba(16,185,129,0.3)' }}
+                              disabled={loading}
+                              onClick={async () => {
+                                if (!window.confirm("Set this tailored resume as your new Master Resume profile?")) return;
+                                setLoading(true);
+                                setStatusMessage('Promoting tailored resume to Master Resume profile...');
+                                try {
+                                  const res = await fetch(`${API_BASE}/user/update_master_from_tailored`, {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${getAuthHeader()}`
+                                    },
+                                    body: JSON.stringify({ latex_code: analysisResult.latex_code })
+                                  });
+                                  if (res.ok) {
+                                    const body = await res.json();
+                                    setResumeData(body.data);
+                                    setResumeEvaluation(body.evaluation);
+                                    setStatusMessage('Master Resume updated from tailored version!');
+                                  } else {
+                                    throw new Error('Failed to promote resume');
+                                  }
+                                } catch (err) {
+                                  setStatusMessage(`Error updating master: ${err.message}`);
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }}
+                              title="Promote this tailored version as your new Master Resume baseline"
+                            >
+                              Set as Master
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {activeTab === 'preview' ? (
@@ -5631,45 +6432,80 @@ function App() {
                           </div>
                         </div>
                       ) : (
-                        <div className="panel-content" style={{ position: 'relative', background: '#090D1A' }}>
-                          <button
-                            className="btn"
-                            style={{ position: 'absolute', right: '15px', top: '15px', padding: '4px 10px', fontSize: '0.75rem', zIndex: 10 }}
-                            onClick={() => {
-                              navigator.clipboard.writeText(analysisResult.latex_code);
-                              setStatusMessage('Copied LaTeX source code to clipboard!');
-                            }}
-                          >
-                            Copy Code
-                          </button>
-                          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.8rem', color: '#CBD5E0', textAlign: 'left' }}>
-                            {analysisResult.latex_code}
-                          </pre>
-                        </div>
+                        <LatexCodeViewer
+                          code={analysisResult.latex_code}
+                          onCopy={() => {
+                            navigator.clipboard.writeText(analysisResult.latex_code);
+                            setStatusMessage('Copied LaTeX source code to clipboard!');
+                          }}
+                        />
                       )}
                     </div>
 
                     <div className="workspace-panel">
-                      <div className="panel-toolbar">
-                        <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>Generated Cover Letter</h3>
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                      <div className="panel-toolbar" style={{
+                        display: 'flex',
+                        flexWrap: 'nowrap',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                        padding: '6px 12px',
+                        background: 'rgba(15, 23, 42, 0.65)',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        borderRadius: '10px',
+                        marginBottom: '14px',
+                        overflowX: 'auto',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-primary)' }}>
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                          </svg>
+                          <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#fff' }}>Cover Letter</span>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontFamily: 'var(--font-mono)',
+                            color: 'var(--text-muted)',
+                            background: 'rgba(255,255,255,0.04)',
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(255,255,255,0.06)'
+                          }}>
+                            {(analysisResult.cover_letter || '').trim().split(/\s+/).filter(Boolean).length} words
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                           <button
                             className="btn btn-secondary"
-                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                            style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px', display: 'inline-flex', alignItems: 'center' }}
                             onClick={handleDownloadCoverLetter}
+                            title="Download cover letter as text file"
                           >
-                            ⬇️ Download
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                              <polyline points="7 10 12 15 17 10"></polyline>
+                              <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Download
                           </button>
                           <button
                             className="btn btn-secondary"
-                            style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                            style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px', display: 'inline-flex', alignItems: 'center' }}
                             onClick={() => {
                               navigator.clipboard.writeText(analysisResult.cover_letter || '');
                               setCoverLetterCopied(true);
                               setTimeout(() => setCoverLetterCopied(false), 2000);
                             }}
+                            title="Copy cover letter text"
                           >
-                            {coverLetterCopied ? '✓ Copied!' : '📋 Copy'}
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            {coverLetterCopied ? 'Copied!' : 'Copy'}
                           </button>
                         </div>
                       </div>
@@ -5688,7 +6524,7 @@ function App() {
                         <div className="log-terminal-dot" style={{ background: '#FFBD2E' }} />
                         <div className="log-terminal-dot" style={{ background: '#28CA41' }} />
                       </div>
-                      📋 PIPELINE EXECUTION LOGS
+                      PIPELINE EXECUTION LOGS
                     </div>
                     <div
                       className="log-terminal-body"
@@ -5721,6 +6557,7 @@ function App() {
                 )}
               </div>
             )}
+
           </div>
         </div>
       )}
@@ -5757,8 +6594,16 @@ function App() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '0.88rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <span>Analyze & Tailor Resume</span>
+                <span>Analyze & Tailor Job</span>
                 <kbd style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600 }}>Cmd+Enter</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span>Save Master Archetype</span>
+                <kbd style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600 }}>Cmd+S</kbd>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span>Switch Modes (Tailor / Discover / History)</span>
+                <kbd style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '4px', padding: '4px 8px', fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 600 }}>Cmd + 1 / 2 / 3</kbd>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                 <span>Show Keyboard Shortcuts</span>
@@ -5800,7 +6645,7 @@ function App() {
             {/* Header */}
             <div className="modal-header">
               <div>
-                <h2>🎤 Interview Preparation Guide</h2>
+                <h2>Interview Preparation Guide</h2>
                 <p className="modal-subtitle">
                   {prepJobInfo.jobTitle} at {prepJobInfo.company}
                 </p>
@@ -5831,7 +6676,7 @@ function App() {
                     navigator.clipboard.writeText(prepMarkdown);
                   }}
                 >
-                  📋 Copy Prep Guide
+                  Copy Prep Guide
                 </button>
                 <button
                   className="btn btn-secondary"
@@ -5861,7 +6706,7 @@ function App() {
             {/* Header */}
             <div className="modal-header">
               <div>
-                <h2>📝 Tailored Cover Letter</h2>
+                <h2>Tailored Cover Letter</h2>
                 <p className="modal-subtitle">
                   {coverLetterJobInfo.jobTitle} at {coverLetterJobInfo.company}
                 </p>
@@ -5894,7 +6739,7 @@ function App() {
                     setTimeout(() => setCoverLetterCopiedModal(false), 2000);
                   }}
                 >
-                  {coverLetterCopiedModal ? '✓ Copied to Clipboard!' : '📋 Copy Cover Letter'}
+                  {coverLetterCopiedModal ? 'Copied to Clipboard!' : 'Copy Cover Letter'}
                 </button>
                 <button
                   className="btn btn-secondary"
@@ -5909,6 +6754,67 @@ function App() {
         </div>
       )}
 
+      {/* Power-User Keyboard & Status Telemetry Strip */}
+      <footer
+        className="power-user-bar"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 24px',
+          marginTop: '32px',
+          borderTop: '1px solid #1E293B',
+          background: 'rgba(9, 13, 22, 0.75)',
+          backdropFilter: 'blur(8px)',
+          fontSize: '0.74rem',
+          color: 'var(--text-muted)',
+          fontFamily: 'var(--font-mono)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }} />
+            <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>SYSTEM READY</span>
+          </div>
+          <span>•</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘↵</kbd>
+            <span>Analyze & Tailor</span>
+          </div>
+          <span>•</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘S</kbd>
+            <span>Save Archetype</span>
+          </div>
+          <span>•</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘1-3</kbd>
+            <span>Switch Tabs</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={() => setShowKeyboardHelp(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--accent-cyan)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.74rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: 0
+            }}
+          >
+            <kbd style={{ background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '4px', padding: '1px 5px', color: 'var(--accent-cyan)' }}>?</kbd>
+            <span>All Shortcuts</span>
+          </button>
+        </div>
+      </footer>
+
     </div>
 
       {/* Extension Installation Setup Guide Modal */}
@@ -5921,7 +6827,7 @@ function App() {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
               <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🎯 Chrome Extension Setup Guide</span>
+                <span>Chrome Extension Setup Guide</span>
               </div>
               <button
                 className="btn btn-secondary"
@@ -5945,7 +6851,7 @@ function App() {
                     handleOneClickExtensionSync(user ? user.sync_code : "GABY48");
                   }}
                 >
-                  📥 Re-Download ZIP
+                  Re-Download ZIP
                 </button>
               </div>
 
@@ -5990,7 +6896,7 @@ function App() {
                 style={{ width: '100%', padding: '10px', fontSize: '0.86rem', fontWeight: 700, background: 'linear-gradient(135deg, #0284c7 0%, #10b981 100%)', color: '#fff' }}
                 onClick={() => setShowExtensionGuide(false)}
               >
-                ✓ Got it! Start Tailoring Jobs
+                Got it! Start Tailoring Jobs
               </button>
             </div>
           </div>

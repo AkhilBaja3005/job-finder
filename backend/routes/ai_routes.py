@@ -450,6 +450,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             dumped["latex_code"] = final_latex
             dumped["overleaf_url"] = overleaf_url
             dumped["download_pdf_url"] = pdf_download_url
+            dumped["pdf_url"] = pdf_download_url
             if recruiter_scrutiny_report:
                 dumped["recruiter_scrutiny"] = recruiter_scrutiny_report
                 if "match_analysis" in dumped and isinstance(dumped["match_analysis"], dict):
