@@ -137,8 +137,15 @@ def record_application(token: Optional[str], entry: dict) -> None:
     _write_local_history(token, entries)
 
 
-def update_application_status(token: Optional[str], job_url: str, new_status: str) -> bool:
-    """Updates status ('applied'|'autofilled'|'tailored') for a job URL."""
+def update_application_status(
+    token: Optional[str],
+    job_url: str,
+    new_status: str,
+    job_title: Optional[str] = None,
+    company: Optional[str] = None,
+    score: Optional[int] = None
+) -> bool:
+    """Updates status ('applied'|'autofilled'|'tailored'|'saved') for a job URL, creating a record if needed."""
     user = get_user_by_token(token) if token else None
     if user and user.get("id"):
         result = supabase_request(
@@ -148,6 +155,17 @@ def update_application_status(token: Optional[str], job_url: str, new_status: st
         )
         if result:
             return True
+        # If record didn't exist in Supabase, insert it
+        if job_title or company:
+            record_application(token, {
+                "job_title": job_title or "Target Role",
+                "company": company or "Hiring Company",
+                "job_url": job_url,
+                "score": score,
+                "status": new_status,
+                "source_mode": "discovery"
+            })
+            return True
 
     # Fallback to local JSON file
     entries = _read_local_history(token)
@@ -156,7 +174,17 @@ def update_application_status(token: Optional[str], job_url: str, new_status: st
         if entry.get("job_url") == job_url:
             entry["status"] = new_status
             updated = True
-    if updated:
+    if not updated and (job_title or company or job_url):
+        record_application(token, {
+            "job_title": job_title or "Target Role",
+            "company": company or "Hiring Company",
+            "job_url": job_url,
+            "score": score,
+            "status": new_status,
+            "source_mode": "discovery"
+        })
+        updated = True
+    elif updated:
         _write_local_history(token, entries)
     return updated
 

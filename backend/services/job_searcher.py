@@ -677,6 +677,38 @@ def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:
     return 70 + (matched_count * 8) - (tier_gap * 10)
 
 
+def _extract_salary_and_seniority(text: str, title: str) -> Dict[str, Optional[str]]:
+    """Extracts salary estimate and seniority classification from title and description text."""
+    seniority = None
+    title_lower = (title or "").lower()
+    for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
+        if pattern.search(title_lower):
+            seniority = tier.capitalize()
+            break
+    
+    if not seniority:
+        text_lower = (text or "")[:1500].lower()
+        for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
+            if pattern.search(text_lower):
+                seniority = tier.capitalize()
+                break
+
+    salary = None
+    if text:
+        # Match common salary patterns like $120,000 - $160,000, £80k - £100k, €75,000 /yr, etc.
+        salary_match = re.search(
+            r'([$£€]\s*[\d,]+(?:\.\d+)?\s*(?:k|K)?(?:\s*(?:-|to|–)\s*[$£€]?\s*[\d,]+(?:\.\d+)?\s*(?:k|K)?)?(?:\s*(?:per\s+annum|per\s+year|p\.a\.|/yr|/year|/hr|per\s+hour))?)',
+            text
+        )
+        if salary_match:
+            cand = salary_match.group(1).strip()
+            # Basic sanity check on length and numeric content
+            if len(cand) >= 3 and any(char.isdigit() for char in cand):
+                salary = cand
+
+    return {"seniority": seniority, "salary": salary}
+
+
 async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, browser, semaphore: asyncio.Semaphore, on_log=None) -> Optional[dict]:
     """Fetches the real JD for a single job (with 24h TTLCache lookup) and scores it with the exact same
     deterministic engine (compute_ats_score / compute_overall_score) that the
@@ -732,6 +764,8 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
         except Exception as e:
             print(f"[Job Searcher] Failed to extract recruiter info for '{job.title}': {e}")
 
+    meta_info = _extract_salary_and_seniority(jd_text, job.title)
+
     return {
         "title": job.title,
         "company": job.company,
@@ -750,6 +784,10 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
         "estimated": False,
         "recruiter_name": recruiter_name,
         "recruiter_profile_url": recruiter_profile_url,
+        "description": jd_text,
+        "raw_text": raw_text,
+        "seniority": meta_info.get("seniority"),
+        "salary": meta_info.get("salary"),
     }
 
 
@@ -803,6 +841,8 @@ def _score_job_with_title_heuristic(job: JobSearchResult, resume_data: dict) -> 
 
     overall_score = int(0.40 * skills_score + 0.35 * experience_score + 0.25 * role_fit_score)
 
+    meta_info = _extract_salary_and_seniority(getattr(job, "full_description", "") or "", job.title)
+
     return {
         "title": job.title,
         "company": job.company,
@@ -819,6 +859,9 @@ def _score_job_with_title_heuristic(job: JobSearchResult, resume_data: dict) -> 
         "matched_skills": matched_skills,
         "missing_skills": missing_skills,
         "estimated": True,
+        "description": getattr(job, "full_description", None) or f"Role: {job.title} at {job.company} ({job.location}). Direct listing from {job.platform}. Open link to view complete requirements.",
+        "seniority": meta_info.get("seniority"),
+        "salary": meta_info.get("salary"),
     }
 
 
