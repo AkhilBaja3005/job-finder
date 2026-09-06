@@ -159,20 +159,64 @@ document.addEventListener("DOMContentLoaded", () => {
     return (userTokenInput?.value || "").trim().toUpperCase();
   }
 
+  const extUpdateBanner = document.getElementById("ext-update-banner");
+  const extUpdateText = document.getElementById("ext-update-text");
+  const extUpdateBtn = document.getElementById("ext-update-btn");
+
+  function compareVersions(v1, v2) {
+    const p1 = (v1 || "0").split(".").map(Number);
+    const p2 = (v2 || "0").split(".").map(Number);
+    const maxLen = Math.max(p1.length, p2.length);
+    for (let i = 0; i < maxLen; i++) {
+      const num1 = p1[i] || 0;
+      const num2 = p2[i] || 0;
+      if (num1 > num2) return 1;
+      if (num1 < num2) return -1;
+    }
+    return 0;
+  }
+
+  function checkVersionUpdate() {
+    try {
+      const currentVersion = (chrome.runtime?.getManifest?.()?.version) || "3.0.0";
+      fetch(`${API_BASE_URL}/extension_version_hash`, { headers: { "Accept": "application/json" } })
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => {
+          if (!data) return;
+          const serverVersion = data.version;
+          if (serverVersion && compareVersions(serverVersion, currentVersion) > 0) {
+            if (extUpdateBanner && extUpdateText) {
+              extUpdateText.textContent = `v${serverVersion} available (Installed: v${currentVersion})`;
+              if (extUpdateBtn) {
+                extUpdateBtn.href = `${API_BASE_URL}${data.download_url || '/download_extension_zip'}`;
+              }
+              extUpdateBanner.style.display = "flex";
+            }
+          } else if (extUpdateBanner) {
+            extUpdateBanner.style.display = "none";
+          }
+        })
+        .catch(() => {});
+    } catch (e) {}
+  }
+
   function checkHealth() {
     fetch(`${API_BASE_URL}/healthz`, { headers: { "Accept": "application/json" } })
       .then((res) => {
         if (res.ok) {
           statusBadge.innerHTML = '<span class="status-dot"></span><span>Connected</span>';
           statusBadge.style.color = "#34d399";
+          checkVersionUpdate();
         } else {
           statusBadge.innerHTML = '<span>Offline 🔴</span>';
           statusBadge.style.color = "#f87171";
+          if (extUpdateBanner) extUpdateBanner.style.display = "none";
         }
       })
       .catch(() => {
         statusBadge.innerHTML = '<span>Offline 🔴</span>';
         statusBadge.style.color = "#f87171";
+        if (extUpdateBanner) extUpdateBanner.style.display = "none";
       });
   }
 
