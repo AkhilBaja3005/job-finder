@@ -4984,18 +4984,18 @@ function App() {
                                   >
                                     {isExpanded ? 'Hide Details ▲' : 'View Job Description ▼'}
                                   </button>
-                                  <button
-                                    className="btn"
-                                    style={{
-                                      flex: 1.2,
-                                      padding: '9px 14px',
-                                      fontSize: '0.82rem',
-                                      fontWeight: 800,
-                                      borderRadius: '8px',
-                                      background: 'linear-gradient(135deg, #38BDF8 0%, #2563EB 100%)',
-                                      color: '#FFFFFF',
-                                      boxShadow: '0 4px 14px rgba(56, 189, 248, 0.3)'
-                                    }}
+                                    <button
+                                      className="btn"
+                                      style={{
+                                        flex: 1.2,
+                                        padding: '8px 14px',
+                                        fontSize: '0.82rem',
+                                        fontWeight: 600,
+                                        borderRadius: '6px',
+                                        background: '#2563EB',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        color: '#FFFFFF'
+                                      }}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setJobUrl(job.url || '');
@@ -5847,6 +5847,29 @@ function App() {
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm-1.5 17.5l-4-4 1.41-1.41L10.5 14.67l6.59-6.59L18.5 9.5l-8 8z" /></svg>
                           Open in Overleaf
                         </button>
+                        {analysisResult && analysisResult.pdf_url && (
+                          <button
+                            className="btn btn-secondary"
+                            style={{
+                              padding: '5px 12px',
+                              fontSize: '0.76rem',
+                              gap: '5px',
+                              fontWeight: 700,
+                              background: 'rgba(56, 189, 248, 0.12)',
+                              color: 'var(--accent-secondary)',
+                              border: '1px solid rgba(56, 189, 248, 0.3)'
+                            }}
+                            onClick={() => window.open(`${API_BASE}${analysisResult.pdf_url}`, '_blank')}
+                            title="Open compiled PDF in a new browser tab"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                              <polyline points="15 3 21 3 21 9"></polyline>
+                              <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                            View Compiled PDF
+                          </button>
+                        )}
                         {analysisResult && analysisResult.pdf_url && (
                           <a
                             href={`${API_BASE}${analysisResult.pdf_url}`}
