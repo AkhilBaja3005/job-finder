@@ -1934,43 +1934,43 @@ function App() {
       )}
 
       <header className="app-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, #38BDF8 0%, #2563EB 100%)',
+            width: '32px',
+            height: '32px',
+            borderRadius: '6px',
+            background: '#2563EB',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 0 16px rgba(56, 189, 248, 0.4)',
             color: '#FFFFFF'
           }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <polyline points="14 2 14 8 20 8"></polyline>
               <line x1="16" y1="13" x2="8" y2="13"></line>
               <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
             </svg>
           </div>
           <div>
-            <h1 className="title" style={{ fontSize: '1.25rem', margin: 0 }}>
-              Resume Tailor Suite
+            <h1 className="title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 700, letterSpacing: '-0.02em' }}>
+              JobFinder <span style={{ color: '#38BDF8', fontWeight: 500, fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}>Pro v3.0</span>
             </h1>
-            <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--accent-secondary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              Enterprise Career Intelligence
+            <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+              Autonomous ATS Tailoring Engine
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {/* Hugging Face / Backend Health Badge */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '4px 10px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: 600,
-            background: backendHealth === 'healthy' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.15)',
-            border: `1px solid ${backendHealth === 'healthy' ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.3)'}`,
-            color: backendHealth === 'healthy' ? 'var(--accent-green)' : 'var(--accent-amber)',
+            padding: '3px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600,
+            background: backendHealth === 'healthy' ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.15)',
+            border: `1px solid ${backendHealth === 'healthy' ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`,
+            color: backendHealth === 'healthy' ? '#10B981' : '#F59E0B',
+            fontFamily: 'var(--font-mono)',
             cursor: 'default'
           }} title={
             backendHealth === 'healthy'
@@ -1979,11 +1979,9 @@ function App() {
           }>
             <span style={{
               width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
-              background: backendHealth === 'healthy' ? 'var(--accent-green)' : 'var(--accent-amber)',
-              boxShadow: backendHealth === 'healthy' ? '0 0 8px rgba(16,185,129,0.6)' : '0 0 8px rgba(245,158,11,0.6)',
-              animation: backendHealth === 'healthy' ? 'none' : 'pulseGlow 1.5s infinite'
+              background: backendHealth === 'healthy' ? '#10B981' : '#F59E0B'
             }} />
-            {backendHealth === 'healthy' ? 'HF Space Active' : 'HF Warming Up...'}
+            {backendHealth === 'healthy' ? 'Engine Online' : 'Warming Up…'}
           </div>
 
           {statusMessage && (
@@ -2922,11 +2920,15 @@ function App() {
               <h2 style={{ marginBottom: 0 }}>Active Profile</h2>
               <button
                 className="btn btn-secondary"
-                style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '5px' }}
+                style={{ padding: '5px 10px', fontSize: '0.74rem', gap: '6px' }}
                 onClick={() => setConfigStepActive(true)}
                 aria-label="Open settings"
               >
-                ⚙️ Settings
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+                <span>Settings</span>
               </button>
             </div>
 
@@ -2987,76 +2989,69 @@ function App() {
 
             {/* ATS Performance Widget matching Enterprise Design */}
             <div style={{
-              background: 'rgba(10, 15, 29, 0.7)',
-              border: '1px solid rgba(56, 189, 248, 0.15)',
-              borderRadius: '14px',
-              padding: '16px',
+              background: 'var(--panel-bg-subtle)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              padding: '14px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '12px',
-              boxShadow: '0 4px 20px -5px rgba(0,0,0,0.5)'
+              gap: '12px'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
                   ATS Performance
                 </span>
                 <span style={{
                   fontSize: '0.68rem',
                   fontWeight: 700,
                   padding: '2px 8px',
-                  borderRadius: '12px',
-                  background: 'rgba(16, 185, 129, 0.15)',
-                  color: '#34d399',
-                  border: '1px solid rgba(16, 185, 129, 0.3)'
+                  borderRadius: '4px',
+                  background: 'rgba(16, 185, 129, 0.12)',
+                  color: '#10B981',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  fontFamily: 'var(--font-mono)'
                 }}>
                   {resumeEvaluation ? `${resumeEvaluation.ats_score || 93}% Match` : 'Calibrated'}
                 </span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                {/* Glowing Semi-Circle / Circle Dial */}
-                <div style={{ position: 'relative', width: '90px', height: '90px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg width="90" height="90" viewBox="0 0 90 90">
-                    <circle cx="45" cy="45" r="36" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="7" />
+                {/* Minimalist Precision Gauge */}
+                <div style={{ position: 'relative', width: '84px', height: '84px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="84" height="84" viewBox="0 0 84 84">
+                    <circle cx="42" cy="42" r="34" fill="none" stroke="#1E293B" strokeWidth="6" />
                     <circle
-                      cx="45" cy="45" r="36" fill="none"
-                      stroke="url(#atsScoreGradient)"
-                      strokeWidth="7"
-                      strokeDasharray={`${((resumeEvaluation?.ats_score || 93) / 100) * (2 * Math.PI * 36)} ${2 * Math.PI * 36}`}
+                      cx="42" cy="42" r="34" fill="none"
+                      stroke="#10B981"
+                      strokeWidth="6"
+                      strokeDasharray={`${((resumeEvaluation?.ats_score || 93) / 100) * (2 * Math.PI * 34)} ${2 * Math.PI * 34}`}
                       strokeLinecap="round"
-                      transform="rotate(-90 45 45)"
-                      style={{ filter: 'drop-shadow(0 0 8px rgba(56, 189, 248, 0.6))' }}
+                      transform="rotate(-90 42 42)"
                     />
-                    <defs>
-                      <linearGradient id="atsScoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#38bdf8" />
-                        <stop offset="100%" stopColor="#10b981" />
-                      </linearGradient>
-                    </defs>
                   </svg>
                   <div style={{ position: 'absolute', textAlign: 'center' }}>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#FFFFFF', lineHeight: 1 }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1, fontFamily: 'var(--font-mono)' }}>
                       {resumeEvaluation?.ats_score || 93}%
                     </div>
-                    <div style={{ fontSize: '0.55rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginTop: '2px' }}>
+                    <div style={{ fontSize: '0.52rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.04em' }}>
                       Overall
                     </div>
                   </div>
                 </div>
 
                 {/* Performance Metrics Breakdown */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
-                    <span style={{ color: '#94a3b8' }}>Readability:</span>
-                    <span style={{ fontWeight: 700, color: '#34d399' }}>96%</span>
+                    <span style={{ color: '#94a3b8' }}>Readability</span>
+                    <span style={{ fontWeight: 600, color: '#10B981', fontFamily: 'var(--font-mono)' }}>96%</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
-                    <span style={{ color: '#94a3b8' }}>Keywords:</span>
-                    <span style={{ fontWeight: 700, color: '#38bdf8' }}>{resumeEvaluation ? `${resumeEvaluation.skills_count ? Math.min(99, resumeEvaluation.skills_count * 5) : 91}%` : '91%'}</span>
+                    <span style={{ color: '#94a3b8' }}>Keywords</span>
+                    <span style={{ fontWeight: 600, color: '#38BDF8', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation ? `${resumeEvaluation.skills_count ? Math.min(99, resumeEvaluation.skills_count * 5) : 91}%` : '91%'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
-                    <span style={{ color: '#94a3b8' }}>Formatting:</span>
-                    <span style={{ fontWeight: 700, color: '#34d399' }}>95%</span>
+                    <span style={{ color: '#94a3b8' }}>Formatting</span>
+                    <span style={{ fontWeight: 600, color: '#10B981', fontFamily: 'var(--font-mono)' }}>95%</span>
                   </div>
                 </div>
               </div>
@@ -3066,108 +3061,117 @@ function App() {
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
-              gap: '8px',
-              borderRadius: '12px',
-              background: 'rgba(0, 0, 0, 0.25)',
-              padding: '6px',
-              border: '1px solid rgba(255, 255, 255, 0.07)',
-              marginTop: '4px'
+              gap: '6px',
+              borderRadius: '8px',
+              background: '#0B1220',
+              padding: '5px',
+              border: '1px solid var(--border-color)',
+              marginTop: '2px'
             }}>
               <button
                 className={`mode-btn ${dashboardMode === 'master' ? 'active' : ''}`}
                 style={{
-                  padding: '9px 12px',
-                  fontSize: '0.82rem',
-                  borderRadius: '9px',
-                  fontWeight: 700,
-                  border: '1px solid ' + (dashboardMode === 'master' ? 'rgba(56, 189, 248, 0.4)' : 'transparent'),
-                  background: dashboardMode === 'master' ? 'rgba(37, 99, 235, 0.22)' : 'transparent',
+                  padding: '8px 10px',
+                  fontSize: '0.78rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: '1px solid ' + (dashboardMode === 'master' ? '#2563EB' : 'transparent'),
+                  background: dashboardMode === 'master' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
                   color: dashboardMode === 'master' ? '#FFFFFF' : 'var(--text-muted)',
                   cursor: 'pointer',
-                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  transition: 'all 0.15s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '7px',
-                  boxShadow: dashboardMode === 'master' ? '0 2px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  gap: '6px'
                 }}
                 onClick={() => {
                   setDashboardMode('master');
                   setIsDiscoveryView(false);
                 }}
               >
-                <span style={{ fontSize: '0.95rem' }}>📊</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="3" y1="9" x2="21" y2="9"></line>
+                  <line x1="9" y1="21" x2="9" y2="9"></line>
+                </svg>
                 <span>Master Profile</span>
               </button>
               <button
                 className={`mode-btn ${dashboardMode === 'tailor' ? 'active' : ''}`}
                 style={{
-                  padding: '9px 12px',
-                  fontSize: '0.82rem',
-                  borderRadius: '9px',
-                  fontWeight: 700,
-                  border: '1px solid ' + (dashboardMode === 'tailor' ? 'rgba(56, 189, 248, 0.4)' : 'transparent'),
-                  background: dashboardMode === 'tailor' ? 'rgba(37, 99, 235, 0.22)' : 'transparent',
+                  padding: '8px 10px',
+                  fontSize: '0.78rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: '1px solid ' + (dashboardMode === 'tailor' ? '#2563EB' : 'transparent'),
+                  background: dashboardMode === 'tailor' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
                   color: dashboardMode === 'tailor' ? '#FFFFFF' : 'var(--text-muted)',
                   cursor: 'pointer',
-                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  transition: 'all 0.15s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '7px',
-                  boxShadow: dashboardMode === 'tailor' ? '0 2px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  gap: '6px'
                 }}
                 onClick={() => {
                   setDashboardMode('tailor');
                   setIsDiscoveryView(false);
                 }}
               >
-                <span style={{ fontSize: '0.95rem' }}>🎯</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="22" y1="12" x2="18" y2="12"></line>
+                  <line x1="6" y1="12" x2="2" y2="12"></line>
+                  <line x1="12" y1="6" x2="12" y2="2"></line>
+                  <line x1="12" y1="22" x2="12" y2="18"></line>
+                </svg>
                 <span>Tailor Resume</span>
               </button>
               <button
                 className={`mode-btn ${dashboardMode === 'discover' ? 'active' : ''}`}
                 style={{
-                  padding: '9px 12px',
-                  fontSize: '0.82rem',
-                  borderRadius: '9px',
-                  fontWeight: 700,
-                  border: '1px solid ' + (dashboardMode === 'discover' ? 'rgba(56, 189, 248, 0.4)' : 'transparent'),
-                  background: dashboardMode === 'discover' ? 'rgba(37, 99, 235, 0.22)' : 'transparent',
+                  padding: '8px 10px',
+                  fontSize: '0.78rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: '1px solid ' + (dashboardMode === 'discover' ? '#2563EB' : 'transparent'),
+                  background: dashboardMode === 'discover' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
                   color: dashboardMode === 'discover' ? '#FFFFFF' : 'var(--text-muted)',
                   cursor: 'pointer',
-                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  transition: 'all 0.15s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '7px',
-                  boxShadow: dashboardMode === 'discover' ? '0 2px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  gap: '6px'
                 }}
                 onClick={() => {
                   setDashboardMode('discover');
                   setIsDiscoveryView(true);
                 }}
               >
-                <span style={{ fontSize: '0.95rem' }}>🔍</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
                 <span>Discover Jobs</span>
               </button>
               <button
                 className={`mode-btn ${dashboardMode === 'history' ? 'active' : ''}`}
                 style={{
-                  padding: '9px 12px',
-                  fontSize: '0.82rem',
-                  borderRadius: '9px',
-                  fontWeight: 700,
-                  border: '1px solid ' + (dashboardMode === 'history' ? 'rgba(56, 189, 248, 0.4)' : 'transparent'),
-                  background: dashboardMode === 'history' ? 'rgba(37, 99, 235, 0.22)' : 'transparent',
+                  padding: '8px 10px',
+                  fontSize: '0.78rem',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  border: '1px solid ' + (dashboardMode === 'history' ? '#2563EB' : 'transparent'),
+                  background: dashboardMode === 'history' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
                   color: dashboardMode === 'history' ? '#FFFFFF' : 'var(--text-muted)',
                   cursor: 'pointer',
-                  transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                  transition: 'all 0.15s ease',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '7px',
-                  boxShadow: dashboardMode === 'history' ? '0 2px 10px rgba(37, 99, 235, 0.25)' : 'none'
+                  gap: '6px'
                 }}
                 onClick={() => {
                   setDashboardMode('history');
@@ -3175,7 +3179,10 @@ function App() {
                   handleFetchHistory();
                 }}
               >
-                <span style={{ fontSize: '0.95rem' }}>🕘</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                  <circle cx="12" cy="12" r="10"></circle>
+                </svg>
                 <span>History</span>
               </button>
             </div>
@@ -3749,27 +3756,29 @@ function App() {
                     const appliedPct = Math.round((appliedCount / total) * 100);
 
                     return (
-                      <div className="card" style={{ padding: '14px', background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.5), rgba(15, 23, 42, 0.8))', border: '1px solid rgba(56, 189, 248, 0.15)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>📊 Application Pipeline Funnel</div>
+                      <div className="card" style={{ padding: '14px', background: 'var(--panel-bg-subtle)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'var(--font-mono)' }}>
+                          Application Pipeline Funnel
+                        </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
-                              <span style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>🎯 Resumes Tailored</span>
-                              <span style={{ color: '#fff', fontWeight: 700 }}>{tailoredCount} ({tailoredPct}%)</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '4px' }}>
+                              <span style={{ color: '#38BDF8', fontWeight: 600 }}>Tailored Resumes</span>
+                              <span style={{ color: '#fff', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{tailoredCount} ({tailoredPct}%)</span>
                             </div>
-                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${tailoredPct}%`, background: 'var(--accent-cyan)', borderRadius: '999px' }} />
+                            <div style={{ height: '5px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${tailoredPct}%`, background: '#38BDF8', borderRadius: '4px' }} />
                             </div>
                           </div>
 
                           <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '3px' }}>
-                              <span style={{ color: 'var(--accent-green)', fontWeight: 600 }}>✅ Submitted / Applied</span>
-                              <span style={{ color: '#fff', fontWeight: 700 }}>{appliedCount} ({appliedPct}%)</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.74rem', marginBottom: '4px' }}>
+                              <span style={{ color: '#10B981', fontWeight: 600 }}>Submitted Applications</span>
+                              <span style={{ color: '#fff', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{appliedCount} ({appliedPct}%)</span>
                             </div>
-                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${appliedPct}%`, background: 'var(--accent-green)', borderRadius: '999px' }} />
+                            <div style={{ height: '5px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${appliedPct}%`, background: '#10B981', borderRadius: '4px' }} />
                             </div>
                           </div>
                         </div>
@@ -3779,15 +3788,16 @@ function App() {
 
                   {/* Filter / Sort Control Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 2px', flexWrap: 'wrap', gap: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Filter:</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter:</span>
                       <button
                         onClick={() => setHistoryFilter('all')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'all' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)',
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'all' ? '#2563EB' : 'rgba(255,255,255,0.03)',
                           color: historyFilter === 'all' ? '#fff' : 'var(--text-muted)',
-                          border: historyFilter === 'all' ? '1px solid var(--accent-primary)' : '1px solid rgba(255,255,255,0.1)'
+                          border: historyFilter === 'all' ? '1px solid #2563EB' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
                         All ({applicationHistory.length})
@@ -3795,57 +3805,62 @@ function App() {
                       <button
                         onClick={() => setHistoryFilter('tailored')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'tailored' ? '#7dd3fc22' : 'rgba(255,255,255,0.05)',
-                          color: historyFilter === 'tailored' ? 'var(--accent-cyan)' : 'var(--text-muted)',
-                          border: historyFilter === 'tailored' ? '1px solid var(--accent-cyan)' : '1px solid rgba(255,255,255,0.1)'
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'tailored' ? 'rgba(56,189,248,0.2)' : 'rgba(255,255,255,0.03)',
+                          color: historyFilter === 'tailored' ? '#38BDF8' : 'var(--text-muted)',
+                          border: historyFilter === 'tailored' ? '1px solid #38BDF8' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
-                        🎯 Tailored ({applicationHistory.filter(e => e.status !== 'applied').length})
+                        Tailored ({applicationHistory.filter(e => e.status !== 'applied').length})
                       </button>
                       <button
                         onClick={() => setHistoryFilter('applied')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'applied' ? '#10B98122' : 'rgba(255,255,255,0.05)',
-                          color: historyFilter === 'applied' ? 'var(--accent-green)' : 'var(--text-muted)',
-                          border: historyFilter === 'applied' ? '1px solid var(--accent-green)' : '1px solid rgba(255,255,255,0.1)'
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'applied' ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.03)',
+                          color: historyFilter === 'applied' ? '#10B981' : 'var(--text-muted)',
+                          border: historyFilter === 'applied' ? '1px solid #10B981' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
-                        ✅ Submitted ({applicationHistory.filter(e => e.status === 'applied').length})
+                        Submitted ({applicationHistory.filter(e => e.status === 'applied').length})
                       </button>
                       <button
                         onClick={() => setHistoryFilter('extension')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'extension' ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.05)',
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'extension' ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.03)',
                           color: historyFilter === 'extension' ? '#c084fc' : 'var(--text-muted)',
-                          border: historyFilter === 'extension' ? '1px solid #c084fc' : '1px solid rgba(255,255,255,0.1)'
+                          border: historyFilter === 'extension' ? '1px solid #c084fc' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
-                        🧩 Extension Mode ({applicationHistory.filter(e => e.source_mode === 'extension').length})
+                        Extension ({applicationHistory.filter(e => e.source_mode === 'extension').length})
                       </button>
                       <button
                         onClick={() => setHistoryFilter('website')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'website' ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.05)',
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'website' ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.03)',
                           color: historyFilter === 'website' ? '#fbbf24' : 'var(--text-muted)',
-                          border: historyFilter === 'website' ? '1px solid #fbbf24' : '1px solid rgba(255,255,255,0.1)'
+                          border: historyFilter === 'website' ? '1px solid #fbbf24' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
-                        💻 Website Mode ({applicationHistory.filter(e => e.source_mode !== 'extension' && e.source_mode !== 'email').length})
+                        Website ({applicationHistory.filter(e => e.source_mode !== 'extension' && e.source_mode !== 'email').length})
                       </button>
                       <button
                         onClick={() => setHistoryFilter('email')}
                         style={{
-                          fontSize: '0.68rem', padding: '3px 9px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700,
-                          background: historyFilter === 'email' ? 'rgba(236,72,153,0.2)' : 'rgba(255,255,255,0.05)',
+                          fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                          background: historyFilter === 'email' ? 'rgba(236,72,153,0.2)' : 'rgba(255,255,255,0.03)',
                           color: historyFilter === 'email' ? '#f472b6' : 'var(--text-muted)',
-                          border: historyFilter === 'email' ? '1px solid #f472b6' : '1px solid rgba(255,255,255,0.1)'
+                          border: historyFilter === 'email' ? '1px solid #f472b6' : '1px solid var(--border-color)',
+                          fontFamily: 'var(--font-mono)'
                         }}
                       >
-                        📧 Email Mode ({applicationHistory.filter(e => e.source_mode === 'email').length})
+                        Email ({applicationHistory.filter(e => e.source_mode === 'email').length})
                       </button>
                     </div>
 
@@ -4022,7 +4037,7 @@ function App() {
                                 {typeof entry.score === 'number' && (
                                   <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#fff' }}>{entry.score}% match</span>
                                 )}
-                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                                   {entry.overleaf_url ? (
                                     <a
                                       href={entry.overleaf_url}
@@ -4030,26 +4045,31 @@ function App() {
                                       rel="noreferrer"
                                       className="btn-overleaf"
                                       style={{
-                                        fontSize: '0.72rem',
-                                        padding: '5px 11px',
-                                        borderRadius: '6px',
+                                        fontSize: '0.7rem',
+                                        padding: '4px 10px',
+                                        borderRadius: '4px',
                                         fontWeight: 600,
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         gap: '5px',
-                                        textDecoration: 'none',
-                                        boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)'
+                                        textDecoration: 'none'
                                       }}
                                     >
-                                      🍃 Overleaf
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                                      </svg>
+                                      <span>Overleaf</span>
                                     </a>
                                   ) : (
                                     <button
                                       className="btn-overleaf"
-                                      style={{ fontSize: '0.72rem', padding: '5px 11px', borderRadius: '6px', opacity: 0.9, fontWeight: 600 }}
+                                      style={{ fontSize: '0.7rem', padding: '4px 10px', borderRadius: '4px', opacity: 0.9, fontWeight: 600 }}
                                       onClick={() => handleGenerateTailoredResume(false, entry.job_url, entry.job_title)}
                                     >
-                                      🍃 Overleaf
+                                      <span>Overleaf</span>
                                     </button>
                                   )}
                                   {entry.job_url && (
@@ -4058,21 +4078,26 @@ function App() {
                                       target="_blank"
                                       rel="noreferrer"
                                       style={{
-                                        fontSize: '0.72rem',
-                                        padding: '5px 11px',
-                                        borderRadius: '6px',
+                                        fontSize: '0.7rem',
+                                        padding: '4px 10px',
+                                        borderRadius: '4px',
                                         fontWeight: 600,
                                         display: 'inline-flex',
                                         alignItems: 'center',
                                         gap: '4px',
                                         textDecoration: 'none',
-                                        background: 'rgba(255, 255, 255, 0.05)',
+                                        background: 'rgba(255, 255, 255, 0.03)',
                                         color: '#e2e8f0',
-                                        border: '1px solid rgba(255, 255, 255, 0.12)'
+                                        border: '1px solid var(--border-color)'
                                       }}
                                       title="Open original job posting"
                                     >
-                                      🔗 Job Link
+                                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                        <polyline points="15 3 21 3 21 9"></polyline>
+                                        <line x1="10" y1="14" x2="21" y2="3"></line>
+                                      </svg>
+                                      <span>Posting</span>
                                     </a>
                                   )}
                                    {entry.pdf_url ? (
@@ -4081,52 +4106,56 @@ function App() {
                                        target="_blank"
                                        rel="noreferrer"
                                        style={{
-                                         fontSize: '0.72rem',
-                                         padding: '5px 11px',
-                                         borderRadius: '6px',
-                                         fontWeight: 700,
+                                         fontSize: '0.7rem',
+                                         padding: '4px 10px',
+                                         borderRadius: '4px',
+                                         fontWeight: 600,
                                          display: 'inline-flex',
                                          alignItems: 'center',
                                          gap: '5px',
                                          textDecoration: 'none',
-                                         background: 'rgba(56, 189, 248, 0.15)',
-                                         color: 'var(--accent-secondary)',
-                                         border: '1px solid rgba(56, 189, 248, 0.35)',
-                                         boxShadow: '0 2px 8px rgba(56, 189, 248, 0.2)'
+                                         background: 'rgba(37, 99, 235, 0.15)',
+                                         color: '#38BDF8',
+                                         border: '1px solid rgba(56, 189, 248, 0.3)'
                                        }}
                                        title="View & Download compiled PDF resume"
                                      >
-                                       📄 View & Download PDF
+                                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                         <polyline points="7 10 12 15 17 10"></polyline>
+                                         <line x1="12" y1="15" x2="12" y2="3"></line>
+                                       </svg>
+                                       <span>PDF Resume</span>
                                      </a>
                                    ) : (
                                      <button
                                        className="btn btn-secondary"
                                        style={{
-                                         fontSize: '0.72rem',
-                                         padding: '5px 11px',
-                                         borderRadius: '6px',
-                                         fontWeight: 700,
+                                         fontSize: '0.7rem',
+                                         padding: '4px 10px',
+                                         borderRadius: '4px',
+                                         fontWeight: 600,
                                          display: 'inline-flex',
                                          alignItems: 'center',
                                          gap: '5px',
-                                         background: 'rgba(56, 189, 248, 0.15)',
-                                         color: 'var(--accent-secondary)',
-                                         border: '1px solid rgba(56, 189, 248, 0.35)',
+                                         background: 'rgba(37, 99, 235, 0.15)',
+                                         color: '#38BDF8',
+                                         border: '1px solid rgba(56, 189, 248, 0.3)',
                                          cursor: 'pointer'
                                        }}
                                        onClick={() => handleGenerateTailoredResume(false, entry.job_url, entry.job_title)}
                                        title="Compile PDF for this role"
                                      >
-                                       📄 Compile PDF
+                                       <span>Compile PDF</span>
                                      </button>
                                    )}
                                    <button
                                      className="btn btn-secondary"
                                      style={{
-                                       fontSize: '0.72rem',
-                                       padding: '5px 11px',
-                                       borderRadius: '6px',
-                                       fontWeight: 700,
+                                       fontSize: '0.7rem',
+                                       padding: '4px 10px',
+                                       borderRadius: '4px',
+                                       fontWeight: 600,
                                        display: 'inline-flex',
                                        alignItems: 'center',
                                        gap: '5px',
@@ -4157,23 +4186,27 @@ function App() {
                                          });
                                          const data = await res.json();
                                          if (res.ok) {
-                                           setStatusMessage('📧 ' + (data.message || 'Email sent successfully!'));
+                                           setStatusMessage(data.message || 'Email sent successfully');
                                          } else {
-                                           setStatusMessage('❌ ' + (data.detail || 'Failed to send email'));
+                                           setStatusMessage(data.detail || 'Failed to send email');
                                          }
                                        } catch (err) {
-                                         setStatusMessage('❌ Error: ' + err.message);
+                                         setStatusMessage('Error: ' + err.message);
                                        }
                                      }}
                                      title="Send compiled PDF resume to your email"
                                    >
-                                     📧 Send Email
+                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                       <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                       <polyline points="22,6 12,13 2,6"></polyline>
+                                     </svg>
+                                     <span>Email</span>
                                    </button>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>
+                                <div style={{ display: 'flex', gap: '6px', width: '100%', marginTop: '6px' }}>
                                   <button
                                     className="btn btn-secondary"
-                                    style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', whiteSpace: 'nowrap' }}
+                                    style={{ flex: 1, padding: '5px 8px', fontSize: '0.68rem', minHeight: '30px', whiteSpace: 'nowrap', gap: '4px' }}
                                     onClick={async () => {
                                       setLoading(true);
                                       setStatusMessage('Preparing personalized interview pack...');
@@ -4198,20 +4231,26 @@ function App() {
                                           setStatusMessage('Interview preparation pack generated!');
                                         } else {
                                           const err = await res.json();
-                                          // showToast(`Error: ${err.detail}`, 'error');
+                                          setStatusMessage(`Error: ${err.detail}`);
                                         }
                                       } catch (e) {
-                                        // showToast(`Error: ${e.message}`, 'error');
+                                        setStatusMessage(`Error: ${e.message}`);
                                       } finally {
                                         setLoading(false);
                                       }
                                     }}
                                   >
-                                    🎤 Interview Prep
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                      <line x1="12" y1="19" x2="12" y2="23"></line>
+                                      <line x1="8" y1="23" x2="16" y2="23"></line>
+                                    </svg>
+                                    <span>Interview Prep</span>
                                   </button>
                                   <button
                                      className="btn btn-secondary"
-                                     style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)', whiteSpace: 'nowrap' }}
+                                     style={{ flex: 1, padding: '5px 8px', fontSize: '0.68rem', minHeight: '30px', borderColor: 'var(--border-color)', color: '#38BDF8', whiteSpace: 'nowrap', gap: '4px' }}
                                      onClick={async () => {
                                        setLoading(true);
                                        setStatusMessage('Generating tailored cover letter...');
@@ -4236,23 +4275,27 @@ function App() {
                                               company: entry.company || 'Target Company'
                                             });
                                             setCoverLetterModalOpen(true);
-                                            setStatusMessage('📝 Tailored cover letter generated!');
+                                            setStatusMessage('Tailored cover letter generated!');
                                          } else {
                                            const err = await res.json();
-                                           setStatusMessage(`❌ Error: ${err.detail}`);
+                                           setStatusMessage(`Error: ${err.detail}`);
                                          }
                                        } catch (e) {
-                                         setStatusMessage(`❌ Error: ${e.message}`);
+                                         setStatusMessage(`Error: ${e.message}`);
                                        } finally {
                                          setLoading(false);
                                        }
                                      }}
                                    >
-                                     📝 Cover Letter
+                                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                       <polyline points="14 2 14 8 20 8"></polyline>
+                                     </svg>
+                                     <span>Cover Letter</span>
                                    </button>
                                   <button
                                     className="btn btn-secondary"
-                                    style={{ flex: 1, padding: '6px 8px', fontSize: '0.68rem', minHeight: '34px', borderColor: 'var(--accent-primary)', color: '#fff', whiteSpace: 'nowrap' }}
+                                    style={{ flex: 1, padding: '5px 8px', fontSize: '0.68rem', minHeight: '30px', borderColor: 'var(--border-color)', color: '#fff', whiteSpace: 'nowrap', gap: '4px' }}
                                     onClick={async () => {
                                       setLoading(true);
                                       setStatusMessage('Generating outreach message...');
@@ -4282,19 +4325,22 @@ function App() {
                                           setOutreachData(data.message);
                                           setOutreachModalOpen(true);
                                           setStatusMessage('Outreach message generated!');
-                                          // showToast('Outreach message ready!', 'success');
                                         } else {
                                           const err = await res.json();
-                                          // showToast(`Error: ${err.detail}`, 'error');
+                                          setStatusMessage(`Error: ${err.detail}`);
                                         }
                                       } catch (e) {
-                                        // showToast(`Error: ${e.message}`, 'error');
+                                        setStatusMessage(`Error: ${e.message}`);
                                       } finally {
                                         setLoading(false);
                                       }
                                     }}
                                   >
-                                    ✉️ Outreach
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                      <polyline points="22,6 12,13 2,6"></polyline>
+                                    </svg>
+                                    <span>Outreach</span>
                                   </button>
                                 </div>
                               </div>

@@ -6,38 +6,43 @@ const HistoryMode = ({
 }) => {
   return (
     <>
-      <div className="section-label">Application History</div>
-      <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
-        A record of jobs you've tailored a resume for or applied to. Kept per-account (or per-guest browser).
+      <div className="section-label">Pipeline History</div>
+      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+        A persistent ledger of targeted applications, tailored LaTeX bundles, and pipeline stages.
       </div>
       <button
         className="btn btn-secondary"
-        style={{ width: '100%', marginTop: '4px', gap: '8px' }}
+        style={{ width: '100%', marginTop: '6px', gap: '6px' }}
         onClick={handleFetchHistory}
         disabled={historyLoading}
       >
-        {historyLoading ? '⏳ Refreshing...' : '🔄 Refresh History'}
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: historyLoading ? 'spin 1s linear infinite' : 'none' }}>
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>{historyLoading ? 'Refreshing Pipeline…' : 'Refresh Pipeline'}</span>
       </button>
 
       {/* Quick History Tips & Actions Box */}
       <div style={{
         marginTop: '16px',
-        padding: '14px',
-        background: 'rgba(255, 255, 255, 0.02)',
+        padding: '12px',
+        background: 'var(--panel-bg-subtle)',
         border: '1px solid var(--border-color)',
-        borderRadius: '12px',
+        borderRadius: '8px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '10px'
+        gap: '8px'
       }}>
-        <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--accent-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          💡 Pipeline Mastery
+        <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'var(--font-mono)' }}>
+          Pipeline Operations
         </div>
-        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          Toggle status between <strong style={{ color: 'var(--accent-cyan)' }}>Tailored</strong> and <strong style={{ color: 'var(--accent-green)' }}>Applied</strong> on any card to update your funnel metrics in real-time.
+        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+          Toggle status between <span style={{ color: '#38BDF8', fontWeight: 600 }}>Tailored</span> and <span style={{ color: '#10B981', fontWeight: 600 }}>Applied</span> to calibrate pipeline metrics in real-time.
         </div>
-        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          Use the <strong style={{ color: '#fff' }}>1-Click Modals</strong> (🎤 Prep, 📝 Cover Letter, ✉️ Outreach) on each application to instantly generate tailored material for that specific employer.
+        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+          Launch on-demand modals (Interview Prep, Cover Letter, Outreach InMail) directly from any application record.
         </div>
       </div>
     </>
