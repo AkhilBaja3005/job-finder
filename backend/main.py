@@ -30,6 +30,7 @@ from routes.resume_routes import router as resume_router
 from routes.job_routes import router as job_router, _extract_company_from_jd
 from routes.ai_routes import router as ai_router
 from routes.admin_routes import router as admin_router
+from routes.mcp_routes import router as mcp_router
 from utils.latex_utils import compile_and_check_page_metrics, apply_latex_hotfix, generate_latex_from_json
 from services.overleaf import upload_zip_to_tmpfiles
 
@@ -118,6 +119,7 @@ app.include_router(resume_router)
 app.include_router(job_router)
 app.include_router(ai_router)
 app.include_router(admin_router)
+app.include_router(mcp_router)
 
 # Mount Static Asset Directories
 if os.path.exists(OUTPUT_DIR):

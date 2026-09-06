@@ -1,0 +1,106 @@
+{
+  "candidate": {
+    "name": "Akhil Baja",
+    "email": "akhilbaja.work@gmail.com",
+    "linkedin": "https://linkedin.com/in/akhilbaja",
+    "location": "London, UK",
+    "education": [
+      {
+        "institution": "Imperial College London",
+        "degree": "MSc Artificial Intelligence",
+        "timeline": "Sept 2026 - Sept 2027",
+        "location": "London, UK"
+      },
+      {
+        "institution": "IIT Hyderabad",
+        "degree": "B.Tech in Computer Science and Engineering",
+        "timeline": "Aug 2019 - May 2023",
+        "location": "Hyderabad, India"
+      }
+    ],
+    "experience_summary": "Senior AI Engineer with 3+ years experience building production Agentic AI workflows, LLM systems, RAG pipelines, and cloud microservices.",
+    "core_skills": [
+      "Agentic AI",
+      "LLM Systems",
+      "LangChain",
+      "RAG",
+      "PyTorch",
+      "Vector Databases",
+      "Python",
+      "C++",
+      "TypeScript",
+      "SQL",
+      "Docker",
+      "Kubernetes",
+      "Azure AKS",
+      "CI/CD"
+    ]
+  },
+  "search_preferences": {
+    "target_roles": [
+      "AI Engineer",
+      "Agentic AI Engineer",
+      "LLM Engineer",
+      "Machine Learning Engineer",
+      "Senior AI Engineer",
+      "Applied AI Scientist"
+    ],
+    "target_locations": [
+      "London, UK",
+      "UK Remote",
+      "Hybrid London",
+      "Remote (Global/EU/US)"
+    ],
+    "timeframe": "past_24_hours",
+    "seniority": [
+      "Mid-Level",
+      "Senior",
+      "Lead"
+    ],
+    "platforms": [
+      "Ashby",
+      "Greenhouse",
+      "Lever",
+      "LinkedIn",
+      "Indeed"
+    ],
+    "min_ats_score_threshold": 65
+  },
+  "networking_and_references": {
+    "reference_personas": [
+      {
+        "tier": "Tier 1 - Primary Verification",
+        "persona": "Engineering Manager / Tech Lead",
+        "context": "Direct managers who supervised your Agentic AI, RAG latency SLA (<150ms), and production Azure/Docker deployments."
+      },
+      {
+        "tier": "Tier 2 - Academic & Research",
+        "persona": "Imperial College & IIT Hyderabad Professors / Thesis Advisors",
+        "context": "Validates core ML/DL foundation, algorithmic rigor, and deep learning competencies."
+      },
+      {
+        "tier": "Tier 3 - Peer Collaborators",
+        "persona": "Senior Backend/ML Peers & Product Managers",
+        "context": "Confirms sprint delivery, team synergy, system design communication, and unblocking teammates."
+      }
+    ],
+    "referral_targets": [
+      {
+        "group": "Alumni Network",
+        "targets": [
+          "IIT Hyderabad Alumni",
+          "Imperial College London Alumni"
+        ],
+        "focus": "Engineers and Staff ML Engineers at target labs/scale-ups (high trust, internal bonus incentive)."
+      },
+      {
+        "group": "Hiring Managers & Recruiters",
+        "targets": [
+          "Technical Recruiters",
+          "Head of AI / AI Engineering Leads"
+        ],
+        "focus": "Direct outreach using 3-sentence personalized InMail highlighting your specific latency/throughput achievements."
+      }
+    ]
+  }
+}
