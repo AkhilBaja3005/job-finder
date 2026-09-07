@@ -44,6 +44,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const selTailoringIntensity = document.getElementById("sel-tailoring-intensity");
   const selResumeArchetype = document.getElementById("sel-resume-archetype");
   const btnTailorPdf = document.getElementById("btn-tailor-pdf");
+  const btnQuickTailor = document.getElementById("btn-quick-tailor");
+  const btnQuickOutreach = document.getElementById("btn-quick-outreach");
+  const atsVerdictBadge = document.getElementById("ats-verdict-badge");
   const btnEmailTailor = document.getElementById("btn-email-tailor");
   const btnCoverLetter = document.getElementById("btn-cover-letter");
   const btnOutreach = document.getElementById("btn-outreach");
@@ -452,6 +455,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (cleanAnalysisUrl && cleanActiveUrl && cleanAnalysisUrl === cleanActiveUrl) {
         if (scoreCircle && cachedAnalysis.fit_score) scoreCircle.textContent = `${cachedAnalysis.fit_score}%`;
         if (scoreSub) scoreSub.textContent = cachedAnalysis.fit_score >= 70 ? "Strong match profile" : "Missing key keywords";
+        if (atsVerdictBadge && cachedAnalysis.fit_score) {
+          const s = cachedAnalysis.fit_score;
+          atsVerdictBadge.textContent = s >= 70 ? "Strong Match" : s >= 50 ? "Moderate Fit" : "Low Fit";
+          atsVerdictBadge.style.color = s >= 70 ? "#34d399" : s >= 50 ? "#38bdf8" : "#fca5a5";
+          atsVerdictBadge.style.background = s >= 70 ? "rgba(16, 185, 129, 0.15)" : s >= 50 ? "rgba(56, 189, 248, 0.15)" : "rgba(239, 68, 68, 0.15)";
+        }
         if (activeRoleTitle && cachedAnalysis.title) activeRoleTitle.textContent = cachedAnalysis.title;
         if (activeCompanyName && cachedAnalysis.company) activeCompanyName.textContent = cachedAnalysis.company;
         if (alignSen && cachedAnalysis.seniority) alignSen.textContent = cachedAnalysis.seniority;
@@ -468,6 +477,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (activeCompanyName) activeCompanyName.textContent = "Open LinkedIn, Indeed, Greenhouse, or Lever";
         if (scoreCircle) scoreCircle.textContent = "⏳";
         if (scoreSub) scoreSub.textContent = "Computing ATS match score...";
+        if (atsVerdictBadge) {
+          atsVerdictBadge.textContent = "Analyzing";
+          atsVerdictBadge.style.color = "#38bdf8";
+          atsVerdictBadge.style.background = "rgba(56, 189, 248, 0.15)";
+        }
         const alignCard = document.getElementById("alignment-report-card");
         if (alignCard) alignCard.style.display = "none";
         if (missingSkillsSection) missingSkillsSection.style.display = "none";
@@ -577,6 +591,24 @@ document.addEventListener("DOMContentLoaded", () => {
                   scoreSub.textContent = score >= 70 ? "Strong match profile" : "Missing key keywords";
                   scoreCircle.style.borderColor = score >= 70 ? "#34d399" : score >= 50 ? "#38bdf8" : "#fb7185";
                   scoreCircle.style.color = score >= 70 ? "#34d399" : score >= 50 ? "#38bdf8" : "#fb7185";
+                  if (atsVerdictBadge) {
+                    if (score >= 70) {
+                      atsVerdictBadge.textContent = "Strong Match";
+                      atsVerdictBadge.style.color = "#34d399";
+                      atsVerdictBadge.style.background = "rgba(16, 185, 129, 0.15)";
+                      atsVerdictBadge.style.borderColor = "rgba(16, 185, 129, 0.35)";
+                    } else if (score >= 50) {
+                      atsVerdictBadge.textContent = "Moderate Fit";
+                      atsVerdictBadge.style.color = "#38bdf8";
+                      atsVerdictBadge.style.background = "rgba(56, 189, 248, 0.15)";
+                      atsVerdictBadge.style.borderColor = "rgba(56, 189, 248, 0.35)";
+                    } else {
+                      atsVerdictBadge.textContent = "Low Fit";
+                      atsVerdictBadge.style.color = "#fca5a5";
+                      atsVerdictBadge.style.background = "rgba(239, 68, 68, 0.15)";
+                      atsVerdictBadge.style.borderColor = "rgba(239, 68, 68, 0.35)";
+                    }
+                  }
 
                   try {
                     chrome.runtime.sendMessage({ action: "SET_BADGE", score });
@@ -987,69 +1019,83 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // 1-Click Tailor & Download PDF
-  if (btnTailorPdf) {
-    btnTailorPdf.addEventListener("click", () => {
-      if (!currentJobInfo) {
-        showToast("⚠️ Open a job page first!");
-        return;
-      }
-      chrome.storage.local.get(["userToken"], (items) => {
-        const token = items ? items.userToken || "guest" : "guest";
-        showToast("⏳ Tailoring LaTeX resume & compiling PDF...");
-        btnTailorPdf.disabled = true;
-        fetch(`${API_BASE_URL}/analyze_job`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            job_url: currentJobInfo.url,
-            job_title: currentJobInfo.title,
-            company: currentJobInfo.company,
-            job_description: currentJobInfo.description,
-            send_email: false,
-            skip_tailoring: false,
-            force_tailoring: true,
-            source_mode: "extension",
-            user_selected_skills: Array.from(window.selectedUserSkills || [])
-          })
+  // 1-Click Tailor & Download PDF Logic
+  function triggerTailorResume(triggerBtn) {
+    if (!currentJobInfo) {
+      showToast("⚠️ Open a job page first!");
+      return;
+    }
+    chrome.storage.local.get(["userToken"], (items) => {
+      const token = items ? items.userToken || "guest" : "guest";
+      showToast("⏳ Tailoring LaTeX resume & compiling PDF...");
+      if (triggerBtn) triggerBtn.disabled = true;
+      fetch(`${API_BASE_URL}/analyze_job`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          job_url: currentJobInfo.url,
+          job_title: currentJobInfo.title,
+          company: currentJobInfo.company,
+          job_description: currentJobInfo.description,
+          send_email: false,
+          skip_tailoring: false,
+          force_tailoring: true,
+          source_mode: "extension",
+          user_selected_skills: Array.from(window.selectedUserSkills || [])
         })
-          .then(async (res) => {
-            if (!res.ok) throw new Error(`Server error (${res.status})`);
-            const reader = res.body.getReader();
-            const decoder = new TextDecoder();
-            let buf = "";
-            let openedPdf = false;
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              buf += decoder.decode(value, { stream: true });
-              const lines = buf.split("\n");
-              buf = lines.pop();
-              for (const line of lines) {
-                try {
-                  const ev = JSON.parse(line);
-                  if (ev.type === "log" && ev.message) {
-                    if (!ev.message.includes("Comparing candidate profile")) showToast(ev.message);
-                  } else if (ev.type === "result") {
-                    if (ev.download_pdf_url && !openedPdf) {
-                      openedPdf = true;
-                      const pdfUrl = ev.download_pdf_url.startsWith("http") ? ev.download_pdf_url : `${API_BASE_URL}${ev.download_pdf_url}`;
-                      chrome.tabs.create({ url: pdfUrl });
-                      showToast("📄 ✅ Tailored PDF generated & opened!");
-                    } else {
-                      showToast(`📄 ✅ Resume tailored! (Fit score: ${ev.fit_score || 85}%)`);
-                    }
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`Server error (${res.status})`);
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = "";
+          let openedPdf = false;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split("\n");
+            buf = lines.pop();
+            for (const line of lines) {
+              try {
+                const ev = JSON.parse(line);
+                if (ev.type === "log" && ev.message) {
+                  if (!ev.message.includes("Comparing candidate profile")) showToast(ev.message);
+                } else if (ev.type === "result") {
+                  if (ev.download_pdf_url && !openedPdf) {
+                    openedPdf = true;
+                    const pdfUrl = ev.download_pdf_url.startsWith("http") ? ev.download_pdf_url : `${API_BASE_URL}${ev.download_pdf_url}`;
+                    chrome.tabs.create({ url: pdfUrl });
+                    showToast("📄 ✅ Tailored PDF generated & opened!");
+                  } else {
+                    showToast(`📄 ✅ Resume tailored! (Fit score: ${ev.fit_score || 85}%)`);
                   }
-                } catch (e) {}
-              }
+                }
+              } catch (e) {}
             }
-          })
-          .catch((err) => showToast("❌ Tailoring failed: " + err.message))
-          .finally(() => { btnTailorPdf.disabled = false; });
-      });
+          }
+        })
+        .catch((err) => showToast("❌ Tailoring failed: " + err.message))
+        .finally(() => { if (triggerBtn) triggerBtn.disabled = false; });
+    });
+  }
+
+  if (btnTailorPdf) {
+    btnTailorPdf.addEventListener("click", () => triggerTailorResume(btnTailorPdf));
+  }
+
+  if (btnQuickTailor) {
+    btnQuickTailor.addEventListener("click", () => triggerTailorResume(btnQuickTailor));
+  }
+
+  if (btnQuickOutreach) {
+    btnQuickOutreach.addEventListener("click", () => {
+      if (btnOutreach) {
+        btnOutreach.click();
+      }
     });
   }
 

@@ -3,271 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Job Finder ATS Tailor</title>
-  <style>
-    body {
-      width: 100%;
-      min-width: 320px;
-      max-width: 100%;
-      min-height: 100vh;
-      margin: 0;
-      padding: 14px 16px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0f172a;
-      color: #f8fafc;
-      box-sizing: border-box;
-      overflow-x: hidden;
-    }
-    .header-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      padding-bottom: 10px;
-      margin-bottom: 12px;
-    }
-    .brand-title {
-      font-size: 15px;
-      margin: 0;
-      color: #38bdf8;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-weight: 800;
-      letter-spacing: -0.01em;
-    }
-    .status-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 3px 8px;
-      border-radius: 12px;
-      font-size: 10px;
-      font-weight: 700;
-      background: rgba(16, 185, 129, 0.15);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.3);
-    }
-    .status-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #34d399;
-      box-shadow: 0 0 6px #34d399;
-    }
-
-    .update-banner {
-      display: none;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 7px 10px;
-      border-radius: 8px;
-      background: rgba(245, 158, 11, 0.14);
-      border: 1px solid rgba(245, 158, 11, 0.4);
-      color: #fbbf24;
-      font-size: 10px;
-      margin-bottom: 10px;
-      animation: fadeIn 0.3s ease;
-    }
-    .update-banner a {
-      color: #fff;
-      background: #d97706;
-      padding: 3px 7px;
-      border-radius: 4px;
-      text-decoration: none;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-    .update-banner a:hover {
-      background: #b45309;
-    }
-
-    /* Top Navigation Tabs */
-    .nav-tabs {
-      display: flex;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(56, 189, 248, 0.25);
-      border-radius: 8px;
-      padding: 3px;
-      margin-bottom: 12px;
-      gap: 4px;
-    }
-    .nav-tab {
-      flex: 1;
-      text-align: center;
-      padding: 6px 4px;
-      font-size: 11.5px;
-      font-weight: 700;
-      color: #94a3b8;
-      border-radius: 6px;
-      cursor: pointer;
-      border: none;
-      background: transparent;
-      transition: all 0.2s ease;
-      white-space: nowrap;
-    }
-    .nav-tab:hover {
-      color: #f8fafc;
-      background: rgba(255, 255, 255, 0.05);
-    }
-    .nav-tab.active {
-      background: #0284c7;
-      color: #ffffff;
-      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
-    }
-
-    .tab-pane {
-      display: none;
-    }
-    .tab-pane.active {
-      display: block;
-    }
-
-    .card {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px;
-      padding: 10px 12px;
-      margin-bottom: 10px;
-    }
-    .score-box {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      background: rgba(56, 189, 248, 0.08);
-      border: 1px solid rgba(56, 189, 248, 0.25);
-      border-radius: 10px;
-      padding: 10px 12px;
-      margin-bottom: 10px;
-    }
-    .score-circle {
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: rgba(56, 189, 248, 0.15);
-      border: 3px solid #38bdf8;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 15px;
-      font-weight: 800;
-      color: #38bdf8;
-      flex-shrink: 0;
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
-    }
-    .skill-chip {
-      display: inline-block;
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      color: #fca5a5;
-      padding: 3px 8px;
-      border-radius: 10px;
-      font-size: 10px;
-      font-weight: 700;
-      margin: 2px 3px 2px 0;
-      cursor: pointer;
-      user-select: none;
-      transition: all 0.2s ease;
-    }
-    .skill-chip:hover {
-      background: rgba(239, 68, 68, 0.28);
-      transform: scale(1.03);
-    }
-    .skill-chip.selected {
-      background: rgba(16, 185, 129, 0.25);
-      border: 1px solid #10b981;
-      color: #34d399;
-      box-shadow: 0 0 8px rgba(16, 185, 129, 0.25);
-    }
-    .btn {
-      width: 100%;
-      padding: 9px;
-      border-radius: 7px;
-      border: none;
-      color: #fff;
-      font-weight: 700;
-      font-size: 11.5px;
-      cursor: pointer;
-      margin-top: 6px;
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      box-shadow: 0 3px 10px rgba(0,0,0,0.15);
-    }
-    .btn:hover {
-      opacity: 0.92;
-      transform: translateY(-1px);
-    }
-    .btn-primary {
-      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-      box-shadow: 0 3px 12px rgba(2, 132, 199, 0.3);
-    }
-    .btn-email {
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      box-shadow: 0 3px 12px rgba(16, 185, 129, 0.25);
-    }
-    .btn-secondary {
-      background: rgba(255,255,255,0.06);
-      color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.3);
-    }
-    .preview-box {
-      background: #090d16;
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      border-radius: 8px;
-      padding: 10px;
-      margin-top: 6px;
-      margin-bottom: 8px;
-      max-height: 140px;
-      overflow-y: auto;
-      font-size: 10.5px;
-      line-height: 1.45;
-      color: #e2e8f0;
-      white-space: pre-wrap;
-      word-break: break-word;
-      text-align: left;
-    }
-    .form-group {
-      margin-bottom: 8px;
-    }
-    .form-group label {
-      display: block;
-      font-size: 10px;
-      color: #94a3b8;
-      font-weight: 600;
-      margin-bottom: 3px;
-    }
-    .form-control {
-      width: 100%;
-      box-sizing: border-box;
-      background: #0f172a;
-      border: 1px solid #334155;
-      color: #f8fafc;
-      padding: 6px 8px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-family: inherit;
-    }
-    .form-control:focus {
-      outline: none;
-      border-color: #38bdf8;
-    }
-    .toast {
-      position: relative;
-      margin-top: 10px;
-      background: rgba(2, 132, 199, 0.25);
-      border: 1px solid #0284c7;
-      color: #38bdf8;
-      padding: 8px 10px;
-      border-radius: 7px;
-      font-size: 11px;
-      font-weight: 700;
-      text-align: center;
-      display: none;
-    }
-  </style>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <!-- Brand & Status Header Bar -->
@@ -347,26 +83,39 @@
     <!-- ATS Match Score Section -->
     <div id="score-section" class="score-box">
       <div id="ats-score-circle" class="score-circle">⏳</div>
-      <div>
-        <div style="font-weight: 700; font-size: 12.5px; color: #f8fafc;">ATS Match Score</div>
-        <div id="ats-score-sub" style="font-size: 10.5px; color: #94a3b8; margin-top: 1px;">Computing ATS match score...</div>
+      <div style="flex: 1;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 700; font-size: 12.5px; color: #f8fafc;">ATS Match Score</span>
+          <span id="ats-verdict-badge" style="font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">Analyzing</span>
+        </div>
+        <div id="ats-score-sub" style="font-size: 10.5px; color: #94a3b8; margin-top: 2px;">Computing ATS match score...</div>
       </div>
     </div>
 
+    <!-- Quick Analysis Action Row (Direct parity with web app decision bar) -->
+    <div class="quick-actions-row">
+      <button id="btn-quick-tailor" class="quick-action-btn quick-action-tailor" title="Tailor LaTeX resume & download PDF">
+        <span>⚡</span> Tailor Resume
+      </button>
+      <button id="btn-quick-outreach" class="quick-action-btn quick-action-outreach" title="Generate personalized recruiter InMail & outreach">
+        <span>✉️</span> Generate Outreach
+      </button>
+    </div>
+
     <!-- Career-Ops Alignment Rubric Breakdown -->
-    <div id="alignment-report-card" style="display: none; background: rgba(30, 41, 59, 0.45); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px;">
+    <div id="alignment-report-card" class="alignment-card">
       <div style="font-size: 9px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">📊 Career-Ops Strategic Alignment:</div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 9.5px;">
-        <div style="background: rgba(15, 23, 42, 0.6); padding: 4px 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.05);">
+      <div class="alignment-grid">
+        <div class="alignment-item">
           <span style="color: #94a3b8; font-weight: 600;">🎓 Level:</span> <span id="align-seniority" style="color: #f8fafc; font-weight: 700;">Matching</span>
         </div>
-        <div style="background: rgba(15, 23, 42, 0.6); padding: 4px 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.05);">
+        <div class="alignment-item">
           <span style="color: #94a3b8; font-weight: 600;">🏢 Domain:</span> <span id="align-domain" style="color: #f8fafc; font-weight: 700;">Direct</span>
         </div>
         <div id="align-flags-box" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); padding: 4px 6px; border-radius: 5px; grid-column: span 2; display: none;">
           <span style="color: #fca5a5; font-weight: 700;">🚩 Gap / Constraint:</span> <span id="align-flags" style="color: #fecaca; font-weight: 600;">None</span>
         </div>
-        <div style="background: rgba(15, 23, 42, 0.6); padding: 4px 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.05); grid-column: span 2;">
+        <div class="alignment-item full-width">
           <span style="color: #94a3b8; font-weight: 600;">⚡ Strategic Verdict:</span> <span id="align-verdict" style="color: #34d399; font-weight: 800;">Strong Fit</span>
         </div>
       </div>
@@ -424,7 +173,7 @@
     <!-- Extension Action Buttons -->
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
       <button id="btn-autofill" class="btn btn-primary" style="margin-top: 0;">⚡ Auto-Fill Form</button>
-      <button id="btn-auto-attach" class="btn btn-primary" style="margin-top: 0; background: linear-gradient(135deg, #059669 0%, #047857 100%);">📎 Attach PDF</button>
+      <button id="btn-auto-attach" class="btn btn-success" style="margin-top: 0;">📎 Attach PDF</button>
     </div>
     <button id="btn-email-tailor" class="btn btn-email">📧 1-Click Email Tailored Package</button>
     <button id="btn-cover-letter" class="btn btn-secondary">📝 Generate & Preview Cover Letter</button>
