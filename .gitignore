@@ -17,4 +17,5 @@ bandit_report.txt
 .vscode/
 pyrightconfig.json
 *.swp
-
+applications_tracker/
+backend/config/candidate_profile.json

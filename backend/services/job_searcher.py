@@ -77,6 +77,8 @@ def generate_search_queries_from_resume(resume_data: dict, custom_api_key: Optio
 
 # ─── Direct ATS Job Search with Gemini Google Search Grounding ─────────────
 
+_ats_grounding_quota_exhausted = False
+
 def search_direct_ats_jobs(
     role: str,
     location: str = "London",
@@ -88,30 +90,36 @@ def search_direct_ats_jobs(
     Greenhouse, Ashby, Lever, and Workday without bot-blocking or scraping hurdles.
     Enforces strict role relevance and freshness timeframe.
     """
+    global _ats_grounding_quota_exhausted
+    if _ats_grounding_quota_exhausted:
+        return []
+
     gemini_key = api_key or os.getenv("GEMINI_API_KEY")
     if not gemini_key:
-        print("[Direct ATS Search] No GEMINI_API_KEY configured. Skipping.")
         return []
-    
-    timeframe_prompt_map = {
-        "24h": "posted within the last 24 hours (today)",
-        "48h": "posted within the last 48 hours (past 2 days)",
-        "7d": "posted within the past 7 days (this week)",
-        "1w": "posted within the past 7 days (this week)",
-        "1m": "posted within the past 30 days (this month)"
-    }
-    timeframe_constraint = timeframe_prompt_map.get(timeframe, f"posted within the last {timeframe}")
-    
-    prompt = f"""Search Google for live job openings for "{role}" in "{location}".
-Target direct listings on Greenhouse (boards.greenhouse.io), Ashby (jobs.ashbyhq.com), Lever (jobs.lever.co), or Workday (myworkdayjobs.com).
-Find jobs that are active and {timeframe_constraint}.
 
-Output ONLY a JSON array with objects matching:
+    # Map timeframe
+    freshness_prompt = {
+        "24h": "posted in the last 24 hours (strictly within the past 1 day)",
+        "48h": "posted in the last 48 hours (strictly within the past 2 days)",
+        "1w": "posted within the last 7 days",
+        "1m": "posted within the last 30 days"
+    }.get(timeframe, "posted recently")
+
+    prompt = f"""Use Google Search to find 5 to 10 active, open job postings for '{role}' in '{location}' that are hosted on direct ATS career portals (Greenhouse, Ashby, Lever, or Workday).
+Every job must be {freshness_prompt}.
+Search specifically on:
+- boards.greenhouse.io OR job-boards.greenhouse.io
+- jobs.ashbyhq.com
+- jobs.lever.co
+- myworkdayjobs.com
+
+For each match found, return a valid JSON array of objects with the exact schema:
 [
   {{
-    "title": "Exact Job Title",
+    "title": "Job Title",
     "company": "Company Name",
-    "location": "Location (City, Country, or Remote)",
+    "location": "Location or Remote",
     "url": "https://direct-ats-link...",
     "posted_time": "e.g. 1 day ago / recent"
   }}
@@ -148,6 +156,11 @@ Do not wrap in explanatory text. Only return the JSON array."""
                     if raw_text:
                         break
             except Exception as model_err:
+                err_str = str(model_err).lower()
+                if "429" in err_str or "resource_exhausted" in err_str:
+                    _ats_grounding_quota_exhausted = True
+                    print(f"[Direct ATS Search] Quota limit reached (429), flipping circuit breaker ON for session.")
+                    break
                 print(f"[Direct ATS Search] Model {search_model} failed: {model_err}, trying fallback...")
                 continue
         if not raw_text:
@@ -639,18 +652,15 @@ DISCOVERY_JD_FETCH_CAP = 30
 # Dynamically scale concurrency based on the hosting environment:
 # - We check for an explicit override environment variable SCRAPER_CONCURRENCY
 # - Render automatically injects "RENDER" into all web service environments under the hood.
-# - If none is found, we fall back to 5 for local runs.
+# - If none is found, we use a conservative default of 3 (prevents memory spikes and rate-limiting on cloud containers)
 try:
     env_concurrency = os.getenv("SCRAPER_CONCURRENCY")
     if env_concurrency is not None:
         DISCOVERY_FETCH_CONCURRENCY = int(env_concurrency)
     else:
-        # Detect if running locally by checking the FRONTEND_URL value
-        frontend_url = os.getenv("FRONTEND_URL", "")
-        is_local = "localhost" in frontend_url or "127.0.0.1" in frontend_url
-        DISCOVERY_FETCH_CONCURRENCY = 5 if is_local else 8
+        DISCOVERY_FETCH_CONCURRENCY = 3
 except Exception:
-    DISCOVERY_FETCH_CONCURRENCY = 8
+    DISCOVERY_FETCH_CONCURRENCY = 3
 
 
 def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:
@@ -765,13 +775,13 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
     if job.platform == "LinkedIn":
         try:
             recruiter_info = await asyncio.wait_for(
-                extract_recruiter(job.url, platform="linkedin", html=scraped.get("html"), browser=browser),
-                timeout=12.0
+                extract_recruiter(job.url, platform="linkedin", html=scraped.get("html"), browser=browser, allow_grounding=False),
+                timeout=6.0
             )
             recruiter_name = recruiter_info.get("recruiter_name")
             recruiter_profile_url = recruiter_info.get("recruiter_profile_url")
         except asyncio.TimeoutError:
-            print(f"[Job Searcher] Recruiter extraction timed out (12s) for '{job.title}', proceeding without recruiter info")
+            print(f"[Job Searcher] Recruiter HTML extraction timed out for '{job.title}', proceeding")
         except Exception as e:
             print(f"[Job Searcher] Failed to extract recruiter info for '{job.title}': {e}")
 

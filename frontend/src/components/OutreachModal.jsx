@@ -112,7 +112,23 @@ const OutreachModal = ({
         </div>
 
         {/* Recruiter Info */}
-        {recruiterInfo?.recruiter_name ? (
+        {recruiterInfo?.quota_exhausted ? (
+          <div className="recruiter-info-box" style={{ background: 'rgba(234, 179, 8, 0.08)', borderColor: 'rgba(234, 179, 8, 0.3)', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EAB308" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: '2px' }}>
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <div>
+              <div style={{ fontSize: '0.86rem', color: '#FDE047', fontWeight: 600, margin: '0 0 3px 0' }}>
+                Google Search Grounding free-tier daily quota limit reached
+              </div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                The outreach note has been addressed to the Hiring Team. You can set a custom Gemini API Key in Settings for unlimited search grounding.
+              </div>
+            </div>
+          </div>
+        ) : recruiterInfo?.recruiter_name ? (
           <div className="recruiter-info-box">
             <div className="recruiter-name">{recruiterInfo.recruiter_name}</div>
             {recruiterInfo?.recruiter_profile_url && (

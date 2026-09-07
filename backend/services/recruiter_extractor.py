@@ -7,6 +7,7 @@ import re
 import unicodedata
 import urllib.parse
 from typing import Optional, Dict
+from utils.ttl_cache import TTLCache
 
 
 def _clean_text(s):
@@ -281,13 +282,37 @@ def extract_recruiter_from_indeed(job_url: str) -> Dict[str, Optional[str]]:
         }
 
 
+# In-memory TTL cache for recruiter company lookups (1 hour TTL)
+_recruiter_cache = TTLCache(ttl_seconds=3600)
+_recruiter_grounding_quota_exhausted = False
+
+def is_recruiter_grounding_quota_exhausted() -> bool:
+    return _recruiter_grounding_quota_exhausted
+
+
+def reset_recruiter_grounding_quota() -> None:
+    global _recruiter_grounding_quota_exhausted
+    _recruiter_grounding_quota_exhausted = False
+
+
 async def discover_recruiter_via_grounding(company_name: str, custom_api_key: Optional[str] = None) -> Dict[str, Optional[str]]:
     """
     Uses Gemini with Google Search Grounding to discover a technical recruiter
     or talent acquisition lead for companies when posting via Greenhouse, Lever, Ashby, etc.
+    Caches lookups by company name for 1 hour to prevent redundant LLM search requests.
     """
+    global _recruiter_grounding_quota_exhausted
+
     if not company_name or len(company_name.strip()) < 2:
         return {"recruiter_name": None, "recruiter_profile_url": None}
+
+    cache_key = company_name.strip().lower()
+    cached = _recruiter_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    if _recruiter_grounding_quota_exhausted and not custom_api_key:
+        return {"recruiter_name": None, "recruiter_profile_url": None, "quota_exhausted": True}
 
     try:
         from services.gemini_client import call_gemini_grounded
@@ -316,23 +341,33 @@ async def discover_recruiter_via_grounding(company_name: str, custom_api_key: Op
                         url = c_url
                         break
             if name and name.lower() not in ["null", "none", "unknown", "n/a"]:
-                return {
+                found = {
                     "recruiter_name": name.strip(),
                     "recruiter_profile_url": url.strip() if url else None
                 }
+                _recruiter_cache.set(cache_key, found)
+                return found
     except Exception as e:
+        err_str = str(e).lower()
+        if "429" in err_str or "resource_exhausted" in err_str or "quota" in err_str:
+            _recruiter_grounding_quota_exhausted = True
+            print(f"[discover_recruiter_via_grounding] Gemini search quota exhausted (429).")
+            return {"recruiter_name": None, "recruiter_profile_url": None, "quota_exhausted": True}
         print(f"[discover_recruiter_via_grounding] Search grounding fallback failed: {e}")
 
-    return {"recruiter_name": None, "recruiter_profile_url": None}
+    result = {"recruiter_name": None, "recruiter_profile_url": None}
+    _recruiter_cache.set(cache_key, result)
+    return result
 
 
-async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: Optional[str] = None, browser=None, company_hint: Optional[str] = None, custom_api_key: Optional[str] = None) -> Dict[str, Optional[str]]:
+async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: Optional[str] = None, browser=None, company_hint: Optional[str] = None, custom_api_key: Optional[str] = None, allow_grounding: bool = True) -> Dict[str, Optional[str]]:
     """
     Unified interface to extract recruiter info from a job posting URL.
 
     Automatically detects the platform if not provided.
     If platform is a direct ATS (Greenhouse, Lever, Ashby, Workday) or no recruiter
-    is directly on the page, uses Gemini Google Search Grounding to find an active recruiter.
+    is directly on the page, uses Gemini Google Search Grounding to find an active recruiter
+    ONLY if allow_grounding is True.
 
     Args:
         job_url: The job posting URL
@@ -343,6 +378,7 @@ async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: 
             (LinkedIn only) instead of launching a new one
         company_hint: Optional company name hint for grounded search
         custom_api_key: Optional custom Gemini API key
+        allow_grounding: When False, skips heavy LLM search grounding (essential during batch discovery)
 
     Returns:
         {
@@ -390,9 +426,9 @@ async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: 
     elif platform == 'indeed':
         res = extract_recruiter_from_indeed(job_url)
 
-    # If recruiter wasn't found on the page or it's a direct ATS (Ashby/Greenhouse/Lever/etc),
-    # discover recruiter via Google Search Grounding
-    if not res.get("recruiter_name"):
+    # If recruiter wasn't found on the page, only discover recruiter via Google Search Grounding
+    # when allow_grounding is explicitly enabled (e.g. on-demand in outreach modal, NOT batch discovery)
+    if allow_grounding and not res.get("recruiter_name"):
         comp = company_hint or res.get("company_name")
         if not comp:
             # Try to derive company name from job URL domain or subpaths (e.g. boards.greenhouse.io/stripe)
@@ -402,6 +438,8 @@ async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: 
 
         if comp:
             grounded_res = await discover_recruiter_via_grounding(comp, custom_api_key=custom_api_key)
+            if grounded_res.get("quota_exhausted"):
+                res["quota_exhausted"] = True
             if grounded_res.get("recruiter_name"):
                 res["recruiter_name"] = grounded_res["recruiter_name"]
                 res["recruiter_profile_url"] = grounded_res.get("recruiter_profile_url")

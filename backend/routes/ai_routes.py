@@ -272,7 +272,10 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             recruiter_name = None
             if request.job_url and not request.skip_tailoring:
                 try:
-                    rec_info = await extract_recruiter(request.job_url, None)
+                    rec_info = await asyncio.wait_for(
+                        extract_recruiter(request.job_url, None, company_hint=request.company, custom_api_key=active_api_key, allow_grounding=True),
+                        timeout=10.0
+                    )
                     recruiter_name = rec_info.get("recruiter_name")
                 except Exception:
                     pass
@@ -714,12 +717,18 @@ async def generate_outreach(request: GenerateOutreachRequest, authorization: Opt
         }
 
         if request.job_url:
-            recruiter_info = await extract_recruiter(
-                request.job_url,
-                request.platform,
-                company_hint=request.company_name,
-                custom_api_key=active_api_key
-            )
+            try:
+                recruiter_info = await asyncio.wait_for(
+                    extract_recruiter(
+                        request.job_url,
+                        request.platform,
+                        company_hint=request.company_name,
+                        custom_api_key=active_api_key
+                    ),
+                    timeout=12.0
+                )
+            except Exception as re_err:
+                print(f"[generate_outreach] Recruiter extraction note: {re_err}")
             if not recruiter_info.get("company_name"):
                 recruiter_info["company_name"] = request.company_name
 
