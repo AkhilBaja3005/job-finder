@@ -6756,7 +6756,7 @@ function App() {
                           </button>
                         </div>
                       </div>
-                      <div className="panel-content" style={{ whiteSpace: 'pre-wrap' }}>
+                      <div className="panel-content" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere', maxWidth: '100%', boxSizing: 'border-box' }}>
                         {analysisResult.cover_letter}
                       </div>
                     </div>
