@@ -662,6 +662,8 @@ def call_gemini_grounded(
     }
 
     last_error = None
+    import concurrent.futures
+
     for model_name in GROUNDED_SEARCH_MODELS:
         try:
             _throttle_for_rpm(model_name)
@@ -671,11 +673,24 @@ def call_gemini_grounded(
             if on_log:
                 on_log(json.dumps({"type": "llm_grounding", "message": msg}))
 
-            response = client.models.generate_content(
-                model=model_name,
-                contents=full_prompt,
-                config=types.GenerateContentConfig(**config_args),
-            )
+            # Enforce strict 12-second timeout per grounding model call
+            def _execute_call():
+                return client.models.generate_content(
+                    model=model_name,
+                    contents=full_prompt,
+                    config=types.GenerateContentConfig(**config_args),
+                )
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_execute_call)
+                try:
+                    response = future.result(timeout=12.0)
+                except concurrent.futures.TimeoutError:
+                    timeout_msg = f"[LLM Grounding] Model {model_name} timed out after 12s, skipping to next variant..."
+                    print(timeout_msg)
+                    log_ist(timeout_msg)
+                    last_error = TimeoutError(f"{model_name} timed out after 12s")
+                    continue
 
             text = response.text or ""
             citations = []
@@ -726,7 +741,11 @@ def call_gemini_grounded(
 
     # Fallback to standard ungrounded generation if grounded endpoints fail
     print(f"[LLM Grounding] Falling back to ungrounded generation due to: {last_error}")
-    raw_text = generate_content_with_fallback(prompt=prompt, custom_api_key=custom_api_key, on_log=on_log)
+    try:
+        raw_text = generate_content_with_fallback(prompt=prompt, custom_api_key=custom_api_key, on_log=on_log)
+    except Exception as fe:
+        print(f"[LLM Grounding] Fallback ungrounded generation error: {fe}")
+        raw_text = ""
     return {
         "text": raw_text,
         "citations": [],

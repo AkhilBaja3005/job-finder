@@ -124,16 +124,25 @@ Do not wrap in explanatory text. Only return the JSON array."""
             "gemini-2.5-flash",
             "gemini-2.5-flash-lite",
         ]
+        import concurrent.futures
         for search_model in ATS_SEARCH_MODELS:
             try:
-                response = client.models.generate_content(
-                    model=search_model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        tools=[types.Tool(google_search=types.GoogleSearch())],
-                        temperature=0.1
+                def _do_ats_search():
+                    return client.models.generate_content(
+                        model=search_model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            tools=[types.Tool(google_search=types.GoogleSearch())],
+                            temperature=0.1
+                        )
                     )
-                )
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    fut = executor.submit(_do_ats_search)
+                    try:
+                        response = fut.result(timeout=12.0)
+                    except concurrent.futures.TimeoutError:
+                        print(f"[Direct ATS Search] Model {search_model} timed out after 12s, trying fallback...")
+                        continue
                 if response and response.text:
                     raw_text = response.text.strip()
                     if raw_text:
@@ -755,9 +764,14 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
     recruiter_profile_url = None
     if job.platform == "LinkedIn":
         try:
-            recruiter_info = await extract_recruiter(job.url, platform="linkedin", html=scraped.get("html"), browser=browser)
+            recruiter_info = await asyncio.wait_for(
+                extract_recruiter(job.url, platform="linkedin", html=scraped.get("html"), browser=browser),
+                timeout=12.0
+            )
             recruiter_name = recruiter_info.get("recruiter_name")
             recruiter_profile_url = recruiter_info.get("recruiter_profile_url")
+        except asyncio.TimeoutError:
+            print(f"[Job Searcher] Recruiter extraction timed out (12s) for '{job.title}', proceeding without recruiter info")
         except Exception as e:
             print(f"[Job Searcher] Failed to extract recruiter info for '{job.title}': {e}")
 
@@ -1028,22 +1042,28 @@ async def find_matching_jobs(
         async def _score_and_stream(job, log_queue_stream):
             def _ui_logger(msg):
                 log_queue_stream.append(json.dumps({"type": "log", "message": msg}) + " " * 2048 + "\n")
-            try:
+
+            async def _inner_score():
                 if browser is not None:
-                    res = await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
+                    return await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
                 else:
                     try:
                         from playwright.async_api import async_playwright
                         async with async_playwright() as p:
                             b = await p.chromium.launch(headless=True)
                             try:
-                                res = await _score_job_with_real_jd(job, resume_data, b, semaphore, on_log=_ui_logger)
+                                return await _score_job_with_real_jd(job, resume_data, b, semaphore, on_log=_ui_logger)
                             finally:
                                 await b.close()
                     except Exception as b_err:
                         print(f"[Job Searcher] Headless browser unavailable for '{job.title}': {b_err}")
-                        res = await _score_job_with_real_jd(job, resume_data, None, semaphore, on_log=_ui_logger)
-                return res
+                        return await _score_job_with_real_jd(job, resume_data, None, semaphore, on_log=_ui_logger)
+
+            try:
+                return await asyncio.wait_for(_inner_score(), timeout=25.0)
+            except asyncio.TimeoutError:
+                print(f"[Job Searcher] ⚠️ Scoring timed out after 25s for '{job.title}', skipping JD scoring")
+                return None
             except Exception as e:
                 print(f"[Job Searcher] Error scoring job '{job.title}': {e}")
                 return None
