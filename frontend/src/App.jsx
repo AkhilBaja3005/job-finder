@@ -1276,62 +1276,6 @@ function App() {
     setStatusMessage(initMsg);
     setStatusLogs([{ message: initMsg, ts: nowTs() }]);
 
-    // ── SSE log stream: connect to /user/logs/stream to pipe all backend logs
-    // into the pipeline log box in real time, independently of the main search fetch.
-    let logEventSource = null;
-    try {
-      const sseUrl = new URL(`${API_BASE}/user/logs/stream`);
-      logEventSource = new EventSource(sseUrl.toString());
-      // NOTE: EventSource doesn't support custom headers, so we send auth as query param
-      // Recreate with token query param approach via fetch-based SSE reader instead
-      logEventSource.close();
-      logEventSource = null;
-    } catch (e) { /* ignore */ }
-
-    // Filter: which log messages to show in the UI pipeline log box.
-    // The admin stream stays fully verbose; we only suppress internal recruiter noise here.
-    const shouldShowLog = (msg) => {
-      // Strip timestamp prefix e.g. "[19:53:56 IST] " for pattern matching
-      const body = msg.replace(/^\[\d{2}:\d{2}:\d{2} IST\]\s*/, '');
-      // Drop recruiter pre-fetched HTML verbose lines (not useful to users)
-      if (/^\[extract_recruiter_from_linkedin\] Using pre-fetched HTML for:/.test(body)) return false;
-      // Drop raw recruiter_extractor found lines (redundant in UI)
-      if (/^\[recruiter_extractor\]/.test(body)) return false;
-      return true;
-    };
-
-    // Use fetch-based SSE reader (supports Authorization header)
-    let sseAbort = new AbortController();
-    const sseHeaders = { 'Authorization': `Bearer ${getAuthHeader()}`, 'ngrok-skip-browser-warning': 'true' };
-    (async () => {
-      try {
-        const sseRes = await fetch(`${API_BASE}/user/logs/stream`, { headers: sseHeaders, signal: sseAbort.signal });
-        if (!sseRes.ok) return;
-        const sseReader = sseRes.body.getReader();
-        const sseDec = new TextDecoder();
-        let sseBuf = '';
-        while (true) {
-          const { value, done } = await sseReader.read();
-          if (done) break;
-          sseBuf += sseDec.decode(value, { stream: true });
-          const lines = sseBuf.split('\n');
-          sseBuf = lines.pop();
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const msg = line.slice(6).trim();
-              if (!msg || msg.startsWith('🟢')) continue;
-              if (!shouldShowLog(msg)) continue;
-              setStatusMessage(msg);
-              setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
-              setTimeout(scrollConsoleToBottom, 30);
-            }
-          }
-        }
-      } catch (e) {
-        // SSE closed normally (aborted) — ignore
-      }
-    })();
-
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (geminiApiKey) headers['X-Gemini-API-Key'] = geminiApiKey;
@@ -1356,7 +1300,12 @@ function App() {
       }
 
       for await (const event of streamNdjson(response)) {
-        if (event.type === 'partial_result' && event.job) {
+        if (event.type === 'log' && event.message) {
+          // User-isolated stream log: only belongs to this active search request
+          setStatusMessage(event.message);
+          setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
+          setTimeout(scrollConsoleToBottom, 30);
+        } else if (event.type === 'partial_result' && event.job) {
           setDiscoveredJobs((prev) => {
             if (prev.some((j) => j.url === event.job.url)) return prev;
             const updated = [...prev, event.job].sort((a, b) => (a.estimated === b.estimated ? b.score - a.score : a.estimated ? 1 : -1));
@@ -1384,8 +1333,6 @@ function App() {
       setStatusMessage(`Discovery failed: ${err.message}`);
       setStatusLogs((prev) => [...prev, { message: `❌ Discovery failed: ${err.message}`, ts: nowTs() }]);
     } finally {
-      // Close the SSE log stream
-      sseAbort.abort();
       setDiscovering(false);
     }
   };
