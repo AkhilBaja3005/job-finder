@@ -10,6 +10,21 @@ pinned: false
 
 # AI Job Finder Agent (v3.0.0)
 
+<div align="center">
+
+**Production-ready, local-first & cloud-deployable autonomous career agent, ATS resume tailor & job search copilot.**
+
+[![Python](https://img.shields.io/badge/Python-3.11%2B%20%7C%203.12%20%7C%203.14-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Google Gemini](https://img.shields.io/badge/Google%20GenAI-Gemini%202.5%20%26%203.7%20Flash-orange?logo=google&logoColor=white)](https://ai.google.dev/)
+[![React](https://img.shields.io/badge/Web%20UI-React%2019%20%2B%20Vite-blue?logo=react&logoColor=white)](https://react.dev/)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-emerald?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Chrome Extension](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-red?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
+[![LaTeX](https://img.shields.io/badge/Typesetting-XeLaTeX%20%2B%20Tectonic-darkgreen?logo=latex&logoColor=white)](https://tectonic-typesetting.github.io/)
+[![MCP](https://img.shields.io/badge/Protocol-Model%20Context%20Protocol%20(MCP)-purple)](https://modelcontextprotocol.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+</div>
+
 An AI-powered job search, resume tailoring, and application assistant. Upload a resume once (in `.pdf`, `.docx`, or `.tex`), then let it discover matching job postings, score your ATS fit against job descriptions, tailor a pixel-perfect one-page LaTeX resume and cover letter for specific roles, generate personalized recruiter outreach messages, and auto-fill applications directly on the web.
 
 The project includes:

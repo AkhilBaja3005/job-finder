@@ -944,17 +944,30 @@ async def find_matching_jobs(
     yield json.dumps({"type": "log", "message": yield_msg}) + " " * 2048 + "\n"
 
     async def _fetch_query_cluster(q: str):
-        li_t = asyncio.to_thread(search_linkedin_jobs, q, location, timeframe)
-        reed_t = asyncio.to_thread(search_reed_jobs, q, location, timeframe)
-        ind_t = search_indeed_jobs(q, location, timeframe)
-        ats_t = asyncio.to_thread(search_direct_ats_jobs, q, location, timeframe, custom_api_key)
-        li_j, reed_j, ind_j, ats_j = await asyncio.gather(li_t, reed_t, ind_t, ats_t)
+        async def _safe_run(coro_or_func, *args, default=[], timeout=20):
+            try:
+                if asyncio.iscoroutinefunction(coro_or_func):
+                    return await asyncio.wait_for(coro_or_func(*args), timeout=timeout)
+                else:
+                    return await asyncio.wait_for(asyncio.to_thread(coro_or_func, *args), timeout=timeout)
+            except asyncio.TimeoutError:
+                log_ist(f"[Job Searcher] ⚠️ Search timeout ({timeout}s) for query '{q}', continuing with remaining sources.")
+                return default
+            except Exception as e:
+                log_ist(f"[Job Searcher] Search source error for '{q}': {e}")
+                return default
+
+        li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=18)
+        reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=14)
+        ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=22)
+        ats_task = _safe_run(search_direct_ats_jobs, q, location, timeframe, custom_api_key, timeout=25)
+
+        li_j, reed_j, ind_j, ats_j = await asyncio.gather(li_task, reed_task, ind_task, ats_task)
         return q, li_j, reed_j, ind_j, ats_j
 
-    query_tasks = [_fetch_query_cluster(q) for q in queries]
-    query_clusters = await asyncio.gather(*query_tasks)
-
-    for q, li_jobs, reed_jobs, ind_jobs, ats_jobs in query_clusters:
+    query_tasks = [asyncio.create_task(_fetch_query_cluster(q)) for q in queries]
+    for completed_task in asyncio.as_completed(query_tasks):
+        q, li_jobs, reed_jobs, ind_jobs, ats_jobs = await completed_task
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(ind_jobs)
