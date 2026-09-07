@@ -714,7 +714,12 @@ async def generate_outreach(request: GenerateOutreachRequest, authorization: Opt
         }
 
         if request.job_url:
-            recruiter_info = await extract_recruiter(request.job_url, request.platform)
+            recruiter_info = await extract_recruiter(
+                request.job_url,
+                request.platform,
+                company_hint=request.company_name,
+                custom_api_key=active_api_key
+            )
             if not recruiter_info.get("company_name"):
                 recruiter_info["company_name"] = request.company_name
 

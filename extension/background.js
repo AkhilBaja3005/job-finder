@@ -76,11 +76,24 @@ if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
   });
 }
 
-// Handle 1-Click Sync Key initialization from web app
+// Handle 1-Click Sync Key initialization & Live Resume Sync from web app
 chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
   if (request.action === "SYNC_USER_KEY" && request.syncKey) {
     chrome.storage.local.set({ userToken: request.syncKey }, () => {
       sendResponse({ success: true, syncedKey: request.syncKey });
+    });
+    return true;
+  }
+
+  if (request.action === "SYNC_RESUME_DATA" && request.resumeData) {
+    chrome.storage.local.set({
+      resumeData: request.resumeData,
+      rawResumeText: request.rawResumeText || "",
+      lastSyncedAt: new Date().toISOString()
+    }, () => {
+      // Notify active popup or tabs of the live update
+      chrome.runtime.sendMessage({ action: "PROFILE_UPDATED", resumeData: request.resumeData }).catch(() => {});
+      sendResponse({ success: true, timestamp: Date.now() });
     });
     return true;
   }

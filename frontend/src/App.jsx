@@ -649,7 +649,10 @@ function App() {
       if (res.ok) {
         const body = await res.json();
         setActiveArchetype(body.active_archetype || name);
-        if (body.data) setResumeData(body.data);
+        if (body.data) {
+          setResumeData(body.data);
+          syncResumeWithExtension(body.data);
+        }
         if (body.evaluation) setResumeEvaluation(body.evaluation);
         showToast(`Switched active master profile to: ${name}`, 'success');
         fetchArchetypes();
@@ -1698,6 +1701,188 @@ function App() {
     }
 
     return 'Injects into Core Skills & Experience';
+  };
+
+  // Zero-Reload Live Sync to Chrome Extension
+  const syncResumeWithExtension = (data, rawText = '') => {
+    if (!data) return;
+    try {
+      if (typeof window !== 'undefined') {
+        window.postMessage({ type: 'JOB_FINDER_SYNC_RESUME', resumeData: data, rawResumeText: rawText }, '*');
+        if (window.chrome && chrome.runtime && chrome.runtime.sendMessage) {
+          const EXT_ID = 'job-finder-ats-extension';
+          try {
+            chrome.runtime.sendMessage(EXT_ID, {
+              action: 'SYNC_RESUME_DATA',
+              resumeData: data,
+              rawResumeText: rawText
+            }, () => {
+              if (chrome.runtime.lastError) {
+                // Extension might not be installed or ID differs in dev mode; silently ignore
+              }
+            });
+          } catch (e) {}
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to dispatch live sync to extension:', e);
+    }
+  };
+
+  // Visual ATS Keyword Highlight Helper for Preview Mode
+  const renderHighlightedText = (text, matchedKeywords = [], injectedKeywords = []) => {
+    if (!text || typeof text !== 'string') return text;
+    const matched = (matchedKeywords || []).map(k => String(k).trim()).filter(Boolean);
+    const injected = (injectedKeywords || []).map(k => String(k).trim()).filter(Boolean);
+    if (matched.length === 0 && injected.length === 0) return text;
+
+    // Combine and sort keywords longest-first so compound terms match before subterms
+    const allKeywords = [...new Set([...matched, ...injected])]
+      .filter(k => k.length >= 2)
+      .sort((a, b) => b.length - a.length);
+
+    if (allKeywords.length === 0) return text;
+
+    const escapeRegex = (s) => s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const pattern = new RegExp(`\\b(${allKeywords.map(escapeRegex).join('|')})\\b`, 'gi');
+    const parts = text.split(pattern);
+
+    return parts.map((part, i) => {
+      if (!part) return null;
+      const lower = part.toLowerCase();
+      const isInjected = injected.some(k => k.toLowerCase() === lower);
+      const isMatched = matched.some(k => k.toLowerCase() === lower);
+
+      if (isInjected) {
+        return (
+          <span key={i} className="ats-kw-injected" title="ATS Targeted Injection">
+            {part}
+          </span>
+        );
+      }
+      if (isMatched) {
+        return (
+          <span key={i} className="ats-kw-match" title="ATS Matched Keyword">
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
+  // Rich Text (HTML) & Markdown Copy Handlers
+  const handleCopyRichText = async () => {
+    const data = tailoredResumeData || resumeData;
+    if (!data) {
+      showToast('No resume data available to copy', 'error');
+      return;
+    }
+
+    const htmlParts = [];
+    htmlParts.push(`<h1>${data.name || 'Candidate'}</h1>`);
+    if (data.summary) {
+      htmlParts.push(`<p><em>${data.summary}</em></p>`);
+    }
+
+    if (data.skills && data.skills.length > 0) {
+      htmlParts.push(`<h3>Skills</h3>`);
+      htmlParts.push(`<p>${data.skills.join(', ')}</p>`);
+    }
+
+    if (data.experience && data.experience.length > 0) {
+      htmlParts.push(`<h3>Experience</h3>`);
+      data.experience.forEach(exp => {
+        htmlParts.push(`<h4>${exp.role || ''} &mdash; ${exp.company || ''}</h4>`);
+        if (exp.description && exp.description.length > 0) {
+          htmlParts.push(`<ul>`);
+          exp.description.forEach(b => htmlParts.push(`<li>${b}</li>`));
+          htmlParts.push(`</ul>`);
+        }
+      });
+    }
+
+    if (data.projects && data.projects.length > 0) {
+      htmlParts.push(`<h3>Projects</h3>`);
+      data.projects.forEach(proj => {
+        htmlParts.push(`<h4>${proj.title || ''}</h4>`);
+        if (proj.description && proj.description.length > 0) {
+          htmlParts.push(`<ul>`);
+          proj.description.forEach(b => htmlParts.push(`<li>${b}</li>`));
+          htmlParts.push(`</ul>`);
+        }
+      });
+    }
+
+    const htmlStr = htmlParts.join('\n');
+    const plainText = [
+      data.name || '',
+      data.summary || '',
+      '\nSKILLS\n' + (data.skills || []).join(', '),
+      '\nEXPERIENCE\n' + (data.experience || []).map(e => `${e.role} @ ${e.company}\n` + (e.description || []).map(b => `- ${b}`).join('\n')).join('\n\n'),
+      '\nPROJECTS\n' + (data.projects || []).map(p => `${p.title}\n` + (p.description || []).map(b => `- ${b}`).join('\n')).join('\n\n')
+    ].join('\n\n');
+
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        const item = new ClipboardItem({
+          'text/html': new Blob([htmlStr], { type: 'text/html' }),
+          'text/plain': new Blob([plainText], { type: 'text/plain' })
+        });
+        await navigator.clipboard.write([item]);
+      } else {
+        await navigator.clipboard.writeText(plainText);
+      }
+      showToast('Copied formatted resume (Google Docs / Word ready)!', 'success');
+    } catch (err) {
+      console.error('Failed to copy rich text', err);
+      navigator.clipboard.writeText(plainText);
+      showToast('Copied plain text resume to clipboard', 'info');
+    }
+  };
+
+  const handleCopyMarkdown = async () => {
+    const data = tailoredResumeData || resumeData;
+    if (!data) {
+      showToast('No resume data available to copy', 'error');
+      return;
+    }
+
+    const mdLines = [];
+    mdLines.push(`# ${data.name || 'Candidate'}\n`);
+    if (data.summary) {
+      mdLines.push(`*${data.summary}*\n`);
+    }
+
+    if (data.skills && data.skills.length > 0) {
+      mdLines.push(`### Skills\n${data.skills.join(', ')}\n`);
+    }
+
+    if (data.experience && data.experience.length > 0) {
+      mdLines.push(`### Experience`);
+      data.experience.forEach(exp => {
+        mdLines.push(`\n#### ${exp.role || ''} - ${exp.company || ''}`);
+        (exp.description || []).forEach(b => mdLines.push(`- ${b}`));
+      });
+      mdLines.push('');
+    }
+
+    if (data.projects && data.projects.length > 0) {
+      mdLines.push(`### Projects`);
+      data.projects.forEach(proj => {
+        mdLines.push(`\n#### ${proj.title || ''}`);
+        (proj.description || []).forEach(b => mdLines.push(`- ${b}`));
+      });
+      mdLines.push('');
+    }
+
+    const mdStr = mdLines.join('\n');
+    try {
+      await navigator.clipboard.writeText(mdStr);
+      showToast('Copied clean Markdown resume (Notion / Slack ready)!', 'success');
+    } catch (err) {
+      showToast('Failed to copy markdown: ' + err.message, 'error');
+    }
   };
 
   // Generate personalized recruiter outreach message
@@ -4123,7 +4308,12 @@ function App() {
                 </div>
               ) : applicationHistory.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-state-icon">[HISTORY]</div>
+                  <div className="empty-state-icon" style={{ color: 'var(--accent-primary)' }}>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                  </div>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>No history yet</div>
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Tailor a resume or apply to a job to see it recorded here.</div>
@@ -4875,9 +5065,9 @@ function App() {
                       <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
                         {[
                           { id: 'all', label: 'All' },
-                          { id: 'unapplied', label: '⏳ Unapplied' },
+                          { id: 'unapplied', label: 'Unapplied' },
                           { id: 'applied', label: 'Applied' },
-                          { id: 'saved', label: '⭐ Saved' },
+                          { id: 'saved', label: 'Saved' },
                         ].map(tab => (
                           <button
                             key={tab.id}
@@ -4956,14 +5146,19 @@ function App() {
                           }}
                           title={expandedCards.size >= paginated.length && paginated.length > 0 ? "Collapse all open job descriptions" : "Expand all job descriptions on this page"}
                         >
-                          {expandedCards.size >= paginated.length && paginated.length > 0 ? '⤡ Collapse All' : '⤢ Expand All'}
+                          {expandedCards.size >= paginated.length && paginated.length > 0 ? 'Collapse All' : 'Expand All'}
                         </button>
                       </div>
                     </div>
 
                     {sorted.length === 0 ? (
                       <div className="empty-state">
-                        <div className="empty-state-icon">[SEARCH]</div>
+                        <div className="empty-state-icon" style={{ color: 'var(--accent-secondary)' }}>
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                          </svg>
+                        </div>
                         <div>
                           <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>No matching listings found</div>
                           <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Enter search keywords or location and scan matches.</div>
@@ -5426,7 +5621,11 @@ function App() {
             ) : rejectionWarning ? (
               <div className="rejection-warning-panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px', animation: 'slideDown 0.4s ease both' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '1rem', color: '#f59e0b', fontWeight: 700 }}>[ALERT]</span>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                  </svg>
                   <h3 style={{ margin: 0, color: 'var(--accent-amber)', fontSize: '1rem' }}>Candidate Suitability Warning</h3>
                 </div>
                 <p style={{ maxWidth: '600px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
@@ -6103,7 +6302,25 @@ function App() {
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', textAlign: 'center',
                     animation: 'slideDown 0.3s ease both'
                   }}>
-                    <div style={{ fontSize: '1.2rem', color: 'var(--accent-secondary)', fontWeight: 700 }}>[PDF]</div>
+                    <div style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '12px',
+                      background: 'rgba(56,189,248,0.1)',
+                      border: '1px solid rgba(56,189,248,0.25)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--accent-secondary)'
+                    }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                      </svg>
+                    </div>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '6px' }}>Using Your Original Resume</div>
                       <div style={{ fontSize: '0.86rem', color: 'var(--text-muted)', maxWidth: '400px', lineHeight: 1.6 }}>
@@ -6333,7 +6550,38 @@ function App() {
                             Overleaf
                           </button>
 
-                          {/* 3. Set as Master Baseline */}
+                          {/* 3. Copy Formatted Rich Text */}
+                          <button
+                            className="btn btn-secondary"
+                            onClick={handleCopyRichText}
+                            disabled={loading}
+                            style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px' }}
+                            title="Copy formatted resume with bold headings and bullets for Google Docs or Word"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#38BDF8' }}>
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            Copy Rich Text
+                          </button>
+
+                          {/* 4. Copy Clean Markdown */}
+                          <button
+                            className="btn btn-secondary"
+                            onClick={handleCopyMarkdown}
+                            disabled={loading}
+                            style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px' }}
+                            title="Copy clean Markdown for Notion or Obsidian"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#A78BFA' }}>
+                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                              <path d="M7 15V9l3 4 3-4v6"></path>
+                              <path d="M17 9v6"></path>
+                            </svg>
+                            Copy Markdown
+                          </button>
+
+                          {/* 5. Set as Master Baseline */}
                           {analysisResult && analysisResult.latex_code && (
                             <button
                               className="btn btn-secondary"
@@ -6355,6 +6603,7 @@ function App() {
                                   if (res.ok) {
                                     const body = await res.json();
                                     setResumeData(body.data);
+                                    syncResumeWithExtension(body.data);
                                     setResumeEvaluation(body.evaluation);
                                     setStatusMessage('Master Resume updated from tailored version!');
                                   } else {
@@ -6380,7 +6629,11 @@ function App() {
                             <div className="resume-preview-name">{(tailoredResumeData || {}).name || ''}</div>
                             {(tailoredResumeData || {}).summary && (
                               <p style={{ textAlign: 'center', fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '4px', lineHeight: 1.6 }}>
-                                {(tailoredResumeData || {}).summary}
+                                {renderHighlightedText(
+                                  (tailoredResumeData || {}).summary,
+                                  analysisResult?.match_analysis?.matched_skills || [],
+                                  analysisResult?.match_analysis?.missing_skills || []
+                                )}
                               </p>
                             )}
                             <hr className="resume-preview-divider" />
@@ -6388,9 +6641,16 @@ function App() {
                               <>
                                 <div className="resume-section-title">Skills</div>
                                 <div className="resume-skills-grid">
-                                  {((tailoredResumeData || {}).skills || []).map((skill, i) => (
-                                    <span key={i} className="resume-skill-chip">{skill}</span>
-                                  ))}
+                                  {((tailoredResumeData || {}).skills || []).map((skill, i) => {
+                                    const isMatch = (analysisResult?.match_analysis?.matched_skills || []).some(m => String(m).toLowerCase() === String(skill).toLowerCase());
+                                    const isInjected = (analysisResult?.match_analysis?.missing_skills || []).some(m => String(m).toLowerCase() === String(skill).toLowerCase());
+                                    const chipClass = isInjected ? "resume-skill-chip ats-kw-injected" : isMatch ? "resume-skill-chip ats-kw-match" : "resume-skill-chip";
+                                    return (
+                                      <span key={i} className={chipClass} title={isInjected ? "ATS Targeted Injection" : isMatch ? "ATS Matched Skill" : ""}>
+                                        {skill}
+                                      </span>
+                                    );
+                                  })}
                                 </div>
                               </>
                             )}
@@ -6405,7 +6665,13 @@ function App() {
                                     </div>
                                     <ul className="resume-exp-bullets">
                                       {(exp.description || []).map((bullet, bidx) => (
-                                        <li key={bidx}>{bullet}</li>
+                                        <li key={bidx}>
+                                          {renderHighlightedText(
+                                            bullet,
+                                            analysisResult?.match_analysis?.matched_skills || [],
+                                            analysisResult?.match_analysis?.missing_skills || []
+                                          )}
+                                        </li>
                                       ))}
                                     </ul>
                                   </div>
@@ -6422,7 +6688,13 @@ function App() {
                                     </div>
                                     <ul className="resume-exp-bullets">
                                       {(proj.description || []).map((bullet, bidx) => (
-                                        <li key={bidx}>{bullet}</li>
+                                        <li key={bidx}>
+                                          {renderHighlightedText(
+                                            bullet,
+                                            analysisResult?.match_analysis?.matched_skills || [],
+                                            analysisResult?.match_analysis?.missing_skills || []
+                                          )}
+                                        </li>
                                       ))}
                                     </ul>
                                   </div>

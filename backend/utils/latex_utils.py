@@ -195,6 +195,14 @@ def apply_latex_hotfix(
         spacing_overrides.append(f"\\def\\nameskip{{\\vspace{{{name_sk:.2f}em}}}}")
         spacing_overrides.append(f"\\def\\addressskip{{\\vspace{{{addr_sk:.2f}em}}}}")
 
+    # ── Strict 1-Page PDF Budget Clamping: tighten itemize and margin if scaled
+    if spacing_scale <= 0.90 or linespread <= 0.95:
+        # Tighten list item padding and section baseline padding
+        spacing_overrides.append("\\addtolength{\\textheight}{0.28in}")
+        spacing_overrides.append("\\addtolength{\\topmargin}{-0.14in}")
+        spacing_overrides.append("\\let\\olditem\\item")
+        spacing_overrides.append("\\renewcommand{\\item}{\\vspace{-1.5pt}\\olditem}")
+
     if spacing_overrides:
         fixed = fixed.replace("\\begin{document}", "\\begin{document}\n" + "\n".join(spacing_overrides), 1)
 

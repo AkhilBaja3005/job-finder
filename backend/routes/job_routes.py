@@ -271,13 +271,18 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                         except Exception:
                             pass
                         await q.put(chunk)
+                except Exception as pe:
+                    traceback.print_exc()
+                    await q.put(json.dumps({"type": "log", "message": f"❌ Search error: {pe}"}) + "\n")
                 finally:
                     search_done = True
                     await q.put(None)
 
             async def _keepalive():
+                # Emit immediate ping on connection start
+                await q.put("{\"type\":\"ping\"}" + " " * 2048 + "\n")
                 while not search_done:
-                    await asyncio.sleep(10)
+                    await asyncio.sleep(5)
                     if not search_done:
                         await q.put("{\"type\":\"ping\"}" + " " * 2048 + "\n")
 

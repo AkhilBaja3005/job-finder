@@ -1,7 +1,7 @@
 {
   "candidate": {
-    "name": "Akhil Baja",
-    "email": "akhilbaja.work@gmail.com",
+    "name": "Jane Doe",
+    "email": "jane@example.com",
     "linkedin": "https://linkedin.com/in/akhilbaja",
     "location": "London, UK",
     "experience_summary": "AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML and developer infrastructure at Qualcomm and Axis Bank. Engineered cross-language LLM context pipelines cutting retrieval latency by 60% and improving LLM accuracy by 46%, alongside enterprise GenAI systems serving 1,000+ users. Strong in Python, LLMs, RAG, machine learning, and distributed systems; MSc student in Artificial Intelligence Applications and Innovation at Imperial College London.",
