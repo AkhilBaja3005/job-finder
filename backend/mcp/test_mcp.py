@@ -18,7 +18,7 @@ async def test_mcp_endpoints():
     list_res = await process_mcp_request(list_req)
     tool_names = [t["name"] for t in list_res["result"]["tools"]]
     print(f"✓ Registered {len(tool_names)} tools: {', '.join(tool_names)}")
-    assert len(tool_names) == 15
+    assert len(tool_names) == 18
 
     print("Testing MCP calculate_ats_score tool execution...")
     sample_jd = """
