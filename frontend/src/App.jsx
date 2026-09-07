@@ -4308,7 +4308,12 @@ function App() {
                 </div>
               ) : applicationHistory.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-state-icon">[HISTORY]</div>
+                  <div className="empty-state-icon" style={{ color: 'var(--accent-primary)' }}>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                  </div>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>No history yet</div>
                     <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Tailor a resume or apply to a job to see it recorded here.</div>
@@ -5060,9 +5065,9 @@ function App() {
                       <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
                         {[
                           { id: 'all', label: 'All' },
-                          { id: 'unapplied', label: '⏳ Unapplied' },
+                          { id: 'unapplied', label: 'Unapplied' },
                           { id: 'applied', label: 'Applied' },
-                          { id: 'saved', label: '⭐ Saved' },
+                          { id: 'saved', label: 'Saved' },
                         ].map(tab => (
                           <button
                             key={tab.id}
@@ -5141,14 +5146,19 @@ function App() {
                           }}
                           title={expandedCards.size >= paginated.length && paginated.length > 0 ? "Collapse all open job descriptions" : "Expand all job descriptions on this page"}
                         >
-                          {expandedCards.size >= paginated.length && paginated.length > 0 ? '⤡ Collapse All' : '⤢ Expand All'}
+                          {expandedCards.size >= paginated.length && paginated.length > 0 ? 'Collapse All' : 'Expand All'}
                         </button>
                       </div>
                     </div>
 
                     {sorted.length === 0 ? (
                       <div className="empty-state">
-                        <div className="empty-state-icon">[SEARCH]</div>
+                        <div className="empty-state-icon" style={{ color: 'var(--accent-secondary)' }}>
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                          </svg>
+                        </div>
                         <div>
                           <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '6px' }}>No matching listings found</div>
                           <div style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '340px', margin: '0 auto' }}>Enter search keywords or location and scan matches.</div>
@@ -5611,7 +5621,11 @@ function App() {
             ) : rejectionWarning ? (
               <div className="rejection-warning-panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px', animation: 'slideDown 0.4s ease both' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '1rem', color: '#f59e0b', fontWeight: 700 }}>[ALERT]</span>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                  </svg>
                   <h3 style={{ margin: 0, color: 'var(--accent-amber)', fontSize: '1rem' }}>Candidate Suitability Warning</h3>
                 </div>
                 <p style={{ maxWidth: '600px', margin: 0, fontSize: '0.87rem', color: 'var(--text-muted)', lineHeight: '1.65' }}>
@@ -6288,7 +6302,25 @@ function App() {
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', textAlign: 'center',
                     animation: 'slideDown 0.3s ease both'
                   }}>
-                    <div style={{ fontSize: '1.2rem', color: 'var(--accent-secondary)', fontWeight: 700 }}>[PDF]</div>
+                    <div style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '12px',
+                      background: 'rgba(56,189,248,0.1)',
+                      border: '1px solid rgba(56,189,248,0.25)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--accent-secondary)'
+                    }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                      </svg>
+                    </div>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '6px' }}>Using Your Original Resume</div>
                       <div style={{ fontSize: '0.86rem', color: 'var(--text-muted)', maxWidth: '400px', lineHeight: 1.6 }}>
