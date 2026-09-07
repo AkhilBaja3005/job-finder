@@ -1383,5 +1383,17 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+  // ----------------------------------------------------
+  // Zero-Reload Extension Sync: Update profile UI on live broadcast
+  // ----------------------------------------------------
+  if (chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg && msg.action === "PROFILE_UPDATED" && msg.resumeData) {
+        populateProfileUI(msg.resumeData, true);
+        showToast("⚡ Master profile live-updated from web dashboard!");
+      }
+    });
+  }
 });
 

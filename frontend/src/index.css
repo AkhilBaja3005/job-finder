@@ -789,6 +789,25 @@ input:focus, textarea:focus, select:focus {
   line-height: 1.5;
 }
 
+/* ─── ATS Keyword Highlighting in Preview ───────────────── */
+.ats-kw-match {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34D399;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.4);
+  font-weight: 600;
+}
+
+.ats-kw-injected {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38BDF8;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.4);
+  font-weight: 600;
+}
+
 /* ─── Mode toggles ───────────────────────────────────────── */
 .mode-toggle {
   display: flex;

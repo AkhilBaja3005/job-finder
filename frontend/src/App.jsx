@@ -649,7 +649,10 @@ function App() {
       if (res.ok) {
         const body = await res.json();
         setActiveArchetype(body.active_archetype || name);
-        if (body.data) setResumeData(body.data);
+        if (body.data) {
+          setResumeData(body.data);
+          syncResumeWithExtension(body.data);
+        }
         if (body.evaluation) setResumeEvaluation(body.evaluation);
         showToast(`Switched active master profile to: ${name}`, 'success');
         fetchArchetypes();
@@ -1698,6 +1701,188 @@ function App() {
     }
 
     return 'Injects into Core Skills & Experience';
+  };
+
+  // Zero-Reload Live Sync to Chrome Extension
+  const syncResumeWithExtension = (data, rawText = '') => {
+    if (!data) return;
+    try {
+      if (typeof window !== 'undefined') {
+        window.postMessage({ type: 'JOB_FINDER_SYNC_RESUME', resumeData: data, rawResumeText: rawText }, '*');
+        if (window.chrome && chrome.runtime && chrome.runtime.sendMessage) {
+          const EXT_ID = 'job-finder-ats-extension';
+          try {
+            chrome.runtime.sendMessage(EXT_ID, {
+              action: 'SYNC_RESUME_DATA',
+              resumeData: data,
+              rawResumeText: rawText
+            }, () => {
+              if (chrome.runtime.lastError) {
+                // Extension might not be installed or ID differs in dev mode; silently ignore
+              }
+            });
+          } catch (e) {}
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to dispatch live sync to extension:', e);
+    }
+  };
+
+  // Visual ATS Keyword Highlight Helper for Preview Mode
+  const renderHighlightedText = (text, matchedKeywords = [], injectedKeywords = []) => {
+    if (!text || typeof text !== 'string') return text;
+    const matched = (matchedKeywords || []).map(k => String(k).trim()).filter(Boolean);
+    const injected = (injectedKeywords || []).map(k => String(k).trim()).filter(Boolean);
+    if (matched.length === 0 && injected.length === 0) return text;
+
+    // Combine and sort keywords longest-first so compound terms match before subterms
+    const allKeywords = [...new Set([...matched, ...injected])]
+      .filter(k => k.length >= 2)
+      .sort((a, b) => b.length - a.length);
+
+    if (allKeywords.length === 0) return text;
+
+    const escapeRegex = (s) => s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const pattern = new RegExp(`\\b(${allKeywords.map(escapeRegex).join('|')})\\b`, 'gi');
+    const parts = text.split(pattern);
+
+    return parts.map((part, i) => {
+      if (!part) return null;
+      const lower = part.toLowerCase();
+      const isInjected = injected.some(k => k.toLowerCase() === lower);
+      const isMatched = matched.some(k => k.toLowerCase() === lower);
+
+      if (isInjected) {
+        return (
+          <span key={i} className="ats-kw-injected" title="ATS Targeted Injection">
+            {part}
+          </span>
+        );
+      }
+      if (isMatched) {
+        return (
+          <span key={i} className="ats-kw-match" title="ATS Matched Keyword">
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
+  // Rich Text (HTML) & Markdown Copy Handlers
+  const handleCopyRichText = async () => {
+    const data = tailoredResumeData || resumeData;
+    if (!data) {
+      showToast('No resume data available to copy', 'error');
+      return;
+    }
+
+    const htmlParts = [];
+    htmlParts.push(`<h1>${data.name || 'Candidate'}</h1>`);
+    if (data.summary) {
+      htmlParts.push(`<p><em>${data.summary}</em></p>`);
+    }
+
+    if (data.skills && data.skills.length > 0) {
+      htmlParts.push(`<h3>Skills</h3>`);
+      htmlParts.push(`<p>${data.skills.join(', ')}</p>`);
+    }
+
+    if (data.experience && data.experience.length > 0) {
+      htmlParts.push(`<h3>Experience</h3>`);
+      data.experience.forEach(exp => {
+        htmlParts.push(`<h4>${exp.role || ''} &mdash; ${exp.company || ''}</h4>`);
+        if (exp.description && exp.description.length > 0) {
+          htmlParts.push(`<ul>`);
+          exp.description.forEach(b => htmlParts.push(`<li>${b}</li>`));
+          htmlParts.push(`</ul>`);
+        }
+      });
+    }
+
+    if (data.projects && data.projects.length > 0) {
+      htmlParts.push(`<h3>Projects</h3>`);
+      data.projects.forEach(proj => {
+        htmlParts.push(`<h4>${proj.title || ''}</h4>`);
+        if (proj.description && proj.description.length > 0) {
+          htmlParts.push(`<ul>`);
+          proj.description.forEach(b => htmlParts.push(`<li>${b}</li>`));
+          htmlParts.push(`</ul>`);
+        }
+      });
+    }
+
+    const htmlStr = htmlParts.join('\n');
+    const plainText = [
+      data.name || '',
+      data.summary || '',
+      '\nSKILLS\n' + (data.skills || []).join(', '),
+      '\nEXPERIENCE\n' + (data.experience || []).map(e => `${e.role} @ ${e.company}\n` + (e.description || []).map(b => `- ${b}`).join('\n')).join('\n\n'),
+      '\nPROJECTS\n' + (data.projects || []).map(p => `${p.title}\n` + (p.description || []).map(b => `- ${b}`).join('\n')).join('\n\n')
+    ].join('\n\n');
+
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        const item = new ClipboardItem({
+          'text/html': new Blob([htmlStr], { type: 'text/html' }),
+          'text/plain': new Blob([plainText], { type: 'text/plain' })
+        });
+        await navigator.clipboard.write([item]);
+      } else {
+        await navigator.clipboard.writeText(plainText);
+      }
+      showToast('Copied formatted resume (Google Docs / Word ready)!', 'success');
+    } catch (err) {
+      console.error('Failed to copy rich text', err);
+      navigator.clipboard.writeText(plainText);
+      showToast('Copied plain text resume to clipboard', 'info');
+    }
+  };
+
+  const handleCopyMarkdown = async () => {
+    const data = tailoredResumeData || resumeData;
+    if (!data) {
+      showToast('No resume data available to copy', 'error');
+      return;
+    }
+
+    const mdLines = [];
+    mdLines.push(`# ${data.name || 'Candidate'}\n`);
+    if (data.summary) {
+      mdLines.push(`*${data.summary}*\n`);
+    }
+
+    if (data.skills && data.skills.length > 0) {
+      mdLines.push(`### Skills\n${data.skills.join(', ')}\n`);
+    }
+
+    if (data.experience && data.experience.length > 0) {
+      mdLines.push(`### Experience`);
+      data.experience.forEach(exp => {
+        mdLines.push(`\n#### ${exp.role || ''} - ${exp.company || ''}`);
+        (exp.description || []).forEach(b => mdLines.push(`- ${b}`));
+      });
+      mdLines.push('');
+    }
+
+    if (data.projects && data.projects.length > 0) {
+      mdLines.push(`### Projects`);
+      data.projects.forEach(proj => {
+        mdLines.push(`\n#### ${proj.title || ''}`);
+        (proj.description || []).forEach(b => mdLines.push(`- ${b}`));
+      });
+      mdLines.push('');
+    }
+
+    const mdStr = mdLines.join('\n');
+    try {
+      await navigator.clipboard.writeText(mdStr);
+      showToast('Copied clean Markdown resume (Notion / Slack ready)!', 'success');
+    } catch (err) {
+      showToast('Failed to copy markdown: ' + err.message, 'error');
+    }
   };
 
   // Generate personalized recruiter outreach message
@@ -6333,7 +6518,38 @@ function App() {
                             Overleaf
                           </button>
 
-                          {/* 3. Set as Master Baseline */}
+                          {/* 3. Copy Formatted Rich Text */}
+                          <button
+                            className="btn btn-secondary"
+                            onClick={handleCopyRichText}
+                            disabled={loading}
+                            style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px' }}
+                            title="Copy formatted resume with bold headings and bullets for Google Docs or Word"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#38BDF8' }}>
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            Copy Rich Text
+                          </button>
+
+                          {/* 4. Copy Clean Markdown */}
+                          <button
+                            className="btn btn-secondary"
+                            onClick={handleCopyMarkdown}
+                            disabled={loading}
+                            style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px' }}
+                            title="Copy clean Markdown for Notion or Obsidian"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#A78BFA' }}>
+                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                              <path d="M7 15V9l3 4 3-4v6"></path>
+                              <path d="M17 9v6"></path>
+                            </svg>
+                            Copy Markdown
+                          </button>
+
+                          {/* 5. Set as Master Baseline */}
                           {analysisResult && analysisResult.latex_code && (
                             <button
                               className="btn btn-secondary"
@@ -6355,6 +6571,7 @@ function App() {
                                   if (res.ok) {
                                     const body = await res.json();
                                     setResumeData(body.data);
+                                    syncResumeWithExtension(body.data);
                                     setResumeEvaluation(body.evaluation);
                                     setStatusMessage('Master Resume updated from tailored version!');
                                   } else {
@@ -6380,7 +6597,11 @@ function App() {
                             <div className="resume-preview-name">{(tailoredResumeData || {}).name || ''}</div>
                             {(tailoredResumeData || {}).summary && (
                               <p style={{ textAlign: 'center', fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '4px', lineHeight: 1.6 }}>
-                                {(tailoredResumeData || {}).summary}
+                                {renderHighlightedText(
+                                  (tailoredResumeData || {}).summary,
+                                  analysisResult?.match_analysis?.matched_skills || [],
+                                  analysisResult?.match_analysis?.missing_skills || []
+                                )}
                               </p>
                             )}
                             <hr className="resume-preview-divider" />
@@ -6388,9 +6609,16 @@ function App() {
                               <>
                                 <div className="resume-section-title">Skills</div>
                                 <div className="resume-skills-grid">
-                                  {((tailoredResumeData || {}).skills || []).map((skill, i) => (
-                                    <span key={i} className="resume-skill-chip">{skill}</span>
-                                  ))}
+                                  {((tailoredResumeData || {}).skills || []).map((skill, i) => {
+                                    const isMatch = (analysisResult?.match_analysis?.matched_skills || []).some(m => String(m).toLowerCase() === String(skill).toLowerCase());
+                                    const isInjected = (analysisResult?.match_analysis?.missing_skills || []).some(m => String(m).toLowerCase() === String(skill).toLowerCase());
+                                    const chipClass = isInjected ? "resume-skill-chip ats-kw-injected" : isMatch ? "resume-skill-chip ats-kw-match" : "resume-skill-chip";
+                                    return (
+                                      <span key={i} className={chipClass} title={isInjected ? "ATS Targeted Injection" : isMatch ? "ATS Matched Skill" : ""}>
+                                        {skill}
+                                      </span>
+                                    );
+                                  })}
                                 </div>
                               </>
                             )}
@@ -6405,7 +6633,13 @@ function App() {
                                     </div>
                                     <ul className="resume-exp-bullets">
                                       {(exp.description || []).map((bullet, bidx) => (
-                                        <li key={bidx}>{bullet}</li>
+                                        <li key={bidx}>
+                                          {renderHighlightedText(
+                                            bullet,
+                                            analysisResult?.match_analysis?.matched_skills || [],
+                                            analysisResult?.match_analysis?.missing_skills || []
+                                          )}
+                                        </li>
                                       ))}
                                     </ul>
                                   </div>
@@ -6422,7 +6656,13 @@ function App() {
                                     </div>
                                     <ul className="resume-exp-bullets">
                                       {(proj.description || []).map((bullet, bidx) => (
-                                        <li key={bidx}>{bullet}</li>
+                                        <li key={bidx}>
+                                          {renderHighlightedText(
+                                            bullet,
+                                            analysisResult?.match_analysis?.matched_skills || [],
+                                            analysisResult?.match_analysis?.missing_skills || []
+                                          )}
+                                        </li>
                                       ))}
                                     </ul>
                                   </div>

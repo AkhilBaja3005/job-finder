@@ -281,11 +281,58 @@ def extract_recruiter_from_indeed(job_url: str) -> Dict[str, Optional[str]]:
         }
 
 
-async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: Optional[str] = None, browser=None) -> Dict[str, Optional[str]]:
+async def discover_recruiter_via_grounding(company_name: str, custom_api_key: Optional[str] = None) -> Dict[str, Optional[str]]:
+    """
+    Uses Gemini with Google Search Grounding to discover a technical recruiter
+    or talent acquisition lead for companies when posting via Greenhouse, Lever, Ashby, etc.
+    """
+    if not company_name or len(company_name.strip()) < 2:
+        return {"recruiter_name": None, "recruiter_profile_url": None}
+
+    try:
+        from services.gemini_client import call_gemini_grounded
+        clean_company = re.sub(r'[^a-zA-Z0-9\s]', '', company_name).strip()
+        query = (
+            f"Find a currently active Technical Recruiter or Head of Talent at {clean_company}. "
+            f"Search specifically for: \"{clean_company}\" (\"technical recruiter\" OR \"talent partner\" OR \"recruiter\") site:linkedin.com/in\n"
+            f"Return ONLY a valid JSON object with the format:\n"
+            f"{{\"name\": \"Full Name\", \"linkedin_url\": \"https://linkedin.com/in/...\", \"title\": \"Title\"}}\n"
+            f"If no specific recruiter is verified with high certainty, return {{\"name\": null, \"linkedin_url\": null}}"
+        )
+        res = call_gemini_grounded(query, custom_api_key=custom_api_key)
+        text = res.get("text", "")
+        # Extract JSON from response
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if match:
+            import json
+            data = json.loads(match.group(0))
+            name = data.get("name")
+            url = data.get("linkedin_url")
+            # If citations contain a linkedin profile, use that as url fallback
+            if name and not url:
+                for cit in res.get("citations", []):
+                    c_url = cit.get("url", "")
+                    if "linkedin.com/in/" in c_url:
+                        url = c_url
+                        break
+            if name and name.lower() not in ["null", "none", "unknown", "n/a"]:
+                return {
+                    "recruiter_name": name.strip(),
+                    "recruiter_profile_url": url.strip() if url else None
+                }
+    except Exception as e:
+        print(f"[discover_recruiter_via_grounding] Search grounding fallback failed: {e}")
+
+    return {"recruiter_name": None, "recruiter_profile_url": None}
+
+
+async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: Optional[str] = None, browser=None, company_hint: Optional[str] = None, custom_api_key: Optional[str] = None) -> Dict[str, Optional[str]]:
     """
     Unified interface to extract recruiter info from a job posting URL.
 
     Automatically detects the platform if not provided.
+    If platform is a direct ATS (Greenhouse, Lever, Ashby, Workday) or no recruiter
+    is directly on the page, uses Gemini Google Search Grounding to find an active recruiter.
 
     Args:
         job_url: The job posting URL
@@ -294,6 +341,8 @@ async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: 
             redundant Playwright navigation when the caller already has it
         browser: Optional already-launched Playwright Browser to reuse
             (LinkedIn only) instead of launching a new one
+        company_hint: Optional company name hint for grounded search
+        custom_api_key: Optional custom Gemini API key
 
     Returns:
         {
@@ -313,21 +362,50 @@ async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: 
 
     # Auto-detect platform if not provided
     if not platform:
-        if 'linkedin.com' in job_url.lower():
+        j_lower = job_url.lower()
+        if 'linkedin.com' in j_lower:
             platform = 'linkedin'
-        elif 'indeed.com' in job_url.lower():
+        elif 'indeed.com' in j_lower:
             platform = 'indeed'
+        elif 'greenhouse.io' in j_lower:
+            platform = 'greenhouse'
+        elif 'lever.co' in j_lower:
+            platform = 'lever'
+        elif 'ashbyhq.com' in j_lower:
+            platform = 'ashby'
+        elif 'workday' in j_lower:
+            platform = 'workday'
         else:
             platform = 'unknown'
 
+    res = {
+        "recruiter_name": None,
+        "recruiter_profile_url": None,
+        "company_name": None,
+        "platform": platform
+    }
+
     if platform == 'linkedin':
-        return await extract_recruiter_from_linkedin(job_url, html=html, browser=browser)
+        res = await extract_recruiter_from_linkedin(job_url, html=html, browser=browser)
     elif platform == 'indeed':
-        return extract_recruiter_from_indeed(job_url)
-    else:
-        return {
-            "recruiter_name": None,
-            "recruiter_profile_url": None,
-            "company_name": None,
-            "platform": platform
-        }
+        res = extract_recruiter_from_indeed(job_url)
+
+    # If recruiter wasn't found on the page or it's a direct ATS (Ashby/Greenhouse/Lever/etc),
+    # discover recruiter via Google Search Grounding
+    if not res.get("recruiter_name"):
+        comp = company_hint or res.get("company_name")
+        if not comp:
+            # Try to derive company name from job URL domain or subpaths (e.g. boards.greenhouse.io/stripe)
+            m_gh = re.search(r'(?:boards\.greenhouse\.io|jobs\.lever\.co|jobs\.ashbyhq\.com)/([^/?#]+)', job_url)
+            if m_gh:
+                comp = m_gh.group(1).replace('-', ' ').title()
+
+        if comp:
+            grounded_res = await discover_recruiter_via_grounding(comp, custom_api_key=custom_api_key)
+            if grounded_res.get("recruiter_name"):
+                res["recruiter_name"] = grounded_res["recruiter_name"]
+                res["recruiter_profile_url"] = grounded_res.get("recruiter_profile_url")
+                if not res.get("company_name"):
+                    res["company_name"] = comp
+
+    return res
