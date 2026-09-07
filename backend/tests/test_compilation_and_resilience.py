@@ -212,3 +212,34 @@ def test_ttl_cache_bounded_size_and_eviction():
     cache.set("d", 4)
     assert len(cache._store) <= 3
     assert cache.get("d") == 4
+
+
+def test_extension_version_and_asset_integrity():
+    """Validates the Chrome extension manifest, files, and version hash endpoint from backend."""
+    import json
+    ext_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "extension"))
+    assert os.path.exists(ext_dir), f"Extension directory not found at {ext_dir}"
+
+    manifest_path = os.path.join(ext_dir, "manifest.json")
+    assert os.path.exists(manifest_path), "manifest.json missing"
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    assert manifest.get("manifest_version") == 3
+    assert manifest.get("version") == "3.1.0"
+    assert "activeTab" in manifest.get("permissions", [])
+
+    for req_file in ["popup.html", "popup.css", "popup.js", "content.js", "content.css", "background.js"]:
+        assert os.path.exists(os.path.join(ext_dir, req_file)), f"{req_file} missing from extension package"
+
+    # Test backend version hash endpoint
+    from starlette.testclient import TestClient
+    from main import app
+    client = TestClient(app)
+    res = client.get("/extension_version_hash")
+    assert res.status_code == 200
+    data = res.json()
+    assert data.get("version") == "3.1.0"
+    assert "hash" in data
+    assert len(data["hash"]) == 32
+
