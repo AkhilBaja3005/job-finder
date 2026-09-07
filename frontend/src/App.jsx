@@ -6232,6 +6232,19 @@ function App() {
                       </button>
                       <button
                         className="btn btn-secondary"
+                        style={{ padding: '10px 18px', borderColor: '#A855F7', color: '#C084FC', fontWeight: 600, fontSize: '0.86rem', gap: '8px' }}
+                        onClick={handleGenerateOutreach}
+                        disabled={outreachLoading || loading}
+                        title="Generate personalized recruiter cold email & LinkedIn InMail message"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                          <polyline points="22,6 12,13 2,6"></polyline>
+                        </svg>
+                        {outreachLoading ? 'Generating Outreach…' : 'Generate Outreach'}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
                         style={{ padding: '11px 20px' }}
                         onClick={() => {
                           setKeepOriginalMode(true);
@@ -6526,6 +6539,21 @@ function App() {
                               <path d="M17 9v6"></path>
                             </svg>
                             Copy Markdown
+                          </button>
+
+                          {/* 5. Outreach & Recruiter InMail */}
+                          <button
+                            className="btn btn-secondary"
+                            onClick={handleGenerateOutreach}
+                            disabled={outreachLoading || loading}
+                            style={{ padding: '6px 12px', fontSize: '0.78rem', gap: '6px', color: '#C084FC', borderColor: 'rgba(168, 85, 247, 0.35)' }}
+                            title="Open personalized recruiter outreach & InMail modal"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                              <polyline points="22,6 12,13 2,6"></polyline>
+                            </svg>
+                            Outreach
                           </button>
 
                           {/* 5. Set as Master Baseline */}
