@@ -243,3 +243,11 @@ def test_extension_version_and_asset_integrity():
     assert "hash" in data
     assert len(data["hash"]) == 32
 
+    # Test dynamic extension zip download endpoint
+    res_zip = client.get("/download_extension_zip")
+    assert res_zip.status_code == 200
+    assert res_zip.headers.get("content-type") == "application/zip"
+    assert "attachment; filename=job_finder_extension.zip" in res_zip.headers.get("content-disposition", "")
+    assert len(res_zip.content) > 1000
+
+
