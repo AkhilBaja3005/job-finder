@@ -701,8 +701,25 @@ document.addEventListener("DOMContentLoaded", () => {
             scoreCircle.textContent = "—";
             scoreSub.textContent = "Upload or sync resume to score";
           } else {
-            scoreCircle.textContent = "⚠️";
-            scoreSub.textContent = "Offline / Server non-responsive";
+            // Check chrome.storage.local for previously saved ATS analysis for this URL
+            chrome.storage.local.get(["lastAtsAnalysis"], (st) => {
+              const cached = st?.lastAtsAnalysis;
+              const cachedClean = getCleanUrl(cached?.url);
+              const curClean = getCleanUrl(details.url);
+              if (cached && cachedClean && curClean && cachedClean === curClean && cached.fit_score) {
+                scoreCircle.textContent = `${cached.fit_score}%`;
+                scoreSub.textContent = "⚡ Offline Cached Score";
+                if (atsVerdictBadge) {
+                  atsVerdictBadge.textContent = "Offline Cache";
+                  atsVerdictBadge.style.color = "#f59e0b";
+                  atsVerdictBadge.style.background = "rgba(245, 158, 11, 0.15)";
+                  atsVerdictBadge.style.borderColor = "rgba(245, 158, 11, 0.35)";
+                }
+              } else {
+                scoreCircle.textContent = "⚠️";
+                scoreSub.textContent = "Offline / Server non-responsive";
+              }
+            });
           }
         });
     });
