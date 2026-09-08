@@ -747,6 +747,54 @@ def generate_latex_from_json(
     return "\n".join(latex)
 
 
+def validate_latex_syntax(latex_code: str) -> tuple[bool, str]:
+    """
+    Fast pre-flight syntax validator before spawning tectonic subprocess.
+    Catches unclosed environments, unbalanced braces, and missing document markers in microseconds.
+    """
+    if not latex_code or not latex_code.strip():
+        return False, "Empty LaTeX document"
+
+    # Check for document environment
+    if "\\begin{document}" not in latex_code or "\\end{document}" not in latex_code:
+        return False, "Missing \\begin{document} or \\end{document}"
+
+    # Check brace balance outside comments
+    brace_count = 0
+    in_comment = False
+    i = 0
+    n = len(latex_code)
+    while i < n:
+        c = latex_code[i]
+        if c == '\n':
+            in_comment = False
+        elif not in_comment:
+            if c == '%' and (i == 0 or latex_code[i - 1] != '\\'):
+                in_comment = True
+            elif c == '{' and (i == 0 or latex_code[i - 1] != '\\'):
+                brace_count += 1
+            elif c == '}' and (i == 0 or latex_code[i - 1] != '\\'):
+                brace_count -= 1
+                if brace_count < 0:
+                    return False, f"Unmatched closing brace '}}' at offset {i}"
+        i += 1
+
+    if brace_count != 0:
+        return False, f"Unbalanced braces in LaTeX document: {brace_count} unclosed brace(s)"
+
+    # Check environment balances (\begin{env} vs \end{env})
+    begins = re.findall(r'\\begin\{([a-zA-Z0-9_*]+)\}', latex_code)
+    ends = re.findall(r'\\end\{([a-zA-Z0-9_*]+)\}', latex_code)
+    # Check counts of common environments
+    for env in set(begins + ends):
+        b_cnt = begins.count(env)
+        e_cnt = ends.count(env)
+        if b_cnt != e_cnt:
+            return False, f"Unmatched environment '\\{env}': {b_cnt} begin vs {e_cnt} end"
+
+    return True, "Syntax valid"
+
+
 def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, linespread: float = 1.0, master_latex: Optional[str] = None) -> tuple:
     import uuid
     import shutil
@@ -755,11 +803,18 @@ def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, 
     from services.session_store import BASE_DIR, UPLOAD_DIR, OUTPUT_DIR
 
     try:
+        fixed_code = apply_latex_hotfix(latex_code, spacing_scale, linespread, master_latex)
+
+        # Pre-flight syntax validation before spawning subprocess
+        is_valid, reason = validate_latex_syntax(fixed_code)
+        if not is_valid:
+            print(f"[latex_utils] Pre-flight syntax check rejected invalid LaTeX: {reason}")
+            return 999, 0.0
+
         unique_id = uuid.uuid4().hex[:10]
         temp_tex = os.path.join(OUTPUT_DIR, f"temp_check_{unique_id}.tex")
         temp_pdf = os.path.join(OUTPUT_DIR, f"temp_check_{unique_id}.pdf")
 
-        fixed_code = apply_latex_hotfix(latex_code, spacing_scale, linespread, master_latex)
         with open(temp_tex, "w", encoding="utf-8") as f:
             f.write(fixed_code)
 

@@ -35,8 +35,22 @@ async def _create_stealth_context(browser):
     await context.add_init_script(_STEALTH_INIT_SCRIPT)
     return context
 
+async def ensure_shared_browser_alive():
+    """Verifies that the shared browser is connected; automatically re-launches if disconnected or closed."""
+    global _shared_playwright, _shared_browser, _context_pool
+    try:
+        if _shared_browser is not None and _shared_browser.is_connected():
+            return _shared_browser
+    except Exception:
+        pass
+
+    print("[Scraper] 🔄 Shared browser disconnected/dead. Auto-recovering...")
+    await close_shared_browser()
+    await init_shared_browser()
+    return _shared_browser
+
 async def init_shared_browser():
-    """Launch the persistent shared Playwright browser. Called once at startup."""
+    """Launch the persistent shared Playwright browser. Called once at startup or by watchdog."""
     global _shared_playwright, _shared_browser, _context_pool
     try:
         _shared_playwright = await async_playwright().start()
@@ -62,13 +76,15 @@ async def init_shared_browser():
         except Exception as pool_err:
             print(f"[Scraper] Context pool warm-up failed: {pool_err}")
             _context_pool = None
+        return _shared_browser
     except Exception as e:
         print(f"[Scraper] Shared browser init failed: {e}")
         _shared_playwright = None
         _shared_browser = None
+        return None
 
 async def close_shared_browser():
-    """Gracefully shut down the shared browser. Called on app shutdown."""
+    """Gracefully shut down the shared browser. Called on app shutdown or crash recovery."""
     global _shared_playwright, _shared_browser, _context_pool
     if _context_pool is not None:
         while not _context_pool.empty():
@@ -428,9 +444,14 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
 
     own_playwright = None
     own_browser = None
-    # Prefer the module-level shared browser (zero startup overhead),
+    # Prefer the module-level shared browser (verifying it is connected and alive),
     # then the caller-supplied browser, then spin up a temporary one.
-    effective_browser = browser or _shared_browser
+    effective_browser = browser
+    if effective_browser is None:
+        if _shared_browser is not None:
+            effective_browser = await ensure_shared_browser_alive()
+        else:
+            effective_browser = _shared_browser
     if effective_browser is None:
         own_playwright = await async_playwright().start()
         effective_browser = await own_playwright.chromium.launch(

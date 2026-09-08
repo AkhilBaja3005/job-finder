@@ -76,7 +76,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               textTransform: 'uppercase',
               letterSpacing: '0.06em'
             }}>Documentation & Setup Guide</span>
-            <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>v3.0.0 (Production)</span>
+            <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>v3.1.0 (Production)</span>
           </div>
           <h1 style={{
             fontSize: '2rem',
@@ -281,11 +281,11 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             </div>
           </section>
 
-          {/* SECTION: Chrome Extension v3.0.0 */}
+          {/* SECTION: Chrome Extension v3.1.0 */}
           <section id="extension" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               
-              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Chrome Extension v3.0.0 (Side Panel & Automation)</h2>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Chrome Extension v3.1.0 (Side Panel & Automation)</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '20px' }}>
               The extension uses Chrome's native <strong>Manifest V3 Persistent Side Panel API</strong>. It docks seamlessly to the right side of your browser and stays open as you switch tabs, click links, and fill out application forms.

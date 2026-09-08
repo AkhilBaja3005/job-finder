@@ -155,3 +155,46 @@ def test_generate_latex_from_json_handles_empty_resume():
     assert r"\documentclass" in latex
     assert r"\begin{document}" in latex
     assert r"\end{document}" in latex
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# validate_latex_syntax
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_validate_latex_syntax_valid():
+    from utils.latex_utils import validate_latex_syntax
+    valid_latex = r"""\documentclass{resume}
+\begin{document}
+\begin{rSection}{Experience}
+\begin{itemize}
+\item Worked on systems.
+\end{itemize}
+\end{rSection}
+\end{document}"""
+    ok, msg = validate_latex_syntax(valid_latex)
+    assert ok is True
+    assert msg == "Syntax valid"
+
+
+def test_validate_latex_syntax_unbalanced_braces():
+    from utils.latex_utils import validate_latex_syntax
+    bad_latex = r"""\documentclass{resume}
+\begin{document}
+\textbf{Incomplete
+\end{document}"""
+    ok, msg = validate_latex_syntax(bad_latex)
+    assert ok is False
+    assert "Unbalanced braces" in msg
+
+
+def test_validate_latex_syntax_unmatched_environments():
+    from utils.latex_utils import validate_latex_syntax
+    bad_latex = r"""\documentclass{resume}
+\begin{document}
+\begin{itemize}
+\item Item without end itemize
+\end{document}"""
+    ok, msg = validate_latex_syntax(bad_latex)
+    assert ok is False
+    assert "Unmatched environment" in msg
+

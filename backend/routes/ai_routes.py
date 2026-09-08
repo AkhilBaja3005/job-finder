@@ -35,35 +35,67 @@ from services.outreach_generator import generate_outreach_message
 from services.cron_scheduler import process_and_send_user_digest
 from routes.job_routes import _extract_company_from_jd, _check_rate_limit
 
+import hashlib
+from utils.ttl_cache import TTLCache
+
 router = APIRouter(tags=["AI & Tailoring"])
 
-# Local In-Memory Analysis Cache
-_analysis_cache: Dict[str, dict] = {}
+# Bounded, thread-safe In-Memory Analysis Cache (1 hour TTL, max 500 items)
+_analysis_cache = TTLCache(ttl_seconds=3600, max_size=500)
 
 
-def _get_analysis_cache_key(token: Optional[str], job_title: str, jd_text: str, user_selected_skills: Optional[List[str]] = None) -> str:
+def _get_analysis_cache_key(
+    token: Optional[str],
+    job_title: str,
+    jd_text: str,
+    user_selected_skills: Optional[List[str]] = None,
+    candidate_profile: Optional[dict] = None
+) -> str:
     user_part = token or "guest"
     jt = (job_title or "").strip().lower()
-    jd = (jd_text or "").strip()[:500].lower()
+    jd = (jd_text or "").strip()[:1000].lower()
+    jd_hash = hashlib.md5(jd.encode("utf-8")).hexdigest()
     skills_part = ",".join(sorted(s.strip().lower() for s in (user_selected_skills or [])))
-    return f"{user_part}:{jt}:{hash(jd)}:{hash(skills_part)}"
+    skills_hash = hashlib.md5(skills_part.encode("utf-8")).hexdigest() if skills_part else "noskills"
+    profile_hash = "noprofile"
+    if candidate_profile and isinstance(candidate_profile, dict):
+        try:
+            profile_str = json.dumps(candidate_profile, sort_keys=True)
+            profile_hash = hashlib.md5(profile_str.encode("utf-8")).hexdigest()[:12]
+        except Exception:
+            profile_hash = "profile_err"
+    return f"{user_part}:{jt}:{jd_hash}:{skills_hash}:{profile_hash}"
 
 
-def get_cached_analysis(token: Optional[str], job_title: str, jd_text: str, user_selected_skills: Optional[List[str]] = None) -> Optional[dict]:
-    key = _get_analysis_cache_key(token, job_title, jd_text, user_selected_skills)
+def get_cached_analysis(
+    token: Optional[str],
+    job_title: str,
+    jd_text: str,
+    user_selected_skills: Optional[List[str]] = None,
+    candidate_profile: Optional[dict] = None
+) -> Optional[dict]:
+    key = _get_analysis_cache_key(token, job_title, jd_text, user_selected_skills, candidate_profile)
     return _analysis_cache.get(key)
 
 
-def set_cached_analysis(token: Optional[str], job_title: str, jd_text: str, data: dict, user_selected_skills: Optional[List[str]] = None):
-    key = _get_analysis_cache_key(token, job_title, jd_text, user_selected_skills)
-    _analysis_cache[key] = data
+def set_cached_analysis(
+    token: Optional[str],
+    job_title: str,
+    jd_text: str,
+    data: dict,
+    user_selected_skills: Optional[List[str]] = None,
+    candidate_profile: Optional[dict] = None
+):
+    key = _get_analysis_cache_key(token, job_title, jd_text, user_selected_skills, candidate_profile)
+    _analysis_cache.set(key, data)
 
 
 def clear_user_cached_analysis(token: Optional[str]):
     user_part = token or "guest"
-    keys_to_del = [k for k in _analysis_cache if k.startswith(f"{user_part}:")]
-    for k in keys_to_del:
-        del _analysis_cache[k]
+    with _analysis_cache._lock:
+        keys_to_del = [k for k in _analysis_cache._store if str(k).startswith(f"{user_part}:")]
+        for k in keys_to_del:
+            _analysis_cache._store.pop(k, None)
 
 
 class RunContext:
@@ -198,7 +230,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
     # Cache hit check
     if request.job_description and not request.force_tailoring:
-        cached = get_cached_analysis(token, request.job_title or "", request.job_description, request.user_selected_skills)
+        cached = get_cached_analysis(token, request.job_title or "", request.job_description, request.user_selected_skills, session_resume_data)
         if cached:
             if request.skip_tailoring:
                 cached = dict(cached)
@@ -556,7 +588,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             except Exception as rec_err:
                 print(f"[analyze_job] Failed to record application history: {rec_err}")
 
-            set_cached_analysis(token, job_title or "", jd_text or "", dumped, request.user_selected_skills)
+            set_cached_analysis(token, job_title or "", jd_text or "", dumped, request.user_selected_skills, session_resume_data)
 
             yield json.dumps({
                 "type": "result",

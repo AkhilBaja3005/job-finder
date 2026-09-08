@@ -67,7 +67,7 @@ def get_extension_version_hash():
     import hashlib
     ext_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "extension"))
     h = hashlib.md5()
-    version = "3.0.0"
+    version = "3.1.0"
     manifest_path = os.path.join(ext_dir, "manifest.json")
     if os.path.exists(manifest_path):
         try:
