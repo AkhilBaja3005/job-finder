@@ -100,7 +100,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Job Finder & ATS Tailor API",
     description="Full-stack automated Job Discovery, ATS Match Scoring, Resume Tailoring, and AI Auto-Apply Backend",
-    version="3.0.0",
+    version="3.1.0",
     lifespan=lifespan
 )
 

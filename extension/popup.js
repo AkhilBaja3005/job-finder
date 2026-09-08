@@ -181,7 +181,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function checkVersionUpdate() {
     try {
-      const currentVersion = (chrome.runtime?.getManifest?.()?.version) || "3.0.0";
+      const currentVersion = (chrome.runtime?.getManifest?.()?.version) || "3.1.0";
       fetch(`${API_BASE_URL}/extension_version_hash`, { headers: { "Accept": "application/json" } })
         .then((res) => res.ok ? res.json() : null)
         .then((data) => {

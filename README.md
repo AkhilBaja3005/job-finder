@@ -8,7 +8,7 @@ app_port: 8000
 pinned: false
 ---
 
-# AI Job Finder Agent (v3.0.0)
+# AI Job Finder Agent (v3.1.0)
 
 <div align="center">
 
@@ -29,7 +29,7 @@ An AI-powered job search, resume tailoring, and application assistant. Upload a 
 
 The project includes:
 1. **Full-Stack Web App** — Modular FastAPI backend + React 19 (Vite) dashboard.
-2. **Chrome Extension (`Job Finder ATS Tailor v3.0.0`)** — Persistent Chrome Side Panel to score jobs, tailor resumes, auto-fill forms with multimodal intelligence, and dispatch delivery packages on LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday, and custom career sites.
+2. **Chrome Extension (`Job Finder ATS Tailor v3.1.0`)** — Persistent Chrome Side Panel to score jobs, tailor resumes, auto-fill forms with multimodal intelligence, and dispatch delivery packages on LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday, and custom career sites.
 
 ---
 
@@ -70,13 +70,15 @@ The project includes:
 
 ---
 
-## 🧩 Chrome Extension (`Job Finder ATS Tailor v3.0.0`)
+## 🧩 Chrome Extension (`Job Finder ATS Tailor v3.1.0`)
 
 The project includes a Manifest V3 Chrome Extension located in the `/extension` directory for instant in-page analysis while browsing job boards.
 
 ### Extension Features
 - **Chrome MV3 Persistent Side Panel**: Docks permanently to the right side of the browser, remaining open across form filling, job scrolling, and tab switching without auto-dismissing.
+- **Offline Fallback & Cached Resilience**: When offline or if the backend server is non-responsive, the extension automatically falls back to local storage and displays a cached ATS score indicator (`⚡ Offline Cached Score`).
 - **Live Tab Synchronization & 🔄 Rescan Tab**: Automatically synchronizes and extracts the active job page when switching tabs; dedicated rescan button forces fresh live extraction.
+- **Auto-Update Detection Banner**: Notifies you directly in the side panel when an updated extension version is available with a 1-click zip download button.
 - **Zero-Config Download Package**: Pre-bakes your 6-digit Sync Key and backend server endpoint directly into the downloaded extension zip for instant zero-configuration onboarding.
 - **In-Page Job Extraction**: Auto-detects Job Title, Company Name, and Full Description on **LinkedIn**, **Indeed**, **Workday**, **Greenhouse**, **Lever**, **Ashby**, and custom career sites.
 - **Interactive JD Paste & Edit**: Paste raw JD text or adjust job titles on complex single-page apps (SPAs) or iframe job listings with live ATS rescoring.
@@ -101,7 +103,7 @@ Job Finder/
 ├── backend/              # Modular FastAPI application & microservices
 │   ├── main.py           # Application entrypoint & APIRouter registration
 │   ├── routes/
-│   │   ├── ai_routes.py      # /analyze_job, /generate_cover_letter, /send_outreach_email, /answer_question
+│   │   ├── ai_routes.py      # /analyze_job, /generate_cover_letter, /send_outreach_email, /answer_question (TTLCache Bounded)
 │   │   ├── resume_routes.py  # /parse_resume, /user/resume, /download_latex, /download_extension
 │   │   ├── job_routes.py     # /jobs, /scrape, /apply, /extension_version_hash
 │   │   ├── auth_routes.py    # /auth/google, /auth/callback, /user/me, /user/sync_profile
@@ -114,15 +116,16 @@ Job Finder/
 │   │   ├── gemini_client.py    # Multi-LLM provider client (Gemini Grounding, Claude, Groq)
 │   │   ├── email_service.py    # SMTP email delivery with styled HTML templates
 │   │   ├── job_searcher.py     # LinkedIn & Indeed job scraper and ranking pipeline
-│   │   ├── scraper.py          # Playwright headless page scraper
+│   │   ├── scraper.py          # Playwright headless page scraper with crash auto-recovery watchdog
 │   │   ├── autofill_agent.py   # Form filling and question answering engine
 │   │   └── auth.py             # Supabase & Google OAuth session handlers
 │   └── utils/
-│       ├── latex_utils.py      # LaTeX sanitization, macro hotfixes, Tectonic compilation
+│       ├── latex_utils.py      # Pre-flight syntax validation, sanitization, macro hotfixes, Tectonic compilation
+│       ├── ttl_cache.py        # Thread-safe bounded TTL cache for sub-millisecond memory safety
 │       └── ssl_utils.py        # Verified TLS context handler
-└── extension/            # Chrome Extension (Manifest V3 - Side Panel v3.0.0)
+└── extension/            # Chrome Extension (Manifest V3 - Side Panel v3.1.0)
     ├── manifest.json     # Extension permissions, sidePanel, host rules, and metadata
-    ├── popup.html / js   # Persistent side panel interface for ATS scoring & tailoring
+    ├── popup.html / js   # Persistent side panel interface with offline fallback & rescan
     ├── content.js        # Universal job page extractor, iframe support & form autofiller
     └── background.js     # MV3 service worker configuring side panel behavior
 ```
