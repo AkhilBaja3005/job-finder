@@ -7,8 +7,10 @@ import threading
 import traceback
 from typing import Optional, List, Dict
 from fastapi import APIRouter, HTTPException, Header, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse, Response
 from pydantic import BaseModel
+import zipfile
+import io
 
 from services.session_store import get_session_data, _user_output_paths
 from services.auth import async_get_user_by_token
@@ -85,6 +87,32 @@ def get_extension_version_hash():
                     except OSError:
                         pass
     return {"hash": h.hexdigest(), "version": version, "download_url": "/download_extension_zip"}
+ 
+ 
+@router.get("/download_extension_zip")
+def download_extension_zip():
+    ext_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "extension"))
+    if not os.path.exists(ext_dir):
+        raise HTTPException(status_code=404, detail="Extension directory not found")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for root, _, files in os.walk(ext_dir):
+            for file in files:
+                if not file.startswith(".") and not file.endswith((".pyc", ".swp", "~")):
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, ext_dir)
+                    zip_file.write(file_path, arcname)
+
+    zip_buffer.seek(0)
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": "attachment; filename=job_finder_extension.zip"
+        }
+    )
+
 
 
 def _extract_company_from_jd(jd_text: str, page_url: Optional[str] = None) -> str:
