@@ -1,0 +1,124 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Medium Length Professional CV
+% Version 3.0 - ATS-safe (no icon fonts / custom glyphs) + Human-optimized
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[11pt]{resume}
+
+\usepackage[T1]{fontenc}
+\usepackage[left=0.35in,top=0.15in,right=0.35in,bottom=0.13in]{geometry}
+\usepackage{times}
+\usepackage[hidelinks]{hyperref}
+
+\hypersetup{
+    colorlinks=false,
+    pdfborder={0 0 0}
+}
+
+% Standard bullet configuration
+\renewcommand{\labelitemi}{$\bullet$}
+\renewcommand{\labelitemii}{$\bullet$}
+\frenchspacing
+
+% resume.cls defaults these vertical gaps (\sectionskip, \nameskip, etc.) to
+% \medskip. With 6 sections that adds up fast. Overriding to \smallskip here
+% -- rather than fighting it with more \vspace{-...} calls throughout the
+% body -- is what actually buys back the room to fit one page.
+\def\sectionskip{\vspace{0.08em}}
+\def\sectionlineskip{\vspace{0.04em}}
+\def\nameskip{\vspace{0.05em}}
+\def\addressskip{\vspace{0.05em}}
+
+\name{Akhil Baja}
+
+\address{
+\begin{minipage}{\linewidth}
+\centering
+\href{mailto:akhilbaja.work@gmail.com}{akhilbaja.work@gmail.com} $|$ +91 9948083135 $|$
+\href{https://www.linkedin.com/in/akhilbaja}{linkedin.com/in/akhilbaja} $|$ \href{https://akhilbaja3005.github.io/AkhilBaja3005/}{https://akhilbaja3005.github.io}
+\end{minipage}
+}
+
+\begin{document}
+
+%----------------------------------------------------------------------------------------
+%	SUMMARY SECTION
+%----------------------------------------------------------------------------------------
+
+
+\begin{rSection}{Professional Summary}
+AI/ML Systems Engineer with 3+ years of experience building production-grade GenAI, LLM infrastructure, and machine learning systems at \textbf{Qualcomm} and \textbf{Axis Bank}. Engineered cross-language LLM context pipelines reducing retrieval latency by \textbf{60\%} and improving LLM accuracy by \textbf{46\%}, alongside enterprise GenAI systems serving \textbf{1,000+} users. Strong in Python, LLMs, RAG, context engineering, distributed systems, and production ML infrastructure.
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	EDUCATION SECTION
+%----------------------------------------------------------------------------------------
+
+
+\begin{rSection}{Education}
+{\bf Imperial College London} -- {\em MSc in Artificial Intelligence Applications and Innovation} \\
+{\em Sept 2026 -- Sept 2027 $|$ London, UK} \\[0.05em]
+{\bf Indian Institute of Technology Hyderabad (IIT Hyderabad)} -- {\em B.Tech in Engineering Science} \\
+{\em Aug 2019 -- May 2023 $|$ CPI: 8.04 / 10.0} \\
+\textit{\textbf{Internship \& Placement Cell Coordinator} -- led corporate outreach and recruitment across 100+ tier-1 tech \& engineering firms.}
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	WORK EXPERIENCE
+%----------------------------------------------------------------------------------------
+
+\begin{rSection}{Work Experience}
+{\bf Qualcomm $|$ \textnormal{Software Engineer (GenAI / Systems)} $|$ \em Dec 2024 -- Aug 2026 $|$ Hyderabad, India} \\
+{\em Technologies: Python, C++, Jedi, Jenkins, RabbitMQ, Docker, Rancher, AST Parsing, SQL, Git}
+\vspace{-0.6em}
+\begin{itemize}
+    \setlength{\itemsep}{-0.35em}
+    \setlength{\parsep}{0em}
+    \item Engineered a cross-language LLM context engineering pipeline utilizing AST-based dependency extraction across Java, Python, C, and C++, reducing context retrieval latency by \textbf{60\%} and improving code-generation accuracy by 46\% (Awarded Qualcomm Certificate of Recognition).
+    \item Re-architected a distributed data-harvesting pipeline for 1,000+ internal engineers, cutting deployment failures by \textbf{84\%} by replacing legacy workflows with asynchronous RabbitMQ queues and containerized microservices on Docker/Rancher.
+    \item Slashed static analysis parser execution latency via in-memory dependency caching and consolidated the unit test suite into a Linux-compatible test harness, significantly cutting ongoing CI maintenance overhead.
+\end{itemize}
+
+{\bf Axis Bank $|$ \textnormal{Data Scientist (AI / ML)} $|$ \em July 2023 -- Dec 2024 $|$ Bangalore, India} \\
+{\em Technologies: Python, Azure OpenAI, PySpark, Cloudera ML, XGBoost, Scikit-learn, SAS EG, SQL}
+\vspace{-0.6em}
+\begin{itemize}
+    \setlength{\itemsep}{-0.35em}
+    \setlength{\parsep}{0em}
+    \item Built and deployed an enterprise RAG assistant using Azure OpenAI, FAISS vector search, and Cloudera ML, serving 1,300+ bank employees and reducing internal support query resolution time by \textbf{70\%}.
+    \item Designed an Isolation Forest anomaly detection pipeline for Gold Loans, identifying high-risk branch patterns tied to \textbf{\pounds 30M+} (INR 300Cr+) in potential loss exposure and cutting manual audit time by 80\% (Awarded BIU Star Award).
+    \item Automated customer Dynamic Risk Rating via \textbf{XGBoost and Naive Bayes} classification pipelines, reducing manual processing overhead while ensuring full regulatory compliance with RBI guidelines.
+\end{itemize}
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	PROJECTS (Open-source, GenAI/LLM-relevant only)
+%----------------------------------------------------------------------------------------
+
+\begin{rSection}{Projects}
+\begin{itemize}
+    \setlength{\itemsep}{-0.35em}
+    \setlength{\parsep}{0em}
+    \item \textbf{AI Job Finder Agent \& ATS Tailoring Engine} -- {\em Python, Docker, FastAPI, React, LaTeX/Tectonic, Playwright} \\
+    Open source: \href{https://github.com/AkhilBaja3005/job-finder}{github.com/AkhilBaja3005/job-finder} \\
+    End-to-end job discovery, ATS fit-scoring, and automated resume/cover-letter tailoring with recruiter-review feedback loops; includes a Manifest V3 Chrome extension auto-filling applications across LinkedIn, Lever, Ashby, Workday, and Greenhouse -- cutting job discovery latency by \textbf{75\%}.
+    \item \textbf{AI Study Copilot -- Autonomous Lecture Assistant} -- {\em Python, Docker, Telegram Bot API, Hugging Face} \\
+    Open source: \href{https://github.com/AkhilBaja3005/notes-taker}{github.com/AkhilBaja3005/notes-taker} \\
+    Cloud-deployed AI assistant for STEM coursework via a Telegram bot (mobile-to-server I/O): lecture transcription, slide OCR, and contextual Q\&A; used a Render reverse proxy to bypass Hugging Face's Telegram API restrictions.
+    \item \textbf{Cosmic Ray Segmentation} -- {\em Python, PyTorch} \\
+    Enhanced the deepCR model for cosmic-ray detection in astronomical images; evaluated U-Net and implemented residual connections, improving pixel-level segmentation precision by \textbf{15\%}.
+\end{itemize}
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	TECHNICAL SKILLS
+%----------------------------------------------------------------------------------------
+
+\begin{rSection}{Technical Skills}
+\textbf{Languages:} Python, C++, Java, SQL \\
+\textbf{AI/ML \& GenAI:} Generative AI, LLMs, RAG, FAISS, LLM Context Engineering, PyTorch, Scikit-learn, XGBoost, Vector Search, Anomaly Detection, Computer Vision (U-Net, DenseNet) \\
+\textbf{Data \& Platforms:} PySpark, Azure OpenAI, FAISS, Cloudera ML, PostgreSQL, RabbitMQ, REST APIs, FastAPI \\
+\textbf{Systems \& DevOps:} Docker, Rancher, Jenkins, Git, CI/CD, Microservices, Static Analysis, AST Parsing, Linux
+\end{rSection}
+
+\end{document}

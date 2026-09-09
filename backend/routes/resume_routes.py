@@ -40,10 +40,29 @@ def _get_guest_state_file(token: Optional[str] = None) -> str:
 
 
 def _build_original_latex(resume_data: dict, master_path: Optional[str] = None) -> str:
+    master_template = os.path.join(BASE_DIR, "assets", "master_resume_template.tex")
+    master_latex = None
     if master_path and master_path.endswith(".tex") and os.path.exists(master_path):
-        with open(master_path, "r", encoding="utf-8") as f:
-            return f.read()
-    return apply_latex_hotfix(generate_latex_from_json(resume_data))
+        try:
+            with open(master_path, "r", encoding="utf-8") as f:
+                master_latex = f.read()
+        except Exception:
+            pass
+    elif os.path.exists(master_template):
+        try:
+            with open(master_template, "r", encoding="utf-8") as f:
+                master_latex = f.read()
+        except Exception:
+            pass
+
+    # If full structured resume_data is provided, generate pristine LaTeX from JSON
+    if resume_data and (resume_data.get("experience") or resume_data.get("projects") or resume_data.get("education")):
+        return apply_latex_hotfix(generate_latex_from_json(resume_data, master_latex=master_latex), master_latex=master_latex)
+
+    if master_latex:
+        return apply_latex_hotfix(master_latex, master_latex=master_latex)
+
+    return apply_latex_hotfix(generate_latex_from_json(resume_data, master_latex=master_latex), master_latex=master_latex)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

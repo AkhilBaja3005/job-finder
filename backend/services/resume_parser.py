@@ -59,6 +59,7 @@ class StructuredResume(BaseModel):
     name: str
     email: str
     phone: str
+    location: Optional[str] = Field(default="", description="Candidate location/city/country (e.g. London, UK)")
     links: List[str]
     summary: str = Field(default="", description="A short professional summary paragraph (2-3 sentences) describing candidate background and expertise. NEVER serialize full resume JSON into this field.")
     skills: Union[Dict[str, List[str]], List[str]]
@@ -277,6 +278,14 @@ def parse_resume(file_path: str) -> StructuredResume:
         parsed_data["email"] = ""
     if not parsed_data.get("phone"):
         parsed_data["phone"] = ""
+    if not parsed_data.get("location"):
+        # Infer location from candidate header or first education/experience entry if available
+        candidate_loc = ""
+        for edu in parsed_data.get("education", []):
+            if isinstance(edu, dict) and edu.get("location"):
+                candidate_loc = edu.get("location")
+                break
+        parsed_data["location"] = candidate_loc
     if not parsed_data.get("links"):
         parsed_data["links"] = []
     parsed_data["summary"] = sanitize_resume_summary(parsed_data.get("summary", ""))

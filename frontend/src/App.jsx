@@ -293,6 +293,8 @@ function App() {
   const [userArchetypes, setUserArchetypes] = useState([]);
   const [activeArchetype, setActiveArchetype] = useState('Primary');
   const [newArchetypeName, setNewArchetypeName] = useState('');
+  const [telemetryModalOpen, setTelemetryModalOpen] = useState(false);
+  const [telemetryForm, setTelemetryForm] = useState({ name: '', email: '', phone: '', location: '' });
   const [archetypeLoading, setArchetypeLoading] = useState(false);
   const scrapedJobDescriptionRef = useRef('');
   const analysisPanelRef = useRef(null);
@@ -2680,20 +2682,52 @@ function App() {
                       </svg>
                       Candidate Telemetry
                     </div>
-                    {resumeData.experience_years && (
-                      <span style={{
-                        fontSize: '0.70rem',
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: '10px',
-                        background: 'rgba(56, 189, 248, 0.12)',
-                        color: '#38bdf8',
-                        border: '1px solid rgba(56, 189, 248, 0.25)',
-                        fontFamily: 'var(--font-mono)'
-                      }}>
-                        {resumeData.experience_years}+ Yrs Exp
-                      </span>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {resumeData.experience_years && (
+                        <span style={{
+                          fontSize: '0.70rem',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          background: 'rgba(56, 189, 248, 0.12)',
+                          color: '#38bdf8',
+                          border: '1px solid rgba(56, 189, 248, 0.25)',
+                          fontFamily: 'var(--font-mono)'
+                        }}>
+                          {resumeData.experience_years}+ Yrs Exp
+                        </span>
+                      )}
+                      <button
+                        onClick={() => {
+                          setTelemetryForm({
+                            name: resumeData.name || '',
+                            email: resumeData.email || '',
+                            phone: resumeData.phone || '',
+                            location: resumeData.location || ''
+                          });
+                          setTelemetryModalOpen(true);
+                        }}
+                        style={{
+                          background: 'rgba(56, 189, 248, 0.12)',
+                          border: '1px solid rgba(56, 189, 248, 0.3)',
+                          color: '#38bdf8',
+                          fontSize: '0.68rem',
+                          fontWeight: 600,
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Edit Candidate Telemetry"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                        </svg>
+                        Edit
+                      </button>
+                    </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
                     {resumeData.name && (
@@ -7144,6 +7178,194 @@ function App() {
                 onClick={() => setShowExtensionGuide(false)}
               >
                 Got it! Start Tailoring Jobs
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Edit Candidate Telemetry Modal */}
+      {telemetryModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#0f172a',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '460px',
+            padding: '24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                Edit Candidate Telemetry
+              </div>
+              <button
+                onClick={() => setTelemetryModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.85rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '4px' }}>Full Name</label>
+                <input
+                  type="text"
+                  value={telemetryForm.name}
+                  onChange={(e) => setTelemetryForm(prev => ({ ...prev, name: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#fff',
+                    fontSize: '0.85rem'
+                  }}
+                  placeholder="e.g. Jane Doe"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '4px' }}>Email</label>
+                <input
+                  type="email"
+                  value={telemetryForm.email}
+                  onChange={(e) => setTelemetryForm(prev => ({ ...prev, email: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#fff',
+                    fontSize: '0.85rem'
+                  }}
+                  placeholder="e.g. candidate@example.com"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '4px' }}>Phone</label>
+                <input
+                  type="text"
+                  value={telemetryForm.phone}
+                  onChange={(e) => setTelemetryForm(prev => ({ ...prev, phone: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#fff',
+                    fontSize: '0.85rem'
+                  }}
+                  placeholder="e.g. +44 7123 456789"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', marginBottom: '4px' }}>Location / City</label>
+                <input
+                  type="text"
+                  value={telemetryForm.location}
+                  onChange={(e) => setTelemetryForm(prev => ({ ...prev, location: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#fff',
+                    fontSize: '0.85rem'
+                  }}
+                  placeholder="e.g. London, UK"
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+              <button
+                onClick={() => setTelemetryModalOpen(false)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#cbd5e1',
+                  cursor: 'pointer',
+                  fontSize: '0.82rem',
+                  fontWeight: 600
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                    const res = await fetch(`${API_BASE}/user/profile`, {
+                      method: 'POST',
+                      headers,
+                      body: JSON.stringify({
+                        name: telemetryForm.name,
+                        email: telemetryForm.email,
+                        phone: telemetryForm.phone,
+                        location: telemetryForm.location,
+                        raw_resume_data: resumeData
+                      })
+                    });
+                    if (res.ok) {
+                      setResumeData(prev => ({
+                        ...prev,
+                        name: telemetryForm.name,
+                        email: telemetryForm.email,
+                        phone: telemetryForm.phone,
+                        location: telemetryForm.location
+                      }));
+                      setTelemetryModalOpen(false);
+                      showToast('Candidate telemetry updated successfully!', 'success');
+                    } else {
+                      showToast('Failed to update telemetry', 'error');
+                    }
+                  } catch (err) {
+                    showToast(`Error updating telemetry: ${err.message}`, 'error');
+                  }
+                }}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  background: 'linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)',
+                  border: 'none',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '0.82rem',
+                  fontWeight: 700
+                }}
+              >
+                Save Changes
               </button>
             </div>
           </div>
