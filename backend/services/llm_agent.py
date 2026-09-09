@@ -182,6 +182,31 @@ def tailor_latex_code(
     """
     jd_truncated = _truncate_jd(job_description)
     safe_suggestions = _sanitize_suggestions(suggestions)
+
+    # ── Surgical Slot Replacement Engine (Zero Layout Distortion) ──
+    # If safe_suggestions has tailored summary or experience bullets, inject them directly into master_latex slots
+    try:
+        from utils.latex_utils import inject_tailored_slots
+        s_dict = safe_suggestions if isinstance(safe_suggestions, dict) else (safe_suggestions.model_dump() if hasattr(safe_suggestions, "model_dump") else {})
+        tailored_summary = s_dict.get("summary")
+        tailored_exp = s_dict.get("experience")
+        tailored_proj = s_dict.get("projects")
+
+        if tailored_summary or (tailored_exp and len(tailored_exp) > 0) or user_selected_skills:
+            slotted_latex = inject_tailored_slots(
+                master_latex=master_latex,
+                summary=tailored_summary,
+                experience_bullets=tailored_exp,
+                project_bullets=tailored_proj,
+                user_selected_skills=user_selected_skills,
+            )
+            if slotted_latex and "\\begin{document}" in slotted_latex and "\\documentclass" in slotted_latex:
+                if on_log:
+                    on_log("⚡ Applied precision slot replacement directly on Master LaTeX layout.")
+                return slotted_latex
+    except Exception as slot_err:
+        print(f"[tailor_latex_code] Slot replacement fallback to LLM generation: {slot_err}")
+
     feedback_str = (
         f"\n⚠️  CRITICAL REVIEWER FEEDBACK — You MUST fix EVERY point listed below before returning:\n{reviewer_feedback}\n"
         if reviewer_feedback else ""

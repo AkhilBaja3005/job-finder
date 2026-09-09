@@ -2,9 +2,10 @@
   "candidate": {
     "name": "Akhil Baja",
     "email": "akhilbaja.work@gmail.com",
+    "phone": "+91 9948083135",
     "linkedin": "https://linkedin.com/in/akhilbaja",
     "github": "https://github.com/AkhilBaja3005",
-    "portfolio": "https://akhilbaja3005.github.io/AkhilBaja3005/",
+    "portfolio": "https://akhilbaja.dev",
     "location": "London, UK",
     "experience_summary": "AI/ML Systems Engineer with 3+ years of experience engineering production-grade GenAI, LLM infrastructure, and distributed data pipelines at Qualcomm and Axis Bank. Architected cross-language context pipelines reducing retrieval latency by 60% and boosting LLM accuracy by 46%, alongside enterprise GenAI platforms serving 1,000+ end users. Incoming MSc AI student at Imperial College London specializing in scalable AI infrastructure.",
     "education": [
@@ -71,16 +72,38 @@
       {
         "title": "AI Job Finder Agent & ATS Tailoring Engine",
         "category": "GenAI / Systems",
-        "technologies": ["Python", "FastAPI", "React", "LaTeX/Tectonic", "Playwright"],
+        "technologies": [
+          "Python",
+          "Docker",
+          "FastAPI",
+          "React",
+          "LaTeX/Tectonic",
+          "Playwright"
+        ],
         "url": "https://github.com/AkhilBaja3005/job-finder",
-        "description": "End-to-end job discovery, ATS fit-scoring, and automated resume/cover-letter tailoring engine with recruiter-review feedback loops; includes a Manifest V3 Chrome extension that auto-fills applications across LinkedIn Easy Apply, Lever, Ashby, Workday, and Greenhouse, cutting job discovery latency by 75%."
+        "description": "End-to-end job discovery, ATS fit-scoring, and automated resume/cover-letter tailoring with recruiter-review feedback loops; includes a Manifest V3 Chrome extension auto-filling applications across LinkedIn, Lever, Ashby, Workday, and Greenhouse -- cutting job discovery latency by 75%."
       },
       {
-        "title": "Large-Scale PDF Hybrid RAG Engine",
-        "category": "Information Retrieval / GenAI",
-        "technologies": ["Python", "Hybrid Search", "Graph Clustering"],
-        "url": "https://github.com/AkhilBaja3005/custom-rag",
-        "description": "Engineered for 10k--100k+ page corpora; combines hybrid dense/sparse retrieval, vision-native page parsing for diagrams, and community-graph chunk re-clustering to improve retrieval precision at scale."
+        "title": "AI Study Copilot -- Autonomous Lecture Assistant",
+        "category": "GenAI / Systems",
+        "technologies": [
+          "Python",
+          "Docker",
+          "Telegram Bot API",
+          "Hugging Face"
+        ],
+        "url": "https://github.com/AkhilBaja3005/notes-taker",
+        "description": "Cloud-deployed AI assistant for STEM coursework via a Telegram bot (mobile-to-server I/O): lecture transcription, slide OCR, and contextual Q&A; used a Render reverse proxy to bypass Hugging Face's Telegram API restrictions."
+      },
+      {
+        "title": "Cosmic Ray Segmentation",
+        "category": "Computer Vision / Deep Learning",
+        "technologies": [
+          "Python",
+          "PyTorch"
+        ],
+        "url": "",
+        "description": "Enhanced the deepCR model for cosmic-ray detection in astronomical images; evaluated U-Net and implemented residual connections, improving pixel-level segmentation precision by 15%."
       }
     ],
     "core_skills": [

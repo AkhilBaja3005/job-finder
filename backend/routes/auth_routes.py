@@ -183,7 +183,39 @@ async def update_user_profile(request: ProfileUpdateRequest, authorization: Opti
     if request.summary: profile_dict["summary"] = sanitize_resume_summary(request.summary)
 
     # Update in-memory session store
-    set_session_data(token or "guest", profile_dict, session.get("path", ""))
+    safe_key = token or "guest"
+    from services.session_store import _safe_key, _get_user_storage_dirs
+    from services.ats_scorer import evaluate_master_resume
+    set_session_data(safe_key, profile_dict, session.get("path", ""))
+
+    # Also sync to guest state file on disk
+    try:
+        _, user_out_dir = _get_user_storage_dirs(_safe_key(safe_key))
+        guest_file = os.path.join(user_out_dir, f"resume_state_{_safe_key(safe_key)}.json")
+        eval_data = evaluate_master_resume(profile_dict)
+        with open(guest_file, "w", encoding="utf-8") as gf:
+            json.dump({"data": profile_dict, "path": session.get("path", ""), "evaluation": eval_data}, gf, indent=2)
+    except Exception as g_err:
+        print(f"[update_user_profile] Warning updating guest file: {g_err}")
+
+    # Also persist telemetry updates to config/candidate_profile.json
+    try:
+        from mcp.tools.profile_tools import PROFILE_CONFIG_PATH
+        if os.path.exists(PROFILE_CONFIG_PATH):
+            with open(PROFILE_CONFIG_PATH, "r", encoding="utf-8") as cf:
+                cfg_data = json.load(cf)
+            cand = cfg_data.setdefault("candidate", {})
+            if request.name: cand["name"] = request.name
+            if request.email: cand["email"] = request.email
+            if request.phone: cand["phone"] = request.phone
+            if request.location: cand["location"] = request.location
+            if request.portfolio: cand["portfolio"] = request.portfolio
+            if request.linkedin: cand["linkedin"] = request.linkedin
+            if request.github: cand["github"] = request.github
+            with open(PROFILE_CONFIG_PATH, "w", encoding="utf-8") as cf:
+                json.dump(cfg_data, cf, indent=2)
+    except Exception as cfg_err:
+        print(f"[update_user_profile] Warning updating candidate_profile.json: {cfg_err}")
 
     # Persist to Supabase if logged-in user exists
     if user and user.get("id") and not str(user.get("id")).startswith("guest_"):

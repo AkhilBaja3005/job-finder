@@ -6,6 +6,7 @@ Extracted from main.py for separation of concerns.
 
 import re
 import os
+import json
 from typing import Optional, List, Dict, Set, Any
 
 
@@ -185,45 +186,33 @@ def apply_latex_hotfix(
     fixed = re.sub(r'\\IfFontExistsTF\{[^\}]+\}\s*\{[^{}]*(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}[^{}]*)*\}\s*\{[^{}]*(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}[^{}]*)*\}', '', fixed)
     
     doc_class_end = fixed.find('\n', fixed.find('\\documentclass'))
-    fontspec_preamble = (
+    ats_preamble = (
+        "\\usepackage[T1]{fontenc}\n"
         "\\usepackage[left=0.35in,top=0.15in,right=0.35in,bottom=0.13in]{geometry}\n"
-        "\\usepackage{fontspec}\n"
-        "\\IfFontExistsTF{TeX Gyre Termes}{\n"
-        "  \\setmainfont{TeX Gyre Termes}\n"
-        "}{\n"
-        "  \\IfFontExistsTF{Times New Roman}{\n"
-        "    \\setmainfont{Times New Roman}\n"
-        "  }{\n"
-        "    \\IfFontExistsTF{Liberation Serif}{\\setmainfont{Liberation Serif}}{}\n"
-        "  }\n"
-        "}\n"
+        "\\usepackage{times}\n"
+        "\\usepackage[hidelinks]{hyperref}\n"
+        "\\hypersetup{\n    colorlinks=false,\n    pdfborder={0 0 0}\n}\n"
+        "\\renewcommand{\\labelitemi}{$\\bullet$}\n"
+        "\\renewcommand{\\labelitemii}{$\\bullet$}\n"
+        "\\def\\sectionskip{\\vspace{0.08em}}\n"
+        "\\def\\sectionlineskip{\\vspace{0.04em}}\n"
+        "\\def\\nameskip{\\vspace{0.05em}}\n"
+        "\\def\\addressskip{\\vspace{0.05em}}\n"
     )
-    fixed = fixed[:doc_class_end + 1] + fontspec_preamble + fixed[doc_class_end + 1:]
-    if '\\usepackage{fontawesome}' not in fixed:
-        fixed = fixed.replace('\\usepackage{fontspec}', '\\usepackage{fontspec}\n\\usepackage{fontawesome}')
-    if '\\usepackage{xcolor}' not in fixed:
-        fixed = fixed.replace('\\usepackage{fontawesome}', '\\usepackage{fontawesome}\n\\usepackage{xcolor}')
-    if '\\usepackage{hyperref}' not in fixed and '\\usepackage[hidelinks]{hyperref}' not in fixed:
-        fixed = fixed.replace('\\usepackage{xcolor}', '\\usepackage{xcolor}\n\\usepackage[hidelinks]{hyperref}')
+    fixed = fixed[:doc_class_end + 1] + ats_preamble + fixed[doc_class_end + 1:]
     if '\\newcommand\\mybar' not in fixed:
         mybar_def = "\\newcommand\\mybar{\\kern1pt\\rule[-\\dp\\strutbox]{.8pt}{\\baselineskip}\\kern1pt}\n"
         fixed = fixed.replace('\\begin{document}', mybar_def + '\\begin{document}')
-    if '\\renewcommand{\\labelitemi}' not in fixed:
-        bullet_def = "\\renewcommand{\\labelitemi}{$\\bullet$}\n\\renewcommand{\\labelitemii}{$\\bullet$}\n"
-        fixed = fixed.replace('\\begin{document}', bullet_def + '\\begin{document}')
-    # Standardize marvosym fallback back to FontAwesome
-    fixed = re.sub(r'\\Letter\\\s*', r'\\faEnvelope\ ', fixed)
-    fixed = re.sub(r'\\Telefon\\\s*', r'\\faPhone\ ', fixed)
 
     # ── Inject spacing_scale and linespread overrides ────────────────────────
     spacing_overrides = []
     if linespread != 1.0:
         spacing_overrides.append(f"\\linespread{{{linespread:.2f}}}\\selectfont")
     if spacing_scale != 1.0:
-        sec_skip = max(0.15, 0.35 * spacing_scale)
-        sec_line_skip = max(0.08, 0.18 * spacing_scale)
-        name_sk = max(0.15, 0.30 * spacing_scale)
-        addr_sk = max(0.10, 0.20 * spacing_scale)
+        sec_skip = max(0.12, 0.25 * spacing_scale)
+        sec_line_skip = max(0.06, 0.12 * spacing_scale)
+        name_sk = max(0.12, 0.20 * spacing_scale)
+        addr_sk = max(0.08, 0.15 * spacing_scale)
         spacing_overrides.append(f"\\def\\sectionskip{{\\vspace{{{sec_skip:.2f}em}}}}")
         spacing_overrides.append(f"\\def\\sectionlineskip{{\\vspace{{{sec_line_skip:.2f}em}}}}")
         spacing_overrides.append(f"\\def\\nameskip{{\\vspace{{{name_sk:.2f}em}}}}")
@@ -256,6 +245,13 @@ def apply_latex_hotfix(
             if line.strip().startswith('%'):
                 new_lines.append(line)
                 continue
+            # Replace raw Unicode £ with \pounds (raw £ in Times New Roman under Tectonic maps to Czech hacek c caron)
+            line = line.replace('£', '\\pounds ')
+            # Replace unicode en-dash, em-dash, and curly quotes that trigger missing font glyph warnings
+            line = line.replace('–', '--').replace('—', '---')
+            line = line.replace('’', "'").replace('‘', "'").replace('”', '"').replace('“', '"')
+            # Ensure proper separation between \pounds and digits (e.g. \pounds30M+ -> \pounds 30M+)
+            line = re.sub(r'\\pounds(?=[0-9])', r'\\pounds ', line)
             l = re.sub(r'(?<!\\)&', r'\\&', line)
             l = re.sub(r'(?<!\\)%', r'\\%', l)
             l = re.sub(r'(?<!\\)_', r'\\_', l)
@@ -403,8 +399,9 @@ def apply_latex_hotfix(
             if not parts[i].startswith(('\\textbf{', '\\href{', '\\begin{rSection}{Technical Skills}')):
                 # Bold percentages: 60%, 46%, ~40%, \sim40%, +12%
                 parts[i] = re.sub(r'(?<!\\textbf\{)(?<!\w)((\~|\\sim\s*|\+)?\d+(?:\.\d+)?\\%)(?!\})', r'\\textbf{\1}', parts[i])
-                # Bold currencies and scale amounts: £30M+, $10M+, 2M+, 1,000+, 200+, 5,000+
-                parts[i] = re.sub(r'(?<!\\textbf\{)(?<!\w)([£\$]\d+(?:\.\d+)?[MKB]?\+?|\b\d+(?:,\d{3})+\+?|\b\d+[MKB]\+?)(?!\w)(?!\})', r'\\textbf{\1}', parts[i])
+                # Bold currencies and scale amounts: \pounds 30M+, $10M+, 2M+, 1,000+, 200+, 5,000+
+                parts[i] = re.sub(r'(?<!\\textbf\{)(?:\\pounds\s*|\$)\s*(\d+(?:\.\d+)?[MKB]?\+?)', r'\\textbf{\\pounds \1}' if '\\pounds' in parts[i] else r'\\textbf{\$\1}', parts[i])
+                parts[i] = re.sub(r'(?<!\\textbf\{)(?<!\w)(\b\d+(?:,\d{3})+\+?|\b\d+[MKB]\+?)(?!\w)(?!\})', r'\\textbf{\1}', parts[i])
                 # Bold dynamically extracted candidate employers & schools
                 for entity_str in sorted(list(dynamic_entities), key=lambda x: len(x), reverse=True):
                     pat = f"(?<!\\\\textbf\\{{)(?<!\\w)({re.escape(entity_str)})(?!\\w)(?!\\}})"
@@ -529,14 +526,20 @@ def generate_latex_from_json(
     name     = data.get("name", "Name")
     email    = data.get("email", "")
     phone    = data.get("phone", "")
-    linkedin = data.get("linkedin", "")
-    github   = data.get("github", "")
+    portfolio = data.get("portfolio", "") or data.get("website", "")
+    linkedin  = data.get("linkedin", "")
+    github    = data.get("github", "")
 
     for link in data.get("links", []):
-        if "linkedin.com" in link:
-            linkedin = link
-        elif "github.com" in link:
-            github = link
+        link_str = str(link).strip()
+        if "linkedin.com" in link_str:
+            linkedin = link_str
+        elif any(domain in link_str for domain in ["github.io", "akhilbaja3005.github.io"]):
+            portfolio = link_str
+        elif "github.com" in link_str and not github:
+            github = link_str
+        elif not portfolio and ("http://" in link_str or "https://" in link_str):
+            portfolio = link_str
 
     contact_parts = []
     if email:
@@ -546,7 +549,10 @@ def generate_latex_from_json(
     if linkedin:
         li_user = linkedin.split("/in/")[-1].rstrip("/") if "/in/" in linkedin else linkedin
         contact_parts.append(f"\\href{{{linkedin}}}{{linkedin.com/in/{li_user}}}")
-    if github:
+    if portfolio:
+        disp_port = portfolio.replace("https://", "").replace("http://", "").rstrip("/")
+        contact_parts.append(f"\\href{{{portfolio}}}{{{disp_port}}}")
+    elif github:
         gh_user = github.split("github.com/")[-1].rstrip("/") if "github.com" in github else github
         contact_parts.append(f"\\href{{{github}}}{{github.com/{gh_user}}}")
 
@@ -562,10 +568,10 @@ def generate_latex_from_json(
     latex.append("\\renewcommand{\\labelitemi}{$\\bullet$}")
     latex.append("\\renewcommand{\\labelitemii}{$\\bullet$}")
     latex.append("\\frenchspacing")
-    latex.append("\\def\\sectionskip{\\smallskip}")
-    latex.append("\\def\\sectionlineskip{\\smallskip}")
-    latex.append("\\def\\nameskip{\\smallskip}")
-    latex.append("\\def\\addressskip{\\smallskip}")
+    latex.append("\\def\\sectionskip{\\vspace{0.08em}}")
+    latex.append("\\def\\sectionlineskip{\\vspace{0.04em}}")
+    latex.append("\\def\\nameskip{\\vspace{0.05em}}")
+    latex.append("\\def\\addressskip{\\vspace{0.05em}}")
 
     name_block: Optional[str] = None
     address_block: Optional[str] = None
@@ -624,80 +630,18 @@ def generate_latex_from_json(
 
     skills_list = skills if isinstance(skills, list) else []
 
-    # Professional Summary
+    # 1. Professional Summary
     summary = data.get("summary", "")
     if summary:
-        latex.append("\\vspace{-0.2em}")
         latex.append("\\begin{rSection}{Professional Summary}")
         latex.append(_format_bullet_bolding(summary, skills_list))
         latex.append("\\end{rSection}")
 
-    # Work Experience
-    exp_list = data.get("experience", [])
-    if exp_list:
-        latex.append("\\vspace{-0.3em}")
-        latex.append("\\begin{rSection}{Work Experience}")
-        for exp in exp_list:
-            company = exp.get("company", "")
-            role    = exp.get("role", "")
-            start   = exp.get("start_date", "")
-            end     = exp.get("end_date", "")
-            dates   = f"{start} -- {end}" if start and end else (start or end or exp.get("dates", ""))
-            bullets = exp.get("description", [])
-            techs   = exp.get("technologies", "")
-            latex.append(f"{{\\bf {company} \\mybar \\textnormal{{{role}}}}} \\hfill {{\\em {dates}}}")
-            if techs:
-                latex.append(f"\\\\ {{\\em Technologies: {techs}}}")
-            if bullets:
-                latex.append("\\vspace{-0.35em}")
-                latex.append("\\begin{itemize}")
-                latex.append("    \\setlength{\\itemsep}{-0.20em}")
-                latex.append("    \\setlength{\\parsep}{0em}")
-                for b in bullets:
-                    formatted_b = _format_bullet_bolding(b, skills_list)
-                    latex.append(f"    \\item {formatted_b}")
-                latex.append("\\end{itemize}")
-        latex.append("\\end{rSection}")
-
-    # Technical Skills
-    if not skills or (isinstance(skills, dict) and len(skills) == 0):
-        # Fallback: Collect technologies listed under Work Experience if skills dictionary is empty
-        fallback_skills = []
-        for exp in data.get("experience", []):
-            techs = exp.get("technologies") or ""
-            if techs:
-                fallback_skills.extend([t.strip() for t in techs.split(",") if t.strip()])
-        if fallback_skills:
-            from services.resume_parser import categorize_skills_with_llm
-            skills = categorize_skills_with_llm(list(set(fallback_skills)))
-
-    if skills:
-        latex.append("\\vspace{-0.3em}")
-        latex.append("\\begin{rSection}{Technical Skills}")
-        latex.append("\\vspace{-0.1em}")
-        if isinstance(skills, list):
-            from services.resume_parser import categorize_skills_with_llm
-            skills = categorize_skills_with_llm(skills)
-
-        if isinstance(skills, dict):
-            for cat, s_list in skills.items():
-                cat_name = cat.replace("&", "\\&").replace("%", "\\%")
-                s_str = ", ".join(s_list) if isinstance(s_list, list) else str(s_list)
-                # Skills values must NOT be bolded — strip any \textbf{} that came from the data
-                s_str = re.sub(r'\\textbf\{([^{}]*)\}', r'\1', s_str)
-                latex.append(f"\\textbf{{{cat_name}:}} {s_str} \\\\")
-            if latex[-1].endswith(" \\\\"):
-                latex[-1] = latex[-1][:-3]
-        else:
-            latex.append(str(skills).replace("&", "\\&").replace("%", "\\%").replace("_", "\\_"))
-        latex.append("\\end{rSection}")
-
-    # Education
+    # 2. Education
     edu_list = data.get("education", [])
     if edu_list:
-        latex.append("\\vspace{-0.3em}")
         latex.append("\\begin{rSection}{Education}")
-        for edu in edu_list:
+        for idx, edu in enumerate(edu_list):
             school = edu.get("institution") or edu.get("school") or ""
             degree = edu.get("degree", "")
             field  = edu.get("field_of_study", "")
@@ -713,60 +657,186 @@ def generate_latex_from_json(
             gpa    = edu.get("gpa", "") or edu.get("cpi", "")
             if gpa and not gpa.lower().startswith(("cpi", "gpa", "grade", "percentage", "cgpa")):
                 gpa = f"CPI: {gpa}"
-            highlights = edu.get("highlights", [])
-            latex.append(f"{{\\bf {school}}} \\hfill {{\\em {dates}}} \\\\")
+
+            meta_parts = []
+            if dates:
+                meta_parts.append(dates)
             if loc:
-                latex.append(f"{{\\textit{{{degree}}}}} \\hfill {{\\em {loc}}} \\\\")
+                meta_parts.append(loc)
             elif gpa:
-                latex.append(f"{{\\textit{{{degree}}}}} \\hfill {{\\em {gpa}}} \\\\")
-            else:
-                latex.append(f"{{\\textit{{{degree}}}}} \\\\")
+                meta_parts.append(gpa)
+            meta_line = " $|$ ".join(meta_parts)
+
+            edu_entry_lines = []
+            edu_entry_lines.append(f"{{\\bf {school}}} -- {{\\em {degree}}} \\\\")
+            if meta_line:
+                edu_entry_lines.append(f"{{\\em {meta_line}}} \\\\")
+            highlights = edu.get("highlights", [])
             if highlights:
                 for h in highlights:
                     formatted_h = _format_bullet_bolding(h, skills_list)
-                    latex.append(f"\\textit{{\\textbf{{{formatted_h}}}}} \\\\")
-        if latex[-1].endswith(" \\\\"):
-            latex[-1] = latex[-1][:-3]
+                    edu_entry_lines.append(f"\\textit{{\\textbf{{{formatted_h}}}}} \\\\")
+            entry_str = "\n".join(edu_entry_lines)
+            if idx < len(edu_list) - 1:
+                if not entry_str.endswith("\\\\"):
+                    entry_str += " \\\\[0.05em]"
+            else:
+                if entry_str.endswith(" \\\\"):
+                    entry_str = entry_str[:-3]
+            latex.append(entry_str)
         latex.append("\\end{rSection}")
 
-    # Projects (Formatted as direct single-line items with \\ like user master resume)
-    # Projects (Formatted as itemized section with colon separators, bolding & \textasciitilde)
+    # 3. Work Experience
+    exp_list = data.get("experience", [])
+    if exp_list:
+        latex.append("\\begin{rSection}{Work Experience}")
+        for exp in exp_list:
+            company  = exp.get("company", "")
+            role     = exp.get("role", "")
+            location = exp.get("location", "")
+            start    = exp.get("start_date", "")
+            end      = exp.get("end_date", "")
+            dates    = f"{start} -- {end}" if start and end else (start or end or exp.get("dates", ""))
+            bullets  = exp.get("description", [])
+            techs    = exp.get("technologies", "")
+
+            # Match user format: {\bf Company $|$ \textnormal{Role} $|$ \em Dates $|$ Location}
+            header_components = []
+            if company:
+                header_components.append(f"\\bf {company}")
+            if role:
+                header_components.append(f"\\textnormal{{{role}}}")
+            if dates:
+                header_components.append(f"\\em {dates}")
+            if location:
+                header_components.append(location)
+
+            header_str = " $|$ ".join(header_components)
+            latex.append(f"{{{header_str}}} \\\\")
+            if techs:
+                latex.append(f"{{\\em Technologies: {techs}}}")
+            if bullets:
+                latex.append("\\vspace{-0.6em}")
+                latex.append("\\begin{itemize}")
+                latex.append("    \\setlength{\\itemsep}{-0.35em}")
+                latex.append("    \\setlength{\\parsep}{0em}")
+                for b in bullets:
+                    formatted_b = _format_bullet_bolding(b, skills_list)
+                    latex.append(f"    \\item {formatted_b}")
+                latex.append("\\end{itemize}")
+        latex.append("\\end{rSection}")
+
+    # 4. Projects
     proj_list = data.get("projects", [])
     if proj_list:
         latex.append("\\begin{rSection}{Projects}")
-        latex.append("\\vspace{-0.2em}")
         latex.append("\\begin{itemize}")
-        latex.append("    \\setlength{\\itemsep}{-0.25em}")
+        latex.append("    \\setlength{\\itemsep}{-0.35em}")
         latex.append("    \\setlength{\\parsep}{0em}")
+        # Load candidate profile projects lookup for fallback URLs and technologies
+        known_profile_projects = {}
+        try:
+            from mcp.tools.profile_tools import PROFILE_CONFIG_PATH
+            if os.path.exists(PROFILE_CONFIG_PATH):
+                with open(PROFILE_CONFIG_PATH, "r", encoding="utf-8") as _pf:
+                    pdata = json.load(_pf)
+                    for kp in pdata.get("candidate", {}).get("projects", []):
+                        ktitle = kp.get("title", "").lower().strip()
+                        if ktitle:
+                            known_profile_projects[ktitle] = kp
+        except Exception:
+            pass
+
         for proj in proj_list:
-            title   = proj.get("title", "")
-            bullets = proj.get("description", [])
-            body_text = ""
+            title       = proj.get("title", "")
+            tech_stack  = proj.get("technologies", "") or proj.get("tech_stack", "")
+            link_url    = proj.get("link", "") or proj.get("url", "") or proj.get("github", "")
+            bullets     = proj.get("description", [])
+
+            # Check profile fallback
+            t_low = title.lower().strip()
+            for kp_title, kp_data in known_profile_projects.items():
+                if kp_title in t_low or t_low in kp_title or (len(t_low) > 8 and kp_title[:8] == t_low[:8]):
+                    if not link_url and kp_data.get("url"):
+                        link_url = kp_data.get("url")
+                    if not tech_stack and kp_data.get("technologies"):
+                        k_techs = kp_data.get("technologies")
+                        tech_stack = ", ".join(k_techs) if isinstance(k_techs, list) else str(k_techs)
+                    break
+
+            # Handle case where description array had technologies as its first element
+            if isinstance(bullets, list) and len(bullets) > 1 and not tech_stack:
+                first_item = bullets[0].strip()
+                if not any(v in first_item.lower() for v in ["built", "designed", "developed", "engineered", "cloud", "enhanced"]) and len(first_item.split(",")) >= 2:
+                    tech_stack = first_item
+                    bullets = bullets[1:]
+
+            body_text   = ""
             if bullets:
                 if isinstance(bullets, list):
                     body_text = " ".join([b.strip() for b in bullets])
                 else:
                     body_text = str(bullets).strip()
-            
-            # Replace raw tildes before metrics (~40% -> \textasciitilde40%)
+
             body_text = re.sub(r'~\s*(?=\d|\\textbf)', r'\\textasciitilde ', body_text)
             formatted_body = _format_bullet_bolding(body_text, skills_list)
-            
-            if body_text:
-                latex.append(f"    \\item \\textbf{{{title}:}} {formatted_body}")
-            else:
-                latex.append(f"    \\item \\textbf{{{title}}}")
+
+            # Escape LaTeX special chars in title and tech_stack if unescaped
+            safe_title = re.sub(r'(?<!\\)&', r'\\&', title)
+            safe_tech = re.sub(r'(?<!\\)&', r'\\&', tech_stack) if tech_stack else ""
+
+            proj_header = f"    \\item \\textbf{{{safe_title}}}"
+            if safe_tech:
+                proj_header += f" -- {{\\em {safe_tech}}}"
+            proj_header += " \\\\"
+            latex.append(proj_header)
+
+            if link_url:
+                short_link = link_url.replace("https://", "").replace("http://", "").rstrip("/")
+                latex.append(f"    Open source: \\href{{{link_url}}}{{{short_link}}} \\\\")
+
+            if formatted_body:
+                latex.append(f"    {formatted_body}")
         latex.append("\\end{itemize}")
         latex.append("\\end{rSection}")
 
-    # Achievements & Leadership (Rendered as clean single section or inline highlights)
+    # 5. Technical Skills
+    if not skills or (isinstance(skills, dict) and len(skills) == 0):
+        fallback_skills = []
+        for exp in data.get("experience", []):
+            techs = exp.get("technologies") or ""
+            if techs:
+                fallback_skills.extend([t.strip() for t in techs.split(",") if t.strip()])
+        if fallback_skills:
+            from services.resume_parser import categorize_skills_with_llm
+            skills = categorize_skills_with_llm(list(set(fallback_skills)))
+
+    if skills:
+        latex.append("\\begin{rSection}{Technical Skills}")
+        if isinstance(skills, list):
+            from services.resume_parser import categorize_skills_with_llm
+            skills = categorize_skills_with_llm(skills)
+
+        if isinstance(skills, dict):
+            for cat, s_list in skills.items():
+                cat_name = cat.replace("&", "\\&").replace("%", "\\%")
+                s_str = ", ".join(s_list) if isinstance(s_list, list) else str(s_list)
+                s_str = re.sub(r'\\textbf\{([^{}]*)\}', r'\1', s_str)
+                latex.append(f"\\textbf{{{cat_name}:}} {s_str} \\\\")
+            if latex[-1].endswith(" \\\\"):
+                latex[-1] = latex[-1][:-3]
+        else:
+            latex.append(str(skills).replace("&", "\\&").replace("%", "\\%").replace("_", "\\_"))
+        latex.append("\\end{rSection}")
+
+    # Achievements & Leadership (if present in custom data)
     ach = data.get("achievements", [])
     if ach:
         latex.append("\\begin{rSection}{Achievements \\& Leadership}")
         if len(ach) == 1:
             latex.append(_format_bullet_bolding(ach[0], skills_list))
         else:
-            latex.append("\\begin{itemize}\\setlength{\\itemsep}{-1pt}\\setlength{\\parsep}{0pt}\\setlength{\\topsep}{0pt}\\setlength{\\itemsep}{-0.2em} \\setlength{\\parsep}{0em}")
+            latex.append("\\begin{itemize}\\setlength{\\itemsep}{-0.2em} \\setlength{\\parsep}{0em}")
             for item in ach:
                 latex.append(f"    \\item {_format_bullet_bolding(item, skills_list)}")
             latex.append("\\end{itemize}")
@@ -896,3 +966,135 @@ def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, 
     except Exception as e:
         print(f"Error checking page metrics: {e}")
         return 999, 0.0
+
+
+def inject_tailored_slots(
+    master_latex: str,
+    summary: Optional[str] = None,
+    experience_bullets: Optional[List[List[str]]] = None,
+    project_bullets: Optional[List[List[str]]] = None,
+    user_selected_skills: Optional[List[str]] = None,
+    candidate_info: Optional[dict] = None,
+) -> str:
+    """
+    Surgical Slot Replacement Engine:
+    Keeps master_latex completely intact as the golden structural skeleton and only
+    replaces the dynamic text slots (Summary, Work Experience bullets, Technical Skills,
+    and Header/Candidate info). Locks down Education, document classes, and layouts.
+    """
+    result = master_latex
+
+    # 0. Candidate info / Header slot
+    if candidate_info:
+        name = candidate_info.get("name")
+        email = candidate_info.get("email")
+        phone = candidate_info.get("phone")
+        linkedin = candidate_info.get("linkedin")
+        portfolio = candidate_info.get("portfolio") or candidate_info.get("website")
+
+        if name:
+            result = re.sub(r'\\name\{[^}]*\}', f"\\\\name{{{name}}}", result)
+
+        addr_match = re.search(r'\\address\{(\\begin\{minipage\}.*?\\end\{minipage\})\}', result, re.DOTALL)
+        if addr_match:
+            parts = []
+            if email:
+                parts.append(f"\\href{{mailto:{email}}}{{{email}}}")
+            if phone:
+                parts.append(phone)
+            if linkedin:
+                li_user = linkedin.split("/in/")[-1].rstrip("/") if "/in/" in linkedin else linkedin
+                parts.append(f"\\href{{{linkedin}}}{{linkedin.com/in/{li_user}}}")
+            if portfolio:
+                disp_port = portfolio.replace("https://", "").replace("http://", "").rstrip("/")
+                parts.append(f"\\href{{{portfolio}}}{{{disp_port}}}")
+            if parts:
+                new_addr = "\\begin{minipage}{\\linewidth}\n\\centering\n" + " $|$ ".join(parts) + "\n\\end{minipage}"
+                result = result[:addr_match.start(1)] + new_addr + result[addr_match.end(1):]
+
+    # 1. Professional Summary slot
+    if summary and summary.strip():
+        sum_pat = r'(\\begin\{rSection\}\{Professional Summary\}).*?(\\end\{rSection\})'
+        clean_sum = summary.strip()
+        # Clean markdown bold if LLM emitted it
+        clean_sum = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', clean_sum)
+        result = re.sub(sum_pat, rf'\1\n{clean_sum}\n\2', result, flags=re.DOTALL)
+
+    # 2. Work Experience bullets slot (preserve company, role, dates, tech stack headers)
+    if experience_bullets and len(experience_bullets) > 0:
+        exp_m = re.search(r'(\\begin\{rSection\}\{Work Experience\}.*?\\end\{rSection\})', result, re.DOTALL)
+        if exp_m:
+            exp_text = exp_m.group(1)
+            itemizes = list(re.finditer(r'(\\begin\{itemize\}.*?\\end\{itemize\})', exp_text, re.DOTALL))
+            for job_idx, job_bullets in enumerate(experience_bullets):
+                if job_idx < len(itemizes) and isinstance(job_bullets, list) and len(job_bullets) > 0:
+                    target_itemize = itemizes[job_idx].group(1)
+                    spacing_m = re.search(r'(\\setlength\{\\itemsep\}\{[^}]*\}\s*\\setlength\{\\parsep\}\{[^}]*\})', target_itemize)
+                    spacing_str = spacing_m.group(1) if spacing_m else "\\setlength{\\itemsep}{-0.35em}\n    \\setlength{\\parsep}{0em}"
+                    new_items_list = []
+                    for b in job_bullets:
+                        b_clean = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', b.strip())
+                        new_items_list.append(f"    \\item {b_clean}")
+                    new_items = "\n".join(new_items_list)
+                    new_itemize = f"\\begin{{itemize}}\n    {spacing_str}\n{new_items}\n\\end{{itemize}}"
+                    exp_text = exp_text.replace(target_itemize, new_itemize, 1)
+            result = result[:exp_m.start(1)] + exp_text + result[exp_m.end(1):]
+
+    # 3. Technical Skills slot (inject approved skills)
+    if user_selected_skills and len(user_selected_skills) > 0:
+        clean_user_skills = [s.strip() for s in user_selected_skills if s and s.strip()]
+        skill_m = re.search(r'(\\begin\{rSection\}\{Technical Skills\}.*?\\end\{rSection\})', result, re.DOTALL)
+        if skill_m and clean_user_skills:
+            skills_text = skill_m.group(1)
+            for s in clean_user_skills:
+                if s.lower() not in skills_text.lower():
+                    # Place in AI/ML line if AI/LLM related, else Data/Platforms
+                    if any(w in s.lower() for w in ["ai", "llm", "rag", "langchain", "prompt", "agent", "pytorch", "vllm", "llama", "triton", "eval"]):
+                        skills_text = re.sub(r'(\\textbf\{AI/ML[^:]*:.*?)( \\\\)', rf'\1, {s}\2', skills_text)
+                    elif any(w in s.lower() for w in ["cloud", "docker", "k8s", "linux", "ci", "git", "jenkins"]):
+                        skills_text = re.sub(r'(\\textbf\{Systems[^:]*:.*?)(?=\\end\{rSection\}|\s*\\\\)', rf'\1, {s}', skills_text)
+                    else:
+                        skills_text = re.sub(r'(\\textbf\{Data[^:]*:.*?)( \\\\)', rf'\1, {s}\2', skills_text)
+            result = result[:skill_m.start(1)] + skills_text + result[skill_m.end(1):]
+
+    # 4. Projects slot (preserves Title, Technologies, and Open source: URLs while updating description)
+    if project_bullets and len(project_bullets) > 0:
+        proj_m = re.search(r'(\\begin\{rSection\}\{Projects\}.*?\\end\{rSection\})', result, re.DOTALL)
+        if proj_m:
+            proj_sec = proj_m.group(1)
+            items = list(re.finditer(r'(\\item\s+\\textbf\{[^}]+\}.*?)(?=\\item|\s*\\end\{itemize\})', proj_sec, re.DOTALL))
+            for p_idx, p_bullets in enumerate(project_bullets):
+                if p_idx < len(items) and p_bullets:
+                    old_item = items[p_idx].group(1)
+                    lines = [l for l in old_item.strip().split("\n") if l.strip()]
+                    if lines:
+                        header_line = lines[0]
+                        has_opensource = len(lines) > 1 and "Open source:" in lines[1]
+                        opensource_line = lines[1] if has_opensource else ""
+                        
+                        desc_bullets = p_bullets if isinstance(p_bullets, list) else [str(p_bullets)]
+                        clean_bullets = [re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', b.strip()) for b in desc_bullets if b.strip()]
+                        # If the first bullet repeated the technologies, discard it
+                        if len(clean_bullets) > 1 and not any(v in clean_bullets[0].lower() for v in ["built", "designed", "developed", "engineered", "enhanced", "cloud"]) and len(clean_bullets[0].split(",")) >= 2:
+                            clean_bullets = clean_bullets[1:]
+                        new_desc = " ".join(clean_bullets)
+                        
+                        new_parts = [header_line]
+                        if opensource_line:
+                            new_parts.append(opensource_line)
+                        if new_desc:
+                            new_parts.append(f"    {new_desc}")
+                        new_item_str = "\n".join(new_parts)
+                        proj_sec = proj_sec.replace(old_item.strip(), new_item_str.strip(), 1)
+            result = result[:proj_m.start(1)] + proj_sec + result[proj_m.end(1):]
+
+    # 5. Achievements / Leadership slot (preserves inline awards or updates section if present)
+    ach_bullets = candidate_info.get("achievements") if candidate_info else None
+    if ach_bullets and len(ach_bullets) > 0:
+        ach_m = re.search(r'(\\begin\{rSection\}\{(?:Achievements|Awards|Leadership)[^}]*\}.*?\\end\{rSection\})', result, re.DOTALL)
+        if ach_m:
+            ach_items = "\n".join([f"    \\item {re.sub(r'\\*\\*(.*?)\\*\\*', r'\\\\textbf{\\1}', a.strip())}" for a in ach_bullets if a.strip()])
+            new_ach = f"\\begin{{rSection}}{{Achievements \\& Leadership}}\n\\begin{{itemize}}\n    \\setlength{{\\itemsep}}{{-0.2em}}\n    \\setlength{{\\parsep}}{{0em}}\n{ach_items}\n\\end{{itemize}}\n\\end{{rSection}}"
+            result = result[:ach_m.start(1)] + new_ach + result[ach_m.end(1):]
+
+    return result
