@@ -1093,7 +1093,12 @@ def inject_tailored_slots(
     if ach_bullets and len(ach_bullets) > 0:
         ach_m = re.search(r'(\\begin\{rSection\}\{(?:Achievements|Awards|Leadership)[^}]*\}.*?\\end\{rSection\})', result, re.DOTALL)
         if ach_m:
-            ach_items = "\n".join([f"    \\item {re.sub(r'\\*\\*(.*?)\\*\\*', r'\\\\textbf{\\1}', a.strip())}" for a in ach_bullets if a.strip()])
+            ach_lines = []
+            for a in ach_bullets:
+                if a and a.strip():
+                    a_clean = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', a.strip())
+                    ach_lines.append(f"    \\item {a_clean}")
+            ach_items = "\n".join(ach_lines)
             new_ach = f"\\begin{{rSection}}{{Achievements \\& Leadership}}\n\\begin{{itemize}}\n    \\setlength{{\\itemsep}}{{-0.2em}}\n    \\setlength{{\\parsep}}{{0em}}\n{ach_items}\n\\end{{itemize}}\n\\end{{rSection}}"
             result = result[:ach_m.start(1)] + new_ach + result[ach_m.end(1):]
 
