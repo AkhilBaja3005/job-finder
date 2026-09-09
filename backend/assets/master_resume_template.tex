@@ -1,0 +1,139 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Medium Length Professional CV
+% Version 3.0 - ATS-safe (no icon fonts / custom glyphs) + Human-optimized
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[11pt]{resume}
+
+\usepackage[T1]{fontenc}
+\usepackage[left=0.35in,top=0.15in,right=0.35in,bottom=0.13in]{geometry}
+\usepackage{times}
+\usepackage[hidelinks]{hyperref}
+
+\hypersetup{
+    colorlinks=false,
+    pdfborder={0 0 0}
+}
+
+% Standard bullet configuration
+\renewcommand{\labelitemi}{$\bullet$}
+\renewcommand{\labelitemii}{$\bullet$}
+\frenchspacing
+
+% resume.cls defaults these vertical gaps (\sectionskip, \nameskip, etc.) to
+% \medskip. With 6 sections that adds up fast. Overriding to \smallskip here
+% -- rather than fighting it with more \vspace{-...} calls throughout the
+% body -- is what actually buys back the room to fit one page.
+\def\sectionskip{\smallskip}
+\def\sectionlineskip{\smallskip}
+\def\nameskip{\smallskip}
+\def\addressskip{\smallskip}
+
+\name{Akhil Baja}
+
+% NOTE: No icon fonts (FontAwesome) and no custom-drawn glyphs (e.g. \mybar).
+% Plain text + standard ASCII separators only, so PDF text extraction stays
+% clean on every ATS parser -- nothing here can render as a stray/garbled
+% character or get merged into an adjacent word.
+%
+% NOTE: \address{} is rendered via \centerline, which does NOT wrap -- it is
+% one unbreakable horizontal line, however long. Cramming all contact fields
+% into a single \address{} call runs it off the page margins. This class
+% supports up to THREE separate \address{} calls, each becoming its own
+% centered line -- so the fix is to split fields across two calls, not to
+% add manual line breaks inside one.
+\address{
+\begin{minipage}{\linewidth}
+\centering
+\href{mailto:akhilbaja.work@gmail.com}{akhilbaja.work@gmail.com} $|$ +91 9948083135 $|$ London, UK \newline
+\href{https://www.linkedin.com/in/akhilbaja}{linkedin.com/in/akhilbaja} $|$ \href{https://github.com/AkhilBaja3005}{github.com/AkhilBaja3005} $|$ \href{https://akhilbaja3005.github.io/AkhilBaja3005/}{akhilbaja3005.github.io}
+\end{minipage}
+}
+
+\begin{document}
+
+%----------------------------------------------------------------------------------------
+%	SUMMARY SECTION
+%----------------------------------------------------------------------------------------
+
+\vspace{-0.3em}
+\begin{rSection}{Professional Summary}
+AI/ML Systems Engineer with 3+ years of experience engineering production-grade GenAI, LLM infrastructure, and distributed data pipelines at \textbf{Qualcomm} and \textbf{Axis Bank}. Architected cross-language context pipelines reducing retrieval latency by \textbf{60\%} and boosting LLM accuracy by \textbf{46\%}, alongside enterprise GenAI platforms serving \textbf{1,000+} end users. Incoming MSc AI student at \textbf{Imperial College London} specializing in scalable AI infrastructure.
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	EDUCATION SECTION
+%----------------------------------------------------------------------------------------
+
+\vspace{-0.35em}
+\begin{rSection}{Education}
+{\bf Imperial College London} -- {\em MSc in Artificial Intelligence Applications and Innovation} \\
+{\em Sept 2026 -- Sept 2027 $|$ London, UK}
+
+\vspace{-0.4em}
+{\bf Indian Institute of Technology Hyderabad (IIT Hyderabad)} -- {\em B.Tech in Engineering Science} \\
+{\em Aug 2019 -- May 2023 $|$ CPI: 8.04 / 10.0} \\
+{\small Internship \& Placement Cell Coordinator -- spearheaded corporate outreach and recruitment operations across 100+ tier-1 technology and engineering firms.}
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	WORK EXPERIENCE
+%----------------------------------------------------------------------------------------
+
+\vspace{-0.35em}
+\begin{rSection}{Work Experience}
+{\bf Qualcomm $|$ \textnormal{Software Engineer (GenAI / Systems)} $|$ \em Dec 2024 -- Aug 2026} \\
+{\em Technologies: Python, C++, Jedi, Jenkins, RabbitMQ, Docker, Rancher, AST Parsing, SQL, Git}
+\vspace{-0.35em}
+\begin{itemize}
+    \setlength{\itemsep}{-0.22em}
+    \setlength{\parsep}{0em}
+    \item Engineered a cross-language \textbf{LLM context engineering} pipeline utilizing AST-based dependency extraction across Java, Python, C, and C++, reducing context retrieval latency by \textbf{60\%} and improving code-generation accuracy by \textbf{46\%} (Awarded \textbf{Qualcomm Certificate of Recognition}).
+    \item Re-architected a distributed data-harvesting pipeline for \textbf{1,000+} internal engineering users, cutting deployment failures by \textbf{84\%} by replacing legacy synchronous workflows with asynchronous \textbf{RabbitMQ} queues and containerized microservices on \textbf{Docker/Rancher}.
+    \item Slashed static analysis parser execution latency by \textbf{93\%} via in-memory dependency caching and consolidated 200+ unit tests into a Linux-compatible test harness, cutting ongoing CI maintenance by \textbf{60\%}.
+\end{itemize}
+
+{\bf Axis Bank $|$ \textnormal{Data Scientist (AI / ML)} $|$ \em July 2023 -- Dec 2024} \\
+{\em Technologies: Python, Azure OpenAI, PySpark, Cloudera ML, XGBoost, Scikit-learn, SAS EG, SQL}
+\vspace{-0.35em}
+\begin{itemize}
+    \setlength{\itemsep}{-0.22em}
+    \setlength{\parsep}{0em}
+    \item Built and deployed an enterprise RAG assistant using \textbf{Azure OpenAI and Cloudera ML}, serving \textbf{1,000+} bank employees and reducing internal support query resolution time by \textbf{70\%}.
+    \item Designed an \textbf{Isolation Forest} anomaly detection pipeline for Gold Loans, identifying high-risk branch patterns tied to \textbf{\pounds30M+} (approx. \textbf{INR 300Cr+}) in potential portfolio loss exposure and cutting manual audit time by \textbf{80\%} (Awarded \textbf{BIU Star Award}).
+    \item Automated customer Dynamic Risk Rating via \textbf{XGBoost and Naive Bayes} classification pipelines, reducing manual processing overhead by \textbf{40\%} while ensuring full regulatory compliance with \textbf{RBI guidelines}.
+\end{itemize}
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	PROJECTS (Open-source, GenAI/LLM-relevant only)
+%----------------------------------------------------------------------------------------
+
+\vspace{-0.35em}
+\begin{rSection}{Projects}
+\begin{itemize}
+    \setlength{\itemsep}{-0.22em}
+    \setlength{\parsep}{0em}
+    \item \textbf{AI Job Finder Agent \& ATS Tailoring Engine} -- {\em Python, FastAPI, React, LaTeX/Tectonic, Playwright} \\
+    Open source: \href{https://github.com/AkhilBaja3005/job-finder}{github.com/AkhilBaja3005/job-finder} \\
+    End-to-end job discovery, ATS fit-scoring, and automated resume/cover-letter tailoring engine with recruiter-review feedback loops; includes a Manifest V3 Chrome extension that auto-fills applications across LinkedIn Easy Apply, Lever, Ashby, Workday, and Greenhouse, cutting job discovery latency by 75\%.
+    \item \textbf{Large-Scale PDF Hybrid RAG Engine} -- {\em Python, Hybrid Search, Graph Clustering} \\
+    Open source: \href{https://github.com/AkhilBaja3005/custom-rag}{github.com/AkhilBaja3005/custom-rag} \\
+    Engineered for 10k--100k+ page corpora; combines hybrid dense/sparse retrieval, vision-native page parsing for diagrams, and community-graph chunk re-clustering to improve retrieval precision at scale.
+\end{itemize}
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	TECHNICAL SKILLS
+%----------------------------------------------------------------------------------------
+
+\vspace{-0.35em}
+\begin{rSection}{Technical Skills}
+\vspace{-0.1em}
+\textbf{Languages:} Python, C++, Java, SQL \\
+\textbf{AI/ML \& GenAI:} Generative AI, LLMs, RAG, LLM Context Engineering, PyTorch, Scikit-learn, XGBoost, Vector Search, Anomaly Detection, Computer Vision (U-Net, DenseNet) \\
+\textbf{Data \& Platforms:} PySpark, Azure OpenAI, Cloudera ML, PostgreSQL, RabbitMQ, REST APIs, FastAPI \\
+\textbf{Systems \& DevOps:} Docker, Rancher, Jenkins, Git, CI/CD, Microservices, Static Analysis, AST Parsing, Linux
+\end{rSection}
+
+\end{document}

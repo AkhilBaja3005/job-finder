@@ -16,23 +16,53 @@ def extract_latex_command(latex_code: str, cmd_name: str) -> Optional[str]:
     """
     Extract the full block of a LaTeX command including its brace-delimited argument.
     e.g. extract_latex_command(code, "\\name") → "\\name{John Doe}"
-    Handles nested braces correctly via counting.
+    Handles nested braces correctly via counting, ignores comments, and enforces word boundaries.
     """
-    idx = latex_code.find(cmd_name)
-    if idx == -1:
-        return None
-    brace_count = 0
-    found_first_brace = False
-    for i in range(idx + len(cmd_name), len(latex_code)):
-        char = latex_code[i]
-        if char == '{':
-            found_first_brace = True
-            brace_count += 1
-        elif char == '}':
-            if found_first_brace:
+    escaped_cmd = re.escape(cmd_name)
+    # Match cmd_name on lines that are not comments, followed by non-alpha or {
+    pattern = re.compile(rf"(?m)^(?![ \t]*%)[^%\n]*?({escaped_cmd}(?![a-zA-Z]))")
+
+    for match in pattern.finditer(latex_code):
+        idx = match.start(1)
+        brace_count = 0
+        found_first_brace = False
+        start_search = idx + len(cmd_name)
+
+        # Ensure only whitespace or comments between cmd_name and {
+        valid = True
+        j = start_search
+        while j < len(latex_code):
+            char = latex_code[j]
+            if char in " \t\r\n":
+                j += 1
+                continue
+            elif char == "%":
+                eol = latex_code.find("\n", j)
+                j = len(latex_code) if eol == -1 else eol + 1
+                continue
+            elif char == "{":
+                found_first_brace = True
+                brace_count = 1
+                break
+            else:
+                valid = False
+                break
+
+        if not valid or not found_first_brace:
+            continue
+
+        for i in range(j + 1, len(latex_code)):
+            char = latex_code[i]
+            if char == "%":
+                eol = latex_code.find("\n", i)
+                i = len(latex_code) if eol == -1 else eol
+                continue
+            elif char == "{":
+                brace_count += 1
+            elif char == "}":
                 brace_count -= 1
                 if brace_count == 0:
-                    return latex_code[idx: i + 1]
+                    return latex_code[idx : i + 1]
     return None
 
 
@@ -112,12 +142,22 @@ def apply_latex_hotfix(
                     flags=re.DOTALL
                 )
 
-    # ── Ensure \name and \address render cleanly with \printaddress inside \begin{document} ──
+    # ── Ensure \name and \address render cleanly ────────────────────────────
+    # For minipage-based multi-line \address, keep in preamble so resume.cls \AtBeginDocument renders it.
+    # For single-line \address, convert to \printaddress inside \begin{document}.
     addr_block = extract_latex_command(fixed, "\\address")
     if addr_block:
-        clean_addr = addr_block.replace("\\address{", "\\printaddress{")
-        fixed = fixed.replace(addr_block, "")
-        fixed = fixed.replace("\\begin{document}", "\\begin{document}\n" + clean_addr, 1)
+        if "minipage" in addr_block:
+            # Minipage address belongs in the preamble before \begin{document}
+            doc_idx = fixed.find("\\begin{document}")
+            addr_idx = fixed.find(addr_block)
+            if addr_idx > doc_idx:
+                fixed = fixed.replace(addr_block, "")
+                fixed = fixed.replace("\\begin{document}", addr_block + "\n\\begin{document}", 1)
+        else:
+            clean_addr = addr_block.replace("\\address{", "\\printaddress{")
+            fixed = fixed.replace(addr_block, "")
+            fixed = fixed.replace("\\begin{document}", "\\begin{document}\n" + clean_addr, 1)
 
     name_block = extract_latex_command(fixed, "\\name")
     if name_block and fixed.find(name_block) > fixed.find("\\begin{document}"):
@@ -126,21 +166,15 @@ def apply_latex_hotfix(
 
     # ── Strip any existing spacing def overrides (we re-inject below) ────────
     for pattern in [
-        r'\\def\\sectionskip\{([^{}]*|\{[^{}]*\})*\}',
-        r'\\def\\sectionlineskip\{([^{}]*|\{[^{}]*\})*\}',
-        r'\\def\\nameskip\{([^{}]*|\{[^{}]*\})*\}',
-        r'\\def\\addressskip\{([^{}]*|\{[^{}]*\})*\}',
-        r'\\renewcommand\{\\sectionskip\}\{([^{}]*|\{[^{}]*\})*\}',
-        r'\\renewcommand\{\\sectionlineskip\}\{([^{}]*|\{[^{}]*\})*\}',
-        r'\\renewcommand\{\\nameskip\}\{([^{}]*|\{[^{}]*\})*\}',
-        r'\\renewcommand\{\\addressskip\}\{([^{}]*|\{[^{}]*\})*\}',
+        r'\\def\\(sectionskip|sectionlineskip|nameskip|addressskip)(\{([^{}]*|\{[^{}]*\})*\}|\\[a-zA-Z]+|\s+[^\s\\{]+)',
+        r'\\renewcommand\{\\(sectionskip|sectionlineskip|nameskip|addressskip)\}(\{([^{}]*|\{[^{}]*\})*\}|\\[a-zA-Z]+)',
     ]:
         fixed = re.sub(pattern, '', fixed)
 
     # ── Tighten geometry margins (force single-page fit) ─────────────────────
     fixed = re.sub(
         r'\\usepackage\[[^\]]*\]\{geometry\}',
-        r'\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.20in]{geometry}',
+        r'\\usepackage[left=0.35in,top=0.15in,right=0.35in,bottom=0.13in]{geometry}',
         fixed,
     )
 
@@ -152,7 +186,7 @@ def apply_latex_hotfix(
     
     doc_class_end = fixed.find('\n', fixed.find('\\documentclass'))
     fontspec_preamble = (
-        "\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.20in]{geometry}\n"
+        "\\usepackage[left=0.35in,top=0.15in,right=0.35in,bottom=0.13in]{geometry}\n"
         "\\usepackage{fontspec}\n"
         "\\IfFontExistsTF{TeX Gyre Termes}{\n"
         "  \\setmainfont{TeX Gyre Termes}\n"
@@ -210,23 +244,25 @@ def apply_latex_hotfix(
     if "\\frenchspacing" not in fixed:
         fixed = fixed.replace("\\begin{document}", "\\frenchspacing\n\\begin{document}", 1)
 
-    # ── Escape unescaped special LaTeX chars in document body ONLY ────────────
+    # ── Escape unescaped special LaTeX chars in document body ONLY (skip pure comments) ─────
     doc_start = fixed.find('\\begin{document}')
     if doc_start != -1:
         preamble = fixed[:doc_start]
         body = fixed[doc_start:]
 
-        body = re.sub(r'(?<!\\)&', r'\\&', body)
-        body = re.sub(r'(?<!\\)%', r'\\%', body)
-        body = re.sub(r'(?<!\\)_', r'\\_', body)
-        # Escape unescaped # characters in body text, preserving LaTeX macro parameter declarations like #1, #2 inside \newcommand / \def
-        body = re.sub(r"(?<!\\)#(?!\d)", r'\\#', body)
-        # Undo double-escapes that arise from the above
-        body = body.replace('\\\\&', '\\&')
-        body = body.replace('\\\\%', '\\%')
-        body = body.replace('\\\\_', '\\_')
-        body = body.replace('\\\\#', '\\#')
-        fixed = preamble + body
+        lines = body.split('\n')
+        new_lines = []
+        for line in lines:
+            if line.strip().startswith('%'):
+                new_lines.append(line)
+                continue
+            l = re.sub(r'(?<!\\)&', r'\\&', line)
+            l = re.sub(r'(?<!\\)%', r'\\%', l)
+            l = re.sub(r'(?<!\\)_', r'\\_', l)
+            l = re.sub(r"(?<!\\)#(?!\d)", r'\\#', l)
+            l = l.replace('\\\\&', '\\&').replace('\\\\%', '\\%').replace('\\\\_', '\\_').replace('\\\\#', '\\#')
+            new_lines.append(l)
+        fixed = preamble + '\n'.join(new_lines)
 
     # ── Remove stray \\ before \begin{itemize} (causes big gaps) ────────────
     fixed = re.sub(
@@ -504,38 +540,32 @@ def generate_latex_from_json(
 
     contact_parts = []
     if email:
-        contact_parts.append(f"\\faEnvelope\\ \\href{{mailto:{email}}}{{{email}}}")
+        contact_parts.append(f"\\href{{mailto:{email}}}{{{email}}}")
     if phone:
-        contact_parts.append(f"\\faPhone\\ {phone}")
+        contact_parts.append(phone)
     if linkedin:
         li_user = linkedin.split("/in/")[-1].rstrip("/") if "/in/" in linkedin else linkedin
-        contact_parts.append(f"\\href{{{linkedin}}}{{\\faLinkedinSquare\\ linkedin.com/in/{li_user}}}")
+        contact_parts.append(f"\\href{{{linkedin}}}{{linkedin.com/in/{li_user}}}")
     if github:
         gh_user = github.split("github.com/")[-1].rstrip("/") if "github.com" in github else github
-        contact_parts.append(f"\\href{{{github}}}{{\\faGithub\\ github.com/{gh_user}}}")
+        contact_parts.append(f"\\href{{{github}}}{{github.com/{gh_user}}}")
 
-    address_line = " \\mybar ".join(contact_parts)
+    address_line = " $|$ ".join(contact_parts)
 
     latex = []
-    latex.append("\\documentclass[12pt]{resume}")
-    latex.append("\\usepackage{fontspec}")
-    latex.append("\\IfFontExistsTF{TeX Gyre Termes}{")
-    latex.append("  \\setmainfont{TeX Gyre Termes}")
-    latex.append("}{")
-    latex.append("  \\IfFontExistsTF{Times New Roman}{")
-    latex.append("    \\setmainfont{Times New Roman}")
-    latex.append("  }{")
-    latex.append("    \\IfFontExistsTF{Liberation Serif}{\\setmainfont{Liberation Serif}}{}")
-    latex.append("  }")
-    latex.append("}")
-    latex.append("\\usepackage[left=0.35in,top=0.25in,right=0.35in,bottom=0.22in]{geometry}")
-    latex.append("\\usepackage{fontawesome}")
-    latex.append("\\usepackage{hyperref}")
-    latex.append("\\newcommand\\mybar{\\kern1pt\\rule[-\\dp\\strutbox]{.8pt}{\\baselineskip}\\kern1pt}")
+    latex.append("\\documentclass[11pt]{resume}")
+    latex.append("\\usepackage[T1]{fontenc}")
+    latex.append("\\usepackage[left=0.35in,top=0.15in,right=0.35in,bottom=0.13in]{geometry}")
+    latex.append("\\usepackage{times}")
+    latex.append("\\usepackage[hidelinks]{hyperref}")
     latex.append("\\hypersetup{\n    colorlinks=false,\n    pdfborder={0 0 0}\n}")
     latex.append("\\renewcommand{\\labelitemi}{$\\bullet$}")
     latex.append("\\renewcommand{\\labelitemii}{$\\bullet$}")
     latex.append("\\frenchspacing")
+    latex.append("\\def\\sectionskip{\\smallskip}")
+    latex.append("\\def\\sectionlineskip{\\smallskip}")
+    latex.append("\\def\\nameskip{\\smallskip}")
+    latex.append("\\def\\addressskip{\\smallskip}")
 
     name_block: Optional[str] = None
     address_block: Optional[str] = None
@@ -543,17 +573,16 @@ def generate_latex_from_json(
         name_block    = extract_latex_command(master_latex, "\\name")
         address_block = extract_latex_command(master_latex, "\\address")
         latex.append(name_block if name_block else f"\\name{{{name}}}")
+        if address_block:
+            latex.append(address_block)
+        elif address_line:
+            latex.append(f"\\address{{\\begin{{minipage}}{{\\linewidth}}\\centering {address_line}\\end{{minipage}}}}")
     else:
         latex.append(f"\\name{{{name}}}")
+        if address_line:
+            latex.append(f"\\address{{\\begin{{minipage}}{{\\linewidth}}\\centering {address_line}\\end{{minipage}}}}")
 
     latex.append("\\begin{document}")
-
-    if master_latex and address_block:
-        # Convert \address{...} to \printaddress{...} so it renders cleanly inside \begin{document}
-        clean_addr = address_block.replace("\\address{", "\\printaddress{")
-        latex.append(clean_addr)
-    elif address_line:
-        latex.append(f"\\printaddress{{{address_line}}}")
 
     skills = data.get("skills", [])
     if user_selected_skills and len(user_selected_skills) > 0:

@@ -1,10 +1,12 @@
 {
   "candidate": {
-    "name": "Jane Doe",
-    "email": "jane@example.com",
+    "name": "Akhil Baja",
+    "email": "akhilbaja.work@gmail.com",
     "linkedin": "https://linkedin.com/in/akhilbaja",
+    "github": "https://github.com/AkhilBaja3005",
+    "portfolio": "https://akhilbaja3005.github.io/AkhilBaja3005/",
     "location": "London, UK",
-    "experience_summary": "AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML and developer infrastructure at Qualcomm and Axis Bank. Engineered cross-language LLM context pipelines cutting retrieval latency by 60% and improving LLM accuracy by 46%, alongside enterprise GenAI systems serving 1,000+ users. Strong in Python, LLMs, RAG, machine learning, and distributed systems; MSc student in Artificial Intelligence Applications and Innovation at Imperial College London.",
+    "experience_summary": "AI/ML Systems Engineer with 3+ years of experience engineering production-grade GenAI, LLM infrastructure, and distributed data pipelines at Qualcomm and Axis Bank. Architected cross-language context pipelines reducing retrieval latency by 60% and boosting LLM accuracy by 46%, alongside enterprise GenAI platforms serving 1,000+ end users. Incoming MSc AI student at Imperial College London specializing in scalable AI infrastructure.",
     "education": [
       {
         "institution": "Imperial College London",
@@ -67,70 +69,69 @@
     ],
     "projects": [
       {
-        "title": "Cosmic Ray Segmentation",
-        "category": "Deep Learning",
-        "description": "Enhanced the deepCR model for cosmic-ray detection in astronomical images; evaluated U-Net and implemented residual connections, improving pixel-level segmentation precision by 15%."
+        "title": "AI Job Finder Agent & ATS Tailoring Engine",
+        "category": "GenAI / Systems",
+        "technologies": ["Python", "FastAPI", "React", "LaTeX/Tectonic", "Playwright"],
+        "url": "https://github.com/AkhilBaja3005/job-finder",
+        "description": "End-to-end job discovery, ATS fit-scoring, and automated resume/cover-letter tailoring engine with recruiter-review feedback loops; includes a Manifest V3 Chrome extension that auto-fills applications across LinkedIn Easy Apply, Lever, Ashby, Workday, and Greenhouse, cutting job discovery latency by 75%."
       },
       {
-        "title": "Tuberculosis Detection Pipeline",
-        "category": "Computer Vision",
-        "description": "Implemented a transfer-learning pipeline combining U-Net segmentation and DenseNet classification across 5,000+ chest X-rays (+12% accuracy over baseline)."
-      },
-      {
-        "title": "Scientific Publications Database",
-        "category": "Data Infrastructure",
-        "description": "Designed and optimized a PostgreSQL database and custom ER schema for 2M+ research papers, accelerating query execution time by 45% via targeted indexing."
+        "title": "Large-Scale PDF Hybrid RAG Engine",
+        "category": "Information Retrieval / GenAI",
+        "technologies": ["Python", "Hybrid Search", "Graph Clustering"],
+        "url": "https://github.com/AkhilBaja3005/custom-rag",
+        "description": "Engineered for 10k--100k+ page corpora; combines hybrid dense/sparse retrieval, vision-native page parsing for diagrams, and community-graph chunk re-clustering to improve retrieval precision at scale."
       }
     ],
     "core_skills": [
       "Python",
-      "SQL",
       "C++",
       "Java",
+      "SQL",
       "Generative AI",
       "Large Language Models (LLMs)",
       "RAG",
       "LLM Context Engineering",
-      "Machine Learning",
-      "Deep Learning",
-      "Anomaly Detection",
+      "PyTorch",
+      "Scikit-learn",
       "XGBoost",
-      "Naive Bayes",
+      "Vector Search",
+      "Anomaly Detection",
       "Computer Vision (U-Net, DenseNet)",
       "PySpark",
       "Azure OpenAI",
       "Cloudera ML",
       "PostgreSQL",
-      "SAS EG",
+      "RabbitMQ",
+      "REST APIs",
+      "FastAPI",
       "Docker",
       "Rancher",
-      "RabbitMQ",
       "Jenkins",
       "Git",
-      "AST Parsing",
-      "Static Analysis",
-      "Distributed Systems",
-      "Microservices",
       "CI/CD",
-      "Unit Testing"
+      "Microservices",
+      "Static Analysis",
+      "AST Parsing",
+      "Linux"
     ],
     "skill_categories": {
       "Languages": [
         "Python",
-        "SQL",
         "C++",
-        "Java"
+        "Java",
+        "SQL"
       ],
       "AI/ML & GenAI": [
         "Generative AI",
-        "Large Language Models (LLMs)",
+        "LLMs",
         "RAG",
         "LLM Context Engineering",
-        "Machine Learning",
-        "Deep Learning",
-        "Anomaly Detection",
+        "PyTorch",
+        "Scikit-learn",
         "XGBoost",
-        "Naive Bayes",
+        "Vector Search",
+        "Anomaly Detection",
         "Computer Vision (U-Net, DenseNet)"
       ],
       "Data & Platforms": [
@@ -138,20 +139,20 @@
         "Azure OpenAI",
         "Cloudera ML",
         "PostgreSQL",
-        "SAS EG"
+        "RabbitMQ",
+        "REST APIs",
+        "FastAPI"
       ],
-      "Software & Infrastructure": [
+      "Systems & DevOps": [
         "Docker",
         "Rancher",
-        "RabbitMQ",
         "Jenkins",
         "Git",
-        "AST Parsing",
-        "Static Analysis",
-        "Distributed Systems",
-        "Microservices",
         "CI/CD",
-        "Unit Testing"
+        "Microservices",
+        "Static Analysis",
+        "AST Parsing",
+        "Linux"
       ]
     }
   },
