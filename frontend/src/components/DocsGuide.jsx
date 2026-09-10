@@ -39,7 +39,8 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
     { id: 'shortcuts', label: 'Keyboard Shortcuts', icon: '' },
     { id: 'autofill', label: 'In-Page AI Autofill & PDF Drop', icon: '' },
     { id: 'discovery', label: 'Job Discovery Search', icon: '' },
-    { id: 'api-setup', label: 'API & Deployment', icon: '' },
+    { id: 'mcp-skills', label: 'MCP Server & Universal Skills', icon: '' },
+    { id: 'api-setup', label: 'Backend & Environment Setup', icon: '' },
   ];
 
   return (
@@ -182,7 +183,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                     }}
                   >
                     
-                    <span>{item.label.replace(/^[^\s]+\s/, '')}</span>
+                    <span>{item.label}</span>
                   </button>
                 );
               })}
@@ -240,19 +241,20 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
           {/* SECTION: Quickstart */}
           <section id="quickstart" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              
               <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>Quickstart Workflow</h2>
             </div>
             <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '20px' }}>
-              Follow these 4 simple steps to connect your master resume with live job postings and generate tailored single-page resumes with 1 click.
+              Follow these 6 streamlined steps to connect your master resume with live job postings, tailor ATS-optimized LaTeX resumes, and auto-fill applications.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
               {[
-                { step: '1', title: 'Upload Master Resume', desc: 'Upload your .pdf, .docx, or native .tex file in the Master tab to extract and lock your categorized experience.' },
-                { step: '2', title: 'Install Chrome Extension', desc: 'Download the pre-baked zip package and unpack it in chrome://extensions with zero manual configuration needed.' },
-                { step: '3', title: 'Browse Any Job Board', desc: 'Open LinkedIn, Ashby, Greenhouse, Lever, Workday, or Indeed. The Side Panel auto-extracts the job description.' },
-                { step: '4', title: '1-Click Tailor & Apply', desc: 'Generate a verified 1-page LaTeX PDF resume, cover letter, and personalized recruiter outreach in seconds.' }
+                { step: '1', title: 'Upload & Lock Master Resume', desc: 'Upload your .pdf, .docx, or native .tex file in the Master tab to extract and preserve your exact skill categories, experiences, and metrics.' },
+                { step: '2', title: 'Pair Chrome Extension', desc: 'Download the pre-baked zip package and unpack it in chrome://extensions. Your 6-digit Sync Key pairs the browser side panel automatically.' },
+                { step: '3', title: 'Browse Any Career Portal', desc: 'Navigate to LinkedIn, Ashby, Greenhouse, Lever, Workday, or Indeed. The persistent Side Panel auto-extracts the job description in real time.' },
+                { step: '4', title: 'Review Deterministic ATS Fit', desc: 'Inspect your calculated ATS score, required vs. preferred keywords, missing skills chips, and recruiter seniority alignment before tailoring.' },
+                { step: '5', title: '1-Click LaTeX Tailor & Preview', desc: 'Generate a verified 1-page LaTeX PDF resume with XeLaTeX/Tectonic budgeting, live syntax editor, and optional Overleaf sync.' },
+                { step: '6', title: 'In-Page Auto-Fill & Outreach', desc: 'Use inline "✨ AI Answer" and auto-fill buttons to complete form fields instantly, or copy tailored 3-sentence LinkedIn recruiter InMails.' }
               ].map((c) => (
                 <div key={c.step} style={{
                   background: 'rgba(15, 23, 42, 0.6)',
@@ -314,30 +316,47 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               </ol>
             </div>
 
-            {/* In-Page Capabilities */}
+            {/* In-Page Capabilities (6 Core Features) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>Live Toolbar ATS Badge</div>
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '20px' }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>Live Toolbar ATS Badge</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
-                  Shows your live match percentage (e.g. <code>94%</code>, <code>76%</code>) on the browser toolbar icon in real time as you navigate job tabs without opening the panel.
+                  Displays your real-time ATS match percentage (e.g. <code>94%</code>, <code>76%</code>) right on the browser toolbar icon as you navigate job listings without needing to open the side panel.
                 </p>
               </div>
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>1-Click File Auto-Attach</div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '20px' }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>1-Click File Auto-Attach</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                   Click <code>Attach PDF</code> in the side panel to compile and programmatically inject your tailored PDF into ATS dropzones on Ashby, Greenhouse, Lever, and Workday via DataTransfer.
                 </p>
               </div>
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>Live Tab Sync & Rescan</div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '20px' }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>Live Tab Sync & Rescan</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                   Switching tabs automatically scans the newly active job posting. If you edit custom job details, clicking <code>Rescan Tab</code> clears stale cache and re-extracts the live page DOM.
                 </p>
               </div>
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '8px' }}>1-Click Email Package</div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '20px' }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>1-Click Email Package</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                   Sends a formatted delivery email with the compiled PDF attached, ATS score breakdown, role title, company name, and direct Overleaf editing links straight to your inbox.
+                </p>
+              </div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '20px' }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>Offline Resilience & Caching</div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Automatically falls back to local storage and in-memory caches when offline or during transient server blips, preserving your tailoring history and ATS metrics without disruption.
+                </p>
+              </div>
+
+              <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '20px' }}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>Multimodal Screening AI Answers</div>
+                <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
+                  Injects inline <code>✨ AI Answer</code> buttons beside open-ended essay questions on live job application forms, synthesizing grounded answers tailored to the company culture.
                 </p>
               </div>
             </div>
@@ -404,7 +423,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               Store multiple distinct master resumes (e.g., <strong>GenAI Systems Engineer</strong>, <strong>Data Scientist</strong>, <strong>Backend SWE</strong>) and toggle the active baseline for target jobs.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '14px' }}>
               {[
                 { name: 'Languages', example: 'Python, SQL, C++, Java' },
                 { name: 'AI/ML & GenAI', example: 'LLMs, RAG, Anomaly Detection, XGBoost, Computer Vision' },
@@ -544,21 +563,21 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               borderRadius: '14px',
               padding: '20px'
             }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '14px' }}>
                 {[
                   { keys: '⌘ / Ctrl + Enter', desc: 'Trigger 1-click ATS Job Analysis & Tailoring' },
                   { keys: '⌘ / Ctrl + S', desc: 'Save current candidate profile snapshot / archetype' },
                   { keys: '⌘ / Ctrl + 1', desc: 'Switch to Master Profile & Setup Tab' },
                   { keys: '⌘ / Ctrl + 2', desc: 'Switch to Job Tailor Workspace Tab' },
                   { keys: '⌘ / Ctrl + 3', desc: 'Switch to Job Discovery Search Tab' },
-                  { keys: '?', desc: 'Toggle keyboard shortcut cheat-sheet dialog' },
-                  { keys: 'Esc', desc: 'Dismiss active modal or full-screen overlay' }
+                  { keys: 'Esc / ?', desc: 'Dismiss active overlay or view shortcut cheat-sheet' }
                 ].map((sc) => (
                   <div key={sc.keys} style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '10px 14px',
+                    gap: '12px',
+                    padding: '12px 16px',
                     background: 'rgba(2, 6, 23, 0.5)',
                     borderRadius: '8px',
                     border: '1px solid rgba(255, 255, 255, 0.05)'
@@ -638,57 +657,206 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             </div>
           </section>
 
-          {/* SECTION: API & Deployment */}
-          <section id="api-setup" style={{ scrollMarginTop: '24px' }}>
+          {/* SECTION: MCP Server & Universal Agent Skills */}
+          <section id="mcp-skills" style={{ scrollMarginTop: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              
-              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>API Configuration & Deployment</h2>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>
+                Model Context Protocol (MCP) & Universal Agent Skills
+              </h2>
             </div>
-            <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '18px' }}>
-              Configure your backend endpoints, Gemini API keys (BYOK support), and environment variables.
+            <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '20px' }}>
+              Job Finder features a built-in JSON-RPC 2.0 MCP server and 8 Universal Skills (YAML frontmatter compatible), enabling autonomous career search directly through <strong>Claude Desktop</strong>, <strong>Claude Code</strong>, <strong>Cursor IDE</strong>, <strong>Gemini CLI</strong>, and <strong>Antigravity</strong>.
             </p>
 
-            <div style={{
-              background: 'rgba(15, 23, 42, 0.6)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '14px',
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px'
-            }}>
-              <div>
-                <h4 style={{ color: '#38bdf8', margin: '0 0 8px', fontSize: '0.95rem' }}>Production Endpoint</h4>
-                <div style={{
-                  background: 'rgba(2, 6, 23, 0.6)',
-                  padding: '10px 14px',
-                  borderRadius: '8px',
-                  fontFamily: 'monospace',
-                  fontSize: '0.88rem',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <span>{serverUrl}</span>
-                  <button
-                    onClick={() => handleCopy(serverUrl, 'url')}
-                    style={{
-                      background: 'rgba(56, 189, 248, 0.2)',
-                      border: 'none',
-                      color: '#38bdf8',
-                      padding: '4px 10px',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {copiedUrl ? '✓ Copied' : 'Copy'}
-                  </button>
+            {/* MCP Highlights */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(168, 85, 247, 0.25)',
+                borderRadius: '12px',
+                padding: '20px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                  <span style={{ background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', padding: '4px 8px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 700 }}>
+                    18 Production MCP Tools
+                  </span>
+                </div>
+                <div style={{ color: '#cbd5e1', fontSize: '0.88rem', lineHeight: 1.6 }}>
+                  Includes <code>search_jobs</code>, <code>scrape_job_posting</code>, <code>calculate_ats_score</code>, <code>analyze_skill_gap</code>, <code>tailor_resume_latex</code>, <code>compile_latex_metrics</code>, <code>export_overleaf_bundle</code>, <code>extract_recruiter_profile</code>, <code>generate_outreach_inmail</code>, and <code>track_application</code>.
                 </div>
               </div>
 
-              <div>
-                <h4 style={{ color: '#38bdf8', margin: '0 0 8px', fontSize: '0.95rem' }}>Hugging Face / Docker Environment Variables</h4>
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(56, 189, 248, 0.25)',
+                borderRadius: '12px',
+                padding: '20px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                  <span style={{ background: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8', padding: '4px 8px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 700 }}>
+                    8 Universal Agent Skills
+                  </span>
+                </div>
+                <div style={{ color: '#cbd5e1', fontSize: '0.88rem', lineHeight: 1.6 }}>
+                  Autonomous career workflows located in <code>.agents/skills/</code>: <code>career-discovery</code>, <code>ats-resume-tailor</code>, <code>recruiter-networking</code>, <code>candidate-profile-config</code>, <code>company-intelligence</code>, <code>cover-letter-crafting</code>, <code>interview-mastery</code>, and <code>application-tracker-crm</code>.
+                </div>
+              </div>
+
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(16, 185, 129, 0.25)',
+                borderRadius: '12px',
+                padding: '20px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                  <span style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', padding: '4px 8px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 700 }}>
+                    flash-lite & Sub-Second Execution
+                  </span>
+                </div>
+                <div style={{ color: '#cbd5e1', fontSize: '0.88rem', lineHeight: 1.6 }}>
+                  Prioritizes <code>gemini-3.5-flash-lite</code> with zero-latency profile auto-resolution (&lt;10ms) from <code>candidate_profile.json</code>, eliminating 429 quota exhaustion.
+                </div>
+              </div>
+            </div>
+
+            {/* Harness Integration Snippet */}
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.8)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '14px',
+              padding: '20px'
+            }}>
+              <h4 style={{ color: '#f8fafc', margin: '0 0 12px', fontSize: '1rem', fontWeight: 700 }}>
+                Harness Setup (Claude Desktop, Cursor, Antigravity)
+              </h4>
+              <p style={{ color: '#94a3b8', fontSize: '0.88rem', margin: '0 0 12px' }}>
+                Add the MCP server configuration into your AI client settings file (see <code>harness_configs/</code> for pre-built JSON templates):
+              </p>
+              <pre style={{
+                background: 'rgba(2, 6, 23, 0.85)',
+                padding: '14px',
+                borderRadius: '8px',
+                fontSize: '0.82rem',
+                color: '#38bdf8',
+                overflowX: 'auto',
+                margin: 0,
+                fontFamily: 'monospace'
+              }}>
+{`{
+  "mcpServers": {
+    "job-finder": {
+      "command": "python",
+      "args": ["-m", "mcp.server"],
+      "cwd": "/path/to/Job Finder/backend",
+      "env": {
+        "GEMINI_API_KEY": "your-gemini-api-key"
+      }
+    }
+  }
+}`}
+              </pre>
+            </div>
+          </section>
+
+          {/* SECTION: Backend & Environment Setup */}
+          <section id="api-setup" style={{ scrollMarginTop: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#f8fafc' }}>
+                Backend & Environment Setup
+              </h2>
+            </div>
+            <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.98rem', marginBottom: '20px' }}>
+              Connect frontend clients to production endpoints, configure BYOK Gemini API keys, or run containerized instances via Docker or local uvicorn.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+              {/* Endpoint Card */}
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '14px',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}>
+                <div>
+                  <h4 style={{ color: '#38bdf8', margin: '0 0 6px', fontSize: '0.98rem', fontWeight: 700 }}>
+                    Active Backend Server URL
+                  </h4>
+                  <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '0 0 10px', lineHeight: 1.5 }}>
+                    Target host for the React web app and Chrome Side Panel synchronization:
+                  </p>
+                  <div style={{
+                    background: 'rgba(2, 6, 23, 0.8)',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(56, 189, 248, 0.2)',
+                    fontFamily: 'monospace',
+                    fontSize: '0.88rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span style={{ color: '#f8fafc' }}>{serverUrl}</span>
+                    <button
+                      onClick={() => handleCopy(serverUrl, 'url')}
+                      style={{
+                        background: 'rgba(56, 189, 248, 0.2)',
+                        border: 'none',
+                        color: '#38bdf8',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {copiedUrl ? '✓ Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '16px' }}>
+                  <h4 style={{ color: '#38bdf8', margin: '0 0 6px', fontSize: '0.98rem', fontWeight: 700 }}>
+                    Docker & Local Run Commands
+                  </h4>
+                  <pre style={{
+                    background: 'rgba(2, 6, 23, 0.8)',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    color: '#94a3b8',
+                    overflowX: 'auto',
+                    margin: 0,
+                    fontFamily: 'monospace'
+                  }}>
+{`# Docker build & run (port 8000)
+docker build -t job-finder .
+docker run -p 8000:8000 --env-file backend/.env job-finder
+
+# Or run backend locally
+cd backend && uvicorn main:app --reload --port 8000`}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Environment Variables Card */}
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '14px',
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 style={{ color: '#38bdf8', margin: 0, fontSize: '0.98rem', fontWeight: 700 }}>
+                    Environment Variables (.env)
+                  </h4>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Hugging Face / Docker</span>
+                </div>
                 <pre style={{
                   background: 'rgba(2, 6, 23, 0.8)',
                   padding: '14px',
@@ -697,11 +865,14 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                   color: '#94a3b8',
                   overflowX: 'auto',
                   margin: 0,
-                  fontFamily: 'monospace'
+                  fontFamily: 'monospace',
+                  lineHeight: 1.6
                 }}>
 {`GEMINI_API_KEY="your-gemini-api-key"
+# Optional Supabase Cloud Sync
 SUPABASE_URL="https://your-project.supabase.co"
 SUPABASE_KEY="your-anon-or-service-key"
+# Optional Email Delivery (SMTP)
 SMTP_SERVER="smtp.gmail.com"
 SMTP_PORT=587
 SMTP_USER="your-email@gmail.com"

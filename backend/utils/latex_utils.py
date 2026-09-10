@@ -1048,13 +1048,13 @@ def inject_tailored_slots(
             skills_text = skill_m.group(1)
             for s in clean_user_skills:
                 if s.lower() not in skills_text.lower():
-                    # Place in AI/ML line if AI/LLM related, else Data/Platforms
+                    # Place in AI/ML line if AI/LLM related, else Systems or Data/Platforms
                     if any(w in s.lower() for w in ["ai", "llm", "rag", "langchain", "prompt", "agent", "pytorch", "vllm", "llama", "triton", "eval"]):
-                        skills_text = re.sub(r'(\\textbf\{AI/ML[^:]*:.*?)( \\\\)', rf'\1, {s}\2', skills_text)
+                        skills_text = re.sub(r'(\\textbf\{AI/ML[^:]*:.*?)(?=\s*\\\\|\s*\\end\{rSection\})', rf'\1, {s}', skills_text)
                     elif any(w in s.lower() for w in ["cloud", "docker", "k8s", "linux", "ci", "git", "jenkins"]):
-                        skills_text = re.sub(r'(\\textbf\{Systems[^:]*:.*?)(?=\\end\{rSection\}|\s*\\\\)', rf'\1, {s}', skills_text)
+                        skills_text = re.sub(r'(\\textbf\{Systems[^:]*:.*?)(?=\s*\\\\|\s*\\end\{rSection\})', rf'\1, {s}', skills_text)
                     else:
-                        skills_text = re.sub(r'(\\textbf\{Data[^:]*:.*?)( \\\\)', rf'\1, {s}\2', skills_text)
+                        skills_text = re.sub(r'(\\textbf\{Data[^:]*:.*?)(?=\s*\\\\|\s*\\end\{rSection\})', rf'\1, {s}', skills_text)
             result = result[:skill_m.start(1)] + skills_text + result[skill_m.end(1):]
 
     # 4. Projects slot (preserves Title, Technologies, and Open source: URLs while updating description)
