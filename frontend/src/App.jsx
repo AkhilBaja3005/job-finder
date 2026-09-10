@@ -9,6 +9,7 @@ const SkeletonLoader = lazy(() => import('./components/SkeletonLoader').then(m =
 const OutreachModal = lazy(() => import('./components/OutreachModal'));
 const DocsGuide = lazy(() => import('./components/DocsGuide'));
 import LatexCodeViewer from './components/LatexCodeViewer';
+import LiveLatexEditor from './components/LiveLatexEditor';
 
 // Automatically inject ngrok-skip-browser-warning header into all frontend fetch requests
 const originalFetch = window.fetch;
@@ -266,6 +267,8 @@ function App() {
   const [applyingSugIdx, setApplyingSugIdx] = useState(null);
   const [showAllSkills, setShowAllSkills] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [masterLatexModalOpen, setMasterLatexModalOpen] = useState(false);
+  const [masterLatexCode, setMasterLatexCode] = useState('');
   const [reviewedResumeData, setReviewedResumeData] = useState(null);
   const [previousResumeData, setPreviousResumeData] = useState(null);
   const [reviewedLatex, setReviewedLatex] = useState('');
@@ -1589,7 +1592,10 @@ function App() {
     try {
       const res = await fetch(`${API_BASE}/compile_master_pdf`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthHeader()}`
+        },
         body: JSON.stringify({
           resume_data: tailoredResumeData || resumeData,
           job_title: jobTitle || 'Tailored Role',
@@ -2195,6 +2201,90 @@ function App() {
         </div>
       )}
 
+      {/* Full-Screen Master Resume Live LaTeX Editor & Real-Time Preview Modal */}
+      {masterLatexModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(9, 13, 26, 0.95)', backdropFilter: 'blur(14px)',
+          zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }}>
+          <div className="card" style={{
+            maxWidth: '1240px', width: '100%', height: '90vh',
+            border: '1px solid rgba(56, 189, 248, 0.4)', padding: '20px',
+            display: 'flex', flexDirection: 'column', gap: '14px', background: '#0B1120',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.85)', borderRadius: '14px', overflow: 'hidden'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '1.2rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10B981' }} />
+                  <span>Master Resume — Live LaTeX Editor & PDF Engine</span>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Edit your canonical LaTeX source code with instant Tectonic PDF compilation. Edits auto-preserve your original layout and packages.
+                </div>
+              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '6px 14px', fontSize: '0.82rem' }}
+                onClick={() => {
+                  setMasterLatexModalOpen(false);
+                  setStatusMessage('');
+                }}
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <LiveLatexEditor
+                initialCode={masterLatexCode}
+                onChange={(newCode) => setMasterLatexCode(newCode)}
+                apiBase={API_BASE}
+                authToken={getAuthHeader()}
+                candidateName={(resumeData && resumeData.name) || 'Master'}
+                jobTitle="Master Resume"
+                company=""
+                onOpenOverleaf={() => {
+                  fetch(`${API_BASE}/open_original_in_overleaf`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${getAuthHeader()}`
+                    },
+                    body: JSON.stringify({
+                      resume_data: resumeData || {},
+                      job_title: 'Master Resume',
+                      company: '',
+                    }),
+                  })
+                    .then(res => res.json())
+                    .then(data => { if (data.url) window.open(data.url, '_blank'); });
+                }}
+                onSaveMaster={async (updatedLatex) => {
+                  const res = await fetch(`${API_BASE}/user/update_master_from_tailored`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${getAuthHeader()}`
+                    },
+                    body: JSON.stringify({ latex_code: updatedLatex })
+                  });
+                  if (!res.ok) {
+                    throw new Error('Failed to save master resume');
+                  }
+                  const body = await res.json();
+                  setResumeData(body.data);
+                  syncResumeWithExtension(body.data);
+                  setResumeEvaluation(body.evaluation);
+                  setStatusMessage('Master Resume saved successfully!');
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="app-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{
@@ -2637,7 +2727,10 @@ function App() {
                       try {
                         const res = await fetch(`${API_BASE}/compile_master_pdf`, {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${getAuthHeader()}`
+                          },
                           body: JSON.stringify({
                             resume_data: resumeData,
                             job_title: 'Master Resume',
@@ -2659,105 +2752,74 @@ function App() {
                   >
                     View Compiled Master PDF
                   </button>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={loading}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                      background: 'rgba(16, 185, 129, 0.12)',
+                      color: '#34D399',
+                      border: '1px solid rgba(16, 185, 129, 0.3)'
+                    }}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setLoading(true);
+                      setStatusMessage('Loading Master LaTeX for Live Editor…');
+                      try {
+                        const res = await fetch(`${API_BASE}/user/resume`, {
+                          headers: { 'Authorization': `Bearer ${getAuthHeader()}` }
+                        });
+                        let latexCode = '';
+                        if (res.ok) {
+                          const info = await res.json();
+                          latexCode = info.master_latex || '';
+                        }
+                        if (!latexCode) {
+                          const compRes = await fetch(`${API_BASE}/compile_master_pdf`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${getAuthHeader()}`
+                            },
+                            body: JSON.stringify({
+                              resume_data: resumeData,
+                              job_title: 'Master Resume',
+                              company: '',
+                            }),
+                          });
+                          if (compRes.ok) {
+                            const compData = await compRes.json();
+                            latexCode = compData.latex || '';
+                          }
+                        }
+                        setMasterLatexCode(latexCode);
+                        setStatusMessage('');
+                        setMasterLatexModalOpen(true);
+                      } catch (err) {
+                        setStatusMessage(`Failed to load Master LaTeX: ${err.message}`);
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    title="Open Live Side-by-Side LaTeX Editor & Real-Time PDF Preview for Master Resume"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                      <polyline points="2 17 12 22 22 17"></polyline>
+                      <polyline points="2 12 12 17 22 12"></polyline>
+                    </svg>
+                    Live Edit & Preview
+                  </button>
                 </div>
               )}
             </div>
-
-              {/* Candidate Identity & Contact Telemetry (when master resume is parsed) */}
-              {resumeData && (resumeData.name || resumeData.email || resumeData.phone || resumeData.location || resumeData.experience_years) && (
-                <div style={{
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  borderRadius: '12px',
-                  padding: '14px 16px',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '10px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#38bdf8' }}>
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                      </svg>
-                      Candidate Telemetry
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {resumeData.experience_years && (
-                        <span style={{
-                          fontSize: '0.70rem',
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: '10px',
-                          background: 'rgba(56, 189, 248, 0.12)',
-                          color: '#38bdf8',
-                          border: '1px solid rgba(56, 189, 248, 0.25)',
-                          fontFamily: 'var(--font-mono)'
-                        }}>
-                          {resumeData.experience_years}+ Yrs Exp
-                        </span>
-                      )}
-                      <button
-                        onClick={() => {
-                          setTelemetryForm({
-                            name: resumeData.name || '',
-                            email: resumeData.email || '',
-                            phone: resumeData.phone || '',
-                            location: resumeData.location || ''
-                          });
-                          setTelemetryModalOpen(true);
-                        }}
-                        style={{
-                          background: 'rgba(56, 189, 248, 0.12)',
-                          border: '1px solid rgba(56, 189, 248, 0.3)',
-                          color: '#38bdf8',
-                          fontSize: '0.68rem',
-                          fontWeight: 600,
-                          padding: '2px 8px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                        title="Edit Candidate Telemetry"
-                      >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                        </svg>
-                        Edit
-                      </button>
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
-                    {resumeData.name && (
-                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Name</div>
-                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.name}</div>
-                      </div>
-                    )}
-                    {resumeData.email && (
-                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Email</div>
-                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={resumeData.email}>{resumeData.email}</div>
-                      </div>
-                    )}
-                    {resumeData.phone && (
-                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Phone</div>
-                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.phone}</div>
-                      </div>
-                    )}
-                    {resumeData.location && (
-                      <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Location</div>
-                        <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.location}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
 
             {/* Daily Cron Match Mailer Subscription settings */}
             <div style={{ border: '1px solid rgba(56, 189, 248, 0.1)', borderRadius: '12px', overflow: 'hidden', background: 'rgba(56, 189, 248, 0.03)' }}>
@@ -2972,6 +3034,93 @@ function App() {
                   {resumeEvaluation.ats_score}% ATS
                 </div>
               </div>
+
+              {/* Candidate Identity & Contact Telemetry in Right Panel */}
+              {resumeData && (resumeData.name || resumeData.email || resumeData.phone || resumeData.location || resumeData.experience_years) && (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#38bdf8' }}>
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                      Candidate Telemetry
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {resumeData.experience_years && (
+                        <span style={{
+                          fontSize: '0.70rem',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          background: 'rgba(56, 189, 248, 0.12)',
+                          color: '#38bdf8',
+                          border: '1px solid rgba(56, 189, 248, 0.25)',
+                          fontFamily: 'var(--font-mono)'
+                        }}>
+                          {resumeData.experience_years}+ Yrs Exp
+                        </span>
+                      )}
+                      <button
+                        onClick={() => {
+                          setTelemetryForm({
+                            name: resumeData.name || 'Akhil Baja',
+                            email: resumeData.email || 'akhilbaja.work@gmail.com',
+                            phone: resumeData.phone || '+91 9948083135',
+                            location: resumeData.location || 'London, UK'
+                          });
+                          setTelemetryModalOpen(true);
+                        }}
+                        style={{
+                          background: 'rgba(56, 189, 248, 0.12)',
+                          border: '1px solid rgba(56, 189, 248, 0.3)',
+                          color: '#38bdf8',
+                          fontSize: '0.68rem',
+                          fontWeight: 600,
+                          padding: '2px 8px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Edit Candidate Telemetry"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                        </svg>
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
+                    <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Name</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.name || 'Akhil Baja'}</div>
+                    </div>
+                    <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Email</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={resumeData.email || 'akhilbaja.work@gmail.com'}>{resumeData.email || 'akhilbaja.work@gmail.com'}</div>
+                    </div>
+                    <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Phone</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.phone || '+91 9948083135'}</div>
+                    </div>
+                    <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Location</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.location || 'London, UK'}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', textAlign: 'center', margin: '4px 0' }}>
                 <div style={{ background: 'var(--panel-bg)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
@@ -3763,7 +3912,10 @@ function App() {
                         try {
                           const res = await fetch(`${API_BASE}/compile_master_pdf`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${getAuthHeader()}`
+                            },
                             body: JSON.stringify({
                               resume_data: resumeData,
                               job_title: 'Master Resume',
@@ -6713,11 +6865,34 @@ function App() {
                           </div>
                         </div>
                       ) : (
-                        <LatexCodeViewer
-                          code={analysisResult.latex_code}
-                          onCopy={() => {
-                            navigator.clipboard.writeText(analysisResult.latex_code);
-                            setStatusMessage('Copied LaTeX source code to clipboard!');
+                        <LiveLatexEditor
+                          initialCode={analysisResult.latex_code}
+                          onChange={(newCode) => {
+                            setAnalysisResult(prev => prev ? { ...prev, latex_code: newCode } : prev);
+                          }}
+                          apiBase={API_BASE}
+                          authToken={getAuthHeader()}
+                          candidateName={(resumeData && resumeData.name) || 'Resume'}
+                          jobTitle={jobTitle || 'Target Role'}
+                          company={company || ''}
+                          onOpenOverleaf={() => openInOverleaf()}
+                          onSaveMaster={async (updatedLatex) => {
+                            const res = await fetch(`${API_BASE}/user/update_master_from_tailored`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${getAuthHeader()}`
+                              },
+                              body: JSON.stringify({ latex_code: updatedLatex })
+                            });
+                            if (!res.ok) {
+                              throw new Error('Failed to update master resume');
+                            }
+                            const body = await res.json();
+                            setResumeData(body.data);
+                            syncResumeWithExtension(body.data);
+                            setResumeEvaluation(body.evaluation);
+                            setStatusMessage('Master Resume updated from editor!');
                           }}
                         />
                       )}

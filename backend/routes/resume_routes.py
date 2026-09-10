@@ -48,14 +48,20 @@ def _build_original_latex(resume_data: dict, master_path: Optional[str] = None) 
                 master_latex = f.read()
         except Exception:
             pass
-    elif os.path.exists(master_template):
+
+    # If the user has a custom uploaded/saved .tex file, honor it directly!
+    # Do NOT overwrite or wipe custom .tex code by regenerating from JSON.
+    if master_latex and master_latex.strip():
+        return apply_latex_hotfix(master_latex, master_latex=master_latex)
+
+    if os.path.exists(master_template):
         try:
             with open(master_template, "r", encoding="utf-8") as f:
                 master_latex = f.read()
         except Exception:
             pass
 
-    # If full structured resume_data is provided, generate pristine LaTeX from JSON
+    # If full structured resume_data is provided and no custom .tex existed, generate pristine LaTeX from JSON
     if resume_data and (resume_data.get("experience") or resume_data.get("projects") or resume_data.get("education")):
         return apply_latex_hotfix(generate_latex_from_json(resume_data, master_latex=master_latex), master_latex=master_latex)
 
@@ -232,10 +238,20 @@ async def get_session_resume(authorization: Optional[str] = Header(None)):
     if data and isinstance(data, dict) and "summary" in data:
         data["summary"] = sanitize_resume_summary(data["summary"])
 
+    master_latex = ""
+    master_path = session_info.get("path", "")
+    if master_path and os.path.exists(master_path):
+        try:
+            with open(master_path, "r", encoding="utf-8") as f:
+                master_latex = f.read()
+        except Exception:
+            pass
+
     return {
         "status": "success",
         "data": data,
-        "path": session_info.get("path", "")
+        "path": master_path,
+        "master_latex": master_latex
     }
 
 
@@ -247,7 +263,22 @@ async def user_resume(authorization: Optional[str] = Header(None)):
     if data and isinstance(data, dict) and "summary" in data:
         data["summary"] = sanitize_resume_summary(data["summary"])
     eval_res = evaluate_master_resume(data) if data else None
-    return {"data": data, "path": session.get("path"), "evaluation": eval_res}
+
+    master_latex = ""
+    master_path = session.get("path", "")
+    if master_path and os.path.exists(master_path):
+        try:
+            with open(master_path, "r", encoding="utf-8") as f:
+                master_latex = f.read()
+        except Exception:
+            pass
+
+    return {
+        "data": data,
+        "path": master_path,
+        "master_latex": master_latex,
+        "evaluation": eval_res
+    }
 
 
 @router.post("/download_latex")
@@ -317,6 +348,7 @@ async def download_cover_letter(request: CoverLetterDownloadRequest):
 async def compile_latex(request: CompileLatexRequest, authorization: Optional[str] = Header(None)):
     token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
     try:
+        user_up_dir, user_out_dir = _get_user_storage_dirs(token or "guest")
         tex_path, pdf_path = _user_output_paths(token)
         fixed_code = apply_latex_hotfix(request.latex_code)
         with open(tex_path, "w", encoding="utf-8") as f:
@@ -326,23 +358,37 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
         if not os.path.exists(cls_source):
             cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
         if os.path.exists(cls_source):
+            shutil.copy2(cls_source, os.path.join(user_out_dir, "resume.cls"))
             shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
 
         result = await asyncio.to_thread(
             subprocess.run,
-            ["tectonic", tex_path, "--outdir", OUTPUT_DIR],
+            ["tectonic", tex_path, "--outdir", user_out_dir],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
         )
 
         if result.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"LaTeX compilation failed: {result.stderr}")
+            err_msg = result.stderr.strip() if result.stderr else (result.stdout.strip() if result.stdout else "Compilation failed")
+            raise HTTPException(status_code=400, detail=f"LaTeX compilation failed: {err_msg}")
+
+        page_count = 1
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(pdf_path)
+            page_count = len(reader.pages)
+        except Exception:
+            pass
 
         return FileResponse(
             pdf_path,
             media_type="application/pdf",
-            headers={"Content-Disposition": "inline; filename=resume.pdf"}
+            headers={
+                "Content-Disposition": "inline; filename=resume.pdf",
+                "X-Page-Count": str(page_count),
+                "Access-Control-Expose-Headers": "X-Page-Count"
+            }
         )
     except Exception as e:
         traceback.print_exc()
@@ -386,9 +432,10 @@ async def open_original_in_overleaf(request: OriginalOverleafRequest):
 
 
 @router.post("/compile_master_pdf")
-async def compile_master_pdf(request: OriginalOverleafRequest):
+async def compile_master_pdf(request: OriginalOverleafRequest, authorization: Optional[str] = Header(None)):
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
     try:
-        session = get_session_data(None)
+        session = get_session_data(token)
         master_path = session.get("path") if session else None
         latex_code = _build_original_latex(request.resume_data, master_path)
         candidate_name = request.resume_data.get("name", "Master")
@@ -693,7 +740,7 @@ async def save_user_archetype(request: SaveArchetypeRequest, authorization: Opti
 
     session = get_session_data(token)
     session_data = session.get("data") or {}
-    session_tex_path = session.get("latex_path")
+    session_tex_path = session.get("path") or session.get("latex_path")
 
     user_up_dir, _ = _get_user_storage_dirs(token or "guest")
     safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
