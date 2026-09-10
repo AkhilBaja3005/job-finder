@@ -123,7 +123,7 @@ def evaluate_pdf_ats(pdf_path: str, jd_text: str, candidate_info: dict) -> int:
         }
         ats = compute_ats_score(resume_data, jd_text)
         rf = estimate_role_fit_score(resume_data, jd_text)
-        return int(compute_overall_score(ats.skills_score, ats.experience_score, rf))
+        return compute_overall_score(ats.skills_score, ats.experience_score, rf)
     except Exception as e:
         print(f"[ATS Scorer] Warning: Could not score PDF {pdf_path}: {e}")
         return 0
