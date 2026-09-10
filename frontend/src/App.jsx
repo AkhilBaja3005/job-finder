@@ -7247,9 +7247,40 @@ function App() {
             <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘1-3</kbd>
             <span>Switch Tabs</span>
           </div>
+          <span>•</span>
+          <span style={{ color: '#94a3b8' }}>
+            Made with ❤️ from Hyderabad by{' '}
+            <a
+              href="mailto:akhilbaja.work@gmail.com"
+              style={{ color: '#38bdf8', textDecoration: 'none', fontWeight: 600 }}
+              title="Contact Akhil Baja"
+            >
+              Akhil Baja
+            </a>
+          </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <a
+            href="https://linkedin.com/in/akhilbaja"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.74rem' }}
+            onMouseEnter={(e) => e.target.style.color = '#38bdf8'}
+            onMouseLeave={(e) => e.target.style.color = '#94a3b8'}
+          >
+            LinkedIn
+          </a>
+          <a
+            href="https://github.com/AkhilBaja3005"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.74rem' }}
+            onMouseEnter={(e) => e.target.style.color = '#38bdf8'}
+            onMouseLeave={(e) => e.target.style.color = '#94a3b8'}
+          >
+            GitHub
+          </a>
           <button
             onClick={() => setShowKeyboardHelp(true)}
             style={{

@@ -880,8 +880,105 @@ SMTP_PASSWORD="your-app-password"`}
                 </pre>
               </div>
             </div>
+
+            {/* Reachout & Contact Card */}
+            <div style={{
+              marginTop: '20px',
+              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 41, 59, 0.6) 100%)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              borderRadius: '14px',
+              padding: '24px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '20px'
+            }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
+                  Creator & Inquiries
+                </div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f8fafc', marginBottom: '4px' }}>
+                  Have questions, ideas, or feedback?
+                </div>
+                <div style={{ color: '#94a3b8', fontSize: '0.88rem' }}>
+                  Reach out directly to Akhil Baja — AI/ML Systems Engineer & Builder.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                <a
+                  href="mailto:akhilbaja.work@gmail.com"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    color: '#38bdf8',
+                    textDecoration: 'none',
+                    fontSize: '0.84rem',
+                    fontWeight: 600
+                  }}
+                >
+                  ✉️ akhilbaja.work@gmail.com
+                </a>
+                <a
+                  href="https://linkedin.com/in/akhilbaja"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#f8fafc',
+                    textDecoration: 'none',
+                    fontSize: '0.84rem',
+                    fontWeight: 600
+                  }}
+                >
+                  LinkedIn
+                </a>
+                <a
+                  href="https://github.com/AkhilBaja3005"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#f8fafc',
+                    textDecoration: 'none',
+                    fontSize: '0.84rem',
+                    fontWeight: 600
+                  }}
+                >
+                  GitHub
+                </a>
+              </div>
+            </div>
           </section>
 
+          {/* Footer note */}
+          <div style={{
+            textAlign: 'center',
+            paddingTop: '20px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+            color: '#64748b',
+            fontSize: '0.85rem'
+          }}>
+            Crafted with ❤️ from Hyderabad • AI Job Finder v3.1.0
+          </div>
         </div>
       </div>
       <style>{`
