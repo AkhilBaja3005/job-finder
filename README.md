@@ -8,14 +8,14 @@ app_port: 8000
 pinned: false
 ---
 
-# AI Job Finder Agent (v3.1.0)
+# AI Job Finder Agent
 
 <div align="center">
 
 **Production-ready, local-first & cloud-deployable autonomous career agent, ATS resume tailor & job search copilot.**
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B%20%7C%203.12%20%7C%203.14-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![Google Gemini](https://img.shields.io/badge/Google%20GenAI-Gemini%202.5%20%26%203.7%20Flash-orange?logo=google&logoColor=white)](https://ai.google.dev/)
+[![Google Gemini](https://img.shields.io/badge/Google%20GenAI-Gemini%20Flash%20%26%20Flash--Lite-orange?logo=google&logoColor=white)](https://ai.google.dev/)
 [![React](https://img.shields.io/badge/Web%20UI-React%2019%20%2B%20Vite-blue?logo=react&logoColor=white)](https://react.dev/)
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-emerald?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Chrome Extension](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-red?logo=googlechrome&logoColor=white)](https://developer.chrome.com/docs/extensions/mv3/)
@@ -29,7 +29,7 @@ An AI-powered job search, resume tailoring, and application assistant. Upload a 
 
 The project includes:
 1. **Full-Stack Web App** — Modular FastAPI backend + React 19 (Vite) dashboard.
-2. **Chrome Extension (`Job Finder ATS Tailor v3.1.0`)** — Persistent Chrome Side Panel to score jobs, tailor resumes, auto-fill forms with multimodal intelligence, and dispatch delivery packages on LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday, and custom career sites.
+2. **Chrome Extension (`Job Finder ATS Tailor`)** — Persistent Chrome Side Panel to score jobs, tailor resumes, auto-fill forms with multimodal intelligence, and dispatch delivery packages on LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday, and custom career sites.
 
 ---
 
@@ -59,7 +59,7 @@ The project includes:
 - **Inline '✨ AI Answer' Buttons**: Directly embedded beside textareas and form inputs on live job pages.
 
 ### 🌐 5. Grounding with Google Search & Verified Recruiter Discovery
-- **Native Google Search Grounding**: Connects Gemini (3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash) directly to real-time web content using `tools=[{"google_search": {}}]` with citation and source link extraction.
+- **Native Google Search Grounding**: Connects Gemini models with search tools directly to real-time web content using `tools=[{"google_search": {}}]` with citation and source link extraction.
 - **Verified Recruiter & Hiring Manager Intel**: Discovers active technical recruiters, talent sourcers, and engineering hiring managers on LinkedIn for any target role and company (`POST /jobs/find_recruiter`).
 - **7-Day TTL Smart Caching**: Normalizes corporate suffixes (e.g. `Stripe, Inc.` $\rightarrow$ `stripe`) to eliminate duplicate billing queries.
 
@@ -70,7 +70,7 @@ The project includes:
 
 ---
 
-## 🧩 Chrome Extension (`Job Finder ATS Tailor v3.1.0`)
+## 🧩 Chrome Extension (`Job Finder ATS Tailor`)
 
 The project includes a Manifest V3 Chrome Extension located in the `/extension` directory for instant in-page analysis while browsing job boards.
 
@@ -123,7 +123,7 @@ Job Finder/
 │       ├── latex_utils.py      # Pre-flight syntax validation, sanitization, macro hotfixes, Tectonic compilation
 │       ├── ttl_cache.py        # Thread-safe bounded TTL cache for sub-millisecond memory safety
 │       └── ssl_utils.py        # Verified TLS context handler
-└── extension/            # Chrome Extension (Manifest V3 - Side Panel v3.1.0)
+└── extension/            # Chrome Extension (Manifest V3 - Side Panel)
     ├── manifest.json     # Extension permissions, sidePanel, host rules, and metadata
     ├── popup.html / js   # Persistent side panel interface with offline fallback & rescan
     ├── content.js        # Universal job page extractor, iframe support & form autofiller
@@ -203,12 +203,12 @@ pytest tests/ -v
 
 ---
 
-## 🤖 MCP Server & Universal Agent Skills (v3.0.0)
+## 🤖 MCP Server & Universal Agent Skills
 
 Job Finder provides a production-grade **Model Context Protocol (MCP)** server and **8 Universal Agent Skills** enabling seamless integration with AI harnesses: **Antigravity**, **Claude Code**, **Claude Desktop**, **Cursor IDE**, and **Gemini CLI**.
 
 ### ⚡ Low-Latency & High-Precision Architecture
-- **Sub-Second Execution (`flash-lite` Prioritization)**: All search grounding and LLM tasks prioritize `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, and `gemini-2.5-flash-lite`, providing ultra-high RPM allowances and eliminating `429 RESOURCE_EXHAUSTED` rate limits.
+- **Sub-Second Execution (`flash-lite` Prioritization)**: All search grounding and LLM tasks prioritize fast-lite models (configured dynamically via `backend/config/constants.py`), providing ultra-high RPM allowances and eliminating `429 RESOURCE_EXHAUSTED` rate limits.
 - **Zero-Latency Profile Auto-Resolution**: When resume data or keyword arguments are omitted, tools automatically read from [`backend/config/candidate_profile.json`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/backend/config/candidate_profile.json) for instant in-memory scoring in `<10ms`.
 - **Precompiled Taxonomy & Deterministic Rules**: Regex and seniority matching are fully precompiled, avoiding runtime compilation overhead.
 

@@ -19,30 +19,41 @@ from utils.ssl_utils import SSL_CONTEXT as _SSL_CONTEXT
 CLOUDFLARE_DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 CLOUDFLARE_MAX_TOKENS = 8192
 
+try:
+    from config.constants import (
+        DEFAULT_FAST_LITE_MODELS,
+        DEFAULT_STRONG_MODELS,
+        DEFAULT_GROUNDED_SEARCH_MODELS,
+        MODEL_RPM_LIMITS,
+        PREFERRED_GEMINI_MODEL
+    )
+except ImportError:
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from config.constants import (
+        DEFAULT_FAST_LITE_MODELS,
+        DEFAULT_STRONG_MODELS,
+        DEFAULT_GROUNDED_SEARCH_MODELS,
+        MODEL_RPM_LIMITS,
+        PREFERRED_GEMINI_MODEL
+    )
+
 PROVIDERS = [
     {"name": "anthropic",   "key_prefix": "sk-ant-",  "models": ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"]},
     {"name": "groq",        "key_prefix": "gsk_",     "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]},
     {"name": "openrouter",  "key_prefix": "sk-or-",   "models": ["google/gemini-2.5-flash", "google/gemini-2.5-flash-lite"]},
     {"name": "nvidia",      "key_prefix": "nvapi-",   "models": ['meta/llama-3.1-8b-instruct', "meta/llama-3.3-70b-instruct", "nvidia/llama-3.1-nemotron-70b-instruct", "mistralai/mixtral-8x22b-instruct-v0.1"]},
-    {"name": "gemini",      "key_prefix": "AIza",     "models": ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash"]},
+    {"name": "gemini",      "key_prefix": "AIza",     "models": DEFAULT_STRONG_MODELS},
 ]
 
-     
-
 # Updated for low-latency resume generation and screening pipelines
-# Cleaned: Removed invalid catalog tracks to speed up response routing
 NVIDIA_FALLBACK_MODELS = [
     'meta/llama-3.1-8b-instruct',
     'meta/llama-3.3-70b-instruct',
 ]
 
-JSON_FALLBACK_MODELS = [
-"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.8-flash",  "gemini-3.7-flash" ,"gemini-3.6-flash" , "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", 
-]
-
-LATEX_FALLBACK_MODELS = [
-"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash" ,"gemini-3.6-flash" , "gemini-3.5-flash", "gemini-3.0-flash","gemini-2.5-flash", 
-]
+JSON_FALLBACK_MODELS = DEFAULT_STRONG_MODELS
+LATEX_FALLBACK_MODELS = DEFAULT_STRONG_MODELS
 
 GROQ_FALLBACK_MODELS = [
     'llama-3.3-70b-versatile',
@@ -117,17 +128,7 @@ def get_gemini_client(custom_api_key: Optional[str] = None) -> genai.Client:
 # concurrent calls from collectively exceeding that cap before any single one
 # sees an error. This tracks call timestamps per model and cooperatively
 # sleeps before making a call if the model is already at its RPM ceiling.
-GEMINI_MODEL_RPM_LIMITS = {
-    "gemini-3.1-flash-lite": 15,
-    "gemini-3.5-flash-lite": 15,
-    "gemini-2.5-flash": 5,
-    "gemini-3.0-flash": 5,
-    "gemini-3.5-flash": 5,
-    "gemini-3.6-flash": 5,
-    "gemini-3.7-flash": 5,
-    "gemini-3.8-flash": 5,
-    "gemini-2.5-flash-lite": 10
-}
+GEMINI_MODEL_RPM_LIMITS = MODEL_RPM_LIMITS
 _rpm_call_log: Dict[str, list] = {}
 _rpm_lock = threading.Lock()
 
@@ -582,13 +583,8 @@ def _execute_openrouter(prompt: str, model_list: list, response_schema, api_key:
 # ─────────────────────────────────────────────────────────────────────────────
 # High-Level Entrypoints
 # ─────────────────────────────────────────────────────────────────────────────
-FAST_LITE_MODELS = [
-    "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash"
-]
-
-STRONG_JSON_MODELS = [
-     "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", "gemini-3.5-flash-lite"
-]
+FAST_LITE_MODELS = DEFAULT_FAST_LITE_MODELS
+STRONG_JSON_MODELS = DEFAULT_STRONG_MODELS
 
 def generate_content_with_fallback(
     prompt: str,
@@ -627,10 +623,7 @@ def generate_latex_with_strong_model(
 # Target Gemini 2.5 models which have active 1,500/day free Search Grounding quota.
 # Note: Gemini 2.0 has 0/0 quota and Gemini 3 has 0/0 search grounding in this project.
 # ─────────────────────────────────────────────────────────────────────────────
-GROUNDED_SEARCH_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite"
-]
+GROUNDED_SEARCH_MODELS = DEFAULT_GROUNDED_SEARCH_MODELS
 
 def call_gemini_grounded(
     prompt: str,

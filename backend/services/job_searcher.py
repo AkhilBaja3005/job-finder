@@ -126,12 +126,10 @@ For each match found, return a valid JSON array of objects with the exact schema
 ]
 Do not wrap in explanatory text. Only return the JSON array."""
     try:
+        from config.constants import DEFAULT_GROUNDED_SEARCH_MODELS
         client = genai.Client(api_key=gemini_key)
         raw_text = ""
-        ATS_SEARCH_MODELS = [
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
-        ]
+        ATS_SEARCH_MODELS = DEFAULT_GROUNDED_SEARCH_MODELS
         import concurrent.futures
         for search_model in ATS_SEARCH_MODELS:
             try:

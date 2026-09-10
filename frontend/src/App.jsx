@@ -10,6 +10,7 @@ const OutreachModal = lazy(() => import('./components/OutreachModal'));
 const DocsGuide = lazy(() => import('./components/DocsGuide'));
 import LatexCodeViewer from './components/LatexCodeViewer';
 import LiveLatexEditor from './components/LiveLatexEditor';
+import { APP_VERSION, CREATOR_SIGNATURE } from './config/constants';
 
 // Automatically inject ngrok-skip-browser-warning header into all frontend fetch requests
 const originalFetch = window.fetch;
@@ -2307,7 +2308,7 @@ function App() {
           </div>
           <div>
             <h1 className="title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 700, letterSpacing: '-0.02em' }}>
-              JobFinder <span style={{ color: '#38BDF8', fontWeight: 500, fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}>Pro v3.0</span>
+              JobFinder <span style={{ color: '#38BDF8', fontWeight: 500, fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}>Pro v{APP_VERSION}</span>
             </h1>
             <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
               Autonomous ATS Tailoring Engine
@@ -7249,14 +7250,7 @@ function App() {
           </div>
           <span>•</span>
           <span style={{ color: '#94a3b8' }}>
-            Made with ❤️ from Hyderabad by{' '}
-            <a
-              href="mailto:akhilbaja.work@gmail.com"
-              style={{ color: '#38bdf8', textDecoration: 'none', fontWeight: 600 }}
-              title="Contact Akhil Baja"
-            >
-              Akhil Baja
-            </a>
+            {CREATOR_SIGNATURE}
           </span>
         </div>
 
