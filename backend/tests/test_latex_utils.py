@@ -198,3 +198,28 @@ def test_validate_latex_syntax_unmatched_environments():
     assert ok is False
     assert "Unmatched environment" in msg
 
+
+def test_inject_tailored_slots_skills_taxonomy():
+    from utils.latex_utils import inject_tailored_slots
+
+    base_latex = r"""\documentclass{resume}
+\begin{document}
+\begin{rSection}{Technical Skills}
+\textbf{AI/ML, Generative AI & Agents:} PyTorch, TensorFlow, LangChain, Transformers \\
+\textbf{Data Platforms, Messaging & Engines:} Apache Spark, Kafka, PostgreSQL \\
+\textbf{Systems, Cloud & Developer Tooling:} AWS, Docker, Kubernetes, Git
+\end{rSection}
+\end{document}"""
+
+    # Injecting skills: AI/ML skill (vLLM), Cloud skill (CI/CD), Data skill (Snowflake)
+    user_skills = ["vLLM", "CI/CD Pipeline", "Snowflake", "PyTorch"]  # PyTorch is already present, shouldn't duplicate
+    tailored = inject_tailored_slots(base_latex, user_selected_skills=user_skills)
+
+    # Verify vLLM placed in AI/ML line
+    assert "Transformers, vLLM" in tailored
+    # Verify CI/CD Pipeline placed in Systems line
+    assert "Git, CI/CD Pipeline" in tailored
+    # Verify Snowflake placed in Data Platforms line
+    assert "PostgreSQL, Snowflake" in tailored
+    # Verify no duplicate PyTorch
+    assert tailored.count("PyTorch") == 1
