@@ -11,6 +11,10 @@ import asyncio
 import subprocess
 from typing import Dict, Any, Optional, List
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "backend", ".env"))
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
+
 from mcp.tools.profile_tools import load_profile_data
 from mcp.tools.ats_tools import handle_calculate_ats_score, handle_analyze_skill_gap
 from mcp.tools.discovery_tools import handle_search_jobs, handle_scrape_job_posting
@@ -108,13 +112,15 @@ AUTOFILL_TOOLS_SPEC = [
 
 
 def _get_base_dirs():
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # File is at backend/mcp/tools/autofill_tools.py -> dirname x 4 = project root
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     return base_dir
 
 
 def _get_default_resume_path() -> Optional[str]:
     base_dir = _get_base_dirs()
     candidate_resumes = [
+        os.path.join(base_dir, "backend", "output", "AKHIL_BAJA", "master_resume.pdf"),
         os.path.join(base_dir, "applications_tracker", "tailored_resumes", "master_resume.pdf"),
         os.path.join(base_dir, "tests", "fixtures", "sample_resume.pdf"),
     ]
@@ -127,6 +133,7 @@ def _get_default_resume_path() -> Optional[str]:
 def _get_master_latex_source() -> Optional[str]:
     base_dir = _get_base_dirs()
     candidates = [
+        os.path.join(base_dir, "backend", "output", "AKHIL_BAJA", "master_resume.tex"),
         os.path.join(base_dir, "backend", "assets", "master_resume_template.tex"),
         os.path.join(base_dir, "assets", "master_resume_template.tex"),
         os.path.join(base_dir, "output", "tailored_resume.tex"),
@@ -257,12 +264,14 @@ async def handle_apply_to_job_browser(arguments: Dict[str, Any]) -> Dict[str, An
     # Track in CRM
     try:
         record_application(
-            job_url=job_url,
-            status="applied" if auto_submit else "tailored",
-            job_title=arguments.get("job_title", "Software Engineer"),
-            company=arguments.get("company", "Company"),
-            score=arguments.get("ats_score", 0),
-            token=token
+            token=token,
+            entry={
+                "job_url": job_url,
+                "status": "applied" if auto_submit else "tailored",
+                "job_title": arguments.get("job_title", "Software Engineer"),
+                "company": arguments.get("company", "Company"),
+                "score": arguments.get("ats_score", 0),
+            }
         )
     except Exception:
         pass
@@ -292,6 +301,11 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
     max_applications = int(arguments.get("max_applications", 3))
     model_name = arguments.get("model_name", "gemini-3.5-flash-lite")
 
+    from services.log_queue import log_ist
+    print(f"\n[Pipeline] 🚀 Pipeline Auto-Apply Started", flush=True)
+    print(f"[Pipeline] 🎯 Keywords: '{keywords}' | 📍 Location: '{location}' | 🎯 Min ATS: {min_ats_score}%", flush=True)
+    log_ist(f"[Pipeline] 🚀 Pipeline Auto-Apply started for '{keywords}' in '{location}' (Min ATS: {min_ats_score}%)")
+
     # 1. Search for matching jobs
     search_res = await handle_search_jobs({
         "keywords": keywords,
@@ -301,6 +315,9 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
     })
 
     jobs = search_res.get("jobs", [])
+    print(f"[Pipeline] 📊 Discovered {len(jobs)} total jobs to evaluate", flush=True)
+    log_ist(f"[Pipeline] 📊 Discovered {len(jobs)} total jobs to evaluate")
+
     if not jobs:
         return {
             "status": "completed",
@@ -315,8 +332,9 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
     tailored_dir = os.path.join(base_dir, "applications_tracker", "tailored_resumes")
     master_resume_pdf = _get_default_resume_path()
 
-    for job in jobs:
+    for idx, job in enumerate(jobs, start=1):
         if applied_count >= max_applications:
+            print(f"[Pipeline] 🛑 Reached max target applications limit ({max_applications}). Stopping.", flush=True)
             break
 
         job_url = job.get("url")
@@ -324,6 +342,9 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
         company = job.get("company", "Company")
         ats_score = job.get("ats_score") or job.get("score")
         jd_text = ""
+
+        print(f"\n[Pipeline] [{idx}/{len(jobs)}] Evaluating '{job_title}' @ {company}...", flush=True)
+        log_ist(f"[Pipeline] Evaluating [{idx}/{len(jobs)}] '{job_title}' @ {company}")
 
         # Deep scrape to evaluate match & tailoring opportunities
         scrape_res = await handle_scrape_job_posting({"url": job_url})
@@ -341,6 +362,8 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
             else:
                 ats_score = 0
 
+        print(f"[Pipeline] 📈 ATS Compatibility: {ats_score}% (Required: {min_ats_score}%)", flush=True)
+
         job_summary = {
             "title": job_title,
             "company": company,
@@ -350,9 +373,10 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
             "tailored_resume_used": False
         }
 
-        # 3. Check ATS threshold (>= 80%)
+        # 3. Check ATS threshold (>= min_ats_score)
         if ats_score >= min_ats_score:
-            print(f"[Pipeline] Job '{job_title}' at {company} qualifies with ATS score {ats_score}% >= {min_ats_score}%!")
+            print(f"[Pipeline] ✅ QUALIFIED! '{job_title}' at {company} ({ats_score}% >= {min_ats_score}%)", flush=True)
+            log_ist(f"[Pipeline] ✅ QUALIFIED: '{job_title}' @ {company} ({ats_score}%)")
 
             # Check if resume can/should be tailored to the JD
             resume_to_upload = master_resume_pdf
@@ -374,6 +398,10 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
                     print(f"[Pipeline] Resume tailoring attempt had error: {e}. Falling back to master resume.")
 
             # 4. Autofill / Auto-apply via browser-use (50 max steps)
+            action_desc = "Submitting application" if auto_submit else "Autofilling application (Preview Mode)"
+            print(f"[Pipeline] 🌐 Launching browser-use: {action_desc} for {company}...", flush=True)
+            log_ist(f"[Pipeline] 🌐 Launching browser-use: {action_desc} for {company}")
+
             apply_res = await run_browser_use_autofill(
                 job_url=job_url,
                 resume_data=candidate,
@@ -387,16 +415,20 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
             job_summary["status"] = "applied" if auto_submit else "filled_review_needed"
             job_summary["browser_result"] = apply_res.get("final_result")
             applied_count += 1
+            print(f"[Pipeline] ✨ Completed application cycle for '{job_title}' @ {company}! Status: {job_summary['status']}", flush=True)
+            log_ist(f"[Pipeline] ✨ Completed application cycle for '{job_title}' @ {company} ({job_summary['status']})")
 
             # 5. Record application status in CRM
             try:
                 record_application(
-                    job_url=job_url,
-                    status="applied" if auto_submit else "tailored",
-                    job_title=job_title,
-                    company=company,
-                    score=int(ats_score),
-                    token=token
+                    token=token,
+                    entry={
+                        "job_url": job_url,
+                        "status": "applied" if auto_submit else "tailored",
+                        "job_title": job_title,
+                        "company": company,
+                        "score": int(ats_score),
+                    }
                 )
             except Exception:
                 pass

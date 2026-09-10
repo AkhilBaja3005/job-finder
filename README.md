@@ -257,4 +257,33 @@ cd backend
 python mcp/comprehensive_test.py
 ```
 
+---
 
+## 🌐 Autonomous Job Scanner & Browser-Use Pipeline
+
+Job Finder includes an autonomous discovery, ATS evaluation, LaTeX resume tailoring, and browser auto-fill engine powered by **`browser-use`** with **`gemini-3.5-flash-lite`** and dual-persistence (Supabase + CSV).
+
+### Workflow & Decision Engine:
+1. **Multi-Platform Discovery**: Searches Greenhouse, Ashby, Lever direct ATS portals, LinkedIn, Indeed, and Reed for active postings matching candidate search preferences within the past 24 hours.
+2. **ATS Threshold Scoring & Selective Tailoring**:
+   - **ATS Score $\ge 80\%$ (Direct Apply)**: Directly submits the candidate's master resume without needing modifications.
+   - **ATS Score $65\% - 79\%$ (Tailor & Apply)**: Automatically drafts and compiles a tailored 1-page LaTeX & PDF resume aligned with the job's missing keywords before submitting.
+   - **ATS Score $< 65\%$ (Saved & Scored)**: Logged to the tracker for manual review without triggering automatic submission.
+3. **Dual Persistence Tracking**: Every application attempt is recorded to Supabase (`applications` table, `user_id = 23`) with automatic fallback to `applications_tracker/job_applications_tracker.csv`.
+4. **Already-Applied Detection**: Queries Supabase and local CSV to prevent duplicate submissions, and utilizes in-page visual detection to instantly exit if an application was already submitted on the target platform.
+5. **Visa Sponsorship & Compliance Handling**: Explicitly evaluates visa knockout constraints (`requires_sponsorship: true`), ensuring truthful answering on all multiple-choice ATS screening questionnaires.
+
+### Running the Scanner:
+```bash
+# Preview mode (Safety Guardrails active — reviews before final submit):
+source backend/venv/bin/activate
+python applications_tracker/scheduled_job_scanner.py
+
+# Autonomous Auto-Submit Mode (Submits applications directly):
+source backend/venv/bin/activate
+BROWSER_USE_DISABLE_GUARDRAILS=1 python applications_tracker/scheduled_job_scanner.py
+
+# Direct single-URL autofill:
+source backend/venv/bin/activate
+BROWSER_USE_DISABLE_GUARDRAILS=1 python applications_tracker/scheduled_job_scanner.py "https://uk.linkedin.com/jobs/view/..."
+```

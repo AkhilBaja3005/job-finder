@@ -741,6 +741,11 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
                 scraped = await scrape_job_description(job.url, browser=browser, on_log=on_log)
                 if scraped and scraped.get("description"):
                     _job_search_cache.set(url_cache_key, scraped)
+                    try:
+                        from services.jd_cache import cache_set
+                        cache_set(job.url, scraped)
+                    except Exception:
+                        pass
             except Exception as e:
                 print(f"[Job Searcher] Failed to fetch JD for '{job.title}' at {job.url}: {e}")
                 return None

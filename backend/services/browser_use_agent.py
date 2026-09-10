@@ -13,6 +13,10 @@ from typing import Optional, Dict, Any, List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
+
 from browser_use import Agent, Browser, ChatGoogle
 from config.constants import DEFAULT_FAST_LITE_MODELS, PREFERRED_GEMINI_MODEL
 
@@ -38,7 +42,7 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
     if not api_key:
         raise ValueError("GEMINI_API_KEY is required for browser-use agent execution.")
 
-    target_model = model_name or os.getenv("BROWSER_USE_MODEL", "gemini-2.5-flash")
+    target_model = model_name or os.getenv("BROWSER_USE_MODEL", "gemini-3.5-flash-lite")
     
     return ChatGoogle(
         model=target_model,
@@ -109,11 +113,14 @@ def build_application_task_prompt(
 
     task += f"""
     Execution Instructions:
-    1. Locate the application form on the page. If there is an 'Apply Now' or 'Apply for this job' button, click it.
-    2. Carefully fill in standard fields (First Name, Last Name, Email, Phone, LinkedIn, Location).
-    3. If there is a file input or drag-and-drop zone for Resume/CV, upload the specified resume file.
-    4. For dropdowns and multiple-choice questions (e.g. Work Authorization, Notice Period, Sponsorship, Gender, Race/Ethnicity, Disability, Veteran status):
+    1. Early Check for Already Applied:
+       - Inspect the page immediately. If the job status says 'Applied', 'You applied on [date]', or the apply button is disabled because you already submitted an application, immediately conclude your task and return SUCCESS with final message: "Already applied on platform."
+    2. Locate the application form on the page. If there is an 'Apply Now', 'Easy Apply', or 'Apply for this job' button, click it.
+    3. Carefully fill in standard fields (First Name, Last Name, Email, Phone, LinkedIn, Location).
+    4. If there is a file input or drag-and-drop zone for Resume/CV, upload the specified resume file.
+    5. For dropdowns and multiple-choice questions (e.g. Work Authorization, Notice Period, Sponsorship, Gender, Race/Ethnicity, Disability, Veteran status):
        - Select the option that best matches the applicant profile details above.
+       - If asked whether you require visa sponsorship now or in the future: select 'Yes' ({sponsorship_str}).
        - Answer truthfully and concisely based on the provided profile.
     {submission_instruction}
     """
@@ -214,7 +221,7 @@ async def run_browser_use_autofill(
         llm = get_browser_use_llm(model_name=model_name, custom_api_key=custom_api_key)
     except Exception as e:
         print(f"[browser-use] Model '{model_name}' fallback triggered: {e}")
-        llm = get_browser_use_llm(model_name="gemini-2.5-flash", custom_api_key=custom_api_key)
+        llm = get_browser_use_llm(model_name="gemini-3.5-flash-lite", custom_api_key=custom_api_key)
 
     task_prompt = build_application_task_prompt(
         job_url=job_url,
@@ -233,8 +240,10 @@ async def run_browser_use_autofill(
         browser_session=browser_session,
         available_file_paths=available_paths,
         use_vision=True,
+        vision_detail_level="low",
+        use_judge=False,
         max_failures=3,
-        retry_delay=2,
+        retry_delay=1,
     )
 
     mode_str = "AUTO-SUBMIT (GUARDRAILS DISABLED)" if effective_auto_submit else "REVIEW ONLY (GUARDRAIL ACTIVE)"
@@ -255,19 +264,53 @@ async def run_browser_use_autofill(
 
 if __name__ == "__main__":
     import sys
+
+    # Dynamically load profile from candidate_profile.json
+    config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "config", "candidate_profile.json"))
+    candidate_profile = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                cand = cfg.get("candidate", {})
+                candidate_profile = {
+                    "name": cand.get("name", "Akhil Baja"),
+                    "email": cand.get("email", "akhilbaja.work@gmail.com"),
+                    "phone": cand.get("phone", "+91 9948083135"),
+                    "location": cand.get("location", "London, UK"),
+                    "linkedin": cand.get("linkedin", "https://linkedin.com/in/akhilbaja"),
+                    "github": cand.get("github", "https://github.com/AkhilBaja3005"),
+                    "summary": cand.get("experience_summary", ""),
+                    "gender": cand.get("gender", "Male"),
+                    "citizenship": cand.get("citizenship", "Indian"),
+                    "work_authorization": cand.get("work_authorization", "Authorized to work in the UK"),
+                    "requires_sponsorship": cand.get("requires_sponsorship", False),
+                    "skills": cand.get("core_skills", []),
+                    "education": cand.get("education", []),
+                    "work_experience": cand.get("work_experience", []),
+                }
+        except Exception as e:
+            print(f"Error loading candidate_profile.json: {e}")
+
+    # Fallback to minimal dict if file load failed
+    if not candidate_profile:
+        candidate_profile = {
+            "name": "Akhil Baja",
+            "email": "akhilbaja.work@gmail.com",
+            "phone": "+91 9948083135",
+            "location": "London, UK",
+            "linkedin": "https://linkedin.com/in/akhilbaja",
+            "github": "https://github.com/AkhilBaja3005",
+            "requires_sponsorship": True
+        }
+
     # Quick standalone CLI prototype runner
     test_url = sys.argv[1] if len(sys.argv) > 1 else "https://boards.greenhouse.io"
-    sample_profile = {
-        "name": "Akhil Baja",
-        "email": "akhilbaja.work@gmail.com",
-        "phone": "+91 9948083135",
-        "location": "London, UK",
-        "linkedin": "https://linkedin.com/in/akhilbaja",
-        "github": "https://github.com/AkhilBaja3005",
-        "summary": "AI Systems Engineer specializing in LLMs, distributed systems, and agentic workflows."
-    }
     resume_pdf = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "applications_tracker", "tailored_resumes", "master_resume.pdf"))
     resume_path = resume_pdf if os.path.exists(resume_pdf) else None
+
     print(f"Testing browser-use prototype on: {test_url}")
-    result = asyncio.run(run_browser_use_autofill(test_url, sample_profile, resume_pdf_path=resume_path, max_steps=25))
+    print(f"Loaded profile for: {candidate_profile.get('name')} ({candidate_profile.get('email')})")
+    result = asyncio.run(run_browser_use_autofill(test_url, candidate_profile, resume_pdf_path=resume_path, max_steps=25))
     print("Result:", json.dumps(result, indent=2))
+
