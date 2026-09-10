@@ -16,6 +16,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from browser_use import Agent, Browser, ChatGoogle
 from config.constants import DEFAULT_FAST_LITE_MODELS, PREFERRED_GEMINI_MODEL
 
+# ─────────────────────────────────────────────────────────────────────────────
+# GUARDRAIL CONTROL FLAG
+#
+# Set DISABLE_GUARDRAILS = True  → agent will autonomously submit applications
+#                                  without pausing for human review.
+# Set DISABLE_GUARDRAILS = False → agent stops at final review/preview step
+#                                  and never clicks the Submit button.
+#
+# This can also be controlled via the environment variable:
+#   BROWSER_USE_DISABLE_GUARDRAILS=1  (any non-empty/non-zero value enables it)
+# ─────────────────────────────────────────────────────────────────────────────
+DISABLE_GUARDRAILS: bool = os.getenv("BROWSER_USE_DISABLE_GUARDRAILS", "0").strip() not in ("", "0", "false", "False", "no")
+
 
 def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Optional[str] = None):
     """
@@ -189,7 +202,14 @@ async def run_browser_use_autofill(
 ) -> Dict[str, Any]:
     """
     Runs an autonomous application filling session using browser-use and Gemini.
+    DISABLE_GUARDRAILS (module-level flag or BROWSER_USE_DISABLE_GUARDRAILS env var)
+    takes precedence over the per-call auto_submit argument.
     """
+    # Module-level flag overrides the per-call argument
+    effective_auto_submit = DISABLE_GUARDRAILS or auto_submit
+    if DISABLE_GUARDRAILS and not auto_submit:
+        print("[browser-use] ⚠️  DISABLE_GUARDRAILS=True — overriding auto_submit to True. Application WILL be submitted.")
+
     try:
         llm = get_browser_use_llm(model_name=model_name, custom_api_key=custom_api_key)
     except Exception as e:
@@ -200,7 +220,7 @@ async def run_browser_use_autofill(
         job_url=job_url,
         resume_data=resume_data,
         resume_pdf_path=resume_pdf_path,
-        auto_submit=auto_submit
+        auto_submit=effective_auto_submit
     )
 
     browser_session = get_or_create_browser_session(headless=headless)
@@ -217,14 +237,15 @@ async def run_browser_use_autofill(
         retry_delay=2,
     )
 
-    mode_str = "AUTO-SUBMIT" if auto_submit else "REVIEW ONLY (GUARDRAIL)"
+    mode_str = "AUTO-SUBMIT (GUARDRAILS DISABLED)" if effective_auto_submit else "REVIEW ONLY (GUARDRAIL ACTIVE)"
     print(f"[browser-use] Starting visible autonomous autofill ({mode_str}) for {job_url} with model {model_name}...")
     history = await agent.run(max_steps=max_steps)
 
     return {
         "status": "success",
         "job_url": job_url,
-        "auto_submit": auto_submit,
+        "auto_submit": effective_auto_submit,
+        "guardrails_disabled": DISABLE_GUARDRAILS,
         "model_used": getattr(llm, "model", model_name),
         "steps_taken": len(history.history) if hasattr(history, "history") else 0,
         "is_done": history.is_done() if hasattr(history, "is_done") else True,
