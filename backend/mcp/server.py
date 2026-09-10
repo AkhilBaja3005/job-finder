@@ -20,6 +20,7 @@ from mcp.tools.networking_tools import NETWORKING_TOOLS_SPEC, handle_extract_rec
 from mcp.tools.interview_tools import INTERVIEW_TOOLS_SPEC, handle_generate_interview_pack, handle_company_culture_brief
 from mcp.tools.tracking_tools import TRACKING_TOOLS_SPEC, handle_track_application, handle_list_applications, handle_check_duplicate_application
 from mcp.tools.profile_tools import PROFILE_TOOLS_SPEC, handle_save_candidate_profile, handle_get_candidate_profile
+from mcp.tools.autofill_tools import AUTOFILL_TOOLS_SPEC, handle_apply_to_job_browser, handle_pipeline_auto_apply
 
 ALL_TOOLS = (
     DISCOVERY_TOOLS_SPEC
@@ -29,6 +30,7 @@ ALL_TOOLS = (
     + INTERVIEW_TOOLS_SPEC
     + TRACKING_TOOLS_SPEC
     + PROFILE_TOOLS_SPEC
+    + AUTOFILL_TOOLS_SPEC
 )
 
 HANDLERS = {
@@ -50,6 +52,8 @@ HANDLERS = {
     "check_duplicate_application": handle_check_duplicate_application,
     "save_candidate_profile": handle_save_candidate_profile,
     "get_candidate_profile": handle_get_candidate_profile,
+    "apply_to_job_browser": handle_apply_to_job_browser,
+    "pipeline_auto_apply": handle_pipeline_auto_apply,
 }
 
 
