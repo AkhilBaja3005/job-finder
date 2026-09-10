@@ -143,6 +143,33 @@ async def record_to_supabase_or_csv(record_data: dict):
             cand = profile_data.get("candidate", {})
             user_id = cand.get("user_id") or 23
 
+            pdf_p = record_data.get("pdf_path")
+            pdf_url = None
+            if pdf_p and os.path.exists(pdf_p):
+                try:
+                    import shutil
+                    from services.session_store import USER_DATA_DIR
+                    user_out_dir = os.path.join(USER_DATA_DIR, str(user_id), "output")
+                    os.makedirs(user_out_dir, exist_ok=True)
+                    dest_name = os.path.basename(pdf_p)
+                    dest_file = os.path.join(user_out_dir, dest_name)
+                    if not os.path.exists(dest_file) or os.path.getsize(dest_file) != os.path.getsize(pdf_p):
+                        shutil.copy2(pdf_p, dest_file)
+                    pdf_url = f"/download_application_pdf/{user_id}/{dest_name}"
+
+                    # Asynchronously mirror to Hugging Face bucket if HF_TOKEN is configured
+                    hf_tok = os.getenv("HF_TOKEN")
+                    if hf_tok:
+                        try:
+                            from huggingface_hub import HfFileSystem
+                            hfs = HfFileSystem(token=hf_tok)
+                            bucket_dest = f"buckets/abaja/job-finder-storage/user_data/{user_id}/output/{dest_name}"
+                            hfs.put_file(dest_file, bucket_dest)
+                        except Exception as hfe:
+                            pass
+                except Exception as cpy_err:
+                    print(f"[Scanner] Note: Could not copy PDF to user output dir: {cpy_err}")
+
             payload = {
                 "user_id": int(user_id),
                 "job_title": record_data.get("job_title", "Role"),
@@ -152,6 +179,8 @@ async def record_to_supabase_or_csv(record_data: dict):
                 "status": record_data.get("status", "saved"),
                 "source_mode": record_data.get("platform", "scanner"),
             }
+            if pdf_url:
+                payload["pdf_url"] = pdf_url
             if record_data.get("recruiter"):
                 payload["recruiter_name"] = record_data.get("recruiter")
             if record_data.get("recruiter_linkedin"):
@@ -161,7 +190,10 @@ async def record_to_supabase_or_csv(record_data: dict):
             url_filter = f"applications?job_url=eq.{record_data.get('job_url', '')}"
             existing = await async_supabase_request(url_filter, "GET")
             if existing and len(existing) > 0:
-                await async_supabase_request(url_filter, "PATCH", {"status": payload["status"], "score": payload["score"]})
+                patch_payload = {"status": payload["status"], "score": payload["score"]}
+                if pdf_url:
+                    patch_payload["pdf_url"] = pdf_url
+                await async_supabase_request(url_filter, "PATCH", patch_payload)
                 supabase_synced = True
             else:
                 inserted = await async_supabase_request("applications", "POST", payload)
