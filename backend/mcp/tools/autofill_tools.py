@@ -153,11 +153,13 @@ def build_and_compile_tailored_pdf(
     job_title: str,
     company: str,
     candidate_info: Dict[str, Any],
-    out_dir: str
+    out_dir: str,
+    missing_skills: Optional[List[str]] = None
 ) -> Optional[str]:
     """
     Checks if resume can be tailored to the JD, adapts the master LaTeX resume code,
     enforces a strict 1-page budget, and compiles a job-specific tailored PDF using Tectonic.
+    Prioritizes sub-second precision slot injection before falling back to LLM rewriting.
     """
     master_latex = _get_master_latex_source()
     if not master_latex:
@@ -177,19 +179,45 @@ def build_and_compile_tailored_pdf(
             shutil.copy2(c, os.path.join(out_dir, "resume.cls"))
             break
 
-    # 1. Tailor LaTeX code
-    from services.llm_agent import tailor_latex_code
-    try:
-        raw_tailored = tailor_latex_code(
-            master_latex=master_latex,
-            job_title=job_title,
-            job_description=jd_text,
-            suggestions={},
-            missing_skills=[]
-        )
-    except Exception as e:
-        print(f"[tailor_resume] Tailoring failed, using master template with hotfixes: {e}")
-        raw_tailored = master_latex
+    skills_to_inject = [s.strip() for s in (missing_skills or []) if s and s.strip()]
+    if not skills_to_inject and jd_text:
+        try:
+            from services.ats_scorer import extract_jd_skills
+            req, pref = extract_jd_skills(jd_text)
+            skills_to_inject = (req + pref)[:5]
+        except Exception:
+            pass
+
+    # 1. Fast Path: Sub-second precision slot injection on Master LaTeX layout
+    raw_tailored = None
+    if skills_to_inject:
+        try:
+            from utils.latex_utils import inject_tailored_slots
+            slotted = inject_tailored_slots(
+                master_latex=master_latex,
+                user_selected_skills=skills_to_inject,
+                candidate_info=candidate_info
+            )
+            if slotted and "\\begin{document}" in slotted and "\\documentclass" in slotted:
+                print(f"[tailor_resume] ⚡ Applied instantaneous precision slot injection for {len(skills_to_inject)} skills: {skills_to_inject}")
+                raw_tailored = slotted
+        except Exception as se:
+            print(f"[tailor_resume] Slot injection error, falling back: {se}")
+
+    # Fallback to LLM tailoring if slot injection was skipped or failed
+    if not raw_tailored:
+        from services.llm_agent import tailor_latex_code
+        try:
+            raw_tailored = tailor_latex_code(
+                master_latex=master_latex,
+                job_title=job_title,
+                job_description=jd_text,
+                suggestions={},
+                missing_skills=skills_to_inject
+            )
+        except Exception as e:
+            print(f"[tailor_resume] LLM Tailoring failed, using master template with hotfixes: {e}")
+            raw_tailored = master_latex
 
     # 2. Multi-pass page budget optimization to guarantee single page
     opt_scale, opt_ls = 1.0, 1.0

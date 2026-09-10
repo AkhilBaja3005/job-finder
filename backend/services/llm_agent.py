@@ -292,13 +292,13 @@ RULE 5 — LATEX PREAMBLE, FONT & SECTION PATTERN (ZERO DEVIATION):
   • TECHNICAL SKILLS (MANDATORY, PRESERVE MASTER CATEGORIZATION & ZERO OVERLAP): You MUST include `\\begin{{rSection}}{{Technical Skills}}`.
     - If the master resume already has categorized skills (e.g. `\\textbf{{Languages:}}`, `\\textbf{{AI/ML & GenAI:}}`, `\\textbf{{Data & Platforms:}}`, `\\textbf{{Software & Infrastructure:}}`), PRESERVE THOSE EXACT CATEGORY NAMES and original skills from the master resume. Do NOT re-categorize, drop, or scramble the master categories!
     - Group Technical Skills into distinct, non-overlapping categories where every skill exists in EXACTLY ONE category. Format each category line as `\\textbf{{Category:}} skill1, skill2 \\\\`. Do NOT use `\\begin{{tabular}}` or `\\end{{tabular}}` environments. Omitting the Technical Skills section is an INSTANT FAILURE.
-  • ABSOLUTE CRITICAL SECTION SEQUENCE: You MUST render sections in this exact order:
+  • ABSOLUTE CRITICAL SECTION SEQUENCE: You MUST render sections in the exact order of the master resume template:
     1. Professional Summary (`\\begin{{rSection}}{{Professional Summary}}`)
-    2. Work Experience (`\\begin{{rSection}}{{Work Experience}}`)
-    3. Technical Skills (`\\begin{{rSection}}{{Technical Skills}}`)
-    4. Education (`\\begin{{rSection}}{{Education}}`)
-    5. Projects (`\\begin{{rSection}}{{Projects}}`)
-  • NEVER omit Technical Skills or alter this section sequence under any circumstances.
+    2. Education (`\\begin{{rSection}}{{Education}}`)
+    3. Work Experience (`\\begin{{rSection}}{{Work Experience}}`)
+    4. Projects (`\\begin{{rSection}}{{Projects}}`)
+    5. Technical Skills (`\\begin{{rSection}}{{Technical Skills}}`)
+  • NEVER omit any section or alter this section sequence under any circumstances.
 
 RULE 6 — ATS KEYWORD INTEGRATION & INLINE AWARDS:
   • Inject relevant missing keywords into Technical Skills and bullets naturally ONLY IF they match or extend the candidate's actual experience.

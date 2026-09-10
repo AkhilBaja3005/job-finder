@@ -271,7 +271,7 @@ async def apply_to_job(
             headless=False,
             model_name="gemini-3.5-flash-lite",
             auto_submit=auto_submit,
-            max_steps=25
+            max_steps=50
         )
         print(f"[Browser-Use] Result: {res}")
         return res
@@ -386,13 +386,15 @@ async def run_pipeline(target_url: Optional[str] = None):
             print(f"   📝 Tailoring 1-page LaTeX resume for keyword & skills alignment...")
             if jd_text:
                 try:
+                    job_missing = job.get("missing_skills") or []
                     pdf_res = await asyncio.to_thread(
                         build_and_compile_tailored_pdf,
                         jd_text=jd_text,
                         job_title=title,
                         company=company,
                         candidate_info=candidate,
-                        out_dir=RESUMES_DIR
+                        out_dir=RESUMES_DIR,
+                        missing_skills=job_missing
                     )
                     if pdf_res and os.path.exists(pdf_res):
                         tailored_ats = evaluate_pdf_ats(pdf_res, jd_text, candidate)

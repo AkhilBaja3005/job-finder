@@ -26,7 +26,9 @@ async def test_all_mcp_tools():
     list_res = await process_mcp_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     tool_names = [t["name"] for t in list_res["result"]["tools"]]
     print(f"  [✓] 2. tools/list registered: {len(tool_names)} tools found")
-    assert len(tool_names) == 18
+    assert len(tool_names) == 20
+    assert "apply_to_job_browser" in tool_names
+    assert "pipeline_auto_apply" in tool_names
 
     # 3. calculate_ats_score
     sample_jd = "Senior Python Engineer needed with experience in FastAPI, PostgreSQL, Docker and AWS."
