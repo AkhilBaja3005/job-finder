@@ -41,8 +41,89 @@ from mcp.tools.discovery_tools import handle_search_jobs
 from mcp.tools.profile_tools import load_profile_data
 from mcp.tools.tracking_tools import handle_track_application
 from mcp.tools.autofill_tools import build_and_compile_tailored_pdf, _get_default_resume_path
+from mcp.tools.ats_tools import handle_calculate_ats_score
 from services.browser_use_agent import run_browser_use_autofill
 from services.auth import async_supabase_request, SUPABASE_URL, SUPABASE_KEY
+import subprocess
+
+
+def find_master_resume_with_mac_tags() -> str:
+    """
+    Finds the master resume PDF by checking macOS color tags in iCloud Drive,
+    falling back to known default paths if tags aren't present.
+    """
+    icloud_folder = "/Users/akhilbaja/Library/Mobile Documents/com~apple~CloudDocs/UK/Imperial/Job Info/Master Resume"
+    explicit_fallback = os.path.join(icloud_folder, "Resume_Akhil_Baja.pdf")
+
+    if os.path.exists(icloud_folder):
+        try:
+            for fname in os.listdir(icloud_folder):
+                if fname.lower().endswith(".pdf"):
+                    full_p = os.path.join(icloud_folder, fname)
+                    res = subprocess.run(["mdls", "-name", "kMDItemUserTags", full_p], capture_output=True, text=True)
+                    out = res.stdout or ""
+                    # Check if tagged with Red, Green, Blue or any user tag
+                    if "kMDItemUserTags = (" in out and "null" not in out.lower():
+                        print(f"[Master Resume] 🏷️ Found macOS tagged master resume: {full_p}")
+                        return full_p
+        except Exception as e:
+            print(f"[Master Resume] Note: Tag inspection failed ({e}), checking explicit path.")
+
+    if os.path.exists(explicit_fallback):
+        print(f"[Master Resume] 📄 Found explicit master resume: {explicit_fallback}")
+        return explicit_fallback
+
+    # Secondary fallback to repo master resume
+    repo_fallback = _get_default_resume_path()
+    if repo_fallback and os.path.exists(repo_fallback):
+        print(f"[Master Resume] 📄 Falling back to repo master resume: {repo_fallback}")
+        return repo_fallback
+
+    return explicit_fallback
+
+
+def evaluate_pdf_ats(pdf_path: str, jd_text: str, candidate_info: dict) -> int:
+    """
+    Extracts text from a compiled resume PDF and deterministically computes its overall ATS score against a JD.
+    """
+    try:
+        from services.resume_parser import extract_text_from_pdf
+        from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
+
+        raw_text = extract_text_from_pdf(pdf_path)
+        if not raw_text:
+            return 0
+
+        # Extract skills section dynamically from the PDF text
+        extracted_skills = []
+        for line in raw_text.split("\n"):
+            if any(k in line.lower() for k in ["languages:", "ai/ml", "data & platforms:", "software & infrastructure:", "skills:"]):
+                parts = line.split(":", 1)
+                if len(parts) > 1:
+                    extracted_skills.extend([s.strip() for s in parts[1].split(",") if s.strip()])
+
+        skills = extracted_skills if extracted_skills else candidate_info.get("core_skills", [])
+
+        resume_data = {
+            "name": candidate_info.get("name"),
+            "location": candidate_info.get("location"),
+            "skills": skills,
+            "experience": [
+                {
+                    "role": e.get("role", ""),
+                    "company": e.get("company", ""),
+                    "description": e.get("highlights", [])
+                }
+                for e in candidate_info.get("work_experience", [])
+            ],
+            "raw_text": raw_text
+        }
+        ats = compute_ats_score(resume_data, jd_text)
+        rf = estimate_role_fit_score(resume_data, jd_text)
+        return int(compute_overall_score(ats.skills_score, ats.experience_score, rf))
+    except Exception as e:
+        print(f"[ATS Scorer] Warning: Could not score PDF {pdf_path}: {e}")
+        return 0
 
 
 async def record_to_supabase_or_csv(record_data: dict):
@@ -201,7 +282,7 @@ async def run_pipeline(target_url: Optional[str] = None):
     prefs = profile.get("search_preferences", {})
 
     disable_guardrails = os.getenv("BROWSER_USE_DISABLE_GUARDRAILS") in ("1", "true", "True")
-    master_resume_pdf = _get_default_resume_path()
+    master_resume_pdf = find_master_resume_with_mac_tags()
 
     # Mode A: Direct application to single job URL passed via CLI
     if target_url:
@@ -309,10 +390,18 @@ async def run_pipeline(target_url: Optional[str] = None):
                         out_dir=RESUMES_DIR
                     )
                     if pdf_res and os.path.exists(pdf_res):
-                        pdf_to_submit = pdf_res
-                        tex_path = pdf_res.replace(".pdf", ".tex")
-                        tailored_count += 1
-                        print(f"   ✓ Tailored 1-page PDF compiled: {os.path.basename(pdf_to_submit)}")
+                        tailored_ats = evaluate_pdf_ats(pdf_res, jd_text, candidate)
+                        master_ats = score  # initial score was against master profile / resume
+                        print(f"   📊 ATS Score Comparison: Tailored PDF = {tailored_ats}% vs Master PDF = {master_ats}%")
+                        if tailored_ats >= master_ats:
+                            pdf_to_submit = pdf_res
+                            tex_path = pdf_res.replace(".pdf", ".tex")
+                            score = tailored_ats
+                            tailored_count += 1
+                            print(f"   ✓ Tailored PDF outperforms master ({tailored_ats}% >= {master_ats}%). Selected: {os.path.basename(pdf_to_submit)}")
+                        else:
+                            pdf_to_submit = master_resume_pdf
+                            print(f"   ℹ️ Master resume scored higher or equal ({master_ats}% > {tailored_ats}%). Keeping master resume: {os.path.basename(pdf_to_submit)}")
                 except Exception as te:
                     print(f"   ⚠️ Tailoring error: {te}. Falling back to master resume.")
         else:
