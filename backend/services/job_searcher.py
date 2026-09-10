@@ -152,41 +152,58 @@ For each match found, return a valid JSON array of objects with the exact schema
 Do not wrap in explanatory text. Only return the JSON array."""
     try:
         from config.constants import DEFAULT_GROUNDED_SEARCH_MODELS
-        client = genai.Client(api_key=gemini_key)
+        from services.gemini_client import get_gemini_api_keys
+        
+        available_keys = [api_key] if api_key else (get_gemini_api_keys() or [os.getenv("GEMINI_API_KEY", "")])
+        available_keys = [k for k in available_keys if k]
+        if not available_keys:
+            return []
+
         raw_text = ""
         ATS_SEARCH_MODELS = DEFAULT_GROUNDED_SEARCH_MODELS
         import concurrent.futures
+        all_429 = True
         for search_model in ATS_SEARCH_MODELS:
-            try:
-                def _do_ats_search():
-                    return client.models.generate_content(
-                        model=search_model,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            tools=[types.Tool(google_search=types.GoogleSearch())],
-                            temperature=0.1
+            for key_candidate in available_keys:
+                client = genai.Client(api_key=key_candidate)
+                try:
+                    def _do_ats_search():
+                        return client.models.generate_content(
+                            model=search_model,
+                            contents=prompt,
+                            config=types.GenerateContentConfig(
+                                tools=[types.Tool(google_search=types.GoogleSearch())],
+                                temperature=0.1
+                            )
                         )
-                    )
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    fut = executor.submit(_do_ats_search)
-                    try:
-                        response = fut.result(timeout=12.0)
-                    except concurrent.futures.TimeoutError:
-                        print(f"[Direct ATS Search] Model {search_model} timed out after 12s, trying fallback...")
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        fut = executor.submit(_do_ats_search)
+                        try:
+                            response = fut.result(timeout=12.0)
+                        except concurrent.futures.TimeoutError:
+                            print(f"[Direct ATS Search] Model {search_model} timed out after 12s, trying fallback...")
+                            continue
+                    if response and response.text:
+                        raw_text = response.text.strip()
+                        if raw_text:
+                            break
+                except Exception as model_err:
+                    err_str = str(model_err).lower()
+                    if "429" in err_str or "resource_exhausted" in err_str:
+                        key_hint = f"...{key_candidate[-6:]}" if len(key_candidate) >= 6 else "key"
+                        print(f"[Direct ATS Search] Key {key_hint} quota limit reached (429), rotating to next API key...")
                         continue
-                if response and response.text:
-                    raw_text = response.text.strip()
-                    if raw_text:
-                        break
-            except Exception as model_err:
-                err_str = str(model_err).lower()
-                if "429" in err_str or "resource_exhausted" in err_str:
-                    _ats_grounding_quota_exhausted = True
-                    print(f"[Direct ATS Search] Quota limit reached (429), flipping circuit breaker ON for session.")
+                    all_429 = False
+                    print(f"[Direct ATS Search] Model {search_model} warning: {model_err}")
                     break
+            if raw_text:
+                break
                 print(f"[Direct ATS Search] Model {search_model} failed: {model_err}, trying fallback...")
                 continue
         if not raw_text:
+            if all_429:
+                _ats_grounding_quota_exhausted = True
+                print("[Direct ATS Search] All candidate keys quota limited (429), flipping circuit breaker ON for session.")
             return []
             
         items = []

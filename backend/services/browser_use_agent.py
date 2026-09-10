@@ -38,7 +38,12 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
     """
     Initializes browser-use native ChatGoogle client targeting Gemini Flash-Lite / Flash.
     """
-    api_key = custom_api_key or os.getenv("GEMINI_API_KEY")
+    try:
+        from services.gemini_client import get_next_gemini_api_key
+        api_key = get_next_gemini_api_key(custom_api_key)
+    except Exception:
+        api_key = custom_api_key or os.getenv("GEMINI_API_KEY")
+
     if not api_key:
         raise ValueError("GEMINI_API_KEY is required for browser-use agent execution.")
 
