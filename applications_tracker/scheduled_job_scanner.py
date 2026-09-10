@@ -139,6 +139,7 @@ def get_existing_tracked_urls() -> set:
     supabase_key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     if supabase_url and supabase_key:
         try:
+            # pyrefly: ignore [missing-import]
             from supabase import create_client
             client = create_client(supabase_url, supabase_key)
             resp = client.table("applications").select("job_url").execute()

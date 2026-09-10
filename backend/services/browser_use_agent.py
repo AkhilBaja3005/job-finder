@@ -77,17 +77,20 @@ def build_application_task_prompt(
     requires_sponsorship = resume_data.get("requires_sponsorship", False)
     sponsorship_str = "Yes" if requires_sponsorship else "No"
     veteran_status = resume_data.get("veteran_status") or resume_data.get("candidate", {}).get("veteran_status", "No")
-    disability_status = resume_data.get("disability_status") or resume_data.get("candidate", {}).get("disability_status", "No")
+    # Phone parsing for easy international code selection
+    phone_digits = "".join(c for c in phone if c.isdigit() or c == '+')
+    country_code_hint = "India (+91)" if "+91" in phone_digits or "91" in phone_digits[:4] else "United Kingdom (+44)"
+    clean_mobile = phone_digits.replace("+91", "").replace("+44", "").strip()
 
     task = f"""
     Navigate to the job application URL: {job_url}
     
-    You are an expert AI Career Assistant acting on behalf of the applicant to fill out this job application form.
+    You are an ultra-fast, expert AI Career Assistant acting on behalf of the applicant to fill out this job application form.
     
     Applicant Profile Details:
     - Full Name: {candidate_name}
     - Email Address: {email}
-    - Phone Number: {phone}
+    - Phone Number: {phone} (Country Code: {country_code_hint}, Local Number: {clean_mobile})
     - Current Location: {location}
     - LinkedIn Profile: {linkedin}
     - GitHub Profile: {github}
@@ -106,22 +109,28 @@ def build_application_task_prompt(
         task += f"\n- Resume File to attach: {os.path.abspath(resume_pdf_path)}\n"
 
     submission_instruction = (
-        "5. SUBMIT APPLICATION: Carefully review all completed fields. Once all required inputs, attachments, and questions are satisfied, click the final 'Submit Application' or 'Send Application' button to submit the application completely."
+        "5. SUBMIT APPLICATION: Once all required inputs, attachments, and questions on the final review step are satisfied, click the final 'Submit Application' or 'Send Application' button. Do not add wait steps after submitting."
         if auto_submit
         else "5. SAFETY GUARDRAIL: Navigate through intermediate pages ('Next' / 'Continue'), but DO NOT click final 'Submit Application' or 'Send Application'. Stop on the final review/preview step and report a summary of completed fields."
     )
 
     task += f"""
+    CRITICAL SPEED & EFFICIENCY RULES:
+    - DO NOT USE THE WAIT ACTION: The browser environment automatically handles DOM mutations and page loads. Never use `wait: seconds: ...`. Elements are immediately actionable.
+    - BATCH ALL ACTIONS: Fill out ALL inputs, selects, and checkboxes on the visible screen in a single turn together with the 'Next' or 'Continue' click. Do not submit one field per step!
+    - SELECT DROPDOWNS: Never click HTML `<select>` elements directly. Always use `select_dropdown` with the target text (e.g., text: '{country_code_hint}').
+
     Execution Instructions:
     1. Early Check for Already Applied:
-       - Inspect the page immediately. If the job status says 'Applied', 'You applied on [date]', or the apply button is disabled because you already submitted an application, immediately conclude your task and return SUCCESS with final message: "Already applied on platform."
-    2. Locate the application form on the page. If there is an 'Apply Now', 'Easy Apply', or 'Apply for this job' button, click it.
-    3. Carefully fill in standard fields (First Name, Last Name, Email, Phone, LinkedIn, Location).
-    4. If there is a file input or drag-and-drop zone for Resume/CV, upload the specified resume file.
-    5. For dropdowns and multiple-choice questions (e.g. Work Authorization, Notice Period, Sponsorship, Gender, Race/Ethnicity, Disability, Veteran status):
-       - Select the option that best matches the applicant profile details above.
-       - If asked whether you require visa sponsorship now or in the future: select 'Yes' ({sponsorship_str}).
-       - Answer truthfully and concisely based on the provided profile.
+       - If the job status already says 'Applied', 'You applied on [date]', or the apply button is disabled, immediately call done with: "Already applied on platform."
+    2. Open Form: Click 'Apply', 'Easy Apply', or 'Apply for this job'.
+    3. Fill & Advance: In a single batched step, fill all contact/question inputs on the screen and click 'Next' or 'Continue'.
+       - For Phone Country Code, select '{country_code_hint}'.
+       - For Phone Number input, type '{clean_mobile or phone}'.
+       - For Resume, ensure the candidate's resume is selected or uploaded.
+       - For Sponsorship question: select 'Yes' ({sponsorship_str}).
+       - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
+    4. Review & Conclude:
     {submission_instruction}
     """
     return task
@@ -242,7 +251,10 @@ async def run_browser_use_autofill(
         use_vision=True,
         vision_detail_level="low",
         use_judge=False,
-        max_failures=3,
+        max_actions_per_step=10,
+        flash_mode=True,
+        enable_planning=False,
+        max_failures=2,
         retry_delay=1,
     )
 
