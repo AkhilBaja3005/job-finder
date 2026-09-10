@@ -49,31 +49,34 @@ import subprocess
 
 def find_master_resume_with_mac_tags() -> str:
     """
-    Finds the master resume PDF by checking macOS color tags in iCloud Drive,
-    falling back to known default paths if tags aren't present.
+    Finds the master resume PDF by checking macOS color tags in iCloud Drive.
+    Irrespective of the file name, any PDF tagged with 'Red' is prioritized as the master resume.
+    Falls back to Resume_Akhil_Baja.pdf or repository master resume if no Red-tagged PDF exists.
     """
     icloud_folder = "/Users/akhilbaja/Library/Mobile Documents/com~apple~CloudDocs/UK/Imperial/Job Info/Master Resume"
     explicit_fallback = os.path.join(icloud_folder, "Resume_Akhil_Baja.pdf")
 
     if os.path.exists(icloud_folder):
         try:
-            for fname in os.listdir(icloud_folder):
+            # 1. Scan every PDF file in the folder for the 'Red' macOS tag
+            for fname in sorted(os.listdir(icloud_folder)):
                 if fname.lower().endswith(".pdf"):
                     full_p = os.path.join(icloud_folder, fname)
                     res = subprocess.run(["mdls", "-name", "kMDItemUserTags", full_p], capture_output=True, text=True)
                     out = res.stdout or ""
-                    # Check if tagged with Red, Green, Blue or any user tag
-                    if "kMDItemUserTags = (" in out and "null" not in out.lower():
-                        print(f"[Master Resume] 🏷️ Found macOS tagged master resume: {full_p}")
+                    # Check specifically for "Red" tag (case-insensitive)
+                    if "red" in out.lower():
+                        print(f"[Master Resume] 🏷️ Found Red-tagged master resume: {full_p}")
                         return full_p
         except Exception as e:
-            print(f"[Master Resume] Note: Tag inspection failed ({e}), checking explicit path.")
+            print(f"[Master Resume] Note: macOS tag inspection failed ({e}), checking fallback paths.")
 
+    # 2. Fallback if no Red tag was found
     if os.path.exists(explicit_fallback):
-        print(f"[Master Resume] 📄 Found explicit master resume: {explicit_fallback}")
+        print(f"[Master Resume] 📄 No Red-tagged PDF found; falling back to: {explicit_fallback}")
         return explicit_fallback
 
-    # Secondary fallback to repo master resume
+    # 3. Secondary fallback to repository master resume
     repo_fallback = _get_default_resume_path()
     if repo_fallback and os.path.exists(repo_fallback):
         print(f"[Master Resume] 📄 Falling back to repo master resume: {repo_fallback}")
