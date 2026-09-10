@@ -75,6 +75,29 @@ def generate_search_queries_from_resume(resume_data: dict, custom_api_key: Optio
         return [recent_roles[0]] if recent_roles else ["Software Engineer"]
 
 
+# ─── Timeframe Normalizer ──────────────────────────────────────────────
+
+def normalize_timeframe(timeframe: Optional[str]) -> str:
+    """
+    Normalizes human/config timeframe strings to standardized search keys:
+    '24h', '48h', '1w', '1m', or 'all'.
+    """
+    if not timeframe:
+        return "48h"
+    t = str(timeframe).strip().lower().replace(" ", "_").replace("-", "_")
+    if t in ("24h", "24", "1d", "day", "past_24_hours", "past_24h", "past_1_day", "last_24_hours", "24_hours"):
+        return "24h"
+    if t in ("48h", "48", "2d", "past_48_hours", "past_48h", "past_2_days", "last_48_hours", "48_hours"):
+        return "48h"
+    if t in ("1w", "7d", "week", "past_week", "past_7_days", "last_week", "1_week"):
+        return "1w"
+    if t in ("1m", "30d", "month", "past_month", "past_30_days", "last_month", "1_month"):
+        return "1m"
+    if t in ("all", "any"):
+        return "all"
+    return "48h"
+
+
 # ─── Direct ATS Job Search with Gemini Google Search Grounding ─────────────
 
 _ats_grounding_quota_exhausted = False
@@ -98,13 +121,15 @@ def search_direct_ats_jobs(
     if not gemini_key:
         return []
 
+    tf_norm = normalize_timeframe(timeframe)
+
     # Map timeframe
     freshness_prompt = {
         "24h": "posted in the last 24 hours (strictly within the past 1 day)",
         "48h": "posted in the last 48 hours (strictly within the past 2 days)",
         "1w": "posted within the last 7 days",
         "1m": "posted within the last 30 days"
-    }.get(timeframe, "posted recently")
+    }.get(tf_norm, "posted recently")
 
     prompt = f"""Use Google Search to find 5 to 10 active, open job postings for '{role}' in '{location}' that are hosted on direct ATS career portals (Greenhouse, Ashby, Lever, or Workday).
 Every job must be {freshness_prompt}.
@@ -264,6 +289,7 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
     """Scrapes LinkedIn's guest job search API for postings from the specified timeframe."""
     encoded_keyword = urllib.parse.quote(keyword)
     encoded_location = urllib.parse.quote(location)
+    tf_norm = normalize_timeframe(timeframe)
     
     # Map timeframe to LinkedIn f_TPR parameter (seconds)
     tpr_map = {
@@ -272,7 +298,7 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
         "1w": "r604800",
         "1m": "r2592000"
     }
-    tpr = tpr_map.get(timeframe, "r172800")
+    tpr = tpr_map.get(tf_norm, "r172800")
     url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={encoded_keyword}&location={encoded_location}&f_TPR={tpr}&start=0"
     
     log_ist(f"[Job Searcher] Fetching LinkedIn: {url}")
@@ -347,17 +373,18 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "2
 
     encoded_keyword = urllib.parse.quote(keyword)
     encoded_location = urllib.parse.quote(location)
+    tf_norm = normalize_timeframe(timeframe)
     
     # Calculate cutoff date based on requested timeframe
     from datetime import datetime, timedelta
     days = 2
-    if timeframe == "24h":
+    if tf_norm == "24h":
         days = 1
-    elif timeframe == "48h":
+    elif tf_norm == "48h":
         days = 2
-    elif timeframe == "1w":
+    elif tf_norm == "1w":
         days = 7
-    elif timeframe == "1m":
+    elif tf_norm == "1m":
         days = 30
         
     cutoff_date = datetime.now() - timedelta(days=days)
@@ -481,6 +508,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 
     encoded_keyword = urllib.parse.quote(keyword)
     encoded_location = urllib.parse.quote(location)
+    tf_norm = normalize_timeframe(timeframe)
     
     # Resolve regional Indeed domain based on target location (e.g. Hyderabad -> in.indeed.com)
     indeed_domain, country_code = get_indeed_domain_for_location(location)
@@ -492,7 +520,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
         "1w": "7",
         "1m": "30"
     }
-    fromage = fromage_map.get(timeframe, "2")
+    fromage = fromage_map.get(tf_norm, "2")
     url = f"https://{indeed_domain}/jobs?q={encoded_keyword}&l={encoded_location}&fromage={fromage}"
     
     log_ist(f"[Job Searcher] Fetching Indeed ({indeed_domain}, Country={country_code}): {url}")

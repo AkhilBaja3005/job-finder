@@ -43,6 +43,7 @@ from mcp.tools.tracking_tools import handle_track_application
 from mcp.tools.autofill_tools import build_and_compile_tailored_pdf, _get_default_resume_path
 from mcp.tools.ats_tools import handle_calculate_ats_score
 from services.browser_use_agent import run_browser_use_autofill
+from services.job_searcher import normalize_timeframe
 from services.auth import async_supabase_request, SUPABASE_URL, SUPABASE_KEY
 import subprocess
 
@@ -313,7 +314,8 @@ async def run_pipeline(target_url: Optional[str] = None):
     keywords = ", ".join(target_roles)
     target_locations = prefs.get("target_locations", ["London, UK"])
     location = target_locations[0] if target_locations else "London, UK"
-    timeframe = prefs.get("timeframe", "24h")
+    raw_timeframe = prefs.get("timeframe", "24h")
+    timeframe = normalize_timeframe(raw_timeframe)
     min_ats_score = int(prefs.get("min_ats_score", 65))
     DIRECT_APPLY_ATS_THRESHOLD = 80  # >= 80%: apply directly with master resume without tailoring
     max_applications = int(os.getenv("MAX_APPLICATIONS_PER_RUN", "10"))

@@ -77,6 +77,7 @@ def build_application_task_prompt(
     requires_sponsorship = resume_data.get("requires_sponsorship", False)
     sponsorship_str = "Yes" if requires_sponsorship else "No"
     veteran_status = resume_data.get("veteran_status") or resume_data.get("candidate", {}).get("veteran_status", "No")
+    disability_status = resume_data.get("disability_status") or resume_data.get("candidate", {}).get("disability_status", "No")
     # Phone parsing for easy international code selection
     phone_digits = "".join(c for c in phone if c.isdigit() or c == '+')
     country_code_hint = "India (+91)" if "+91" in phone_digits or "91" in phone_digits[:4] else "United Kingdom (+44)"
