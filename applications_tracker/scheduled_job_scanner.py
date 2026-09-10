@@ -141,7 +141,7 @@ async def record_to_supabase_or_csv(record_data: dict):
         try:
             profile_data = load_profile_data() or {}
             cand = profile_data.get("candidate", {})
-            user_id = cand.get("user_id") or 23
+            user_id = cand.get("user_id") or 34
 
             pdf_p = record_data.get("pdf_path")
             pdf_url = None
