@@ -69,6 +69,7 @@ def build_application_task_prompt(
     email = resume_data.get("email") or resume_data.get("candidate", {}).get("email", "")
     phone = resume_data.get("phone") or resume_data.get("candidate", {}).get("phone", "")
     location = resume_data.get("location") or resume_data.get("candidate", {}).get("location", "")
+    postal_code = resume_data.get("postal_code") or resume_data.get("postcode") or resume_data.get("candidate", {}).get("postal_code") or resume_data.get("candidate", {}).get("postcode", "W12 0BZ")
     linkedin = resume_data.get("linkedin") or resume_data.get("candidate", {}).get("linkedin", "")
     github = resume_data.get("github") or resume_data.get("candidate", {}).get("github", "")
     portfolio = resume_data.get("portfolio") or resume_data.get("candidate", {}).get("portfolio", "https://akhilbaja3005.github.io/AkhilBaja3005/")
@@ -98,6 +99,7 @@ def build_application_task_prompt(
     - Email Address: {email}
     - Phone Number: {phone} (Country Code: {country_code_hint}, Local Number: {clean_mobile})
     - Current Location: {location}
+    - Postal Code / Postcode: {postal_code}
     - LinkedIn Profile: {linkedin}
     - GitHub Profile: {github}
     - Portfolio / Website: {portfolio}
