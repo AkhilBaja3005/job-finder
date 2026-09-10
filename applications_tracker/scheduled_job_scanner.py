@@ -161,6 +161,7 @@ async def record_to_supabase_or_csv(record_data: dict):
                     hf_tok = os.getenv("HF_TOKEN")
                     if hf_tok:
                         try:
+                            # pyrefly: ignore [missing-import]
                             from huggingface_hub import HfFileSystem
                             hfs = HfFileSystem(token=hf_tok)
                             bucket_dest = f"buckets/abaja/job-finder-storage/user_data/{user_id}/output/{dest_name}"
