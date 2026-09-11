@@ -328,13 +328,9 @@ async def run_browser_use_autofill(
     )
 
     browser_session = get_or_create_browser_session(headless=headless)
-    # Ensure the active tab navigates directly to the target URL before the agent loop starts
-    try:
-        page = await browser_session.get_current_page()
-        if page:
-            await page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
-    except Exception as ne:
-        print(f"[browser-use] ⚠️ Pre-navigation warning: {ne}")
+
+    # Configure initial navigation action so browser-use explicitly opens target_url
+    nav_actions = [{"navigate": {"url": target_url, "new_tab": False}}]
 
     available_paths = [os.path.abspath(resume_pdf_path)] if resume_pdf_path and os.path.exists(resume_pdf_path) else []
 
@@ -346,6 +342,7 @@ async def run_browser_use_autofill(
         task=task_prompt,
         llm=llm,
         browser_session=browser_session,
+        initial_actions=nav_actions,
         available_file_paths=available_paths,
         use_vision=False,
         use_judge=False,
@@ -373,6 +370,7 @@ async def run_browser_use_autofill(
             task=task_prompt + "\nNOTE: Retrying with visual sight and deep reasoning enabled. Analyze the visual layout carefully to locate, solve, and fill any inputs, custom dropdowns, or multi-step modals that were missed.",
             llm=llm,
             browser_session=browser_session,
+            initial_actions=nav_actions,
             available_file_paths=available_paths,
             use_vision=True,
             vision_detail_level="low",
