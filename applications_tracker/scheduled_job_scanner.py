@@ -13,7 +13,7 @@ Automated periodic pipeline using the unified multi-platform discovery engine:
 
 CLI Usage:
   python scheduled_job_scanner.py
-  python scheduled_job_scanner.py "https://www.linkedin.com/jobs/view/4449829595/"
+  python scheduled_job_scanner.py "https://www.linkedin.com/jobs/view/4465660238/"
   BROWSER_USE_DISABLE_GUARDRAILS=1 python scheduled_job_scanner.py
 """
 
@@ -117,7 +117,7 @@ from mcp.tools.autofill_tools import build_and_compile_tailored_pdf, _get_defaul
 from mcp.tools.ats_tools import handle_calculate_ats_score
 from services.browser_use_agent import run_browser_use_autofill
 from services.job_searcher import normalize_timeframe
-from services.auth import async_supabase_request, SUPABASE_URL, SUPABASE_KEY
+from services.auth import async_supabase_request, supabase_request, SUPABASE_URL, SUPABASE_KEY
 import subprocess
 
 
@@ -330,16 +330,11 @@ def get_existing_tracked_urls() -> set:
     urls = set()
 
     # 1. Check Supabase applications table if configured
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-    if supabase_url and supabase_key:
+    if SUPABASE_URL and SUPABASE_KEY:
         try:
-            # pyrefly: ignore [missing-import]
-            from supabase import create_client  # type: ignore
-            client = create_client(supabase_url, supabase_key)
-            resp = client.table("applications").select("job_url").execute()
-            if resp and resp.data:
-                for row in resp.data:
+            records = supabase_request("applications?select=job_url", "GET")
+            if records and isinstance(records, list):
+                for row in records:
                     u = row.get("job_url")
                     if u:
                         urls.add(u.strip().split("?")[0].rstrip("/").lower())
