@@ -89,24 +89,28 @@ def find_master_resume_with_mac_tags() -> str:
 def evaluate_pdf_ats(pdf_path: str, jd_text: str, candidate_info: dict) -> int:
     """
     Extracts text from a compiled resume PDF and deterministically computes its overall ATS score against a JD.
+    Uses full taxonomy skill extraction from both the parsed PDF text and structured sections.
     """
     try:
         from services.resume_parser import extract_text_from_pdf
-        from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
+        from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score, _extract_taxonomy_skills
 
         raw_text = extract_text_from_pdf(pdf_path)
         if not raw_text:
             return 0
 
-        # Extract skills section dynamically from the PDF text
-        extracted_skills = []
+        # Extract skills using the full canonical taxonomy from the PDF text directly
+        extracted_taxonomy_skills = list(_extract_taxonomy_skills(raw_text))
+
+        # Also capture any explicitly formatted skills lines as fallback
+        extracted_skills = list(extracted_taxonomy_skills)
         for line in raw_text.split("\n"):
-            if any(k in line.lower() for k in ["languages:", "ai/ml", "data & platforms:", "software & infrastructure:", "skills:"]):
+            if any(k in line.lower() for k in ["languages:", "ai/ml", "data & platforms:", "software & infrastructure:", "systems & devops:", "tools:", "skills:"]):
                 parts = line.split(":", 1)
                 if len(parts) > 1:
                     extracted_skills.extend([s.strip() for s in parts[1].split(",") if s.strip()])
 
-        skills = extracted_skills if extracted_skills else candidate_info.get("core_skills", [])
+        skills = list(dict.fromkeys(extracted_skills)) if extracted_skills else candidate_info.get("core_skills", [])
 
         resume_data = {
             "name": candidate_info.get("name"),
@@ -431,7 +435,9 @@ async def run_pipeline(target_url: Optional[str] = None):
                     )
                     if pdf_res and os.path.exists(pdf_res):
                         tailored_ats = evaluate_pdf_ats(pdf_res, jd_text, candidate)
-                        master_ats = score  # initial score was against master profile / resume
+                        # Apples-to-apples: score the master PDF using the identical PDF text evaluator if exists, else fallback to score
+                        master_pdf_score = evaluate_pdf_ats(master_resume_pdf, jd_text, candidate) if (master_resume_pdf and os.path.exists(master_resume_pdf)) else score
+                        master_ats = master_pdf_score or score
                         print(f"   📊 ATS Score Comparison: Tailored PDF = {tailored_ats}% vs Master PDF = {master_ats}%")
                         if tailored_ats >= master_ats:
                             pdf_to_submit = pdf_res
@@ -441,7 +447,7 @@ async def run_pipeline(target_url: Optional[str] = None):
                             print(f"   ✓ Tailored PDF outperforms master ({tailored_ats}% >= {master_ats}%). Selected: {os.path.basename(pdf_to_submit)}")
                         else:
                             pdf_to_submit = master_resume_pdf
-                            print(f"   ℹ️ Master resume scored higher or equal ({master_ats}% > {tailored_ats}%). Keeping master resume: {os.path.basename(pdf_to_submit)}")
+                            print(f"   ℹ️ Master resume scored higher ({master_ats}% > {tailored_ats}%). Keeping master resume: {os.path.basename(pdf_to_submit)}")
                 except Exception as te:
                     print(f"   ⚠️ Tailoring error: {te}. Falling back to master resume.")
         else:
