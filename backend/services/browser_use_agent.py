@@ -258,10 +258,18 @@ def get_or_create_browser_session(headless: bool = False):
     """
     Maintains a single persistent browser instance across multiple runs by connecting to
     the shared Chrome daemon via CDP so subsequent jobs run in the same browser window.
+    Applies aggressive low-latency timings to eliminate idle waiting between actions.
     """
     from browser_use import BrowserSession
     cdp_url = ensure_persistent_browser(headless=headless)
-    return BrowserSession(cdp_url=cdp_url)
+    return BrowserSession(
+        cdp_url=cdp_url,
+        minimum_wait_page_load_time=0.1,             # Cut from 0.25s to 0.1s
+        wait_for_network_idle_page_load_time=0.15,   # Cut from 0.5s to 0.15s (network idle cutoff)
+        wait_between_actions=0.02,                   # Instantaneous action execution
+        highlight_elements=False,                    # Disable DOM bounding box calculation overhead
+        auto_download_pdfs=False,
+    )
 
 
 async def run_browser_use_autofill(
@@ -332,7 +340,9 @@ async def run_browser_use_autofill(
         available_file_paths=available_paths,
         use_vision=False,
         use_judge=False,
-        max_actions_per_step=10,
+        use_thinking=False,
+        max_history_items=5,
+        max_actions_per_step=15,
         flash_mode=True,
         enable_planning=False,
         max_failures=2,
@@ -349,18 +359,20 @@ async def run_browser_use_autofill(
     needs_vision_fallback = not is_done or any(ind in final_res.lower() for ind in ["unable to fill", "cannot locate", "stuck", "element not found"])
 
     if needs_vision_fallback:
-        print(f"[browser-use] 👁️ Pure-DOM pass encountered difficulties or could not complete. Retrying with Vision enabled...")
+        print(f"[browser-use] 👁️ Pure-DOM pass encountered difficulties. Activating Vision + Reasoning (thinking=True) fallback...")
         agent_vision = Agent(
-            task=task_prompt + "\nNOTE: Retrying with visual sight enabled. Use visual coordinates/elements to locate and fill any inputs that were missed.",
+            task=task_prompt + "\nNOTE: Retrying with visual sight and deep reasoning enabled. Analyze the visual layout carefully to locate, solve, and fill any inputs, custom dropdowns, or multi-step modals that were missed.",
             llm=llm,
             browser_session=browser_session,
             available_file_paths=available_paths,
             use_vision=True,
             vision_detail_level="low",
             use_judge=False,
+            use_thinking=True,      # Deliberate and reason through tricky/stuck states
+            max_history_items=8,
             max_actions_per_step=10,
-            flash_mode=True,
-            enable_planning=False,
+            flash_mode=False,       # Full reasoning capabilities for fallback
+            enable_planning=True,   # Plan around obstacles (modals, captchas, multi-page flows)
             max_failures=2,
             retry_delay=1,
         )
