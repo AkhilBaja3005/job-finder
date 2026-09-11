@@ -37,10 +37,10 @@ def format_posted_date_time(raw_post_date: Optional[str]) -> str:
     - Date only: '2026-09-11' -> '2026-09-11; 00:00'
     """
     now = datetime.now()
-    if not raw_post_date or not str(raw_post_date).strip():
+    if not raw_post_date or not raw_post_date.strip():
         return now.strftime("%Y-%m-%d; %H:%M")
 
-    raw = str(raw_post_date).strip()
+    raw = raw_post_date.strip()
     raw_lower = raw.lower()
 
     # Relative handling: 'just now', 'recent', 'today', 'active'
@@ -373,13 +373,16 @@ async def apply_to_job(
     print(f"[Browser-Use] 🔗 URL: {url}")
     print(f"[Browser-Use] 📄 Resume: {resume_path}")
     print(f"[Browser-Use] ⚡ Guardrails: {'Disabled (Auto-Submit Enabled)' if (auto_submit or os.getenv('BROWSER_USE_DISABLE_GUARDRAILS') in ('1', 'true', 'True')) else 'Enabled (Preview Mode)'}")
+    headless = os.getenv("BROWSER_USE_HEADLESS", "false").lower() in ("1", "true", "yes")
+    from config.constants import get_best_flash_lite_model
+    selected_model = get_best_flash_lite_model()
     try:
         res = await run_browser_use_autofill(
             job_url=url,
             resume_data=candidate,
             resume_pdf_path=resume_path,
-            headless=False,
-            model_name="gemini-3.5-flash-lite",
+            headless=headless,
+            model_name=selected_model,
             auto_submit=auto_submit,
             max_steps=50
         )
