@@ -27,6 +27,24 @@ def test_compileall_backend_source_files():
     assert success is True, "Compilation failed for one or more Python files in backend"
 
 
+def test_pyright_type_check():
+    """Runs Pyright static type checker across backend and applications_tracker to ensure 0 type errors."""
+    import subprocess
+    import shutil
+    pyright_bin = shutil.which("pyright") or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "venv", "bin", "pyright")
+    if not os.path.exists(pyright_bin):
+        pytest.skip("pyright binary not found in virtual environment")
+
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    result = subprocess.run(
+        [pyright_bin, "backend/", "applications_tracker/"],
+        cwd=root_dir,
+        capture_output=True,
+        text=True
+    )
+    assert result.returncode == 0, f"Pyright found type errors:\n{result.stdout}\n{result.stderr}"
+
+
 @pytest.mark.asyncio
 async def test_recruiter_caching_mechanism():
     """Verifies that discover_recruiter_via_grounding caches lookups by company name."""

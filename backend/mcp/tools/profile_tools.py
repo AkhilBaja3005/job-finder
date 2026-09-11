@@ -24,6 +24,13 @@ PROFILE_TOOLS_SPEC = [
                 "email": {"type": "string", "description": "Candidate email address"},
                 "linkedin": {"type": "string", "description": "LinkedIn profile URL"},
                 "location": {"type": "string", "description": "Current home/base location (e.g. 'London, UK')"},
+                "gender": {"type": "string", "description": "Candidate gender (e.g. 'Male', 'Female', 'Decline to self-identify')"},
+                "ethnicity": {"type": "string", "description": "Candidate ethnicity / race category (e.g. 'Asian', 'White', 'Hispanic', etc.)"},
+                "citizenship": {"type": "string", "description": "Candidate nationality / primary citizenship"},
+                "work_authorization": {"type": "string", "description": "Current work authorization status details"},
+                "requires_sponsorship": {"type": "boolean", "description": "Whether visa sponsorship is required"},
+                "veteran_status": {"type": "string", "description": "Veteran status (e.g. 'No', 'I am not a protected veteran')"},
+                "disability_status": {"type": "string", "description": "Disability status (e.g. 'No, I do not have a disability')"},
                 "target_roles": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -104,6 +111,13 @@ async def handle_save_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
     if "email" in args: candidate["email"] = args["email"]
     if "linkedin" in args: candidate["linkedin"] = args["linkedin"]
     if "location" in args: candidate["location"] = args["location"]
+    if "gender" in args: candidate["gender"] = args["gender"]
+    if "ethnicity" in args: candidate["ethnicity"] = args["ethnicity"]
+    if "citizenship" in args: candidate["citizenship"] = args["citizenship"]
+    if "work_authorization" in args: candidate["work_authorization"] = args["work_authorization"]
+    if "requires_sponsorship" in args: candidate["requires_sponsorship"] = args["requires_sponsorship"]
+    if "veteran_status" in args: candidate["veteran_status"] = args["veteran_status"]
+    if "disability_status" in args: candidate["disability_status"] = args["disability_status"]
     if "core_skills" in args: candidate["core_skills"] = args["core_skills"]
     if "experience_summary" in args: candidate["experience_summary"] = args["experience_summary"]
 

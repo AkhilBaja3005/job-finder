@@ -3,7 +3,9 @@ Discovery & Scraping MCP Tools.
 Enables agents to search and scrape Ashby, Greenhouse, Lever, LinkedIn, and Indeed.
 """
 
+import os
 import asyncio
+import json
 from typing import Dict, Any, Optional, List
 from services.job_searcher import find_matching_jobs
 from services.scraper import scrape_job_description
@@ -76,24 +78,41 @@ async def handle_search_jobs(arguments: Dict[str, Any]) -> Dict[str, Any]:
         resume_data = session.get("data") or {}
     
     if not resume_data and cand:
+        formatted_experience = []
+        for exp in cand.get("work_experience", []):
+            timeline = exp.get("timeline", "")
+            parts = timeline.split("–") if "–" in timeline else timeline.split("-")
+            start = parts[0].strip() if len(parts) > 0 else "2023"
+            end = parts[1].strip() if len(parts) > 1 else "Present"
+            formatted_experience.append({
+                "role": exp.get("role", "Engineer"),
+                "company": exp.get("company", "Tech"),
+                "start_date": start,
+                "end_date": end,
+                "description": exp.get("highlights", [])
+            })
+        if not formatted_experience:
+            formatted_experience = [{
+                "role": "Senior AI Engineer",
+                "company": "Tech Solutions",
+                "start_date": "June 2023",
+                "end_date": "Present",
+                "description": [cand.get("experience_summary", "")]
+            }]
+
         resume_data = {
             "name": cand.get("name"),
-            "location": cand.get("location"),
+            "location": cand.get("location", "London, UK"),
+            "requires_sponsorship": cand.get("requires_sponsorship", True),
             "skills": cand.get("core_skills", []),
-            "experience": [
-                {
-                    "role": "Senior AI Engineer",
-                    "company": "Tech Solutions",
-                    "start_date": "June 2023",
-                    "end_date": "Present",
-                    "description": [cand.get("experience_summary", "")]
-                }
-            ]
+            "education": cand.get("education", []),
+            "experience": formatted_experience
         }
 
     jobs = []
     est_jobs = []
     try:
+        partial_jobs = []
         async for chunk in find_matching_jobs(
             resume_data=resume_data,
             location=location,
@@ -102,25 +121,40 @@ async def handle_search_jobs(arguments: Dict[str, Any]) -> Dict[str, Any]:
         ):
             if not chunk or not chunk.strip():
                 continue
-            try:
-                data = json.loads(chunk.strip())
-                if data.get("type") == "result":
-                    jobs = data.get("jobs", [])
-                    est_jobs = data.get("est_jobs", [])
-                    break
-                elif data.get("type") == "partial_result" and "job" in data:
-                    jobs.append(data["job"])
-            except Exception:
-                pass
+            for line in chunk.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    if data.get("type") == "result":
+                        res_jobs = data.get("jobs", [])
+                        if res_jobs:
+                            jobs = res_jobs
+                        else:
+                            jobs = partial_jobs
+                        est_jobs = data.get("est_jobs", [])
+                    elif data.get("type") == "partial_result" and "job" in data:
+                        partial_jobs.append(data["job"])
+                except Exception:
+                    pass
+            if jobs:
+                break
+        if not jobs and partial_jobs:
+            jobs = partial_jobs
     except Exception as e:
         print(f"[handle_search_jobs] Error during job search: {e}")
+
+    is_cloud = any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")) or os.getenv("ENVIRONMENT") == "production"
+    job_slice_limit = 25 if is_cloud else 120
+    est_slice_limit = 10 if is_cloud else 50
 
     return {
         "count": len(jobs),
         "location": location,
         "timeframe": timeframe,
-        "jobs": jobs[:25],
-        "est_jobs": est_jobs[:10]
+        "jobs": jobs[:job_slice_limit],
+        "est_jobs": est_jobs[:est_slice_limit]
     }
 
 

@@ -52,13 +52,20 @@ The project includes:
 - **Overleaf Integration**: One-click direct export to Overleaf for both tailored and original master resumes.
 - **On-Demand Styled Email Delivery**: 1-click delivery of tailored resume PDFs with full metadata (`Target Role`, `Company`, `ATS Score`) to candidate inboxes.
 
-### ⚡ 4. Multimodal & Deterministic Auto-Fill Assistant
+### ⚡ 4. Autonomous Web Autofill Engine (`browser-use` + Gemini)
+- **Two-Phase Adaptive Execution**: Fast pure-DOM pass (`use_vision=False`, `use_thinking=False`) for sub-10s filling, with an adaptive fallback to **Vision + Deep Reasoning (`use_thinking=True`)** for custom canvas widgets or shadow DOM hurdles.
+- **Pre-Flight HTTP Probing**: Follows redirects to resolve direct ATS destinations (e.g. LinkedIn $\rightarrow$ Ashby) and exits in **~200ms** on closed/expired listings without launching Chrome.
+- **Persistent Chrome Instance**: Reuses a dedicated Chrome daemon on CDP port 9222 with performance flags (disabled image painting, timer throttling bypass).
+- **Safety Guardrails**: Default `REVIEW_ONLY` mode navigates through multi-step forms and pauses on the final preview step; `AUTO_SUBMIT` mode autonomously submits when enabled.
+- 📖 **Full Architecture Guide**: See [`docs/AUTONOMOUS_AUTOFILL_README.md`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/docs/AUTONOMOUS_AUTOFILL_README.md).
+
+### 🧩 5. In-Page Chrome Extension Assistant
 - **Zero-Autofill Architecture**: Uses smart field classifiers and deterministic fallbacks for contact info, notice periods, salary expectations, and work authorizations.
 - **Embedded `<iframe>` Support**: Injects into both top-level and embedded ATS frames (Greenhouse/Lever).
 - **Open-Ended Question Engine**: Instant screening answer generation for essays like *"Why this company?"* or *"Describe a challenging project"*.
 - **Inline '✨ AI Answer' Buttons**: Directly embedded beside textareas and form inputs on live job pages.
 
-### 🌐 5. Grounding with Google Search & Verified Recruiter Discovery
+### 🌐 6. Grounding with Google Search & Verified Recruiter Discovery
 - **Native Google Search Grounding**: Connects Gemini models with search tools directly to real-time web content using `tools=[{"google_search": {}}]` with citation and source link extraction.
 - **Verified Recruiter & Hiring Manager Intel**: Discovers active technical recruiters, talent sourcers, and engineering hiring managers on LinkedIn for any target role and company (`POST /jobs/find_recruiter`).
 - **7-Day TTL Smart Caching**: Normalizes corporate suffixes (e.g. `Stripe, Inc.` $\rightarrow$ `stripe`) to eliminate duplicate billing queries.
@@ -99,6 +106,8 @@ The project includes a Manifest V3 Chrome Extension located in the `/extension` 
 
 ```
 Job Finder/
+├── docs/                 # Architectural specifications & engine guides
+│   └── AUTONOMOUS_AUTOFILL_README.md  # Detailed browser-use autofill architecture
 ├── frontend/             # React 19 + Vite SPA — Single-page interactive dashboard
 ├── backend/              # Modular FastAPI application & microservices
 │   ├── main.py           # Application entrypoint & APIRouter registration
@@ -109,6 +118,7 @@ Job Finder/
 │   │   ├── auth_routes.py    # /auth/google, /auth/callback, /user/me, /user/sync_profile
 │   │   └── admin_routes.py   # /admin/stats, /admin/clean_storage
 │   ├── services/
+│   │   ├── browser_use_agent.py# Autonomous application filling engine (browser-use + Gemini)
 │   │   ├── resume_parser.py    # Multi-format resume parsing & category extractor
 │   │   ├── ats_scorer.py       # Deterministic ATS scoring & timeline analysis engine
 │   │   ├── recruiter_finder.py # Google Search Grounding for verified LinkedIn recruiters
@@ -123,6 +133,8 @@ Job Finder/
 │       ├── latex_utils.py      # Pre-flight syntax validation, sanitization, macro hotfixes, Tectonic compilation
 │       ├── ttl_cache.py        # Thread-safe bounded TTL cache for sub-millisecond memory safety
 │       └── ssl_utils.py        # Verified TLS context handler
+├── applications_tracker/ # Scheduled batch scanner, tailoring pipeline & ledger
+│   └── scheduled_job_scanner.py
 └── extension/            # Chrome Extension (Manifest V3 - Side Panel)
     ├── manifest.json     # Extension permissions, sidePanel, host rules, and metadata
     ├── popup.html / js   # Persistent side panel interface with offline fallback & rescan
@@ -257,4 +269,109 @@ cd backend
 python mcp/comprehensive_test.py
 ```
 
+---
+
+## 🌐 Autonomous Job Scanner & Browser-Use Pipeline
+
+Job Finder includes an autonomous discovery, ATS evaluation, LaTeX resume tailoring, and browser auto-fill engine powered by **`browser-use`** with **`gemini-3.5-flash-lite`** and dual-persistence (Supabase + CSV).
+
+### Workflow & Decision Engine:
+1. **Multi-Platform Discovery**: Searches Greenhouse, Ashby, Lever direct ATS portals, LinkedIn, Indeed, and Reed for active postings matching candidate search preferences within the past 24 hours.
+2. **ATS Threshold Scoring & Selective Tailoring**:
+   - **ATS Score $\ge 80\%$ (Direct Apply)**: Directly submits the candidate's master resume without needing modifications.
+   - **ATS Score $65\% - 79\%$ (Tailor & Apply)**: Automatically drafts and compiles a tailored 1-page LaTeX & PDF resume aligned with the job's missing keywords before submitting.
+   - **ATS Score $< 65\%$ (Saved & Scored)**: Logged to the tracker for manual review without triggering automatic submission.
+3. **Dual Persistence Tracking**: Every application attempt is recorded to Supabase (`applications` table, `user_id = 23`) with automatic fallback to `applications_tracker/job_applications_tracker.csv`.
+4. **Already-Applied Detection**: Queries Supabase and local CSV to prevent duplicate submissions, and utilizes in-page visual detection to instantly exit if an application was already submitted on the target platform.
+5. **Visa Sponsorship & Compliance Handling**: Explicitly evaluates visa knockout constraints (`requires_sponsorship: true`), ensuring truthful answering on all multiple-choice ATS screening questionnaires.
+
+### Running the Scanner:
+```bash
+# Preview mode (Safety Guardrails active — reviews before final submit):
+source backend/venv/bin/activate
+python applications_tracker/scheduled_job_scanner.py
+
+# Autonomous Auto-Submit Mode (Submits applications directly):
+source backend/venv/bin/activate
+BROWSER_USE_DISABLE_GUARDRAILS=1 python applications_tracker/scheduled_job_scanner.py
+
+# Direct single-URL autofill:
+source backend/venv/bin/activate
+BROWSER_USE_DISABLE_GUARDRAILS=1 python applications_tracker/scheduled_job_scanner.py "https://uk.linkedin.com/jobs/view/..."
+```
+
+---
+
+## ⚡ Ad-Hoc Master Resume Auto-Filler (`adhoc_auto_filler.py`)
+
+When you have a list of job URLs or an existing tracker and want to **immediately auto-fill using your Master Resume** without LaTeX recompilation or tailoring overhead:
+
+### Features:
+- **Zero Tailoring Compilation**: Directly attaches your macOS Red-tagged Master Resume from iCloud or repository fallback.
+- **Multiple Input Formats**: Takes jobs directly from a CSV file (`--csv`), an Excel spreadsheet (`--excel`), or command-line URLs (`--url`).
+- **Status & Limit Filtering**: Selectively runs on specific statuses (e.g. `--filter "Ready to Apply"`) and controls batch sizes (`--limit 5`).
+- **Safety Modes**: Supports preview/review mode (default) or autonomous submission (`--auto-submit`).
+
+### CLI Usage:
+```bash
+# 1. Apply to specific URL(s) using Master Resume
+python applications_tracker/adhoc_auto_filler.py \
+  --url "https://job-boards.greenhouse.io/company/jobs/123"
+
+# 2. Process top 5 jobs from the applications tracker CSV
+python applications_tracker/adhoc_auto_filler.py \
+  --csv applications_tracker/job_applications_tracker.csv \
+  --limit 5
+
+# 3. Process jobs from an Excel sheet with autonomous auto-submit
+python applications_tracker/adhoc_auto_filler.py \
+  --excel target_jobs.xlsx \
+  --auto-submit
+
+# 4. Filter by status in CSV
+python applications_tracker/adhoc_auto_filler.py \
+  --filter "Ready to Apply" \
+  --limit 10
+```
+
+---
+
+## 🌟 LinkedIn 'Top Applicant' Scanner & Auto-Apply (`linkedin_top_applicant_scanner.py`)
+
+Dedicated autonomous scanner that specifically targets LinkedIn postings where your profile has the **"You’d be a top applicant"** (or top 10% / top 25% / stand out) badge, auto-applying with zero-tailoring latency using your Master Resume.
+
+### Key Capabilities:
+- **Persistent Chrome Session (CDP Port 9222)**: Reuses your authenticated Chrome profile (`backend/user_data/browser_use_chrome_session`), eliminating repetitive LinkedIn logins, captcha prompts, and session resets.
+- **Top Applicant Badge DOM Filter**: Evaluates rendered search listing cards and detail views to pinpoint roles where you have an unfair competitive advantage.
+- **Master Resume Direct Dispatch**: Dispatches your macOS Red-tagged Master Resume directly without unnecessary LaTeX recompilation.
+- **Automated Email OTP Retrieval via Gmail Tab**: If an external application portal (e.g. micro1, Ashby, Workday) asks for an email verification code, the agent automatically opens `https://mail.google.com` in a new tab, extracts the latest OTP code, and enters it seamlessly.
+- **Dual Persistence**: Every submission is automatically logged to Supabase and tracked in `job_applications_tracker.csv`.
+
+### CLI Usage:
+```bash
+# 1. Preview Mode (Safety Guardrails active):
+python applications_tracker/linkedin_top_applicant_scanner.py
+
+# 2. Autonomous Auto-Submit Mode:
+python applications_tracker/linkedin_top_applicant_scanner.py --auto-submit
+
+# 3. Custom keywords and limit:
+python applications_tracker/linkedin_top_applicant_scanner.py \
+  --keywords "Machine Learning Engineer, AI Engineer" \
+  --limit 10 \
+  --auto-submit
+```
+
+---
+
+## ⏰ Automated Daily macOS Scheduling (`launchd`)
+
+The pipeline includes an automated daily scheduler that executes every morning at **9:00 AM** on macOS via `launchd`:
+
+- **Execution Script**: [`applications_tracker/run_daily_scanner.sh`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/applications_tracker/run_daily_scanner.sh)
+- **LaunchAgent Plist**: `~/Library/LaunchAgents/com.jobfinder.daily_scanner.plist`
+- **Execution Workflow**:
+  1. **Phase 1 (ATS Scanner)**: Searches Ashby, Greenhouse, Lever, Workday for high-fit roles and applies/tailors resumes.
+  2. **Phase 2 (LinkedIn Top Applicant)**: Scans LinkedIn for Top Applicant badge matches and executes autonomous auto-submission.
+- **Daily Logs**: Stored under `applications_tracker/logs/scanner_YYYY-MM-DD.log`.
 

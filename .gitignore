@@ -19,3 +19,4 @@ pyrightconfig.json
 *.swp
 applications_tracker/
 backend/config/candidate_profile.json
+backend/data/

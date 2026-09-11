@@ -1,12 +1,22 @@
 {
   "candidate": {
+    "user_id": 34,
     "name": "Akhil Baja",
     "email": "akhilbaja.work@gmail.com",
     "phone": "+91 9948083135",
     "linkedin": "https://linkedin.com/in/akhilbaja",
     "github": "https://github.com/AkhilBaja3005",
-    "portfolio": "https://akhilbaja.dev",
+    "portfolio": "https://akhilbaja3005.github.io/AkhilBaja3005/",
     "location": "London, UK",
+    "postal_code": "W12 0BZ",
+    "postcode": "W12 0BZ",
+    "gender": "Male",
+    "ethnicity": "Asian (Indian)",
+    "citizenship": "Indian",
+    "work_authorization": "Authorized to work in the UK (Student/Graduate Route / Sponsorship Eligible); Authorized to work in India",
+    "requires_sponsorship": true,
+    "veteran_status": "No",
+    "disability_status": "No",
     "experience_summary": "AI/ML Systems Engineer with 3+ years of experience engineering production-grade GenAI, LLM infrastructure, and distributed data pipelines at Qualcomm and Axis Bank. Architected cross-language context pipelines reducing retrieval latency by 60% and boosting LLM accuracy by 46%, alongside enterprise GenAI platforms serving 1,000+ end users. Incoming MSc AI student at Imperial College London specializing in scalable AI infrastructure.",
     "education": [
       {
@@ -181,7 +191,12 @@
   },
   "search_preferences": {
     "target_roles": [
-      "AI Engineer"
+      "AI Engineer",
+      "Machine Learning Engineer",
+      "Generative AI Engineer",
+      "AI Systems Engineer",
+      "Data Engineer",
+      "Senior Data Scientist"
     ],
     "target_locations": [
       "London, UK"

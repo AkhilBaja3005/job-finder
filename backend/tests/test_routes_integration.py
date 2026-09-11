@@ -79,7 +79,7 @@ def test_user_profile_sync():
             "name": "Akhil Baja",
             "email": "akhilbaja.work@gmail.com",
             "location": "London, UK",
-            "portfolio": "https://akhilbaja.dev",
+            "portfolio": "https://akhilbaja3005.github.io/AkhilBaja3005/",
             "notice_period": "1 month",
             "salary_expectations": "Competitive market rate",
             "work_auth": "Yes",
@@ -90,7 +90,7 @@ def test_user_profile_sync():
     data = response.json()
     assert data["status"] == "success"
     assert data["profile"]["location"] == "London, UK"
-    assert data["profile"]["portfolio"] == "https://akhilbaja.dev"
+    assert data["profile"]["portfolio"] == "https://akhilbaja3005.github.io/AkhilBaja3005/"
     assert data["profile"]["notice_period"] == "1 month"
     assert data["profile"]["work_auth"] == "Yes"
     assert data["profile"]["sponsorship"] == "No"

@@ -28,7 +28,19 @@ from utils.location_resolver import get_indeed_domain_for_location, resolve_loca
 from services.log_queue import LLMClientLogQueue, log_ist
 
 # ─── System Caps & TTL Cache ─────────────────────────────────────────────
-DISCOVERY_JD_FETCH_CAP = 15       # Top 15 web-scraped jobs get real JD ATS scoring
+def _is_cloud_environment() -> bool:
+    """Detects whether running in a cloud/production container (Render, Hugging Face, Railway, Fly)."""
+    return any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")) or os.getenv("ENVIRONMENT") == "production"
+
+# In production / cloud instances: keep conservative limits (15 total, ~8 per platform) to avoid memory/rate limits
+# In local development: process up to 50 LinkedIn + 50 Indeed jobs
+if _is_cloud_environment():
+    DISCOVERY_JD_FETCH_CAP = 15
+    DISCOVERY_PLATFORM_FETCH_CAP = 8
+else:
+    DISCOVERY_JD_FETCH_CAP = 100
+    DISCOVERY_PLATFORM_FETCH_CAP = 50
+
 DISCOVERY_FETCH_CONCURRENCY = 5  # Scaled up to 5 concurrent browser tasks utilizing 3GB combined memory
 _job_search_cache = TTLCache(ttl_seconds=300)  # 5-minute TTL search cache
 _indeed_blocked_circuit_breaker = False        # Flips to True if 1 Indeed request gets Cloudflare blocked
@@ -75,6 +87,29 @@ def generate_search_queries_from_resume(resume_data: dict, custom_api_key: Optio
         return [recent_roles[0]] if recent_roles else ["Software Engineer"]
 
 
+# ─── Timeframe Normalizer ──────────────────────────────────────────────
+
+def normalize_timeframe(timeframe: Optional[str]) -> str:
+    """
+    Normalizes human/config timeframe strings to standardized search keys:
+    '24h', '48h', '1w', '1m', or 'all'.
+    """
+    if not timeframe:
+        return "48h"
+    t = str(timeframe).strip().lower().replace(" ", "_").replace("-", "_")
+    if t in ("24h", "24", "1d", "day", "past_24_hours", "past_24h", "past_1_day", "last_24_hours", "24_hours"):
+        return "24h"
+    if t in ("48h", "48", "2d", "past_48_hours", "past_48h", "past_2_days", "last_48_hours", "48_hours"):
+        return "48h"
+    if t in ("1w", "7d", "week", "past_week", "past_7_days", "last_week", "1_week"):
+        return "1w"
+    if t in ("1m", "30d", "month", "past_month", "past_30_days", "last_month", "1_month"):
+        return "1m"
+    if t in ("all", "any"):
+        return "all"
+    return "48h"
+
+
 # ─── Direct ATS Job Search with Gemini Google Search Grounding ─────────────
 
 _ats_grounding_quota_exhausted = False
@@ -85,11 +120,6 @@ def search_direct_ats_jobs(
     timeframe: str = "48h",
     api_key: Optional[str] = None
 ) -> List[JobSearchResult]:
-    """
-    Leverages Gemini with Google Search Grounding to directly search
-    Greenhouse, Ashby, Lever, and Workday without bot-blocking or scraping hurdles.
-    Enforces strict role relevance and freshness timeframe.
-    """
     global _ats_grounding_quota_exhausted
     if _ats_grounding_quota_exhausted:
         return []
@@ -98,13 +128,15 @@ def search_direct_ats_jobs(
     if not gemini_key:
         return []
 
+    tf_norm = normalize_timeframe(timeframe)
+
     # Map timeframe
     freshness_prompt = {
         "24h": "posted in the last 24 hours (strictly within the past 1 day)",
         "48h": "posted in the last 48 hours (strictly within the past 2 days)",
         "1w": "posted within the last 7 days",
         "1m": "posted within the last 30 days"
-    }.get(timeframe, "posted recently")
+    }.get(tf_norm, "posted recently")
 
     prompt = f"""Use Google Search to find 5 to 10 active, open job postings for '{role}' in '{location}' that are hosted on direct ATS career portals (Greenhouse, Ashby, Lever, or Workday).
 Every job must be {freshness_prompt}.
@@ -127,41 +159,58 @@ For each match found, return a valid JSON array of objects with the exact schema
 Do not wrap in explanatory text. Only return the JSON array."""
     try:
         from config.constants import DEFAULT_GROUNDED_SEARCH_MODELS
-        client = genai.Client(api_key=gemini_key)
+        from services.gemini_client import get_gemini_api_keys
+        
+        available_keys = [api_key] if api_key else (get_gemini_api_keys() or [os.getenv("GEMINI_API_KEY", "")])
+        available_keys = [k for k in available_keys if k]
+        if not available_keys:
+            return []
+
         raw_text = ""
         ATS_SEARCH_MODELS = DEFAULT_GROUNDED_SEARCH_MODELS
         import concurrent.futures
+        all_429 = True
         for search_model in ATS_SEARCH_MODELS:
-            try:
-                def _do_ats_search():
-                    return client.models.generate_content(
-                        model=search_model,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            tools=[types.Tool(google_search=types.GoogleSearch())],
-                            temperature=0.1
+            for key_candidate in available_keys:
+                client = genai.Client(api_key=key_candidate)
+                try:
+                    def _do_ats_search():
+                        return client.models.generate_content(
+                            model=search_model,
+                            contents=prompt,
+                            config=types.GenerateContentConfig(
+                                tools=[types.Tool(google_search=types.GoogleSearch())],
+                                temperature=0.1
+                            )
                         )
-                    )
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    fut = executor.submit(_do_ats_search)
-                    try:
-                        response = fut.result(timeout=12.0)
-                    except concurrent.futures.TimeoutError:
-                        print(f"[Direct ATS Search] Model {search_model} timed out after 12s, trying fallback...")
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        fut = executor.submit(_do_ats_search)
+                        try:
+                            response = fut.result(timeout=12.0)
+                        except concurrent.futures.TimeoutError:
+                            print(f"[Direct ATS Search] Model {search_model} timed out after 12s, trying fallback...")
+                            continue
+                    if response and response.text:
+                        raw_text = response.text.strip()
+                        if raw_text:
+                            break
+                except Exception as model_err:
+                    err_str = str(model_err).lower()
+                    if "429" in err_str or "resource_exhausted" in err_str:
+                        key_hint = f"...{key_candidate[-6:]}" if len(key_candidate) >= 6 else "key"
+                        print(f"[Direct ATS Search] Key {key_hint} quota limit reached (429), rotating to next API key...")
                         continue
-                if response and response.text:
-                    raw_text = response.text.strip()
-                    if raw_text:
-                        break
-            except Exception as model_err:
-                err_str = str(model_err).lower()
-                if "429" in err_str or "resource_exhausted" in err_str:
-                    _ats_grounding_quota_exhausted = True
-                    print(f"[Direct ATS Search] Quota limit reached (429), flipping circuit breaker ON for session.")
+                    all_429 = False
+                    print(f"[Direct ATS Search] Model {search_model} warning: {model_err}")
                     break
+            if raw_text:
+                break
                 print(f"[Direct ATS Search] Model {search_model} failed: {model_err}, trying fallback...")
                 continue
         if not raw_text:
+            if all_429:
+                _ats_grounding_quota_exhausted = True
+                print("[Direct ATS Search] All candidate keys quota limited (429), flipping circuit breaker ON for session.")
             return []
             
         items = []
@@ -264,6 +313,7 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
     """Scrapes LinkedIn's guest job search API for postings from the specified timeframe."""
     encoded_keyword = urllib.parse.quote(keyword)
     encoded_location = urllib.parse.quote(location)
+    tf_norm = normalize_timeframe(timeframe)
     
     # Map timeframe to LinkedIn f_TPR parameter (seconds)
     tpr_map = {
@@ -272,7 +322,7 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
         "1w": "r604800",
         "1m": "r2592000"
     }
-    tpr = tpr_map.get(timeframe, "r172800")
+    tpr = tpr_map.get(tf_norm, "r172800")
     url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={encoded_keyword}&location={encoded_location}&f_TPR={tpr}&start=0"
     
     log_ist(f"[Job Searcher] Fetching LinkedIn: {url}")
@@ -347,17 +397,18 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "2
 
     encoded_keyword = urllib.parse.quote(keyword)
     encoded_location = urllib.parse.quote(location)
+    tf_norm = normalize_timeframe(timeframe)
     
     # Calculate cutoff date based on requested timeframe
     from datetime import datetime, timedelta
     days = 2
-    if timeframe == "24h":
+    if tf_norm == "24h":
         days = 1
-    elif timeframe == "48h":
+    elif tf_norm == "48h":
         days = 2
-    elif timeframe == "1w":
+    elif tf_norm == "1w":
         days = 7
-    elif timeframe == "1m":
+    elif tf_norm == "1m":
         days = 30
         
     cutoff_date = datetime.now() - timedelta(days=days)
@@ -481,6 +532,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 
     encoded_keyword = urllib.parse.quote(keyword)
     encoded_location = urllib.parse.quote(location)
+    tf_norm = normalize_timeframe(timeframe)
     
     # Resolve regional Indeed domain based on target location (e.g. Hyderabad -> in.indeed.com)
     indeed_domain, country_code = get_indeed_domain_for_location(location)
@@ -492,7 +544,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
         "1w": "7",
         "1m": "30"
     }
-    fromage = fromage_map.get(timeframe, "2")
+    fromage = fromage_map.get(tf_norm, "2")
     url = f"https://{indeed_domain}/jobs?q={encoded_keyword}&l={encoded_location}&fromage={fromage}"
     
     log_ist(f"[Job Searcher] Fetching Indeed ({indeed_domain}, Country={country_code}): {url}")
@@ -646,7 +698,6 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 
 # ─── Combined Aggregation & Scoring Pipeline ──────────────────────────────
 
-DISCOVERY_JD_FETCH_CAP = 30
 # Dynamically scale concurrency based on the hosting environment:
 # - We check for an explicit override environment variable SCRAPER_CONCURRENCY
 # - Render automatically injects "RENDER" into all web service environments under the hood.
@@ -741,6 +792,11 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
                 scraped = await scrape_job_description(job.url, browser=browser, on_log=on_log)
                 if scraped and scraped.get("description"):
                     _job_search_cache.set(url_cache_key, scraped)
+                    try:
+                        from services.jd_cache import cache_set
+                        cache_set(job.url, scraped)
+                    except Exception:
+                        pass
             except Exception as e:
                 print(f"[Job Searcher] Failed to fetch JD for '{job.title}' at {job.url}: {e}")
                 return None
@@ -982,20 +1038,18 @@ async def find_matching_jobs(
         li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=18)
         reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=14)
         ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=22)
-        ats_task = _safe_run(search_direct_ats_jobs, q, location, timeframe, custom_api_key, timeout=25)
 
-        li_j, reed_j, ind_j, ats_j = await asyncio.gather(li_task, reed_task, ind_task, ats_task)
-        return q, li_j, reed_j, ind_j, ats_j
+        li_j, reed_j, ind_j = await asyncio.gather(li_task, reed_task, ind_task)
+        return q, li_j, reed_j, ind_j
 
     query_tasks = [asyncio.create_task(_fetch_query_cluster(q)) for q in queries]
     for completed_task in asyncio.as_completed(query_tasks):
-        q, li_jobs, reed_jobs, ind_jobs, ats_jobs = await completed_task
+        q, li_jobs, reed_jobs, ind_jobs = await completed_task
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(ind_jobs)
-        raw_jobs.extend(ats_jobs)
         indeed_jobs_for_est.extend(ind_jobs)
-        res_msg = f"✓ Found {len(ats_jobs)} Direct ATS (Ashby/Greenhouse/Lever/Workday), {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed & {len(reed_jobs)} Reed.co.uk postings for '{q}'" if target_country == "GB" else f"✓ Found {len(ats_jobs)} Direct ATS (Ashby/Greenhouse/Lever/Workday), {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{q}'"
+        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed & {len(reed_jobs)} Reed.co.uk postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{q}'"
         log_ist(res_msg)
         yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 
@@ -1039,12 +1093,30 @@ async def find_matching_jobs(
             except Exception as pe:
                 print(f"[find_matching_jobs] Direct portal scoring error for '{job.title}': {pe}")
 
-    # Phase B: Scrape and score top external web listings (LinkedIn / Indeed)
-    web_scored_batch = scraped_jobs[:DISCOVERY_JD_FETCH_CAP]
-    title_only_batch = scraped_jobs[DISCOVERY_JD_FETCH_CAP:]
+    # Separate LinkedIn and Indeed scraped jobs to enforce fair platform allocation
+    linkedin_scraped = [j for j in scraped_jobs if "linkedin" in j.platform.lower() or "linkedin" in j.url.lower()]
+    indeed_scraped = [j for j in scraped_jobs if "indeed" in j.platform.lower() or "indeed" in j.url.lower()]
+    other_scraped = [j for j in scraped_jobs if j not in linkedin_scraped and j not in indeed_scraped]
+
+    linkedin_scraped.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
+    indeed_scraped.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
+    other_scraped.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
+
+    # Take top up to 50 from LinkedIn and up to 50 from Indeed for accurate JD fetching
+    web_scored_batch = (
+        linkedin_scraped[:DISCOVERY_PLATFORM_FETCH_CAP] +
+        indeed_scraped[:DISCOVERY_PLATFORM_FETCH_CAP] +
+        other_scraped[:20]
+    )
+    # Remaining become title_only_batch
+    title_only_batch = (
+        linkedin_scraped[DISCOVERY_PLATFORM_FETCH_CAP:] +
+        indeed_scraped[DISCOVERY_PLATFORM_FETCH_CAP:] +
+        other_scraped[20:]
+    )
 
     if web_scored_batch:
-        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(web_scored_batch)} web listings (LinkedIn / Indeed)..."}) + " " * 2048 + "\n"
+        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(web_scored_batch)} web listings ({min(len(linkedin_scraped), DISCOVERY_PLATFORM_FETCH_CAP)} LinkedIn, {min(len(indeed_scraped), DISCOVERY_PLATFORM_FETCH_CAP)} Indeed)..."}) + " " * 2048 + "\n"
         semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
         
         async def _score_and_stream(job, log_queue_stream):
@@ -1092,7 +1164,7 @@ async def find_matching_jobs(
                 yield json.dumps({"type": "log", "message": "⏳ Processing web listings..."}) + " " * 2048 + "\n"
 
     if title_only_batch:
-        yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + " " * 2048 + "\n"
+        yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title heuristic..."}) + " " * 2048 + "\n"
         for job in title_only_batch:
             r = _score_job_with_title_heuristic(job, resume_data)
             scored_jobs.append(r)
@@ -1104,14 +1176,17 @@ async def find_matching_jobs(
     estimated_count = len(scored_jobs) - accurate_count
     yield json.dumps({"type": "log", "message": f"🏁 Scanned {len(scored_jobs)} matches successfully! ({accurate_count} JD-scored, {estimated_count} title-estimated)"}) + "\n"
 
-    # Prepare EST (External Sources - Indeed) section
+    # Prepare EST section for any leftover Indeed jobs that weren't included in scored_jobs
+    scored_urls = {j.get("url", "").split("?")[0].rstrip("/").lower() for j in scored_jobs}
     est_jobs = []
     if indeed_jobs_for_est:
-        # Deduplicate Indeed jobs
         seen_indeed_ids = set()
         for job in indeed_jobs_for_est:
-            if job.job_id not in seen_indeed_ids:
+            u_norm = job.url.split("?")[0].rstrip("/").lower()
+            if job.job_id not in seen_indeed_ids and u_norm not in scored_urls:
                 seen_indeed_ids.add(job.job_id)
+                # Score with title heuristic so it's not arbitrary score 0
+                h_score = _title_heuristic_score(job, resume_data)
                 est_jobs.append({
                     "title": job.title,
                     "company": job.company,
@@ -1119,9 +1194,9 @@ async def find_matching_jobs(
                     "url": job.url,
                     "source": "Indeed",
                     "posted_date": job.post_date_raw,
-                    "score": 0,  # Not scored - external source
+                    "score": h_score,
                     "estimated": True,
-                    "reason": "External source (Indeed) - not scored by our ATS engine"
+                    "reason": "Title-estimated from Indeed search listing"
                 })
         yield json.dumps({"type": "log", "message": f"📌 Found {len(est_jobs)} Indeed jobs in EST section (not scored by our engine)"}) + "\n"
 

@@ -13,6 +13,11 @@ from typing import Optional, Callable, Dict, Any, List
 
 from utils.ssl_utils import SSL_CONTEXT as _SSL_CONTEXT
 
+# pyrefly: ignore [missing-import]
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Global Configurations & Provider Layout Models
 # ─────────────────────────────────────────────────────────────────────────────
@@ -108,10 +113,64 @@ def clean_schema(schema: Any, inside_properties: bool = False) -> Any:
         return schema
 
 
+def get_gemini_api_keys() -> List[str]:
+    """
+    Collects all configured Gemini API keys from environment variables.
+    Supports:
+      - GEMINI_API_KEYS (comma-separated list of keys)
+      - GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3, GEMINI_API_KEY_4, GEMINI_API_KEY_5...
+    Filters out empty or placeholder values.
+    """
+    keys: List[str] = []
+    
+    # 1. Comma-separated multi-key variable
+    multi_keys = os.getenv("GEMINI_API_KEYS", "")
+    if multi_keys:
+        for k in multi_keys.split(","):
+            cleaned = k.strip()
+            if cleaned and not cleaned.startswith("YOUR_") and not cleaned.startswith("ENTER_"):
+                if cleaned not in keys:
+                    keys.append(cleaned)
+                    
+    # 2. Individual indexed variables (GEMINI_API_KEY, GEMINI_API_KEY_2, ...)
+    primary = os.getenv("GEMINI_API_KEY", "").strip()
+    if primary and not primary.startswith("YOUR_") and not primary.startswith("ENTER_") and primary not in keys:
+        keys.append(primary)
+        
+    for idx in range(2, 11):
+        k = os.getenv(f"GEMINI_API_KEY_{idx}", "").strip()
+        if k and not k.startswith("YOUR_") and not k.startswith("ENTER_") and k not in keys:
+            keys.append(k)
+            
+    return keys
+
+
+_key_rotation_idx = 0
+_key_rotation_lock = threading.Lock()
+
+def get_next_gemini_api_key(custom_api_key: Optional[str] = None) -> str:
+    """
+    Returns the next active Gemini API key using round-robin rotation.
+    """
+    if custom_api_key and (custom_api_key.startswith("AIza") or custom_api_key.startswith("AQ.")):
+        return custom_api_key
+        
+    keys = get_gemini_api_keys()
+    if not keys:
+        fallback = os.getenv("GEMINI_API_KEY", "").strip()
+        if fallback:
+            return fallback
+        raise ValueError("No valid GEMINI_API_KEY found in environment or .env file.")
+        
+    global _key_rotation_idx
+    with _key_rotation_lock:
+        key = keys[_key_rotation_idx % len(keys)]
+        _key_rotation_idx += 1
+        return key
+
+
 def get_gemini_client(custom_api_key: Optional[str] = None) -> genai.Client:
-    api_key = custom_api_key or os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY is not set.")
+    api_key = get_next_gemini_api_key(custom_api_key)
     return genai.Client(api_key=api_key)
 
 
@@ -245,12 +304,11 @@ def _generate_with_model_list(
             if on_log:
                 on_log(json.dumps({"type": "llm_warn", "provider": "cloudflare", "message": f"Cloudflare failed: {str(cf_err)[:100]}"}))
 
-    # ── STAGE 3: Native Gemini Client (Final Fallback Floor) ─────────────────
-    gemini_key = custom_api_key if (custom_api_key and (custom_api_key.startswith("AIza") or custom_api_key.startswith("AQ."))) else os.getenv("GEMINI_API_KEY")
-    if not gemini_key:
+    available_keys = [custom_api_key] if (custom_api_key and (custom_api_key.startswith("AIza") or custom_api_key.startswith("AQ."))) else (get_gemini_api_keys() or [os.getenv("GEMINI_API_KEY", "")])
+    available_keys = [k for k in available_keys if k]
+    if not available_keys:
         raise ValueError("Pipeline dropped to final floor, but GEMINI_API_KEY environment variable is missing.")
 
-    client = get_gemini_client(gemini_key)
     config_args: Any = {
         "temperature": 0.1,
         "automatic_function_calling": types.AutomaticFunctionCallingConfig(disable=True)
@@ -261,32 +319,35 @@ def _generate_with_model_list(
 
     last_error = None
     for model_name in model_list:
-        for retry_attempt in range(1):  # Single attempt per model variant to fail fast & prevent thread starvation
-            try:
-                _throttle_for_rpm(model_name)
-                msg_llm = f"[LLM] Attempting generation with model: {model_name} (try {retry_attempt + 1})..."
-                from services.log_queue import log_ist
-                log_ist(msg_llm)
-                if on_log:
-                    on_log(json.dumps({"type": "llm_info", "message": msg_llm}))
-
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(**config_args),
-                )
-                text = response.text
-                if not text or not text.strip():
-                    break # Try next variant shape model in list
-                return text
-            except Exception as e:
-                last_error = e
-                err_str = str(e).lower()
-                if any(x in err_str for x in ["429", "quota", "rate limit", "resource_exhausted"]):
+        for key_candidate in available_keys:
+            client = get_gemini_client(key_candidate)
+            for retry_attempt in range(1):  # Single attempt per key/model variant to fail fast & prevent thread starvation
+                try:
+                    _throttle_for_rpm(model_name)
+                    msg_llm = f"[LLM] Attempting generation with model: {model_name} (try {retry_attempt + 1})..."
                     from services.log_queue import log_ist
-                    log_ist(f"[LLM] Model {model_name} rate limited (429). Switching immediately to next fallback model...")
-                    break  # Break out of loop for this model to try the next model immediately
-                break # Non-rate-limit client problems move strictly forward to downstream models
+                    log_ist(msg_llm)
+                    if on_log:
+                        on_log(json.dumps({"type": "llm_info", "message": msg_llm}))
+
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(**config_args),
+                    )
+                    text = response.text
+                    if not text or not text.strip():
+                        break # Try next variant shape model in list
+                    return text
+                except Exception as e:
+                    last_error = e
+                    err_str = str(e).lower()
+                    if any(x in err_str for x in ["429", "quota", "rate limit", "resource_exhausted"]):
+                        from services.log_queue import log_ist
+                        key_hint = f"...{key_candidate[-6:]}" if len(key_candidate) >= 6 else "key"
+                        log_ist(f"[LLM] Model {model_name} with key {key_hint} rate limited (429). Rotating to next API key/fallback model...")
+                        break  # Break out to try next candidate key or next model
+                    break # Non-rate-limit client problems move strictly forward to downstream models
 
     raise RuntimeError(f"All sequence pipelines and model alternatives exhausted. Final floor exception: {last_error}")
 # ─────────────────────────────────────────────────────────────────────────────
@@ -583,8 +644,7 @@ def _execute_openrouter(prompt: str, model_list: list, response_schema, api_key:
 # ─────────────────────────────────────────────────────────────────────────────
 # High-Level Entrypoints
 # ─────────────────────────────────────────────────────────────────────────────
-FAST_LITE_MODELS = DEFAULT_FAST_LITE_MODELS
-STRONG_JSON_MODELS = DEFAULT_STRONG_MODELS
+from config.constants import discover_gemini_models
 
 def generate_content_with_fallback(
     prompt: str,
@@ -594,14 +654,19 @@ def generate_content_with_fallback(
     system_instruction: Optional[str] = None,
     model_tier: Optional[str] = None,
 ) -> str:
-    """JSON / structured output generation via fallback list."""
+    """JSON / structured output generation via dynamic fallback list (strictly non-pro)."""
     full_prompt = f"SYSTEM INSTRUCTION: {system_instruction}\n\n{prompt}" if system_instruction else prompt
+    try:
+        lite_dyn, strong_dyn = discover_gemini_models(custom_api_key)
+    except Exception:
+        lite_dyn, strong_dyn = DEFAULT_FAST_LITE_MODELS, DEFAULT_STRONG_MODELS
+
     if model_tier == 'strong':
-        models_to_use = STRONG_JSON_MODELS
+        models_to_use = strong_dyn
     elif model_tier == 'lite':
-        models_to_use = FAST_LITE_MODELS
+        models_to_use = lite_dyn
     else:
-        models_to_use = FAST_LITE_MODELS
+        models_to_use = lite_dyn
     return _generate_with_model_list(
         full_prompt, models_to_use, response_schema, custom_api_key, on_log
     )
@@ -612,9 +677,13 @@ def generate_latex_with_strong_model(
     custom_api_key: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
 ) -> str:
-    """Raw text/LaTeX generation without predefined model schemas."""
+    """Raw text/LaTeX generation using newest discovered Flash model (strictly non-pro)."""
+    try:
+        _, strong_dyn = discover_gemini_models(custom_api_key)
+    except Exception:
+        strong_dyn = DEFAULT_STRONG_MODELS
     return _generate_with_model_list(
-        prompt, LATEX_FALLBACK_MODELS, response_schema=None, custom_api_key=custom_api_key, on_log=on_log
+        prompt, strong_dyn, response_schema=None, custom_api_key=custom_api_key, on_log=on_log
     )
 
 
@@ -644,11 +713,11 @@ def call_gemini_grounded(
     current_date_context = "CRITICAL METADATA: The current year is 2026. Keep this in mind for all dates, durations, timelines, and calculations.\n\n"
     full_prompt = current_date_context + prompt
 
-    gemini_key = custom_api_key if (custom_api_key and (custom_api_key.startswith("AIza") or custom_api_key.startswith("AQ."))) else os.getenv("GEMINI_API_KEY")
-    if not gemini_key:
+    available_keys = [custom_api_key] if (custom_api_key and (custom_api_key.startswith("AIza") or custom_api_key.startswith("AQ."))) else (get_gemini_api_keys() or [os.getenv("GEMINI_API_KEY", "")])
+    available_keys = [k for k in available_keys if k]
+    if not available_keys:
         raise ValueError("GEMINI_API_KEY environment variable is missing for grounded generation.")
 
-    client = get_gemini_client(gemini_key)
     config_args: Dict[str, Any] = {
         "temperature": temperature,
         "tools": [{"google_search": {}}],
@@ -658,79 +727,85 @@ def call_gemini_grounded(
     import concurrent.futures
 
     for model_name in GROUNDED_SEARCH_MODELS:
-        try:
-            _throttle_for_rpm(model_name)
-            msg = f"[LLM Grounding] Executing grounded generation with {model_name}..."
-            from services.log_queue import log_ist
-            log_ist(msg)
-            if on_log:
-                on_log(json.dumps({"type": "llm_grounding", "message": msg}))
+        for key_candidate in available_keys:
+            client = get_gemini_client(key_candidate)
+            try:
+                _throttle_for_rpm(model_name)
+                msg = f"[LLM Grounding] Executing grounded generation with {model_name}..."
+                from services.log_queue import log_ist
+                log_ist(msg)
+                if on_log:
+                    on_log(json.dumps({"type": "llm_grounding", "message": msg}))
 
-            # Enforce strict 12-second timeout per grounding model call
-            def _execute_call():
-                return client.models.generate_content(
-                    model=model_name,
-                    contents=full_prompt,
-                    config=types.GenerateContentConfig(**config_args),
-                )
+                # Enforce strict 12-second timeout per grounding model call
+                def _execute_call():
+                    return client.models.generate_content(
+                        model=model_name,
+                        contents=full_prompt,
+                        config=types.GenerateContentConfig(**config_args),
+                    )
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_execute_call)
-                try:
-                    response = future.result(timeout=12.0)
-                except concurrent.futures.TimeoutError:
-                    timeout_msg = f"[LLM Grounding] Model {model_name} timed out after 12s, skipping to next variant..."
-                    print(timeout_msg)
-                    log_ist(timeout_msg)
-                    last_error = TimeoutError(f"{model_name} timed out after 12s")
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_execute_call)
+                    try:
+                        response = future.result(timeout=12.0)
+                    except concurrent.futures.TimeoutError:
+                        timeout_msg = f"[LLM Grounding] Model {model_name} timed out after 12s, skipping to next variant..."
+                        print(timeout_msg)
+                        log_ist(timeout_msg)
+                        last_error = TimeoutError(f"{model_name} timed out after 12s")
+                        continue
+
+                text = response.text or ""
+                citations = []
+                queries = []
+                grounded = False
+
+                candidates = getattr(response, "candidates", None)
+                if candidates and len(candidates) > 0:
+                    candidate = candidates[0]
+                    meta = getattr(candidate, "grounding_metadata", None)
+                    if meta:
+                        grounded = True
+                        if hasattr(meta, "web_search_queries") and meta.web_search_queries:
+                            queries = list(meta.web_search_queries)
+
+                        if hasattr(meta, "grounding_chunks") and meta.grounding_chunks:
+                            for chunk in meta.grounding_chunks:
+                                web = getattr(chunk, "web", None)
+                                if web:
+                                    citations.append({
+                                        "title": getattr(web, "title", "") or "",
+                                        "url": getattr(web, "uri", "") or "",
+                                        "domain": getattr(web, "domain", "") or ""
+                                    })
+
+                # Deduplicate citations by url
+                seen_urls = set()
+                deduped_citations = []
+                for c in citations:
+                    u = c.get("url")
+                    if u and u not in seen_urls:
+                        seen_urls.add(u)
+                        deduped_citations.append(c)
+
+                return {
+                    "text": text,
+                    "citations": deduped_citations,
+                    "queries": queries,
+                    "grounded": grounded,
+                    "model": model_name
+                }
+            except Exception as e:
+                last_error = e
+                err_str = str(e).lower()
+                if any(x in err_str for x in ["429", "quota", "rate limit", "resource_exhausted"]):
+                    from services.log_queue import log_ist
+                    key_hint = f"...{key_candidate[-6:]}" if len(key_candidate) >= 6 else "key"
+                    log_ist(f"[LLM Grounding] Model {model_name} with key {key_hint} rate limited (429). Rotating to next API key...")
                     continue
-
-            text = response.text or ""
-            citations = []
-            queries = []
-            grounded = False
-
-            candidates = getattr(response, "candidates", None)
-            if candidates and len(candidates) > 0:
-                candidate = candidates[0]
-                meta = getattr(candidate, "grounding_metadata", None)
-                if meta:
-                    grounded = True
-                    if hasattr(meta, "web_search_queries") and meta.web_search_queries:
-                        queries = list(meta.web_search_queries)
-
-                    if hasattr(meta, "grounding_chunks") and meta.grounding_chunks:
-                        for chunk in meta.grounding_chunks:
-                            web = getattr(chunk, "web", None)
-                            if web:
-                                citations.append({
-                                    "title": getattr(web, "title", "") or "",
-                                    "url": getattr(web, "uri", "") or "",
-                                    "domain": getattr(web, "domain", "") or ""
-                                })
-
-            # Deduplicate citations by url
-            seen_urls = set()
-            deduped_citations = []
-            for c in citations:
-                u = c.get("url")
-                if u and u not in seen_urls:
-                    seen_urls.add(u)
-                    deduped_citations.append(c)
-
-            return {
-                "text": text,
-                "citations": deduped_citations,
-                "queries": queries,
-                "grounded": grounded,
-                "model": model_name
-            }
-        except Exception as e:
-            last_error = e
-            err_str = str(e).lower()
-            if any(x in err_str for x in ["429", "quota", "rate limit", "resource_exhausted"]):
-                continue
-            print(f"[LLM Grounding] Model {model_name} search grounding warning: {e}. Trying next variant...")
+                print(f"[LLM Grounding] Model {model_name} search grounding warning: {e}. Trying next variant...")
+                break
 
     # Fallback to standard ungrounded generation if grounded endpoints fail
     print(f"[LLM Grounding] Falling back to ungrounded generation due to: {last_error}")

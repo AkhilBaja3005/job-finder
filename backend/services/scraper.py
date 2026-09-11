@@ -213,6 +213,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     """
     Scrapes a job posting page from LinkedIn, Indeed, Reed, or any MNC career portal.
     Uses official Reed Jobs Details REST API when scraping Reed URLs for instant zero-latency JD extraction.
+    Integrates persistent SQLite caching (jd_cache) for zero-latency repeats across queries.
     """
     import re
     import json
@@ -222,6 +223,17 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     from bs4 import BeautifulSoup
     from utils.ssl_utils import SSL_CONTEXT
     from services.log_queue import log_ist
+
+    try:
+        from services.jd_cache import cache_get, cache_set
+        cached_res = cache_get(url)
+        if cached_res and cached_res.get("description") and len(cached_res.get("description", "")) > 50:
+            if on_log:
+                on_log(f"[Scraper] ⚡ Instantly retrieved from persistent JD cache: {url[:60]}")
+            return cached_res
+    except Exception as _ce:
+        pass
+
     # Fast path for Reed URLs via official REST API
     if "reed.co.uk" in url:
         job_id_match = re.search(r'/(\d+)(?:\?|$)', url)
