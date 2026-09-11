@@ -121,6 +121,7 @@ async def scan_linkedin_for_top_applicant_jobs(
             user_data_dir=scanner_profile_dir,
             headless=headless,
             **executable_args,
+            ignore_default_args=["--enable-automation"],
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
@@ -132,6 +133,10 @@ async def scan_linkedin_for_top_applicant_jobs(
         )
 
         page = context.pages[0] if context.pages else await context.new_page()
+        await page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            window.chrome = { runtime: {} };
+        """)
 
         # Map timeframe to LinkedIn f_TPR param
         tpr_sec = timeframe_hours * 3600
