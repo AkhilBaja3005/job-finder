@@ -23,12 +23,40 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path
 try:
     from browser_use import Agent, Browser, ChatGoogle, BrowserSession
     HAS_BROWSER_USE = True
+
+    class MultiFallbackAgent(Agent):
+        """
+        Agent subclass that supports an ordered pool of fallback LLMs across all configured
+        GEMINI_API_KEYS. Whenever a rate limit (429 RESOURCE_EXHAUSTED) or provider failure
+        occurs, it seamlessly rotates to the next available Gemini API key and continues.
+        """
+        def __init__(self, *args, fallback_pool: Optional[List[Any]] = None, **kwargs):
+            self._fallback_pool = list(fallback_pool or [])
+            first_fb = self._fallback_pool.pop(0) if self._fallback_pool else None
+            super().__init__(*args, fallback_llm=first_fb, **kwargs)
+
+        def _try_switch_to_fallback_llm(self, error: Any) -> bool:
+            if self._fallback_llm is None and not self._fallback_pool:
+                return False
+            if self._using_fallback_llm:
+                if self._fallback_pool:
+                    next_fb = self._fallback_pool.pop(0)
+                    self._fallback_llm = next_fb
+                    self._using_fallback_llm = False
+                    self.logger.warning(
+                        f"🔄 429 quota reached on current key. Cascading to next Gemini API key ({getattr(next_fb, 'model', 'flash-lite')}). Remaining fallbacks: {len(self._fallback_pool)}"
+                    )
+                else:
+                    return False
+            return super()._try_switch_to_fallback_llm(error)
+
 except ImportError:
     HAS_BROWSER_USE = False
     Agent: Any = None
     Browser: Any = None
     ChatGoogle: Any = None
     BrowserSession: Any = None
+    MultiFallbackAgent: Any = None
 
 from config.constants import (
     DEFAULT_FAST_LITE_MODELS,
@@ -74,6 +102,51 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
         api_key=api_key,
         temperature=0.1,
     )
+
+
+def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[str] = None) -> List[Any]:
+    """
+    Constructs a list of fallback ChatGoogle instances using all other configured GEMINI_API_KEYS.
+    When one key hits a 429 RESOURCE_EXHAUSTED rate limit, browser-use automatically cascades
+    to the next available key and model tier without crashing the scan.
+    """
+    fallback_instances: List[Any] = []
+    try:
+        from services.gemini_client import get_gemini_api_keys
+        all_keys = get_gemini_api_keys()
+    except Exception:
+        all_keys = [k for k in [os.getenv(f"GEMINI_API_KEY_{i}") for i in range(2, 11)] if k]
+
+    primary_key = getattr(primary_llm, "api_key", None)
+    target_model = model_name or os.getenv("BROWSER_USE_MODEL") or "gemini-3.5-flash-lite"
+
+    # 1. Use remaining Gemini keys on the same model tier
+    for key in all_keys:
+        if key and key != primary_key:
+            try:
+                fallback_instances.append(ChatGoogle(
+                    model=target_model,
+                    api_key=key,
+                    temperature=0.1,
+                ))
+            except Exception:
+                pass
+
+    # 2. Add alternate Flash models (e.g. gemini-3.1-flash-lite, gemini-3.5-flash) across keys to hedge against per-model quotas
+    alt_models = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash-lite"]
+    for alt_m in alt_models:
+        if alt_m != target_model:
+            for key in all_keys[:3]:
+                try:
+                    fallback_instances.append(ChatGoogle(
+                        model=alt_m,
+                        api_key=key,
+                        temperature=0.1,
+                    ))
+                except Exception:
+                    pass
+
+    return fallback_instances
 
 
 def build_application_task_prompt(
@@ -183,6 +256,13 @@ def build_application_task_prompt(
          c. Click or read the email snippet to extract the numeric or alphanumeric OTP code.
          d. Switch back to the application tab (or close the Gmail tab).
          e. Type the verification code into the OTP input field and proceed.
+    5. Handle Sign-in / Sign-up / Account Creation (e.g. Reed.co.uk, Workday, Lever, SmartRecruiters, Job Boards):
+       - If the site requires logging in, signing up, or creating an account before allowing you to apply (such as Reed.co.uk):
+         * ALWAYS look for and click 'Sign in with Google', 'Continue with Google', or 'Sign up with Google'.
+         * The browser session already has active Google credentials for '{email}'. If a Google account selection popup appears, click '{email}' or '{candidate_name}' to authenticate automatically.
+         * If Google OAuth asks to confirm permissions or continue, click 'Confirm' / 'Continue' / 'Allow'.
+         * Once authenticated, proceed directly with completing the application form.
+         * Do NOT stop or fail saying credentials are missing without first attempting 'Sign in / Sign up with Google'!
     {submission_instruction}
     """
     return task
@@ -376,11 +456,16 @@ async def run_browser_use_autofill(
 
     mode_str = "AUTO-SUBMIT (GUARDRAILS DISABLED)" if effective_auto_submit else "REVIEW ONLY (GUARDRAIL ACTIVE)"
 
+    # Prepare multi-key fallback pool across all configured GEMINI_API_KEYS
+    fallback_llms = get_browser_use_fallback_llms(primary_llm=llm, model_name=model_name)
+    agent_cls = MultiFallbackAgent if MultiFallbackAgent is not None else Agent
+
     # --- Phase 1: Fast Pure-DOM Mode (use_vision=False) ---
-    print(f"[browser-use] ⚡ Starting fast pure-DOM autofill ({mode_str}) for {job_url} [vision=False]...")
-    agent_fast = Agent(
+    print(f"[browser-use] ⚡ Starting fast pure-DOM autofill ({mode_str}) for {job_url} [vision=False, fallbacks={len(fallback_llms)}]...")
+    agent_fast = agent_cls(
         task=task_prompt,
         llm=llm,
+        fallback_pool=fallback_llms,
         browser_session=browser_session,
         initial_actions=nav_actions,
         available_file_paths=available_paths,
@@ -391,7 +476,7 @@ async def run_browser_use_autofill(
         max_actions_per_step=15,
         flash_mode=True,
         enable_planning=False,
-        max_failures=2,
+        max_failures=3,
         retry_delay=1,
     )
 
@@ -406,9 +491,10 @@ async def run_browser_use_autofill(
 
     if needs_vision_fallback:
         print(f"[browser-use] 👁️ Pure-DOM pass encountered difficulties. Activating Vision + Reasoning (thinking=True) fallback...")
-        agent_vision = Agent(
+        agent_vision = agent_cls(
             task=task_prompt + "\nNOTE: Retrying with visual sight and deep reasoning enabled. Analyze the visual layout carefully to locate, solve, and fill any inputs, custom dropdowns, or multi-step modals that were missed.",
             llm=llm,
+            fallback_pool=fallback_llms,
             browser_session=browser_session,
             initial_actions=nav_actions,
             available_file_paths=available_paths,
@@ -420,7 +506,7 @@ async def run_browser_use_autofill(
             max_actions_per_step=10,
             flash_mode=False,       # Full reasoning capabilities for fallback
             enable_planning=True,   # Plan around obstacles (modals, captchas, multi-page flows)
-            max_failures=2,
+            max_failures=3,
             retry_delay=1,
         )
         history = await agent_vision.run(max_steps=max_steps)
