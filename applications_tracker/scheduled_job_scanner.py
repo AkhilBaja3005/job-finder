@@ -118,6 +118,8 @@ from mcp.tools.ats_tools import handle_calculate_ats_score
 from services.browser_use_agent import run_browser_use_autofill
 from services.email_service import send_notification_email
 from services.job_searcher import normalize_timeframe
+from services.scraper import scrape_job_description
+from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
 from services.auth import async_supabase_request, supabase_request, SUPABASE_URL, SUPABASE_KEY
 import subprocess
 
@@ -619,6 +621,49 @@ async def run_pipeline(target_url: Optional[str] = None):
         pdf_to_submit = master_resume_pdf
         tex_path = ""
         jd_text = job.get("description") or ""
+
+        # If job description is missing or a brief placeholder (common for Indeed RSS / title-heuristic jobs),
+        # fetch the real JD on-demand via the scraper so ATS scoring & tailoring have 100% full content.
+        if (not jd_text or len(jd_text.strip()) < 100 or job.get("estimated", False)) and url:
+            try:
+                print(f"[{idx}/{len(jobs)}] 📥 Fetching live JD on-demand for {title} @ {company} ({platform})...")
+                live_scraped = await scrape_job_description(url)
+                scraped_jd = (live_scraped.get("description") or "").strip()
+                if scraped_jd and len(scraped_jd) >= 100:
+                    jd_text = scraped_jd
+                    job["description"] = jd_text
+                    if live_scraped.get("title") and live_scraped.get("title") not in ("Indeed Job", "Job Posting"):
+                        title = live_scraped.get("title")
+                    if live_scraped.get("company") and live_scraped.get("company") not in ("Indeed Employer", "Company"):
+                        company = live_scraped.get("company")
+
+                    # Compute real deterministic ATS score with candidate profile
+                    cand_resume_data = {
+                        "name": candidate.get("name"),
+                        "location": candidate.get("location"),
+                        "skills": candidate.get("core_skills", []),
+                        "experience": [
+                            {"role": e.get("role", ""), "company": e.get("company", ""), "description": e.get("highlights", [])}
+                            for e in candidate.get("work_experience", [])
+                        ],
+                        "raw_text": ""
+                    }
+                    ats_res = compute_ats_score(cand_resume_data, jd_text)
+                    rf_res = estimate_role_fit_score(cand_resume_data, jd_text)
+                    score = compute_overall_score(ats_res.skills_score, ats_res.experience_score, rf_res)
+                    matched_skills = ", ".join(ats_res.matched_skills)
+                    missing_skills = ", ".join(ats_res.missing_skills)
+                    job["ats_score"] = score
+                    job["score"] = score
+                    job["matched_skills"] = ats_res.matched_skills
+                    job["missing_skills"] = ats_res.missing_skills
+                    job["skills_score"] = ats_res.skills_score
+                    job["exp_score"] = ats_res.experience_score
+                    job["role_fit_score"] = rf_res
+                    job["estimated"] = False
+                    print(f"   ✓ Successfully retrieved JD ({len(jd_text)} chars). Recomputed ATS Score: {score}% (Skills: {ats_res.skills_score}%, Exp: {ats_res.experience_score}%)")
+            except Exception as jd_err:
+                print(f"   ⚠️ Could not fetch live JD on-demand ({jd_err}), using current score ({score}%).")
 
         if score >= DIRECT_APPLY_ATS_THRESHOLD:
             # 🎯 DIRECT APPLY (>= 80% ATS match)

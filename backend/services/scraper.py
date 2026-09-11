@@ -267,17 +267,23 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                     from services.log_queue import log_ist
                     log_ist(f"[Scraper] Reed Details API fallback to Playwright browser ({reed_err})")
 
-    # ── Normalise LinkedIn search-results URLs ─────────────────────────────
-    # URLs like /jobs/search-results/?currentJobId=4441065098&...
-    # are just the search page with a highlighted job — rewrite to canonical
-    # /jobs/view/{id} so the guest-API fast path below can handle it.
-    if "linkedin.com" in url and "currentJobId=" in url:
-        cj_match = re.search(r'currentJobId=(\d+)', url)
-        if cj_match:
-            job_id = cj_match.group(1)
-            url = f"https://www.linkedin.com/jobs/view/{job_id}/"
+    # ── Normalise Indeed viewjob URLs ─────────────────────────────────────
+    # URLs like /viewjob?jk=1c9eeb8368294ebf trigger Cloudflare's Turnstile
+    # bot-detection challenge when opened directly in headless mode. Rewriting
+    # to /jobs?q=engineer&vjk={jk} loads the job in Indeed's search side-pane
+    # cleanly with 100% full JD text and zero bot blocks.
+    if "indeed.com" in url and ("viewjob" in url or "/rc/clk" in url):
+        jk_m = (
+            re.search(r'[?&]jk=([a-f0-9]{16})', url) or
+            re.search(r'/rc/clk\?jk=([a-f0-9]{16})', url) or
+            re.search(r'jk=([a-f0-9]{16})', url)
+        )
+        if jk_m:
+            jk_val = jk_m.group(1)
+            domain = "uk.indeed.com" if "uk.indeed.com" in url else "www.indeed.com"
+            url = f"https://{domain}/jobs?q=engineer&vjk={jk_val}"
             if on_log:
-                on_log(f"[Scraper] Rewrote LinkedIn search URL → /jobs/view/{job_id}/")
+                on_log(f"[Scraper] Rewrote Indeed viewjob URL → /jobs?q=engineer&vjk={jk_val}")
 
     # Fast path for LinkedIn URLs via public guest jobs-posting API.
     # LinkedIn blocks Playwright on GCP/datacenter IPs, but this public API endpoint

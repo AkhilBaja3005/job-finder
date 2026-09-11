@@ -263,6 +263,11 @@ def build_application_task_prompt(
          * If Google OAuth asks to confirm permissions or continue, click 'Confirm' / 'Continue' / 'Allow'.
          * Once authenticated, proceed directly with completing the application form.
          * Do NOT stop or fail saying credentials are missing without first attempting 'Sign in / Sign up with Google'!
+    6. Handle Cloudflare Verification / Turnstile / "Verify you are human":
+       - If the screen or an iframe displays "Verify you are human", "I am human", "Checking your browser", or a Cloudflare Turnstile checkbox / widget:
+         * DO NOT abort or call done with failure.
+         * Click the "Verify you are human" checkbox, widget label, or iframe element to complete the verification challenge.
+         * Wait for the verification to succeed and the actual job listing or application form to reveal itself, then proceed immediately.
     {submission_instruction}
     """
     return task
@@ -437,7 +442,18 @@ async def run_browser_use_autofill(
         }
 
     target_url = resolved_url or job_url
-    if target_url != job_url:
+    # Normalize Indeed viewjob URLs to search vjk format to prevent Cloudflare Turnstile bot challenges
+    if "indeed.com" in target_url and "viewjob" in target_url:
+        import re
+        jk_m = re.search(r'[?&]jk=([a-f0-9]{16})', target_url) or re.search(r'jk=([a-f0-9]{16})', target_url)
+        if jk_m:
+            jk_val = jk_m.group(1)
+            domain = "uk.indeed.com" if "uk.indeed.com" in target_url else "www.indeed.com"
+            rewritten_indeed = f"https://{domain}/jobs?q=engineer&vjk={jk_val}"
+            print(f"[browser-use] 🔄 Rewrote Indeed viewjob URL to side-pane search format: {rewritten_indeed}")
+            target_url = rewritten_indeed
+
+    if target_url != job_url and "indeed.com" not in target_url:
         print(f"[browser-use] 🎯 Resolved direct ATS application URL: {target_url}")
 
     task_prompt = build_application_task_prompt(
