@@ -222,7 +222,7 @@ async def scan_linkedin_for_top_applicant_jobs(
 async def run_top_applicant_pipeline(
     custom_keywords: Optional[str] = None,
     timeframe_hours: int = 24,
-    limit: int = 5,
+    limit: Optional[int] = None,
     auto_submit: bool = False,
     headless: bool = False
 ):
@@ -274,13 +274,18 @@ async def run_top_applicant_pipeline(
     selected_model = get_best_flash_lite_model()
     processed_count = 0
 
+    # Determine target jobs list based on limit (None or <= 0 means NO LIMIT / process all)
+    jobs_to_process = top_jobs if (limit is None or limit <= 0) else top_jobs[:limit]
+    total_to_process = len(jobs_to_process)
+    print(f"\n[Top Applicant Scanner] 🚀 Processing {total_to_process} jobs ({'No limit' if (limit is None or limit <= 0) else f'Limit: {limit}'})...")
+
     # 2. Auto-apply directly without tailoring
-    for idx, job in enumerate(top_jobs[:limit], start=1):
+    for idx, job in enumerate(jobs_to_process, start=1):
         job_url = job["url"]
         job_title = job["title"]
         company = job["company"]
 
-        print(f"\n[{idx}/{min(len(top_jobs), limit)}] 🚀 Auto-applying for: {job_title} @ {company}")
+        print(f"\n[{idx}/{total_to_process}] 🚀 Auto-applying for: {job_title} @ {company}")
         print(f"🔗 URL: {job_url}")
 
         # Pre-flight check
@@ -334,7 +339,7 @@ def main():
     parser = argparse.ArgumentParser(description="Scan LinkedIn for 'Top Applicant' jobs and auto-apply with master resume")
     parser.add_argument("--keywords", type=str, default=None, help="Comma-separated search keywords (e.g. 'Machine Learning, AI Engineer')")
     parser.add_argument("--timeframe", type=int, default=24, help="Timeframe in hours to search for postings (default: 24)")
-    parser.add_argument("--limit", type=int, default=5, help="Maximum number of applications to process (default: 5)")
+    parser.add_argument("--limit", type=int, default=None, help="Maximum number of applications to process (default: None, processes all found jobs)")
     parser.add_argument("--auto-submit", action="store_true", help="Submit automatically without stopping for review")
     parser.add_argument("--headless", action="store_true", help="Run browser in headless mode")
 
