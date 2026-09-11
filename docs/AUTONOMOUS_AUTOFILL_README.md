@@ -93,6 +93,20 @@ To run with guardrails disabled (autonomous submit):
 BROWSER_USE_DISABLE_GUARDRAILS=1 python -m services.browser_use_agent "https://jobs.ashbyhq.com/company/job-id"
 ```
 
+### ⚡ Batch Master Resume Autofill (`adhoc_auto_filler.py`)
+To process batches of jobs directly using your Master Resume (from CSV, Excel, or URLs without waiting for LaTeX recompilation):
+
+```bash
+# Apply from CSV tracker:
+python applications_tracker/adhoc_auto_filler.py --csv applications_tracker/job_applications_tracker.csv --limit 5
+
+# Apply from Excel sheet:
+python applications_tracker/adhoc_auto_filler.py --excel job_list.xlsx --auto-submit
+
+# Direct URLs:
+python applications_tracker/adhoc_auto_filler.py --url "https://jobs.ashbyhq.com/company/123"
+```
+
 ---
 
 ## 📂 Related Files
@@ -100,4 +114,5 @@ BROWSER_USE_DISABLE_GUARDRAILS=1 python -m services.browser_use_agent "https://j
 - **Agent Implementation**: [`backend/services/browser_use_agent.py`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/backend/services/browser_use_agent.py)
 - **Candidate Profile Configuration**: [`backend/config/candidate_profile.json`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/backend/config/candidate_profile.json)
 - **Scheduled Scanner Integration**: [`applications_tracker/scheduled_job_scanner.py`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/applications_tracker/scheduled_job_scanner.py)
+- **Ad-hoc Master Resume Autofiller**: [`applications_tracker/adhoc_auto_filler.py`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/applications_tracker/adhoc_auto_filler.py)
 - **Unit & Integration Tests**: [`backend/tests/test_browser_use_prototype.py`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/backend/tests/test_browser_use_prototype.py)

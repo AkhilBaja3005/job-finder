@@ -299,3 +299,38 @@ BROWSER_USE_DISABLE_GUARDRAILS=1 python applications_tracker/scheduled_job_scann
 source backend/venv/bin/activate
 BROWSER_USE_DISABLE_GUARDRAILS=1 python applications_tracker/scheduled_job_scanner.py "https://uk.linkedin.com/jobs/view/..."
 ```
+
+---
+
+## ⚡ Ad-Hoc Master Resume Auto-Filler (`adhoc_auto_filler.py`)
+
+When you have a list of job URLs or an existing tracker and want to **immediately auto-fill using your Master Resume** without LaTeX recompilation or tailoring overhead:
+
+### Features:
+- **Zero Tailoring Compilation**: Directly attaches your macOS Red-tagged Master Resume from iCloud or repository fallback.
+- **Multiple Input Formats**: Takes jobs directly from a CSV file (`--csv`), an Excel spreadsheet (`--excel`), or command-line URLs (`--url`).
+- **Status & Limit Filtering**: Selectively runs on specific statuses (e.g. `--filter "Ready to Apply"`) and controls batch sizes (`--limit 5`).
+- **Safety Modes**: Supports preview/review mode (default) or autonomous submission (`--auto-submit`).
+
+### CLI Usage:
+```bash
+# 1. Apply to specific URL(s) using Master Resume
+python applications_tracker/adhoc_auto_filler.py \
+  --url "https://job-boards.greenhouse.io/company/jobs/123"
+
+# 2. Process top 5 jobs from the applications tracker CSV
+python applications_tracker/adhoc_auto_filler.py \
+  --csv applications_tracker/job_applications_tracker.csv \
+  --limit 5
+
+# 3. Process jobs from an Excel sheet with autonomous auto-submit
+python applications_tracker/adhoc_auto_filler.py \
+  --excel target_jobs.xlsx \
+  --auto-submit
+
+# 4. Filter by status in CSV
+python applications_tracker/adhoc_auto_filler.py \
+  --filter "Ready to Apply" \
+  --limit 10
+```
+

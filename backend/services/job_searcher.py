@@ -28,7 +28,19 @@ from utils.location_resolver import get_indeed_domain_for_location, resolve_loca
 from services.log_queue import LLMClientLogQueue, log_ist
 
 # ─── System Caps & TTL Cache ─────────────────────────────────────────────
-DISCOVERY_JD_FETCH_CAP = 15       # Top 15 web-scraped jobs get real JD ATS scoring
+def _is_cloud_environment() -> bool:
+    """Detects whether running in a cloud/production container (Render, Hugging Face, Railway, Fly)."""
+    return any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")) or os.getenv("ENVIRONMENT") == "production"
+
+# In production / cloud instances: keep conservative limits (15 total, ~8 per platform) to avoid memory/rate limits
+# In local development: process up to 50 LinkedIn + 50 Indeed jobs
+if _is_cloud_environment():
+    DISCOVERY_JD_FETCH_CAP = 15
+    DISCOVERY_PLATFORM_FETCH_CAP = 8
+else:
+    DISCOVERY_JD_FETCH_CAP = 100
+    DISCOVERY_PLATFORM_FETCH_CAP = 50
+
 DISCOVERY_FETCH_CONCURRENCY = 5  # Scaled up to 5 concurrent browser tasks utilizing 3GB combined memory
 _job_search_cache = TTLCache(ttl_seconds=300)  # 5-minute TTL search cache
 _indeed_blocked_circuit_breaker = False        # Flips to True if 1 Indeed request gets Cloudflare blocked
@@ -691,7 +703,6 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 
 # ─── Combined Aggregation & Scoring Pipeline ──────────────────────────────
 
-DISCOVERY_JD_FETCH_CAP = 30
 # Dynamically scale concurrency based on the hosting environment:
 # - We check for an explicit override environment variable SCRAPER_CONCURRENCY
 # - Render automatically injects "RENDER" into all web service environments under the hood.
@@ -1089,12 +1100,30 @@ async def find_matching_jobs(
             except Exception as pe:
                 print(f"[find_matching_jobs] Direct portal scoring error for '{job.title}': {pe}")
 
-    # Phase B: Scrape and score top external web listings (LinkedIn / Indeed)
-    web_scored_batch = scraped_jobs[:DISCOVERY_JD_FETCH_CAP]
-    title_only_batch = scraped_jobs[DISCOVERY_JD_FETCH_CAP:]
+    # Separate LinkedIn and Indeed scraped jobs to enforce fair platform allocation
+    linkedin_scraped = [j for j in scraped_jobs if "linkedin" in j.platform.lower() or "linkedin" in j.url.lower()]
+    indeed_scraped = [j for j in scraped_jobs if "indeed" in j.platform.lower() or "indeed" in j.url.lower()]
+    other_scraped = [j for j in scraped_jobs if j not in linkedin_scraped and j not in indeed_scraped]
+
+    linkedin_scraped.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
+    indeed_scraped.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
+    other_scraped.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)
+
+    # Take top up to 50 from LinkedIn and up to 50 from Indeed for accurate JD fetching
+    web_scored_batch = (
+        linkedin_scraped[:DISCOVERY_PLATFORM_FETCH_CAP] +
+        indeed_scraped[:DISCOVERY_PLATFORM_FETCH_CAP] +
+        other_scraped[:20]
+    )
+    # Remaining become title_only_batch
+    title_only_batch = (
+        linkedin_scraped[DISCOVERY_PLATFORM_FETCH_CAP:] +
+        indeed_scraped[DISCOVERY_PLATFORM_FETCH_CAP:] +
+        other_scraped[20:]
+    )
 
     if web_scored_batch:
-        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(web_scored_batch)} web listings (LinkedIn / Indeed)..."}) + " " * 2048 + "\n"
+        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(web_scored_batch)} web listings ({min(len(linkedin_scraped), DISCOVERY_PLATFORM_FETCH_CAP)} LinkedIn, {min(len(indeed_scraped), DISCOVERY_PLATFORM_FETCH_CAP)} Indeed)..."}) + " " * 2048 + "\n"
         semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
         
         async def _score_and_stream(job, log_queue_stream):
@@ -1142,7 +1171,7 @@ async def find_matching_jobs(
                 yield json.dumps({"type": "log", "message": "⏳ Processing web listings..."}) + " " * 2048 + "\n"
 
     if title_only_batch:
-        yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title only (beyond the {DISCOVERY_JD_FETCH_CAP}-job accurate-scan cap)..."}) + " " * 2048 + "\n"
+        yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title heuristic..."}) + " " * 2048 + "\n"
         for job in title_only_batch:
             r = _score_job_with_title_heuristic(job, resume_data)
             scored_jobs.append(r)
@@ -1154,14 +1183,17 @@ async def find_matching_jobs(
     estimated_count = len(scored_jobs) - accurate_count
     yield json.dumps({"type": "log", "message": f"🏁 Scanned {len(scored_jobs)} matches successfully! ({accurate_count} JD-scored, {estimated_count} title-estimated)"}) + "\n"
 
-    # Prepare EST (External Sources - Indeed) section
+    # Prepare EST section for any leftover Indeed jobs that weren't included in scored_jobs
+    scored_urls = {j.get("url", "").split("?")[0].rstrip("/").lower() for j in scored_jobs}
     est_jobs = []
     if indeed_jobs_for_est:
-        # Deduplicate Indeed jobs
         seen_indeed_ids = set()
         for job in indeed_jobs_for_est:
-            if job.job_id not in seen_indeed_ids:
+            u_norm = job.url.split("?")[0].rstrip("/").lower()
+            if job.job_id not in seen_indeed_ids and u_norm not in scored_urls:
                 seen_indeed_ids.add(job.job_id)
+                # Score with title heuristic so it's not arbitrary score 0
+                h_score = _title_heuristic_score(job, resume_data)
                 est_jobs.append({
                     "title": job.title,
                     "company": job.company,
@@ -1169,9 +1201,9 @@ async def find_matching_jobs(
                     "url": job.url,
                     "source": "Indeed",
                     "posted_date": job.post_date_raw,
-                    "score": 0,  # Not scored - external source
+                    "score": h_score,
                     "estimated": True,
-                    "reason": "External source (Indeed) - not scored by our ATS engine"
+                    "reason": "Title-estimated from Indeed search listing"
                 })
         yield json.dumps({"type": "log", "message": f"📌 Found {len(est_jobs)} Indeed jobs in EST section (not scored by our engine)"}) + "\n"
 

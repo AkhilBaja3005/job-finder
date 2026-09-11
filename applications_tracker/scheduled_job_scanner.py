@@ -351,7 +351,7 @@ async def run_pipeline(target_url: Optional[str] = None):
     keywords = ", ".join(target_roles)
     target_locations = prefs.get("target_locations", ["London, UK"])
     location = target_locations[0] if target_locations else "London, UK"
-    raw_timeframe = prefs.get("timeframe", "24h")
+    raw_timeframe = prefs.get("timeframe", "48h")
     timeframe = normalize_timeframe(raw_timeframe)
     min_ats_score = int(prefs.get("min_ats_score", 65))
     DIRECT_APPLY_ATS_THRESHOLD = 80  # >= 80%: apply directly with master resume without tailoring
@@ -374,7 +374,19 @@ async def run_pipeline(target_url: Optional[str] = None):
     })
 
     jobs = search_res.get("jobs", [])
-    print(f"\n[Scanner] 📊 Total unique postings discovered and scored: {len(jobs)}")
+    est_jobs = search_res.get("est_jobs", [])
+    
+    # Merge Indeed est_jobs if not already present in scored jobs
+    existing_scored_urls = {j.get("url", "").strip().split("?")[0].rstrip("/").lower() for j in jobs if j.get("url")}
+    merged_count = 0
+    for ej in est_jobs:
+        u_norm = ej.get("url", "").strip().split("?")[0].rstrip("/").lower()
+        if u_norm and u_norm not in existing_scored_urls:
+            jobs.append(ej)
+            existing_scored_urls.add(u_norm)
+            merged_count += 1
+
+    print(f"\n[Scanner] 📊 Total unique postings discovered and queued: {len(jobs)} ({len(jobs) - merged_count} primary scored + {merged_count} from Indeed/EST)")
 
     existing_urls = get_existing_tracked_urls()
     print(f"[Scanner] 🔍 Found {len(existing_urls)} previously tracked/applied job URLs across Supabase and CSV.")

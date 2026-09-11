@@ -4457,7 +4457,7 @@ function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, minHeight: 0, paddingRight: '4px' }}>
                   {/* Funnel Metrics Dashboard Card */}
                   {(() => {
-                    const tailoredCount = applicationHistory.filter(e => e.status === 'tailored').length;
+                    const tailoredCount = applicationHistory.filter(e => e.status !== 'applied').length;
                     const appliedCount = applicationHistory.filter(e => e.status === 'applied').length;
                     const total = applicationHistory.length || 1;
 

@@ -3,6 +3,7 @@ Discovery & Scraping MCP Tools.
 Enables agents to search and scrape Ashby, Greenhouse, Lever, LinkedIn, and Indeed.
 """
 
+import os
 import asyncio
 import json
 from typing import Dict, Any, Optional, List
@@ -144,12 +145,16 @@ async def handle_search_jobs(arguments: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         print(f"[handle_search_jobs] Error during job search: {e}")
 
+    is_cloud = any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")) or os.getenv("ENVIRONMENT") == "production"
+    job_slice_limit = 25 if is_cloud else 120
+    est_slice_limit = 10 if is_cloud else 50
+
     return {
         "count": len(jobs),
         "location": location,
         "timeframe": timeframe,
-        "jobs": jobs[:25],
-        "est_jobs": est_jobs[:10]
+        "jobs": jobs[:job_slice_limit],
+        "est_jobs": est_jobs[:est_slice_limit]
     }
 
 
