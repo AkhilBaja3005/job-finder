@@ -106,33 +106,14 @@ async def scan_linkedin_for_top_applicant_jobs(
         print("[Top Applicant Scanner] ❌ Playwright not installed in environment.")
         return []
 
-    # Dedicated browser profile for top-applicant search scanning to prevent lock conflicts with browser-use
-    scanner_profile_dir = os.path.abspath(os.path.join(BACKEND_DIR, "user_data", "top_applicant_scanner_profile"))
-    os.makedirs(scanner_profile_dir, exist_ok=True)
-
-    chrome_executable = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    executable_args: Dict[str, Any] = {}
-    if os.path.exists(chrome_executable):
-        executable_args["executable_path"] = chrome_executable
+    from services.browser_use_agent import ensure_persistent_browser
+    cdp_url = ensure_persistent_browser(headless=headless)
 
     async with async_playwright() as p:
-        print(f"[Top Applicant Scanner] 🌐 Launching browser context ({scanner_profile_dir})...")
-        context = await p.chromium.launch_persistent_context(
-            user_data_dir=scanner_profile_dir,
-            headless=headless,
-            **executable_args,
-            ignore_default_args=["--enable-automation"],
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--no-first-run",
-                "--no-default-browser-check"
-            ],
-            viewport={"width": 1440, "height": 900}
-        )
-
-        page = context.pages[0] if context.pages else await context.new_page()
+        print(f"[Top Applicant Scanner] 🌐 Connecting to persistent Chrome session via CDP ({cdp_url})...")
+        browser = await p.chromium.connect_over_cdp(cdp_url)
+        context = browser.contexts[0] if browser.contexts else await browser.new_context()
+        page = await context.new_page()
         await page.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
             window.chrome = { runtime: {} };
@@ -229,7 +210,7 @@ async def scan_linkedin_for_top_applicant_jobs(
                     except Exception as ce:
                         continue
 
-        await context.close()
+        await page.close()
 
     print(f"\n[Top Applicant Scanner] 🎯 Total 'Top Applicant' matches identified: {len(found_jobs)}")
     return found_jobs

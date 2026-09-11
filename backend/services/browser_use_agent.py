@@ -328,6 +328,13 @@ async def run_browser_use_autofill(
     )
 
     browser_session = get_or_create_browser_session(headless=headless)
+    # Ensure the active tab navigates directly to the target URL before the agent loop starts
+    try:
+        page = await browser_session.get_current_page()
+        if page:
+            await page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
+    except Exception as ne:
+        print(f"[browser-use] ⚠️ Pre-navigation warning: {ne}")
 
     available_paths = [os.path.abspath(resume_pdf_path)] if resume_pdf_path and os.path.exists(resume_pdf_path) else []
 
