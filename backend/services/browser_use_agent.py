@@ -533,10 +533,15 @@ async def run_browser_use_autofill(
         "required field",
         "could not submit",
         "failed to submit",
+        "something went wrong",
+        "please try again",
+        "try again",
+        "server error",
         "captcha",
         "recaptcha",
         "please fill in this field",
         "select a country",
+        "an error occurred",
     ])
 
     if effective_auto_submit:
