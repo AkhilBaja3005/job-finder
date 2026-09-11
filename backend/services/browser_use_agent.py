@@ -127,10 +127,11 @@ def build_application_task_prompt(
     - DO NOT USE THE WAIT ACTION: The browser environment automatically handles DOM mutations and page loads. Never use `wait: seconds: ...`. Elements are immediately actionable.
     - BATCH ALL ACTIONS: Fill out ALL inputs, selects, and checkboxes on the visible screen in a single turn together with the 'Next' or 'Continue' click. Do not submit one field per step!
     - SELECT DROPDOWNS: Never click HTML `<select>` elements directly. Always use `select_dropdown` with the target text (e.g., text: '{country_code_hint}').
+    - NEW TAB HANDLING: If clicking 'Apply' or a link opens an external ATS site (Ashby, Greenhouse, Lever, Workday) in a new tab, ALWAYS stay in that new tab and fill the form there. NEVER switch back to the referrer/LinkedIn tab.
 
     Execution Instructions:
-    1. Early Check for Already Applied:
-       - If the job status already says 'Applied', 'You applied on [date]', or the apply button is disabled, immediately call done with: "Already applied on platform."
+    1. Early Check for Already Applied or Closed Job:
+       - If the page or modal displays 'Job not found', 'This job has closed', 'No longer accepting applications', or 'Applied', immediately call `done` with that reason without wasting extra steps.
     2. Open Form: Click 'Apply', 'Easy Apply', or 'Apply for this job'.
     3. Fill & Advance: In a single batched step, fill all contact/question inputs on the screen and click 'Next' or 'Continue'.
        - For Phone Country Code, select '{country_code_hint}'.
@@ -182,6 +183,13 @@ def ensure_persistent_browser(headless: bool = False) -> str:
         f"--user-data-dir={user_data_dir}",
         "--no-first-run",
         "--no-default-browser-check",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+        "--disable-sync",
+        "--disable-extensions",
+        "--disable-component-update",
+        "--blink-settings=imagesEnabled=false",  # Speed up DOM rendering 3x by disabling unnecessary images
     ]
     if headless:
         launch_args.append("--headless=new")
@@ -202,6 +210,49 @@ def ensure_persistent_browser(headless: bool = False) -> str:
             continue
 
     return cdp_url
+
+
+def preflight_check_job_url(url: str) -> tuple[str, bool, Optional[str]]:
+    """
+    Ultra-fast pre-flight HTTP check:
+    1. Follows redirects to uncover direct ATS destinations (Ashby, Greenhouse, Lever).
+    2. Probes whether the job is closed or not found without launching a browser.
+    Returns: (resolved_url, is_active, reason_if_inactive)
+    """
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            final_url = response.geturl()
+            status_code = response.getcode()
+            if status_code in (404, 410):
+                return final_url, False, "Job posting not found (HTTP 404/410)"
+            
+            # Read first 16KB of HTML to check for expired indicators
+            sample_content = response.read(16384).decode("utf-8", errors="ignore").lower()
+            closed_markers = [
+                "job not found", "posting is no longer available",
+                "this job is no longer available", "this job has expired",
+                "this position has been filled", "job closed"
+            ]
+            for marker in closed_markers:
+                if marker in sample_content:
+                    return final_url, False, f"Job has expired or been taken down ('{marker}')"
+
+            return final_url, True, None
+    except urllib.error.HTTPError as he:
+        if he.code in (404, 410):
+            return url, False, f"Job URL returned HTTP {he.code}"
+        return url, True, None
+    except Exception:
+        # Fallback to navigating with agent if pre-flight times out or is blocked
+        return url, True, None
 
 
 def get_or_create_browser_session(headless: bool = False):
@@ -240,8 +291,28 @@ async def run_browser_use_autofill(
         print(f"[browser-use] Model '{model_name}' fallback triggered: {e}")
         llm = get_browser_use_llm(model_name="gemini-3.5-flash-lite", custom_api_key=custom_api_key)
 
+    # 1. Pre-flight check: resolve redirects (e.g. LinkedIn -> Ashby) and check for expired job
+    resolved_url, is_active, inactive_reason = await asyncio.to_thread(preflight_check_job_url, job_url)
+    if not is_active:
+        print(f"[browser-use] ⚡ Pre-flight detected closed job without browser ({inactive_reason}). Terminating early.")
+        return {
+            "status": "failed",
+            "job_url": job_url,
+            "resolved_url": resolved_url,
+            "auto_submit": effective_auto_submit,
+            "guardrails_disabled": DISABLE_GUARDRAILS,
+            "model_used": "preflight-check",
+            "steps_taken": 0,
+            "is_done": True,
+            "final_result": f"Job unavailable: {inactive_reason}",
+        }
+
+    target_url = resolved_url or job_url
+    if target_url != job_url:
+        print(f"[browser-use] 🎯 Resolved direct ATS application URL: {target_url}")
+
     task_prompt = build_application_task_prompt(
-        job_url=job_url,
+        job_url=target_url,
         resume_data=resume_data,
         resume_pdf_path=resume_pdf_path,
         auto_submit=effective_auto_submit
@@ -251,13 +322,16 @@ async def run_browser_use_autofill(
 
     available_paths = [os.path.abspath(resume_pdf_path)] if resume_pdf_path and os.path.exists(resume_pdf_path) else []
 
-    agent = Agent(
+    mode_str = "AUTO-SUBMIT (GUARDRAILS DISABLED)" if effective_auto_submit else "REVIEW ONLY (GUARDRAIL ACTIVE)"
+
+    # --- Phase 1: Fast Pure-DOM Mode (use_vision=False) ---
+    print(f"[browser-use] ⚡ Starting fast pure-DOM autofill ({mode_str}) for {job_url} [vision=False]...")
+    agent_fast = Agent(
         task=task_prompt,
         llm=llm,
         browser_session=browser_session,
         available_file_paths=available_paths,
-        use_vision=True,
-        vision_detail_level="low",
+        use_vision=False,
         use_judge=False,
         max_actions_per_step=10,
         flash_mode=True,
@@ -266,9 +340,32 @@ async def run_browser_use_autofill(
         retry_delay=1,
     )
 
-    mode_str = "AUTO-SUBMIT (GUARDRAILS DISABLED)" if effective_auto_submit else "REVIEW ONLY (GUARDRAIL ACTIVE)"
-    print(f"[browser-use] Starting visible autonomous autofill ({mode_str}) for {job_url} with model {model_name}...")
-    history = await agent.run(max_steps=max_steps)
+    history = await agent_fast.run(max_steps=max_steps)
+    is_done = history.is_done() if hasattr(history, "is_done") else True
+    final_res = str(history.final_result() if hasattr(history, "final_result") else "")
+
+    # Determine if the pure-DOM pass succeeded or got stuck
+    # If not done or explicitly stated failure/unable to interact, fallback to vision
+    failure_indicators = ["unable", "could not find", "cannot find", "failed", "error", "not found"]
+    needs_vision_fallback = not is_done or any(ind in final_res.lower() for ind in ["unable to fill", "cannot locate", "stuck", "element not found"])
+
+    if needs_vision_fallback:
+        print(f"[browser-use] 👁️ Pure-DOM pass encountered difficulties or could not complete. Retrying with Vision enabled...")
+        agent_vision = Agent(
+            task=task_prompt + "\nNOTE: Retrying with visual sight enabled. Use visual coordinates/elements to locate and fill any inputs that were missed.",
+            llm=llm,
+            browser_session=browser_session,
+            available_file_paths=available_paths,
+            use_vision=True,
+            vision_detail_level="low",
+            use_judge=False,
+            max_actions_per_step=10,
+            flash_mode=True,
+            enable_planning=False,
+            max_failures=2,
+            retry_delay=1,
+        )
+        history = await agent_vision.run(max_steps=max_steps)
 
     return {
         "status": "success",
