@@ -150,7 +150,14 @@ def build_application_task_prompt(
        - For Resume, ensure the candidate's resume is selected or uploaded.
        - For Sponsorship question: select 'Yes' ({sponsorship_str}).
        - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
-    4. Review & Conclude:
+    4. Handle Email Verification / OTP Codes:
+       - If the form asks to enter a verification code / OTP sent to your email (e.g., micro1, Ashby, Workday):
+         a. Open a new tab to Gmail: open a new tab with url 'https://mail.google.com'.
+         b. Locate the latest verification email from the company or portal (usually at the very top of the inbox).
+         c. Click or read the email snippet to extract the numeric or alphanumeric OTP code.
+         d. Switch back to the application tab (or close the Gmail tab).
+         e. Type the verification code into the OTP input field and proceed.
+    5. Review & Conclude:
     {submission_instruction}
     """
     return task
