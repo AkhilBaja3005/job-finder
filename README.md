@@ -334,3 +334,44 @@ python applications_tracker/adhoc_auto_filler.py \
   --limit 10
 ```
 
+---
+
+## 🌟 LinkedIn 'Top Applicant' Scanner & Auto-Apply (`linkedin_top_applicant_scanner.py`)
+
+Dedicated autonomous scanner that specifically targets LinkedIn postings where your profile has the **"You’d be a top applicant"** (or top 10% / top 25% / stand out) badge, auto-applying with zero-tailoring latency using your Master Resume.
+
+### Key Capabilities:
+- **Persistent Chrome Session (CDP Port 9222)**: Reuses your authenticated Chrome profile (`backend/user_data/browser_use_chrome_session`), eliminating repetitive LinkedIn logins, captcha prompts, and session resets.
+- **Top Applicant Badge DOM Filter**: Evaluates rendered search listing cards and detail views to pinpoint roles where you have an unfair competitive advantage.
+- **Master Resume Direct Dispatch**: Dispatches your macOS Red-tagged Master Resume directly without unnecessary LaTeX recompilation.
+- **Automated Email OTP Retrieval via Gmail Tab**: If an external application portal (e.g. micro1, Ashby, Workday) asks for an email verification code, the agent automatically opens `https://mail.google.com` in a new tab, extracts the latest OTP code, and enters it seamlessly.
+- **Dual Persistence**: Every submission is automatically logged to Supabase and tracked in `job_applications_tracker.csv`.
+
+### CLI Usage:
+```bash
+# 1. Preview Mode (Safety Guardrails active):
+python applications_tracker/linkedin_top_applicant_scanner.py
+
+# 2. Autonomous Auto-Submit Mode:
+python applications_tracker/linkedin_top_applicant_scanner.py --auto-submit
+
+# 3. Custom keywords and limit:
+python applications_tracker/linkedin_top_applicant_scanner.py \
+  --keywords "Machine Learning Engineer, AI Engineer" \
+  --limit 10 \
+  --auto-submit
+```
+
+---
+
+## ⏰ Automated Daily macOS Scheduling (`launchd`)
+
+The pipeline includes an automated daily scheduler that executes every morning at **9:00 AM** on macOS via `launchd`:
+
+- **Execution Script**: [`applications_tracker/run_daily_scanner.sh`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/applications_tracker/run_daily_scanner.sh)
+- **LaunchAgent Plist**: `~/Library/LaunchAgents/com.jobfinder.daily_scanner.plist`
+- **Execution Workflow**:
+  1. **Phase 1 (ATS Scanner)**: Searches Ashby, Greenhouse, Lever, Workday for high-fit roles and applies/tailors resumes.
+  2. **Phase 2 (LinkedIn Top Applicant)**: Scans LinkedIn for Top Applicant badge matches and executes autonomous auto-submission.
+- **Daily Logs**: Stored under `applications_tracker/logs/scanner_YYYY-MM-DD.log`.
+
