@@ -112,7 +112,7 @@ async def scan_linkedin_for_top_applicant_jobs(
 
     async with async_playwright() as p:
         print(f"[Top Applicant Scanner] 🌐 Connecting to persistent Chrome session via CDP ({cdp_url})...")
-        browser = await p.chromium.connect_over_cdp(cdp_url)
+        browser = await p.chromium.connect_over_cdp(cdp_url, no_defaults=True)
         context = browser.contexts[0] if browser.contexts else await browser.new_context()
         page = await context.new_page()
         await page.add_init_script("""
