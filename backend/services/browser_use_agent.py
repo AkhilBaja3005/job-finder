@@ -160,8 +160,11 @@ def build_application_task_prompt(
        - Phone Country Code & Number:
          * Many ATS portals (Greenhouse, Lever) use an international telephone widget (`.iti__selected-country` button or 'Select country'). If a phone country button/dropdown is present beside or inside the Phone field, click it, search or select 'India' / '+91' / 'United Kingdom' / '+44', before or together with typing the phone number.
          * Type '{clean_mobile or phone}' into the phone input.
-       - For Dropdowns: First read the list of valid options in that dropdown, then choose the best matching option for candidate profile:
-         * Country / Location: Select 'United Kingdom' or 'London, UK'.
+       - For Dropdowns & Autocomplete Fields:
+         * Country / Location (Autocomplete / Select):
+           - In Greenhouse, Ashby, and Lever, typing 'London' or 'United Kingdom' triggers a dynamic suggestion listbox/flyout menu.
+           - Wait for or inspect the dynamic suggestion list to appear, then click the exact matching option (e.g. 'London, England, United Kingdom', 'London, UK', 'London (United Kingdom)', or 'United Kingdom').
+           - Do not leave the input half-typed without selecting the flyout suggestion.
          * Work Authorization / Sponsorship: Inspect options and choose 'Yes' ({sponsorship_str}).
          * Gender: Inspect options and choose 'Male'.
          * Ethnicity: Inspect options and choose 'Asian' / 'Indian' / 'Asian or Pacific Islander'.
