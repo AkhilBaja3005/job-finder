@@ -627,6 +627,144 @@ if __name__ == "__main__":
             "requires_sponsorship": True
         }
 
+async def extract_jd_with_browser_use(
+    url: str,
+    max_steps: int = 15,
+    model_name: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Uses browser-use to navigate to an Indeed (or Cloudflare-protected) job URL locally,
+    click through any 'Verify you are human' / Turnstile challenge checkboxes, and extract
+    the full job description text and role details.
+    Runs ONLY locally — bypassed in production / cloud environments to preserve container resources.
+    """
+    if not HAS_BROWSER_USE:
+        return None
+
+    # Environment guard: strictly skip in cloud/container environments
+    is_cloud = any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")) or os.getenv("ENVIRONMENT") == "production"
+    if is_cloud:
+        return None
+
+    try:
+        llm = get_browser_use_llm(model_name=model_name or "gemini-3.5-flash-lite")
+    except Exception:
+        llm = get_browser_use_llm(model_name="gemini-3.5-flash-lite")
+
+    fallback_llms = get_browser_use_fallback_llms(primary_llm=llm, model_name="gemini-3.5-flash-lite")
+
+    task_prompt = f"""
+    Navigate to this job listing: {url}
+
+    GOAL:
+    Extract the complete Job Description text, Job Title, and Company Name.
+
+    INSTRUCTIONS:
+    1. If a Cloudflare "Verify you are human", "I am human", or Turnstile security challenge checkbox appears:
+       - Click the "Verify you are human" checkbox or iframe immediately.
+       - Wait 2-3 seconds for the security check to pass and the page to load.
+    2. Once the job page is visible:
+       - Locate the full job description text (including responsibilities, qualifications, requirements, and benefits).
+       - Call `done` with a structured summary in this exact format:
+         JOB_TITLE: <exact job title>
+         COMPANY: <exact company name>
+         DESCRIPTION:
+         <full extracted job description text>
+    """
+
+    agent_cls = MultiFallbackAgent if MultiFallbackAgent is not None else Agent
+    browser_session = create_optimized_browser_session(headless=False)
+
+    try:
+        agent = agent_cls(
+            task=task_prompt,
+            llm=llm,
+            fallback_pool=fallback_llms,
+            browser_session=browser_session,
+            use_vision=True,
+            vision_detail_level="low",
+            use_judge=False,
+            use_thinking=False,
+            max_actions_per_step=8,
+            flash_mode=True,
+            max_failures=2,
+            retry_delay=1,
+        )
+        history = await agent.run(max_steps=max_steps)
+        final_res = str(history.final_result() if hasattr(history, "final_result") else "")
+
+        if not final_res or "DESCRIPTION:" not in final_res:
+            return None
+
+        # Parse extracted output
+        title_val = ""
+        company_val = ""
+        desc_val = ""
+
+        if "JOB_TITLE:" in final_res:
+            part = final_res.split("JOB_TITLE:", 1)[1]
+            title_val = part.split("\n", 1)[0].strip()
+        if "COMPANY:" in final_res:
+            part = final_res.split("COMPANY:", 1)[1]
+            company_val = part.split("\n", 1)[0].strip()
+        if "DESCRIPTION:" in final_res:
+            desc_val = final_res.split("DESCRIPTION:", 1)[1].strip()
+
+        if desc_val and len(desc_val) > 100:
+            return {
+                "title": title_val,
+                "company": company_val,
+                "description": desc_val,
+                "raw_text": desc_val,
+                "url": url,
+                "is_bot_blocked": False
+            }
+        return None
+    except Exception as e:
+        print(f"[browser-use] Error extracting JD via browser-use: {e}")
+        return None
+
+
+if __name__ == "__main__":
+    # Dynamically load profile from candidate_profile.json
+    config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "config", "candidate_profile.json"))
+    candidate_profile = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                cand = cfg.get("candidate", {})
+                candidate_profile = {
+                    "name": cand.get("name", "Akhil Baja"),
+                    "email": cand.get("email", "akhilbaja.work@gmail.com"),
+                    "phone": cand.get("phone", "+91 9948083135"),
+                    "location": cand.get("location", "London, UK"),
+                    "linkedin": cand.get("linkedin", "https://linkedin.com/in/akhilbaja"),
+                    "github": cand.get("github", "https://github.com/AkhilBaja3005"),
+                    "summary": cand.get("experience_summary", ""),
+                    "gender": cand.get("gender", "Male"),
+                    "citizenship": cand.get("citizenship", "Indian"),
+                    "work_authorization": cand.get("work_authorization", "Authorized to work in the UK"),
+                    "requires_sponsorship": cand.get("requires_sponsorship", False),
+                    "skills": cand.get("core_skills", []),
+                    "education": cand.get("education", []),
+                    "work_experience": cand.get("work_experience", []),
+                }
+        except Exception as e:
+            print(f"Error loading candidate_profile.json: {e}")
+
+    # Fallback to minimal dict if file load failed
+    if not candidate_profile:
+        candidate_profile = {
+            "name": "Akhil Baja",
+            "email": "akhilbaja.work@gmail.com",
+            "phone": "+91 9948083135",
+            "location": "London, UK",
+            "linkedin": "https://linkedin.com/in/akhilbaja",
+            "github": "https://github.com/AkhilBaja3005",
+            "requires_sponsorship": True
+        }
+
     # Quick standalone CLI prototype runner
     test_url = sys.argv[1] if len(sys.argv) > 1 else "https://boards.greenhouse.io"
     resume_pdf = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "applications_tracker", "tailored_resumes", "master_resume.pdf"))
@@ -636,4 +774,5 @@ if __name__ == "__main__":
     print(f"Loaded profile for: {candidate_profile.get('name')} ({candidate_profile.get('email')})")
     result = asyncio.run(run_browser_use_autofill(test_url, candidate_profile, resume_pdf_path=resume_path, max_steps=25))
     print("Result:", json.dumps(result, indent=2))
+
 

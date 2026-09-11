@@ -653,14 +653,38 @@ async def run_pipeline(target_url: Optional[str] = None):
             try:
                 print(f"[{idx}/{len(jobs)}] 📥 Fetching live JD on-demand for {title} @ {company} ({platform})...")
                 live_scraped = await scrape_job_description(url)
-                scraped_jd = (live_scraped.get("description") or "").strip()
-                if scraped_jd and len(scraped_jd) >= 100:
+
+                # Check if Playwright got blocked by Cloudflare / Turnstile
+                is_blocked = live_scraped.get("is_bot_blocked", False) if isinstance(live_scraped, dict) else False
+                scraped_jd = (live_scraped.get("description") or "").strip() if isinstance(live_scraped, dict) else ""
+
+                # If bot-blocked or empty, and running locally, attempt browser-use fallback to solve Turnstile
+                is_cloud = any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")) or os.getenv("ENVIRONMENT") == "production"
+                if (is_blocked or not scraped_jd or len(scraped_jd) < 100) and not is_cloud:
+                    print(f"[{idx}/{len(jobs)}] 🛡️ Cloudflare verification detected on Indeed. Activating local browser-use agent to solve Turnstile...")
+                    try:
+                        from services.browser_use_agent import extract_jd_with_browser_use
+                        bu_res = await extract_jd_with_browser_use(url)
+                        if bu_res and bu_res.get("description") and len(bu_res.get("description", "")) >= 100:
+                            live_scraped = bu_res
+                            scraped_jd = bu_res["description"].strip()
+                            is_blocked = False
+                            print(f"[{idx}/{len(jobs)}] ⚡ browser-use successfully solved Turnstile and retrieved JD!")
+                    except Exception as bu_err:
+                        print(f"[{idx}/{len(jobs)}] browser-use JD extraction note: {bu_err}")
+
+                # Only accept scraped result if it is NOT a bot-block page and has a substantial description
+                if scraped_jd and len(scraped_jd) >= 100 and not is_blocked:
                     jd_text = scraped_jd
                     job["description"] = jd_text
-                    if live_scraped.get("title") and live_scraped.get("title") not in ("Indeed Job", "Job Posting"):
-                        title = live_scraped.get("title")
-                    if live_scraped.get("company") and live_scraped.get("company") not in ("Indeed Employer", "Company"):
-                        company = live_scraped.get("company")
+                    scraped_title = live_scraped.get("title", "").strip()
+                    # Protect original title: NEVER overwrite with error/fallback strings like 'Unavailable'
+                    invalid_titles = ("indeed job", "job posting", "unavailable", "just a moment", "target job", "cloudflare verification error")
+                    if scraped_title and scraped_title.lower() not in invalid_titles:
+                        title = scraped_title
+                    scraped_company = live_scraped.get("company", "").strip()
+                    if scraped_company and scraped_company.lower() not in ("indeed employer", "company", ""):
+                        company = scraped_company
 
                     # Compute real deterministic ATS score with candidate profile
                     cand_resume_data = {
@@ -687,6 +711,8 @@ async def run_pipeline(target_url: Optional[str] = None):
                     job["role_fit_score"] = rf_res
                     job["estimated"] = False
                     print(f"   ✓ Successfully retrieved JD ({len(jd_text)} chars). Recomputed ATS Score: {score}% (Skills: {ats_res.skills_score}%, Exp: {ats_res.experience_score}%)")
+                else:
+                    print(f"   ℹ️ Live JD blocked or incomplete, keeping original title '{title}' and estimate ({score}%).")
             except Exception as jd_err:
                 print(f"   ⚠️ Could not fetch live JD on-demand ({jd_err}), using current score ({score}%).")
 
