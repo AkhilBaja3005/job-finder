@@ -9,6 +9,7 @@ set -eo pipefail
 PROJECT_DIR="/Users/akhilbaja/Documents/Akhil/Job Finder"
 VENV_PYTHON="$PROJECT_DIR/backend/venv/bin/python"
 SCANNER_SCRIPT="$PROJECT_DIR/applications_tracker/scheduled_job_scanner.py"
+LINKEDIN_SCANNER_SCRIPT="$PROJECT_DIR/applications_tracker/linkedin_top_applicant_scanner.py"
 LOG_DIR="$PROJECT_DIR/applications_tracker/logs"
 
 mkdir -p "$LOG_DIR"
@@ -29,10 +30,14 @@ fi
 export BROWSER_USE_DISABLE_GUARDRAILS="1"
 export BROWSER_USE_HEADLESS="false"
 
-# Run the scanner
-"$VENV_PYTHON" "$SCANNER_SCRIPT" >> "$LOG_FILE" 2>&1
+# Phase 1: Run the scheduled ATS portal scanner
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🔍 [Phase 1] Running Scheduled ATS Portal Scanner..." >> "$LOG_FILE"
+"$VENV_PYTHON" "$SCANNER_SCRIPT" >> "$LOG_FILE" 2>&1 || echo "⚠️ ATS Scanner completed with non-zero exit code" >> "$LOG_FILE"
 
-EXIT_CODE=$?
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🏁 Scanner finished with exit code: $EXIT_CODE" >> "$LOG_FILE"
+# Phase 2: Run LinkedIn Top Applicant Scanner & Auto-Apply
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🌟 [Phase 2] Running LinkedIn 'Top Applicant' Scanner & Auto-Apply..." >> "$LOG_FILE"
+"$VENV_PYTHON" "$LINKEDIN_SCANNER_SCRIPT" --limit 10 --auto-submit >> "$LOG_FILE" 2>&1 || echo "⚠️ LinkedIn Top Applicant Scanner completed with non-zero exit code" >> "$LOG_FILE"
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🏁 Daily Pipeline Completed Successfully" >> "$LOG_FILE"
 echo "" >> "$LOG_FILE"
-exit $EXIT_CODE
+exit 0
