@@ -9,19 +9,23 @@ Supported inputs:
   1. CSV file (e.g. applications tracker or custom job list)
   2. Excel file (.xlsx / .xls)
   3. Direct job URL(s) passed via CLI
+  4. LinkedIn Job ID(s) passed via CLI (--job-ids)
 
 Usage:
-  # 1. Apply to a single or comma-separated URLs
+  # 1. Apply to LinkedIn job IDs (space- or comma-separated)
+  python applications_tracker/adhoc_auto_filler.py --job-ids 4455334729 4465614142 4464616151
+
+  # 2. Apply to a single or comma-separated URLs
   python applications_tracker/adhoc_auto_filler.py --url "https://job-boards.greenhouse.io/company/jobs/123"
 
-  # 2. Process jobs from tracker CSV matching a status filter (defaults to 'Ready to Apply' and 'Saved & Scored')
+  # 3. Process jobs from tracker CSV matching a status filter (defaults to 'Ready to Apply' and 'Saved & Scored')
   python applications_tracker/adhoc_auto_filler.py --csv applications_tracker/job_applications_tracker.csv --limit 5
 
-  # 3. Process jobs from an Excel file
+  # 4. Process jobs from an Excel file
   python applications_tracker/adhoc_auto_filler.py --excel my_jobs.xlsx --limit 10
 
-  # 4. Enable auto-submit (guardrails disabled)
-  python applications_tracker/adhoc_auto_filler.py --csv applications_tracker/job_applications_tracker.csv --auto-submit
+  # 5. Enable auto-submit (guardrails disabled)
+  python applications_tracker/adhoc_auto_filler.py --job-ids 4455334729 --auto-submit
 """
 
 import os
@@ -29,6 +33,7 @@ import sys
 import csv
 import asyncio
 import argparse
+import re
 from typing import List, Dict, Any, Optional
 
 JOB_FINDER_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -150,12 +155,15 @@ async def apply_job_adhoc(
     print(f"⚡ Mode: {'Auto-Submit (Guardrails OFF)' if auto_submit else 'Review / Preview (Guardrails ON)'}")
     print(f"===========================================================")
 
+    from config.constants import get_best_flash_lite_model
+    selected_model = get_best_flash_lite_model()
+
     res = await run_browser_use_autofill(
         job_url=url,
         resume_data=candidate,
         resume_pdf_path=resume_path,
         headless=headless,
-        model_name="gemini-3.5-flash-lite",
+        model_name=selected_model,
         auto_submit=auto_submit,
         max_steps=50
     )
@@ -166,6 +174,7 @@ async def apply_job_adhoc(
 
 async def main():
     parser = argparse.ArgumentParser(description="Ad-hoc Job Application Auto-Filler using Master Resume")
+    parser.add_argument("--job-ids", nargs="+", type=str, help="List of LinkedIn job IDs (e.g. 4455334729 4465614142 or comma-separated)")
     parser.add_argument("--url", type=str, help="Direct job URL (or comma-separated list of URLs)")
     parser.add_argument("--csv", type=str, default=None, help=f"Path to CSV file (defaults to {DEFAULT_CSV_PATH} if --excel or --url not set)")
     parser.add_argument("--excel", type=str, default=None, help="Path to Excel (.xlsx) file")
@@ -199,7 +208,34 @@ async def main():
     # Collect jobs list
     jobs_to_process: List[Dict[str, Any]] = []
 
-    if args.url:
+    if args.job_ids:
+        # Flatten space-separated or comma-separated LinkedIn job IDs
+        raw_ids: List[str] = []
+        for item in args.job_ids:
+            for sub_id in item.replace(",", " ").split():
+                clean_id = sub_id.strip()
+                # If a user passes a full URL by accident into --job-ids, extract the digits
+                id_match = re.search(r"(\d{8,})", clean_id)
+                if id_match:
+                    raw_ids.append(id_match.group(1))
+                elif clean_id.isdigit():
+                    raw_ids.append(clean_id)
+
+        # Deduplicate while preserving order
+        unique_ids = list(dict.fromkeys(raw_ids))
+        print(f"[Ad-hoc Filler] 🎯 Received {len(unique_ids)} LinkedIn Job ID(s): {', '.join(unique_ids)}")
+        for jid in unique_ids:
+            job_url = f"https://www.linkedin.com/jobs/view/{jid}/"
+            jobs_to_process.append({
+                "title": f"LinkedIn Job #{jid}",
+                "company": "LinkedIn Listing",
+                "url": job_url,
+                "location": "UK",
+                "platform": "LinkedIn",
+                "status": "Ready to Apply",
+                "overall_ats": 85
+            })
+    elif args.url:
         urls = [u.strip() for u in args.url.split(",") if u.strip()]
         for u in urls:
             jobs_to_process.append({

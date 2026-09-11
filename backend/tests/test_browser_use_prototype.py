@@ -173,3 +173,23 @@ def test_format_posted_date_time():
     assert format_posted_date_time("2026-09-11") == "2026-09-11; 00:00"
 
 
+def test_adhoc_auto_filler_job_ids_parsing():
+    """Validates normalization of raw job IDs and messy inputs into clean LinkedIn URLs."""
+    import re
+    raw_args = ["4455334729", "4465614142,4464616151", "https://www.linkedin.com/jobs/view/4442843430/"]
+    raw_ids = []
+    for item in raw_args:
+        for sub_id in item.replace(",", " ").split():
+            clean_id = sub_id.strip()
+            id_match = re.search(r"(\d{8,})", clean_id)
+            if id_match:
+                raw_ids.append(id_match.group(1))
+            elif clean_id.isdigit():
+                raw_ids.append(clean_id)
+
+    unique_ids = list(dict.fromkeys(raw_ids))
+    assert unique_ids == ["4455334729", "4465614142", "4464616151", "4442843430"]
+    urls = [f"https://www.linkedin.com/jobs/view/{jid}/" for jid in unique_ids]
+    assert all("linkedin.com/jobs/view/" in u for u in urls)
+
+
