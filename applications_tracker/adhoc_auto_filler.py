@@ -57,6 +57,7 @@ from scheduled_job_scanner import (
     get_existing_tracked_urls,
     record_to_supabase_or_csv,
     format_posted_date_time,
+    notify_user_of_failed_applications,
 )
 
 
@@ -271,6 +272,7 @@ async def main():
     print(f"\n[Ad-hoc Filler] 📋 Found {len(jobs_to_process)} jobs ({len(filtered_jobs)} actionable). Processing top {total_to_run} jobs.")
 
     completed = 0
+    failed_applications = []
     for idx, job in enumerate(filtered_jobs[:total_to_run], start=1):
         print(f"\n[{idx}/{total_to_run}] Starting application for {job['title']} @ {job['company']}")
         res = await apply_job_adhoc(
@@ -281,8 +283,27 @@ async def main():
             headless=args.headless
         )
 
-        # Update record status in Supabase/CSV
-        new_status = "applied" if auto_submit and res.get("status") == "success" else "Reviewed & Ready"
+        # Update record status in Supabase/CSV with post-submission verification
+        res_status = res.get("status") if isinstance(res, dict) else ""
+        final_res = str(res.get("final_result", "")) if isinstance(res, dict) else ""
+
+        if auto_submit:
+            if res_status == "success":
+                new_status = "applied"
+                print(f"   ✅ Application verified & submitted successfully for {job['title']} @ {job['company']}")
+            else:
+                new_status = "Needs Review (Unsubmitted)"
+                fail_reason = final_res or "Form validation error or unconfirmed submission"
+                print(f"   ⚠️ Submission verification failed for {job['title']} @ {job['company']}: {fail_reason}")
+                failed_applications.append({
+                    "title": job.get("title", "Role"),
+                    "company": job.get("company", "Company"),
+                    "url": job["url"],
+                    "reason": fail_reason[:150]
+                })
+        else:
+            new_status = "Reviewed & Ready"
+
         record_payload = {
             "company": job.get("company", "Company"),
             "job_title": job.get("title", "Role"),
@@ -307,7 +328,12 @@ async def main():
         await record_to_supabase_or_csv(record_payload)
         completed += 1
 
-    print(f"\n✨ [Ad-hoc Filler] Completed processing {completed} applications successfully!")
+    print(f"\n✨ [Ad-hoc Filler] Completed processing {completed} applications!")
+
+    # Alert user via email if any applications failed/need review
+    if failed_applications:
+        cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
+        notify_user_of_failed_applications(failed_applications, to_email=cand_email)
 
 
 if __name__ == "__main__":

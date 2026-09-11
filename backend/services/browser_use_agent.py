@@ -137,7 +137,13 @@ def build_application_task_prompt(
         task += f"\n- Resume File to attach: {os.path.abspath(resume_pdf_path)}\n"
 
     submission_instruction = (
-        "5. SUBMIT APPLICATION: Once all required inputs, attachments, and questions on the final review step are satisfied, click the final 'Submit Application' or 'Send Application' button. Do not add wait steps after submitting."
+        """5. SUBMIT & VERIFY SUBMISSION (STRICT VERIFICATION REQUIRED):
+       - Once all required inputs, attachments, and questions on the final review step are satisfied, click the final 'Submit Application' or 'Send Application' button.
+       - AFTER CLICKING SUBMIT:
+         * Carefully check the resulting page state or URL:
+           a. CONFIRMED SUCCESS: If the URL redirects to a confirmation page (e.g. contains '/confirmation', '/thank-you', '/thank_you', or '/applied') OR the screen displays clear confirmation text ('Thank you for applying', 'Application submitted', 'Your application was sent to', 'We have received your application'), call `done` with 'SUBMISSION_CONFIRMED: <details>'.
+           b. FAILED OR BLOCKED: If you are still on the form page and see any validation error message, unfulfilled required field (e.g. missing phone country code, unselected dropdown, uncompleted captcha, or 'Please fill in this field'), or if submission failed, DO NOT claim success! Fix the fields and retry submitting once. If still unable to submit, call `done` with 'SUBMISSION_FAILED: <exact reason or error text>'.
+       - NEVER claim success if you are still on an unsubmitted form with validation errors!"""
         if auto_submit
         else "5. SAFETY GUARDRAIL: Navigate through intermediate pages ('Next' / 'Continue'), but DO NOT click final 'Submit Application' or 'Send Application'. Stop on the final review/preview step and report a summary of completed fields."
     )
@@ -177,8 +183,6 @@ def build_application_task_prompt(
          c. Click or read the email snippet to extract the numeric or alphanumeric OTP code.
          d. Switch back to the application tab (or close the Gmail tab).
          e. Type the verification code into the OTP input field and proceed.
-    5. Review & Conclude:
-       - After clicking 'Submit Application', DO NOT immediately call `done`. First check if any red validation error banners or unfulfilled required fields (like 'Select a country' or 'Required') appear. If validation errors appear, solve them and click 'Submit Application' again until the page displays a confirmation message ('Thank you for applying', 'Application submitted', or redirects).
     {submission_instruction}
     """
     return task
@@ -421,15 +425,56 @@ async def run_browser_use_autofill(
         )
         history = await agent_vision.run(max_steps=max_steps)
 
+    is_done = history.is_done() if hasattr(history, "is_done") else True
+    final_res = str(history.final_result() if hasattr(history, "final_result") else "")
+
+    # Rigorous Post-Submission Verification
+    # Distinguish between actual confirmed submission vs forms stuck on validation errors / unfinished
+    res_lower = final_res.lower()
+    submission_confirmed = any(m in res_lower for m in [
+        "submission_confirmed",
+        "thank you for applying",
+        "application submitted",
+        "application was sent",
+        "we have received your application",
+        "applied successfully",
+        "confirmation",
+    ])
+    submission_failed = any(m in res_lower for m in [
+        "submission_failed",
+        "unable to submit",
+        "validation error",
+        "required field",
+        "could not submit",
+        "failed to submit",
+        "captcha",
+        "recaptcha",
+        "please fill in this field",
+        "select a country",
+    ])
+
+    if effective_auto_submit:
+        if submission_confirmed and not submission_failed:
+            exec_status = "success"
+        elif submission_failed or not is_done:
+            exec_status = "failed"
+        elif any(f in res_lower for f in ["submitted", "complete", "finished"]):
+            exec_status = "success"
+        else:
+            # Fallback if unsure whether it actually submitted
+            exec_status = "needs_review"
+    else:
+        exec_status = "preview_ready" if is_done else "failed"
+
     return {
-        "status": "success",
+        "status": exec_status,
         "job_url": job_url,
         "auto_submit": effective_auto_submit,
         "guardrails_disabled": DISABLE_GUARDRAILS,
         "model_used": getattr(llm, "model", model_name),
         "steps_taken": len(history.history) if hasattr(history, "history") else 0,
-        "is_done": history.is_done() if hasattr(history, "is_done") else True,
-        "final_result": history.final_result() if hasattr(history, "final_result") else "Completed application autofill run.",
+        "is_done": is_done,
+        "final_result": final_res or "Completed application autofill run.",
     }
 
 

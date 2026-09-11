@@ -62,6 +62,7 @@ from scheduled_job_scanner import (
     get_existing_tracked_urls,
     record_to_supabase_or_csv,
     format_posted_date_time,
+    notify_user_of_failed_applications,
 )
 
 TOP_APPLICANT_PATTERNS = [
@@ -273,6 +274,7 @@ async def run_top_applicant_pipeline(
 
     selected_model = get_best_flash_lite_model()
     processed_count = 0
+    failed_applications = []
 
     # Determine target jobs list based on limit (None or <= 0 means NO LIMIT / process all)
     jobs_to_process = top_jobs if (limit is None or limit <= 0) else top_jobs[:limit]
@@ -305,7 +307,26 @@ async def run_top_applicant_pipeline(
                 max_steps=50
             )
 
-            new_status = "applied" if auto_submit and res.get("status") == "success" else "Top Applicant - Ready"
+            res_status = res.get("status") if isinstance(res, dict) else ""
+            final_res = str(res.get("final_result", "")) if isinstance(res, dict) else ""
+
+            if auto_submit:
+                if res_status == "success":
+                    new_status = "applied"
+                    print(f"   ✅ Application verified & submitted successfully for {job_title} @ {company}")
+                else:
+                    new_status = "Needs Review (Unsubmitted)"
+                    fail_reason = final_res or "Form validation error or unconfirmed submission"
+                    print(f"   ⚠️ Submission verification failed for {job_title} @ {company}: {fail_reason}")
+                    failed_applications.append({
+                        "title": job_title,
+                        "company": company,
+                        "url": job_url,
+                        "reason": fail_reason[:150]
+                    })
+            else:
+                new_status = "Top Applicant - Ready"
+
             record_payload = {
                 "company": company,
                 "job_title": job_title,
@@ -333,6 +354,11 @@ async def run_top_applicant_pipeline(
             print(f"   ❌ Error applying to {job_url}: {e}")
 
     print(f"\n✨ [Top Applicant Scanner] Completed processing {processed_count} top applicant jobs.")
+
+    # Alert user via email if any applications failed/need review
+    if failed_applications:
+        cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
+        notify_user_of_failed_applications(failed_applications, to_email=cand_email)
 
 
 def main():

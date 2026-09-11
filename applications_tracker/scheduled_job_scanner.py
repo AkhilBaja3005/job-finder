@@ -116,6 +116,7 @@ from mcp.tools.tracking_tools import handle_track_application
 from mcp.tools.autofill_tools import build_and_compile_tailored_pdf, _get_default_resume_path
 from mcp.tools.ats_tools import handle_calculate_ats_score
 from services.browser_use_agent import run_browser_use_autofill
+from services.email_service import send_notification_email
 from services.job_searcher import normalize_timeframe
 from services.auth import async_supabase_request, supabase_request, SUPABASE_URL, SUPABASE_KEY
 import subprocess
@@ -322,6 +323,128 @@ async def record_to_supabase_or_csv(record_data: dict):
         print(f"[CSV Tracker] Error saving application: {ce}")
 
 
+async def update_application_status(job_url: str, new_status: str, notes: Optional[str] = None):
+    """
+    Updates the status of an existing application in Supabase and the CSV tracker.
+    """
+    if not job_url:
+        return
+
+    # 1. Update Supabase
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            url_filter = f"applications?job_url=eq.{job_url}"
+            patch_payload = {"status": new_status}
+            await async_supabase_request(url_filter, "PATCH", patch_payload)
+        except Exception as se:
+            print(f"[Tracker] Note: Could not update status in Supabase: {se}")
+
+    # 2. Update CSV Tracker
+    if os.path.exists(CSV_PATH):
+        try:
+            rows = []
+            headers = []
+            url_norm = job_url.strip().split("?")[0].rstrip("/").lower()
+            with open(CSV_PATH, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                headers = next(reader, [])
+                for r in reader:
+                    if len(r) >= 19:
+                        r_url = r[18].strip().split("?")[0].rstrip("/").lower()
+                        if r_url == url_norm:
+                            r[17] = new_status
+                    rows.append(r)
+
+            if headers:
+                with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f)
+                    writer.writerow(headers)
+                    writer.writerows(rows)
+        except Exception as ce:
+            print(f"[Tracker] Note: Could not update status in CSV: {ce}")
+
+
+def notify_user_of_failed_applications(failed_jobs: list, to_email: Optional[str] = None) -> bool:
+    """
+    Dispatches an email alert to the user listing all applications that failed or need manual review.
+    """
+    if not failed_jobs:
+        return False
+
+    recipient = to_email or os.getenv("NOTIFY_EMAIL") or "akhilbaja.work@gmail.com"
+    subject = f"⚠️ Job Finder Alert: User Review Needed for {len(failed_jobs)} Application(s)"
+
+    # Build plain text summary
+    text_lines = [
+        f"Hi Akhil,",
+        f"",
+        f"During the recent job application run, {len(failed_jobs)} application(s) could not be submitted automatically and require your review:",
+        f""
+    ]
+    for idx, f in enumerate(failed_jobs, 1):
+        text_lines.append(f"{idx}. {f.get('title', 'Role')} @ {f.get('company', 'Company')}")
+        text_lines.append(f"   URL: {f.get('url', '')}")
+        text_lines.append(f"   Reason: {f.get('reason', 'Submission could not be completed')}")
+        text_lines.append("")
+    text_lines.append("Please open the links above to inspect the forms and complete submission.")
+    text_body = "\n".join(text_lines)
+
+    # Build HTML summary
+    table_rows = "".join([
+        f"""<tr>
+            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;"><b>{f.get('title', 'Role')}</b></td>
+            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">{f.get('company', 'Company')}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #e53e3e;">{f.get('reason', 'Submission unconfirmed')}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">
+                <a href="{f.get('url', '')}" style="background-color: #3182ce; color: white; padding: 6px 12px; text-decoration: none; border-radius: 4px; font-weight: 500; font-size: 13px;" target="_blank">Review & Submit</a>
+            </td>
+        </tr>"""
+        for f in failed_jobs
+    ])
+
+    html_body = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 680px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h2 style="color: #c53030; margin-top: 0;">⚠️ User Review Needed: Unable to Submit Applications</h2>
+        <p style="color: #4a5568; font-size: 15px;">
+            The autonomous job scanner attempted to apply for the following <b>{len(failed_jobs)}</b> role(s), but encountered form validation errors, unselected required fields, or unconfirmed submissions:
+        </p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; text-align: left;">
+            <thead>
+                <tr style="background-color: #f7fafc; color: #4a5568;">
+                    <th style="padding: 10px; border-bottom: 2px solid #cbd5e0;">Job Title</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #cbd5e0;">Company</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #cbd5e0;">Issue / Reason</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #cbd5e0;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {table_rows}
+            </tbody>
+        </table>
+        <p style="color: #718096; font-size: 13px; margin-top: 24px;">
+            These applications have been marked as <code>Needs Review (Unsubmitted)</code> in your tracker ledger.
+        </p>
+    </div>
+    """
+
+    print(f"\n[Email Alert] 📧 Sending 'User Review Needed' email for {len(failed_jobs)} failed application(s) to {recipient}...")
+    try:
+        sent = send_notification_email(
+            to_email=recipient,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body
+        )
+        if sent:
+            print(f"[Email Alert] ✅ Notification email sent successfully to {recipient}!")
+        else:
+            print(f"[Email Alert] ⚠️ Failed to send notification email to {recipient}.")
+        return sent
+    except Exception as ee:
+        print(f"[Email Alert] ❌ Error sending notification email: {ee}")
+        return False
+
+
 def get_existing_tracked_urls() -> set:
     """
     Collects normalized URLs of jobs already tracked or applied to.
@@ -467,6 +590,7 @@ async def run_pipeline(target_url: Optional[str] = None):
     tailored_count = 0
     direct_applied_count = 0
     applied_attempts = 0
+    failed_applications = []
 
     for idx, job in enumerate(jobs, start=1):
         title = job.get("title", "Role")
@@ -498,13 +622,13 @@ async def run_pipeline(target_url: Optional[str] = None):
 
         if score >= DIRECT_APPLY_ATS_THRESHOLD:
             # 🎯 DIRECT APPLY (>= 80% ATS match)
-            status = "applied" if disable_guardrails else "Ready to Apply"
+            status = "Ready to Apply"
             print(f"\n[{idx}/{len(jobs)}] 🌟 EXCELLENT MATCH ({score}% >= {DIRECT_APPLY_ATS_THRESHOLD}%): {title} @ {company}")
             print(f"   ⚡ Direct Apply mode: Using master resume (no tailoring needed)")
             direct_applied_count += 1
         elif score >= min_ats_score:
             # 🛠️ TAILOR & APPLY (65% - 79% ATS match)
-            status = "applied" if disable_guardrails else "Tailored & Ready"
+            status = "Tailored & Ready"
             print(f"\n[{idx}/{len(jobs)}] 🎯 QUALIFIED MATCH ({score}% ATS): {title} @ {company}")
             print(f"   📝 Tailoring 1-page LaTeX resume for keyword & skills alignment...")
             if jd_text:
@@ -575,7 +699,7 @@ async def run_pipeline(target_url: Optional[str] = None):
                 applied_attempts += 1
                 disp_total = str(max_applications) if max_applications > 0 else "∞"
                 print(f"[Scanner] 🚀 Dispatching application ({applied_attempts}/{disp_total})...")
-                await apply_to_job(
+                res = await apply_to_job(
                     url=url,
                     candidate=candidate,
                     resume_path=pdf_to_submit,
@@ -584,7 +708,33 @@ async def run_pipeline(target_url: Optional[str] = None):
                     auto_submit=disable_guardrails
                 )
 
+                # Post-Submission Verification Check
+                res_status = res.get("status") if isinstance(res, dict) else ""
+                final_res = str(res.get("final_result", "")) if isinstance(res, dict) else ""
+
+                if disable_guardrails:
+                    if res_status == "success":
+                        print(f"   ✅ Application verified & submitted successfully for {title} @ {company}")
+                        await update_application_status(url, "applied")
+                    else:
+                        fail_reason = final_res or "Form validation error or unconfirmed submission"
+                        print(f"   ⚠️ Submission verification failed for {title} @ {company}: {fail_reason}")
+                        await update_application_status(url, "Needs Review (Unsubmitted)")
+                        failed_applications.append({
+                            "title": title,
+                            "company": company,
+                            "url": url,
+                            "reason": fail_reason[:150]
+                        })
+                else:
+                    await update_application_status(url, "Ready to Apply (Reviewed)")
+
     print(f"\n[Scanner] ✅ Scan complete! Discovered & processed {new_jobs_added} new postings ({direct_applied_count} direct applied, {tailored_count} tailored).")
+
+    # Send summary email alert if any applications failed/need review
+    if failed_applications:
+        cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
+        notify_user_of_failed_applications(failed_applications, to_email=cand_email)
 
 
 if __name__ == "__main__":
