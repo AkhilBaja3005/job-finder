@@ -281,9 +281,24 @@ Job Finder includes an autonomous discovery, ATS evaluation, LaTeX resume tailor
    - **ATS Score $\ge 80\%$ (Direct Apply)**: Directly submits the candidate's master resume without needing modifications.
    - **ATS Score $65\% - 79\%$ (Tailor & Apply)**: Automatically drafts and compiles a tailored 1-page LaTeX & PDF resume aligned with the job's missing keywords before submitting.
    - **ATS Score $< 65\%$ (Saved & Scored)**: Logged to the tracker for manual review without triggering automatic submission.
-3. **Dual Persistence Tracking**: Every application attempt is recorded to Supabase (`applications` table, `user_id = 23`) with automatic fallback to `applications_tracker/job_applications_tracker.csv`.
-4. **Already-Applied Detection**: Queries Supabase and local CSV to prevent duplicate submissions, and utilizes in-page visual detection to instantly exit if an application was already submitted on the target platform.
-5. **Visa Sponsorship & Compliance Handling**: Explicitly evaluates visa knockout constraints (`requires_sponsorship: true`), ensuring truthful answering on all multiple-choice ATS screening questionnaires.
+3. **Rigorous Post-Submission Verification & Error Detection**:
+   - Clicking "Submit" is **never** assumed to be successful without confirmation.
+   - Checks for definitive confirmation screens/redirects (`/confirmation`, `/thank-you`, `Thank you for applying`, `Application submitted`).
+   - If blocked by unfulfilled required fields (e.g. telephone country code `.iti__selected-country`), missing dynamic flyouts, captchas, or server endpoint errors (e.g. `'Something went wrong. Please try again.'`), it strictly classifies the status as:
+     ```
+     Needs Review (Unsubmitted)
+     ```
+4. **Automated User Failure Notification Emails**:
+   - At the conclusion of any scanning run (`scheduled_job_scanner.py`, `adhoc_auto_filler.py`, `linkedin_top_applicant_scanner.py`), if any applications encountered errors or could not be submitted, the agent immediately sends an email alert to the candidate.
+   - Includes a formatted summary table with the job title, company name, exact blocking error reason, and a direct `[Review & Submit]` action button to finish the submission manually.
+5. **Universal "Sign in / Sign up with Google" Authentication**:
+   - When application portals demand user authentication or registration (such as **Reed.co.uk**, Workday, or custom portals), the agent automatically uses **"Sign in with Google" / "Continue with Google"** with the persistent authenticated Chrome session.
+6. **Multi-Key LLM Cascading (`429 RESOURCE_EXHAUSTED` Resilience)**:
+   - Integrates `MultiFallbackAgent` across all configured Gemini API keys (`GEMINI_API_KEY` through `GEMINI_API_KEY_7`) and model tiers (`gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.5-flash`).
+   - If free-tier RPM quotas are saturated, it seamlessly rotates to the next available API key in real-time without crashing the scan.
+7. **Dual Persistence Tracking**: Every application attempt is recorded to Supabase (`applications` table) with automatic fallback to `applications_tracker/job_applications_tracker.csv`.
+8. **Already-Applied Detection**: Queries Supabase and local CSV to prevent duplicate submissions, and utilizes in-page visual detection to instantly exit if an application was already submitted on the target platform.
+9. **Visa Sponsorship & Compliance Handling**: Explicitly evaluates visa knockout constraints (`requires_sponsorship: true`), ensuring truthful answering on all multiple-choice ATS screening questionnaires.
 
 ### Running the Scanner:
 ```bash
