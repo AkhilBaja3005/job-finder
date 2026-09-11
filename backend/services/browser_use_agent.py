@@ -673,7 +673,7 @@ async def extract_jd_with_browser_use(
     """
 
     agent_cls = MultiFallbackAgent if MultiFallbackAgent is not None else Agent
-    browser_session = create_optimized_browser_session(headless=False)
+    browser_session = get_or_create_browser_session(headless=False)
 
     try:
         agent = agent_cls(
