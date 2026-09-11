@@ -193,3 +193,19 @@ def test_adhoc_auto_filler_job_ids_parsing():
     assert all("linkedin.com/jobs/view/" in u for u in urls)
 
 
+def test_is_top_applicant_badge():
+    """Validates regex matching for various LinkedIn top applicant and competitive badge variations."""
+    import sys
+    sys.path.insert(0, "/Users/akhilbaja/Documents/Akhil/Job Finder/applications_tracker")
+    from linkedin_top_applicant_scanner import is_top_applicant_badge
+
+    assert is_top_applicant_badge("You’d be a top applicant for this job based on your profile")
+    assert is_top_applicant_badge("You'd be a top applicant")
+    assert is_top_applicant_badge("In the top 10% of 142 applicants")
+    assert is_top_applicant_badge("In the top 25% of applicants")
+    assert is_top_applicant_badge("We can help you stand out for this role with Premium")
+    assert is_top_applicant_badge("Competitive applicant match")
+    assert not is_top_applicant_badge("Regular software engineering job in London")
+    assert not is_top_applicant_badge("")
+
+
