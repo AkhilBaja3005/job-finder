@@ -683,12 +683,15 @@ async def run_pipeline(target_url: Optional[str] = None):
                     print(f"[{idx}/{len(jobs)}] 🛡️ Cloudflare verification detected on Indeed. Activating local browser-use agent to solve Turnstile...")
                     try:
                         from services.browser_use_agent import extract_jd_with_browser_use
-                        bu_res = await extract_jd_with_browser_use(url)
+                        # Bound browser-use JD extraction to a safe 60s timeout
+                        bu_res = await asyncio.wait_for(extract_jd_with_browser_use(url), timeout=60.0)
                         if bu_res and bu_res.get("description") and len(bu_res.get("description", "")) >= 100:
                             live_scraped = bu_res
                             scraped_jd = bu_res["description"].strip()
                             is_blocked = False
                             print(f"[{idx}/{len(jobs)}] ⚡ browser-use successfully solved Turnstile and retrieved JD!")
+                    except asyncio.TimeoutError:
+                        print(f"[{idx}/{len(jobs)}] ⏱️ browser-use JD extraction timed out after 60s, keeping original listing info.")
                     except Exception as bu_err:
                         print(f"[{idx}/{len(jobs)}] browser-use JD extraction note: {bu_err}")
 
@@ -697,12 +700,12 @@ async def run_pipeline(target_url: Optional[str] = None):
                     jd_text = scraped_jd
                     job["description"] = jd_text
                     scraped_title = live_scraped.get("title", "").strip()
-                    # Protect original title: NEVER overwrite with error/fallback strings like 'Unavailable'
-                    invalid_titles = ("indeed job", "job posting", "unavailable", "just a moment", "target job", "cloudflare verification error")
+                    # Protect original title: NEVER overwrite with error/fallback strings like 'Unavailable' or 'Not found'
+                    invalid_titles = ("indeed job", "job posting", "unavailable", "not found", "just a moment", "target job", "cloudflare verification error")
                     if scraped_title and scraped_title.lower() not in invalid_titles:
                         title = scraped_title
                     scraped_company = live_scraped.get("company", "").strip()
-                    if scraped_company and scraped_company.lower() not in ("indeed employer", "company", ""):
+                    if scraped_company and scraped_company.lower() not in ("indeed employer", "company", "not found", ""):
                         company = scraped_company
 
                     # Compute real deterministic ATS score with candidate profile
@@ -749,14 +752,18 @@ async def run_pipeline(target_url: Optional[str] = None):
             if jd_text:
                 try:
                     job_missing = job.get("missing_skills") or []
-                    pdf_res = await asyncio.to_thread(
-                        build_and_compile_tailored_pdf,
-                        jd_text=jd_text,
-                        job_title=title,
-                        company=company,
-                        candidate_info=candidate,
-                        out_dir=RESUMES_DIR,
-                        missing_skills=job_missing
+                    # Bound tailoring & compiling to a safe 90s timeout
+                    pdf_res = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            build_and_compile_tailored_pdf,
+                            jd_text=jd_text,
+                            job_title=title,
+                            company=company,
+                            candidate_info=candidate,
+                            out_dir=RESUMES_DIR,
+                            missing_skills=job_missing
+                        ),
+                        timeout=90.0
                     )
                     if pdf_res and os.path.exists(pdf_res):
                         tailored_ats = evaluate_pdf_ats(pdf_res, jd_text, candidate)
@@ -773,6 +780,9 @@ async def run_pipeline(target_url: Optional[str] = None):
                         else:
                             pdf_to_submit = master_resume_pdf
                             print(f"   ℹ️ Master resume scored higher ({master_ats}% > {tailored_ats}%). Keeping master resume: {os.path.basename(pdf_to_submit)}")
+                except asyncio.TimeoutError:
+                    print(f"   ⏱️ Resume tailoring timed out after 90s. Falling back to master resume.")
+                    pdf_to_submit = master_resume_pdf
                 except Exception as te:
                     print(f"   ⚠️ Tailoring error: {te}. Falling back to master resume.")
         else:

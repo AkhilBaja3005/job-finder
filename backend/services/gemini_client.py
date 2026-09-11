@@ -327,14 +327,25 @@ def _generate_with_model_list(
                     msg_llm = f"[LLM] Attempting generation with model: {model_name} (try {retry_attempt + 1})..."
                     from services.log_queue import log_ist
                     log_ist(msg_llm)
-                    if on_log:
-                        on_log(json.dumps({"type": "llm_info", "message": msg_llm}))
+                    import concurrent.futures
+                    def _call_gemini():
+                        return client.models.generate_content(
+                            model=model_name,
+                            contents=prompt,
+                            config=types.GenerateContentConfig(**config_args),
+                        )
 
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(**config_args),
-                    )
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(_call_gemini)
+                        try:
+                            response = future.result(timeout=30.0)
+                        except concurrent.futures.TimeoutError:
+                            from services.log_queue import log_ist
+                            timeout_msg = f"[LLM] Model {model_name} timed out after 30s. Moving to next candidate..."
+                            print(timeout_msg)
+                            log_ist(timeout_msg)
+                            break
+
                     text = response.text
                     if not text or not text.strip():
                         break # Try next variant shape model in list
