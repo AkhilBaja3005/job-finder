@@ -24,7 +24,7 @@ try:
     from browser_use import Agent, Browser, ChatGoogle, BrowserSession
     HAS_BROWSER_USE = True
 
-    class MultiFallbackAgent(Agent):
+    class MultiFallbackAgent(Agent):  # pyright: ignore[reportRedeclaration]
         """
         Agent subclass that supports an ordered pool of fallback LLMs across all configured
         GEMINI_API_KEYS. Whenever a rate limit (429 RESOURCE_EXHAUSTED) or provider failure
@@ -56,7 +56,7 @@ except ImportError:
     Browser: Any = None
     ChatGoogle: Any = None
     BrowserSession: Any = None
-    MultiFallbackAgent: Any = None
+    MultiFallbackAgent = None  # type: ignore
 
 from config.constants import (
     DEFAULT_FAST_LITE_MODELS,
