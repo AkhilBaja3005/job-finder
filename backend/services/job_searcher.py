@@ -1058,7 +1058,19 @@ async def find_matching_jobs(
     seen_urls = set()
     deduped_jobs = []
     for job in raw_jobs:
-        u_norm = job.url.split("?")[0].rstrip("/").lower()
+        # For query-based URLs (like /viewjob?jk=...), preserve the unique job key rather than stripping all queries
+        raw_u = job.url.strip().rstrip("/").lower()
+        if "jk=" in raw_u:
+            import re
+            m_jk = re.search(r'jk=([a-f0-9]{16})', raw_u)
+            u_norm = f"indeed_{m_jk.group(1)}" if m_jk else raw_u
+        elif "currentjobid=" in raw_u:
+            import re
+            m_cj = re.search(r'currentjobid=(\d+)', raw_u)
+            u_norm = f"linkedin_{m_cj.group(1)}" if m_cj else raw_u
+        else:
+            u_norm = raw_u.split("?")[0].rstrip("/").lower()
+
         if job.job_id not in seen_ids and u_norm not in seen_urls:
             seen_ids.add(job.job_id)
             seen_urls.add(u_norm)
@@ -1142,11 +1154,11 @@ async def find_matching_jobs(
             try:
                 return await asyncio.wait_for(_inner_score(), timeout=25.0)
             except asyncio.TimeoutError:
-                print(f"[Job Searcher] ⚠️ Scoring timed out after 25s for '{job.title}', skipping JD scoring")
-                return None
+                print(f"[Job Searcher] ⚠️ Scoring timed out after 25s for '{job.title}', preserving with title estimate")
+                return _score_job_with_title_heuristic(job, resume_data)
             except Exception as e:
-                print(f"[Job Searcher] Error scoring job '{job.title}': {e}")
-                return None
+                print(f"[Job Searcher] Error scoring job '{job.title}': {e}, preserving with title estimate")
+                return _score_job_with_title_heuristic(job, resume_data)
 
         log_queue_stream = []
         tasks = [asyncio.create_task(_score_and_stream(job, log_queue_stream)) for job in web_scored_batch]
@@ -1177,12 +1189,20 @@ async def find_matching_jobs(
     yield json.dumps({"type": "log", "message": f"🏁 Scanned {len(scored_jobs)} matches successfully! ({accurate_count} JD-scored, {estimated_count} title-estimated)"}) + "\n"
 
     # Prepare EST section for any leftover Indeed jobs that weren't included in scored_jobs
-    scored_urls = {j.get("url", "").split("?")[0].rstrip("/").lower() for j in scored_jobs}
+    def _normalize_track_url(u_str: str) -> str:
+        import re
+        raw = (u_str or "").strip().rstrip("/").lower()
+        if "jk=" in raw:
+            m = re.search(r'jk=([a-f0-9]{16})', raw)
+            return f"indeed_{m.group(1)}" if m else raw
+        return raw.split("?")[0].rstrip("/").lower()
+
+    scored_urls = {_normalize_track_url(j.get("url", "")) for j in scored_jobs if j.get("url")}
     est_jobs = []
     if indeed_jobs_for_est:
         seen_indeed_ids = set()
         for job in indeed_jobs_for_est:
-            u_norm = job.url.split("?")[0].rstrip("/").lower()
+            u_norm = _normalize_track_url(job.url)
             if job.job_id not in seen_indeed_ids and u_norm not in scored_urls:
                 seen_indeed_ids.add(job.job_id)
                 # Score with title heuristic so it's not arbitrary score 0

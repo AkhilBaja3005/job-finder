@@ -98,6 +98,27 @@ def format_posted_date_time(raw_post_date: Optional[str]) -> str:
     # Fallback to current date; time if unparseable
     return now.strftime("%Y-%m-%d; %H:%M")
 
+
+def normalize_job_url(u: Optional[str]) -> str:
+    """
+    Normalizes a job URL for consistent deduplication across Supabase, CSV, and search results.
+    Preserves unique job keys for query-based platforms like Indeed (jk=) and LinkedIn (currentJobId=)
+    instead of stripping the query and causing all Indeed jobs to collapse into '.../viewjob'.
+    """
+    if not u or not u.strip():
+        return ""
+    raw = u.strip().rstrip("/").lower()
+    if "jk=" in raw:
+        m = re.search(r'jk=([a-f0-9]{16})', raw)
+        if m:
+            domain = "uk.indeed.com" if "uk.indeed.com" in raw else "indeed.com"
+            return f"{domain}/viewjob?jk={m.group(1)}"
+    if "currentjobid=" in raw:
+        m = re.search(r'currentjobid=(\d+)', raw)
+        if m:
+            return f"linkedin.com/jobs/view/{m.group(1)}"
+    return raw.split("?")[0].rstrip("/").lower()
+
 JOB_FINDER_ROOT = "/Users/akhilbaja/Documents/Akhil/Job Finder"
 BACKEND_DIR = os.path.join(JOB_FINDER_ROOT, "backend")
 TRACKER_DIR = os.path.join(JOB_FINDER_ROOT, "applications_tracker")
@@ -462,7 +483,9 @@ def get_existing_tracked_urls() -> set:
                 for row in records:
                     u = row.get("job_url")
                     if u:
-                        urls.add(u.strip().split("?")[0].rstrip("/").lower())
+                        norm = normalize_job_url(u)
+                        if norm:
+                            urls.add(norm)
         except Exception as se:
             print(f"[Tracker] Note: Could not fetch existing URLs from Supabase: {se}")
 
@@ -474,7 +497,9 @@ def get_existing_tracked_urls() -> set:
                 for row in reader:
                     u = row.get("Job URL") or row.get("url")
                     if u:
-                        urls.add(u.strip().split("?")[0].rstrip("/").lower())
+                        norm = normalize_job_url(u)
+                        if norm:
+                            urls.add(norm)
         except Exception as ce:
             print(f"[Tracker] Note: Could not read CSV tracker: {ce}")
 
@@ -575,10 +600,10 @@ async def run_pipeline(target_url: Optional[str] = None):
     est_jobs = search_res.get("est_jobs", [])
     
     # Merge Indeed est_jobs if not already present in scored jobs
-    existing_scored_urls = {j.get("url", "").strip().split("?")[0].rstrip("/").lower() for j in jobs if j.get("url")}
+    existing_scored_urls = {normalize_job_url(j.get("url", "")) for j in jobs if j.get("url")}
     merged_count = 0
     for ej in est_jobs:
-        u_norm = ej.get("url", "").strip().split("?")[0].rstrip("/").lower()
+        u_norm = normalize_job_url(ej.get("url", ""))
         if u_norm and u_norm not in existing_scored_urls:
             jobs.append(ej)
             existing_scored_urls.add(u_norm)
@@ -610,7 +635,7 @@ async def run_pipeline(target_url: Optional[str] = None):
         recruiter_name = job.get("recruiter_name") or ""
         recruiter_url = job.get("recruiter_url") or ""
 
-        url_norm = url.strip().split("?")[0].rstrip("/").lower()
+        url_norm = normalize_job_url(url)
         is_duplicate = url_norm in existing_urls
 
         if is_duplicate:
