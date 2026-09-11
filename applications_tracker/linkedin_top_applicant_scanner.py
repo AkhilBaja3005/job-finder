@@ -110,15 +110,23 @@ async def scan_linkedin_for_top_applicant_jobs(
     scanner_profile_dir = os.path.abspath(os.path.join(BACKEND_DIR, "user_data", "top_applicant_scanner_profile"))
     os.makedirs(scanner_profile_dir, exist_ok=True)
 
+    chrome_executable = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    executable_args: Dict[str, Any] = {}
+    if os.path.exists(chrome_executable):
+        executable_args["executable_path"] = chrome_executable
+
     async with async_playwright() as p:
         print(f"[Top Applicant Scanner] 🌐 Launching browser context ({scanner_profile_dir})...")
         context = await p.chromium.launch_persistent_context(
             user_data_dir=scanner_profile_dir,
             headless=headless,
+            **executable_args,
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
+                "--no-first-run",
+                "--no-default-browser-check"
             ],
             viewport={"width": 1440, "height": 900}
         )
