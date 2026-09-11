@@ -54,7 +54,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 
 from mcp.tools.profile_tools import load_profile_data
-from services.browser_use_agent import run_browser_use_autofill, preflight_check_job_url
+from services.browser_use_agent import run_browser_use_autofill, preflight_check_job_url, ensure_persistent_browser
 from config.constants import get_best_flash_lite_model
 # pyrefly: ignore [missing-import]
 from scheduled_job_scanner import (
@@ -105,19 +105,30 @@ async def scan_linkedin_for_top_applicant_jobs(
         print("[Top Applicant Scanner] ❌ Playwright not installed in environment.")
         return []
 
+    # Connect to persistent Chrome instance via CDP (port 9222) or launch fresh
+    cdp_url = ensure_persistent_browser(headless=False)
+
     async with async_playwright() as p:
-        # Launch persistent browser context to retain login session
-        print(f"[Top Applicant Scanner] 🌐 Opening browser session ({user_data_dir})...")
-        context = await p.chromium.launch_persistent_context(
-            user_data_dir=user_data_dir,
-            headless=False,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-            ],
-            viewport={"width": 1440, "height": 900}
-        )
+        browser = None
+        context = None
+        # First attempt: connect directly over CDP to the already-running Chrome
+        try:
+            print(f"[Top Applicant Scanner] 🌐 Connecting to Chrome session via CDP ({cdp_url})...")
+            browser = await p.chromium.connect_over_cdp(cdp_url)
+            context = browser.contexts[0] if browser.contexts else await browser.new_context()
+        except Exception as cdpe:
+            print(f"[Top Applicant Scanner] ℹ️ CDP attach failed ({cdpe}), launching isolated browser context...")
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=user_data_dir,
+                headless=False,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                ],
+                viewport={"width": 1440, "height": 900}
+            )
+
         page = context.pages[0] if context.pages else await context.new_page()
 
         # Map timeframe to LinkedIn f_TPR param
@@ -207,7 +218,10 @@ async def scan_linkedin_for_top_applicant_jobs(
                     except Exception as ce:
                         continue
 
-        await context.close()
+        if browser:
+            await browser.close()  # Disconnects CDP client without terminating Chrome process
+        elif context:
+            await context.close()
 
     print(f"\n[Top Applicant Scanner] 🎯 Total 'Top Applicant' matches identified: {len(found_jobs)}")
     return found_jobs
