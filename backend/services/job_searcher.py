@@ -120,11 +120,6 @@ def search_direct_ats_jobs(
     timeframe: str = "48h",
     api_key: Optional[str] = None
 ) -> List[JobSearchResult]:
-    """
-    Leverages Gemini with Google Search Grounding to directly search
-    Greenhouse, Ashby, Lever, and Workday without bot-blocking or scraping hurdles.
-    Enforces strict role relevance and freshness timeframe.
-    """
     global _ats_grounding_quota_exhausted
     if _ats_grounding_quota_exhausted:
         return []
@@ -1043,20 +1038,18 @@ async def find_matching_jobs(
         li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=18)
         reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=14)
         ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=22)
-        ats_task = _safe_run(search_direct_ats_jobs, q, location, timeframe, custom_api_key, timeout=25)
 
-        li_j, reed_j, ind_j, ats_j = await asyncio.gather(li_task, reed_task, ind_task, ats_task)
-        return q, li_j, reed_j, ind_j, ats_j
+        li_j, reed_j, ind_j = await asyncio.gather(li_task, reed_task, ind_task)
+        return q, li_j, reed_j, ind_j
 
     query_tasks = [asyncio.create_task(_fetch_query_cluster(q)) for q in queries]
     for completed_task in asyncio.as_completed(query_tasks):
-        q, li_jobs, reed_jobs, ind_jobs, ats_jobs = await completed_task
+        q, li_jobs, reed_jobs, ind_jobs = await completed_task
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(ind_jobs)
-        raw_jobs.extend(ats_jobs)
         indeed_jobs_for_est.extend(ind_jobs)
-        res_msg = f"✓ Found {len(ats_jobs)} Direct ATS (Ashby/Greenhouse/Lever/Workday), {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed & {len(reed_jobs)} Reed.co.uk postings for '{q}'" if target_country == "GB" else f"✓ Found {len(ats_jobs)} Direct ATS (Ashby/Greenhouse/Lever/Workday), {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{q}'"
+        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed & {len(reed_jobs)} Reed.co.uk postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{q}'"
         log_ist(res_msg)
         yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 

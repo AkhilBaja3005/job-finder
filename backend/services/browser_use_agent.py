@@ -341,7 +341,7 @@ async def run_browser_use_autofill(
         use_vision=False,
         use_judge=False,
         use_thinking=False,
-        max_history_items=5,
+        max_history_items=6,
         max_actions_per_step=15,
         flash_mode=True,
         enable_planning=False,
