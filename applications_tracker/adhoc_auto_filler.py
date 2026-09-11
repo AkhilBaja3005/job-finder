@@ -51,6 +51,7 @@ from scheduled_job_scanner import (
     find_master_resume_with_mac_tags,
     get_existing_tracked_urls,
     record_to_supabase_or_csv,
+    format_posted_date_time,
 )
 
 
@@ -251,7 +252,7 @@ async def main():
             "job_title": job.get("title", "Role"),
             "location": job.get("location", "UK"),
             "platform": job.get("platform", "Ad-hoc"),
-            "posted_time": "Recent",
+            "posted_time": format_posted_date_time(job.get("posted_date") or job.get("post_date_raw") or "Recent"),
             "overall_ats": job.get("overall_ats", 80),
             "skills_match": 80,
             "experience_match": 80,

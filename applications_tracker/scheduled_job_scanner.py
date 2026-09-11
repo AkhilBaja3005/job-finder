@@ -22,8 +22,81 @@ import sys
 import json
 import csv
 import asyncio
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
+from email.utils import parsedate_to_datetime
 from typing import Optional, Dict, Any
+
+def format_posted_date_time(raw_post_date: Optional[str]) -> str:
+    """
+    Standardizes raw posted time strings into a consistent 'date; time' format (e.g. '2026-09-11; 08:30').
+    Handles:
+    - Relative offsets: '2 hours ago', '1 day ago', '30 minutes ago', 'just now', 'recent', 'today'
+    - ISO/Standard timestamps: '2026-09-11 08:30:00', '2026-09-11T08:30'
+    - RFC-822 timestamps: 'Thu, 10 Sep 2026 14:30:00 GMT'
+    - Date only: '2026-09-11' -> '2026-09-11; 00:00'
+    """
+    now = datetime.now()
+    if not raw_post_date or not str(raw_post_date).strip():
+        return now.strftime("%Y-%m-%d; %H:%M")
+
+    raw = str(raw_post_date).strip()
+    raw_lower = raw.lower()
+
+    # Relative handling: 'just now', 'recent', 'today', 'active'
+    if raw_lower in ("recent", "just now", "today", "active", "new"):
+        return now.strftime("%Y-%m-%d; %H:%M")
+
+    if raw_lower == "yesterday":
+        return (now - timedelta(days=1)).strftime("%Y-%m-%d; %H:%M")
+
+    # Relative handling: 'X minutes/hours/days/weeks/months ago'
+    rel_match = re.search(r"(\d+)\s*\+?\s*(minute|min|hour|hr|day|week|month)s?\s*ago", raw_lower)
+    if rel_match:
+        val = int(rel_match.group(1))
+        unit = rel_match.group(2)
+        if "min" in unit:
+            dt = now - timedelta(minutes=val)
+        elif "hour" in unit or "hr" in unit:
+            dt = now - timedelta(hours=val)
+        elif "day" in unit:
+            dt = now - timedelta(days=val)
+        elif "week" in unit:
+            dt = now - timedelta(weeks=val)
+        elif "month" in unit:
+            dt = now - timedelta(days=val * 30)
+        else:
+            dt = now
+        return dt.strftime("%Y-%m-%d; %H:%M")
+
+    # Try RFC-822 (e.g. RSS feed dates like 'Thu, 10 Sep 2026 14:30:00 GMT')
+    try:
+        dt = parsedate_to_datetime(raw)
+        return dt.strftime("%Y-%m-%d; %H:%M")
+    except Exception:
+        pass
+
+    # Try common ISO/standard date/time strings
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%SZ",
+        "%Y-%m-%d",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+        "%d/%m/%Y",
+        "%b %d, %Y",
+        "%B %d, %Y"
+    ):
+        try:
+            dt = datetime.strptime(raw, fmt)
+            return dt.strftime("%Y-%m-%d; %H:%M")
+        except ValueError:
+            continue
+
+    # Fallback to current date; time if unparseable
+    return now.strftime("%Y-%m-%d; %H:%M")
 
 JOB_FINDER_ROOT = "/Users/akhilbaja/Documents/Akhil/Job Finder"
 BACKEND_DIR = os.path.join(JOB_FINDER_ROOT, "backend")
@@ -405,7 +478,8 @@ async def run_pipeline(target_url: Optional[str] = None):
         missing_skills = ", ".join(job.get("missing_skills", []))
         salary = job.get("salary") or ""
         seniority = job.get("seniority") or ""
-        posted_time = job.get("posted_date") or job.get("post_date_raw") or "Recent"
+        raw_posted = job.get("posted_date") or job.get("post_date_raw") or "Recent"
+        posted_time = format_posted_date_time(raw_posted)
 
         recruiter_name = job.get("recruiter_name") or ""
         recruiter_url = job.get("recruiter_url") or ""

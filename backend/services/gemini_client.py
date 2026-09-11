@@ -644,8 +644,7 @@ def _execute_openrouter(prompt: str, model_list: list, response_schema, api_key:
 # ─────────────────────────────────────────────────────────────────────────────
 # High-Level Entrypoints
 # ─────────────────────────────────────────────────────────────────────────────
-FAST_LITE_MODELS = DEFAULT_FAST_LITE_MODELS
-STRONG_JSON_MODELS = DEFAULT_STRONG_MODELS
+from config.constants import discover_gemini_models
 
 def generate_content_with_fallback(
     prompt: str,
@@ -655,14 +654,19 @@ def generate_content_with_fallback(
     system_instruction: Optional[str] = None,
     model_tier: Optional[str] = None,
 ) -> str:
-    """JSON / structured output generation via fallback list."""
+    """JSON / structured output generation via dynamic fallback list (strictly non-pro)."""
     full_prompt = f"SYSTEM INSTRUCTION: {system_instruction}\n\n{prompt}" if system_instruction else prompt
+    try:
+        lite_dyn, strong_dyn = discover_gemini_models(custom_api_key)
+    except Exception:
+        lite_dyn, strong_dyn = DEFAULT_FAST_LITE_MODELS, DEFAULT_STRONG_MODELS
+
     if model_tier == 'strong':
-        models_to_use = STRONG_JSON_MODELS
+        models_to_use = strong_dyn
     elif model_tier == 'lite':
-        models_to_use = FAST_LITE_MODELS
+        models_to_use = lite_dyn
     else:
-        models_to_use = FAST_LITE_MODELS
+        models_to_use = lite_dyn
     return _generate_with_model_list(
         full_prompt, models_to_use, response_schema, custom_api_key, on_log
     )
@@ -673,9 +677,13 @@ def generate_latex_with_strong_model(
     custom_api_key: Optional[str] = None,
     on_log: Optional[Callable[[str], None]] = None,
 ) -> str:
-    """Raw text/LaTeX generation without predefined model schemas."""
+    """Raw text/LaTeX generation using newest discovered Flash model (strictly non-pro)."""
+    try:
+        _, strong_dyn = discover_gemini_models(custom_api_key)
+    except Exception:
+        strong_dyn = DEFAULT_STRONG_MODELS
     return _generate_with_model_list(
-        prompt, LATEX_FALLBACK_MODELS, response_schema=None, custom_api_key=custom_api_key, on_log=on_log
+        prompt, strong_dyn, response_schema=None, custom_api_key=custom_api_key, on_log=on_log
     )
 
 

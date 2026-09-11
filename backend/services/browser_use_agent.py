@@ -21,7 +21,12 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
 
 from browser_use import Agent, Browser, ChatGoogle
-from config.constants import DEFAULT_FAST_LITE_MODELS, PREFERRED_GEMINI_MODEL
+from config.constants import (
+    DEFAULT_FAST_LITE_MODELS,
+    PREFERRED_GEMINI_MODEL,
+    get_best_flash_lite_model,
+    get_best_flash_model
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GUARDRAIL CONTROL FLAG
@@ -39,7 +44,8 @@ DISABLE_GUARDRAILS: bool = os.getenv("BROWSER_USE_DISABLE_GUARDRAILS", "0").stri
 
 def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Optional[str] = None):
     """
-    Initializes browser-use native ChatGoogle client targeting Gemini Flash-Lite / Flash.
+    Initializes browser-use native ChatGoogle client targeting the latest dynamically discovered
+    Gemini Flash-Lite / Flash model (strictly excluding Pro models for high RPM & low latency).
     """
     try:
         from services.gemini_client import get_next_gemini_api_key
@@ -50,7 +56,9 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
     if not api_key:
         raise ValueError("GEMINI_API_KEY is required for browser-use agent execution.")
 
-    target_model = model_name or os.getenv("BROWSER_USE_MODEL", "gemini-3.5-flash-lite")
+    # Automatically resolve the latest available Flash-Lite model if model_name is not explicitly passed
+    discovered_lite = get_best_flash_lite_model(api_key)
+    target_model = model_name or os.getenv("BROWSER_USE_MODEL") or discovered_lite
     
     return ChatGoogle(
         model=target_model,
@@ -277,7 +285,7 @@ async def run_browser_use_autofill(
     resume_data: Dict[str, Any],
     resume_pdf_path: Optional[str] = None,
     headless: bool = False,
-    model_name: Optional[str] = "gemini-3.5-flash-lite",
+    model_name: Optional[str] = None,
     custom_api_key: Optional[str] = None,
     auto_submit: bool = False,
     max_steps: int = 50
@@ -341,7 +349,7 @@ async def run_browser_use_autofill(
         use_vision=False,
         use_judge=False,
         use_thinking=False,
-        max_history_items=6,
+        max_history_items=8,
         max_actions_per_step=15,
         flash_mode=True,
         enable_planning=False,
