@@ -18,20 +18,20 @@ It employs an **Adaptive Multi-Phase Architecture** designed for high throughput
 flowchart TD
     Start(["Target Job URL"]) --> Preflight["1. Pre-Flight HTTP Probe (~200ms)<br/>• Unwraps redirects (LinkedIn -> Ashby/Greenhouse)<br/>• Checks HTTP 404/410 and closed markers"]
     
-    Preflight -->|Job Closed / Expired| EarlyExit["Instant Exit (0 browser steps, $0 tokens)<br/>Status: Job unavailable / Expired"]
+    Preflight -->|"Job Closed / Expired"| EarlyExit["Instant Exit (0 browser steps, $0 tokens)<br/>Status: Job unavailable / Expired"]
     
-    Preflight -->|Active Direct ATS URL| PersistentChrome["2. Attach to Dedicated Chrome Daemon<br/>(CDP Port 9222, image rendering disabled)"]
+    Preflight -->|"Active Direct ATS URL"| PersistentChrome["2. Attach to Dedicated Chrome Daemon<br/>(CDP Port 9222, image rendering disabled)"]
     
     PersistentChrome --> Phase1["3. Phase 1: Fast Pure-DOM Pass<br/>• use_vision = False (No screenshots)<br/>• use_thinking = False (Zero reasoning tokens)<br/>• max_actions_per_step = 15 (Batch fill screen)<br/>• 0.02s action delay & 0.1s page wait"]
     
     Phase1 --> EvalCheck{"Form Completed<br/>Successfully?"}
     
-    EvalCheck -->|Yes (90%+ of standard portals)| GuardrailCheck{"Guardrail Mode?"}
+    EvalCheck -->|"Yes (90%+ of standard portals)"| GuardrailCheck{"Guardrail Mode?"}
     
-    GuardrailCheck -->|REVIEW_ONLY| PauseReview["Stop on Preview Step<br/>Report Form Fields Summary"]
-    GuardrailCheck -->|AUTO_SUBMIT| SubmitApp["Click Final 'Submit Application'<br/>Record in Ledger"]
+    GuardrailCheck -->|"REVIEW_ONLY"| PauseReview["Stop on Preview Step<br/>Report Form Fields Summary"]
+    GuardrailCheck -->|"AUTO_SUBMIT"| SubmitApp["Click Final 'Submit Application'<br/>Record in Ledger"]
     
-    EvalCheck -->|Stuck / Missed Inputs / Canvas / Shadow DOM| Phase2["4. Phase 2: Adaptive Recovery Fallback<br/>• use_vision = True (Low-res visual layout)<br/>• use_thinking = True (Deep reasoning enabled)<br/>• enable_planning = True<br/>• Max 8 history items"]
+    EvalCheck -->|"Stuck / Missed Inputs / Canvas / Shadow DOM"| Phase2["4. Phase 2: Adaptive Recovery Fallback<br/>• use_vision = True (Low-res visual layout)<br/>• use_thinking = True (Deep reasoning enabled)<br/>• enable_planning = True<br/>• Max 8 history items"]
     
     Phase2 --> GuardrailCheck
 ```
