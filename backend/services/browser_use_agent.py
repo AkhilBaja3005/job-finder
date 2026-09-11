@@ -191,13 +191,7 @@ def ensure_persistent_browser(headless: bool = False) -> str:
         f"--user-data-dir={user_data_dir}",
         "--no-first-run",
         "--no-default-browser-check",
-        "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
-        "--disable-renderer-backgrounding",
         "--disable-sync",
-        "--disable-extensions",
-        "--disable-component-update",
-        "--blink-settings=imagesEnabled=false",  # Speed up DOM rendering 3x by disabling unnecessary images
     ]
     if headless:
         launch_args.append("--headless=new")
