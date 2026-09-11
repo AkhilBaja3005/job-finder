@@ -263,7 +263,8 @@ async def record_to_supabase_or_csv(record_data: dict):
                     if hf_tok:
                         def _upload_hf(src, dst, tok):
                             try:
-                                from huggingface_hub import HfFileSystem
+                                # pyrefly: ignore [missing-import]
+                                from huggingface_hub import HfFileSystem  # type: ignore
                                 hfs = HfFileSystem(token=tok)
                                 hfs.put_file(src, dst)
                             except Exception:
