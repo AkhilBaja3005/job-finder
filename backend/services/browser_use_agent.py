@@ -146,7 +146,10 @@ def build_application_task_prompt(
     CRITICAL SPEED & EFFICIENCY RULES:
     - DO NOT USE THE WAIT ACTION: The browser environment automatically handles DOM mutations and page loads. Never use `wait: seconds: ...`. Elements are immediately actionable.
     - BATCH ALL ACTIONS: Fill out ALL inputs, selects, and checkboxes on the visible screen in a single turn together with the 'Next' or 'Continue' click. Do not submit one field per step!
-    - SELECT DROPDOWNS: Never click HTML `<select>` elements directly. Always use `select_dropdown` with the target text (e.g., text: '{country_code_hint}').
+    - DROPDOWNS HANDLING:
+      * Always read/inspect the available `<option>` choices on the dropdown first before selecting.
+      * Match against the actual options available in the DOM (e.g. for phone country code, check if options use '+91', 'India', 'India (+91)', or 'IN (+91)', then pick the exact matching option string).
+      * Never click raw `<select>` elements directly without an option target. Always use `select_dropdown` with the exact option text found in the dropdown.
     - NEW TAB HANDLING: If clicking 'Apply' or a link opens an external ATS site (Ashby, Greenhouse, Lever, Workday) in a new tab, ALWAYS stay in that new tab and fill the form there. NEVER switch back to the referrer/LinkedIn tab.
 
     Execution Instructions:
@@ -154,10 +157,13 @@ def build_application_task_prompt(
        - If the page or modal displays 'Job not found', 'This job has closed', 'No longer accepting applications', or 'Applied', immediately call `done` with that reason without wasting extra steps.
     2. Open Form: Click 'Apply', 'Easy Apply', or 'Apply for this job'.
     3. Fill & Advance: In a single batched step, fill all contact/question inputs on the screen and click 'Next' or 'Continue'.
-       - For Phone Country Code, select '{country_code_hint}'.
+       - For Dropdowns: First read the list of valid options in that dropdown, then choose the best matching option for candidate profile:
+         * Phone Country Code: Inspect dropdown options and select the India option (e.g. '{country_code_hint}', '+91', 'India', or 'IN (+91)').
+         * Work Authorization / Sponsorship: Inspect options and choose 'Yes' ({sponsorship_str}).
+         * Gender: Inspect options and choose 'Male'.
+         * Ethnicity: Inspect options and choose 'Asian' / 'Indian' / 'Asian or Pacific Islander'.
        - For Phone Number input, type '{clean_mobile or phone}'.
        - For Resume, ensure the candidate's resume is selected or uploaded.
-       - For Sponsorship question: select 'Yes' ({sponsorship_str}).
        - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
     4. Handle Email Verification / OTP Codes:
        - If the form asks to enter a verification code / OTP sent to your email (e.g., micro1, Ashby, Workday):
