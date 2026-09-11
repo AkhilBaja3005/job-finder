@@ -52,13 +52,20 @@ The project includes:
 - **Overleaf Integration**: One-click direct export to Overleaf for both tailored and original master resumes.
 - **On-Demand Styled Email Delivery**: 1-click delivery of tailored resume PDFs with full metadata (`Target Role`, `Company`, `ATS Score`) to candidate inboxes.
 
-### ⚡ 4. Multimodal & Deterministic Auto-Fill Assistant
+### ⚡ 4. Autonomous Web Autofill Engine (`browser-use` + Gemini)
+- **Two-Phase Adaptive Execution**: Fast pure-DOM pass (`use_vision=False`, `use_thinking=False`) for sub-10s filling, with an adaptive fallback to **Vision + Deep Reasoning (`use_thinking=True`)** for custom canvas widgets or shadow DOM hurdles.
+- **Pre-Flight HTTP Probing**: Follows redirects to resolve direct ATS destinations (e.g. LinkedIn $\rightarrow$ Ashby) and exits in **~200ms** on closed/expired listings without launching Chrome.
+- **Persistent Chrome Instance**: Reuses a dedicated Chrome daemon on CDP port 9222 with performance flags (disabled image painting, timer throttling bypass).
+- **Safety Guardrails**: Default `REVIEW_ONLY` mode navigates through multi-step forms and pauses on the final preview step; `AUTO_SUBMIT` mode autonomously submits when enabled.
+- 📖 **Full Architecture Guide**: See [`docs/AUTONOMOUS_AUTOFILL_README.md`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/docs/AUTONOMOUS_AUTOFILL_README.md).
+
+### 🧩 5. In-Page Chrome Extension Assistant
 - **Zero-Autofill Architecture**: Uses smart field classifiers and deterministic fallbacks for contact info, notice periods, salary expectations, and work authorizations.
 - **Embedded `<iframe>` Support**: Injects into both top-level and embedded ATS frames (Greenhouse/Lever).
 - **Open-Ended Question Engine**: Instant screening answer generation for essays like *"Why this company?"* or *"Describe a challenging project"*.
 - **Inline '✨ AI Answer' Buttons**: Directly embedded beside textareas and form inputs on live job pages.
 
-### 🌐 5. Grounding with Google Search & Verified Recruiter Discovery
+### 🌐 6. Grounding with Google Search & Verified Recruiter Discovery
 - **Native Google Search Grounding**: Connects Gemini models with search tools directly to real-time web content using `tools=[{"google_search": {}}]` with citation and source link extraction.
 - **Verified Recruiter & Hiring Manager Intel**: Discovers active technical recruiters, talent sourcers, and engineering hiring managers on LinkedIn for any target role and company (`POST /jobs/find_recruiter`).
 - **7-Day TTL Smart Caching**: Normalizes corporate suffixes (e.g. `Stripe, Inc.` $\rightarrow$ `stripe`) to eliminate duplicate billing queries.
@@ -99,6 +106,8 @@ The project includes a Manifest V3 Chrome Extension located in the `/extension` 
 
 ```
 Job Finder/
+├── docs/                 # Architectural specifications & engine guides
+│   └── AUTONOMOUS_AUTOFILL_README.md  # Detailed browser-use autofill architecture
 ├── frontend/             # React 19 + Vite SPA — Single-page interactive dashboard
 ├── backend/              # Modular FastAPI application & microservices
 │   ├── main.py           # Application entrypoint & APIRouter registration
@@ -109,6 +118,7 @@ Job Finder/
 │   │   ├── auth_routes.py    # /auth/google, /auth/callback, /user/me, /user/sync_profile
 │   │   └── admin_routes.py   # /admin/stats, /admin/clean_storage
 │   ├── services/
+│   │   ├── browser_use_agent.py# Autonomous application filling engine (browser-use + Gemini)
 │   │   ├── resume_parser.py    # Multi-format resume parsing & category extractor
 │   │   ├── ats_scorer.py       # Deterministic ATS scoring & timeline analysis engine
 │   │   ├── recruiter_finder.py # Google Search Grounding for verified LinkedIn recruiters
@@ -123,6 +133,8 @@ Job Finder/
 │       ├── latex_utils.py      # Pre-flight syntax validation, sanitization, macro hotfixes, Tectonic compilation
 │       ├── ttl_cache.py        # Thread-safe bounded TTL cache for sub-millisecond memory safety
 │       └── ssl_utils.py        # Verified TLS context handler
+├── applications_tracker/ # Scheduled batch scanner, tailoring pipeline & ledger
+│   └── scheduled_job_scanner.py
 └── extension/            # Chrome Extension (Manifest V3 - Side Panel)
     ├── manifest.json     # Extension permissions, sidePanel, host rules, and metadata
     ├── popup.html / js   # Persistent side panel interface with offline fallback & rescan
