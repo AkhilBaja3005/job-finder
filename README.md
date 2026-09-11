@@ -296,9 +296,20 @@ Job Finder includes an autonomous discovery, ATS evaluation, LaTeX resume tailor
 6. **Multi-Key LLM Cascading (`429 RESOURCE_EXHAUSTED` Resilience)**:
    - Integrates `MultiFallbackAgent` across all configured Gemini API keys (`GEMINI_API_KEY` through `GEMINI_API_KEY_7`) and model tiers (`gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.5-flash`).
    - If free-tier RPM quotas are saturated, it seamlessly rotates to the next available API key in real-time without crashing the scan.
-7. **Dual Persistence Tracking**: Every application attempt is recorded to Supabase (`applications` table) with automatic fallback to `applications_tracker/job_applications_tracker.csv`.
-8. **Already-Applied Detection**: Queries Supabase and local CSV to prevent duplicate submissions, and utilizes in-page visual detection to instantly exit if an application was already submitted on the target platform.
-9. **Visa Sponsorship & Compliance Handling**: Explicitly evaluates visa knockout constraints (`requires_sponsorship: true`), ensuring truthful answering on all multiple-choice ATS screening questionnaires.
+7. **Query-Aware Job Deduplication (`normalize_job_url`)**:
+   - Preserves unique job query identifiers (e.g. `jk=` on Indeed, `currentJobId=` on LinkedIn) during deduplication across Supabase, CSV, and search streams, preventing multiple listings from collapsing into duplicate skips.
+8. **Cloudflare Turnstile & Verification Handling**:
+   - Automatically rewrites Indeed viewjob URLs (`/viewjob?jk=...` $\rightarrow$ `/jobs?q=engineer&vjk=...`) to load job details cleanly in search side-panes without triggering bot blocks.
+   - For local development runs, includes an autonomous `extract_jd_with_browser_use` fallback that interacts with and clicks "Verify you are human" / Turnstile checkboxes to extract full JDs.
+9. **Multi-Tier Execution Timeouts & Hang Prevention**:
+   - **LLM Call Timeout (30s)**: Strictly bounds each individual Gemini API call to 30s. If Google's API hangs, it rotates immediately to the next candidate key or fallback model (`gemini-3.8-flash` $\rightarrow$ `gemini-3.7-flash` $\rightarrow$ `gemini-3.5-flash`).
+   - **Resume Tailoring Timeout (90s)**: Bounding LaTeX tailoring and compilation; automatically falls back to the master resume if the 90s window expires.
+   - **Turnstile JD Extraction Timeout (60s)**: Prevents browser-use JD extraction from hanging the scanner.
+   - **Autofill Application Timeout (5 min / 300s)**: Limits complex multi-step application autofill sessions to 5 minutes (`BROWSER_USE_TIMEOUT=300`) and 50 steps (`max_steps=50`). If timed out, the job is cleanly marked as `Needs Review (Unsubmitted)` and added to the failure notification email.
+   - **Non-blocking Storage Uploads**: Hugging Face bucket PDF synchronization runs asynchronously in a worker thread without freezing the async event loop.
+10. **Dual Persistence Tracking**: Every application attempt is recorded to Supabase (`applications` table) with automatic fallback to `applications_tracker/job_applications_tracker.csv`.
+11. **Already-Applied Detection**: Queries Supabase and local CSV to prevent duplicate submissions, and utilizes in-page visual detection to instantly exit if an application was already submitted on the target platform.
+12. **Visa Sponsorship & Compliance Handling**: Explicitly evaluates visa knockout constraints (`requires_sponsorship: true`), ensuring truthful answering on all multiple-choice ATS screening questionnaires.
 
 ### Running the Scanner:
 ```bash
@@ -313,6 +324,9 @@ BROWSER_USE_DISABLE_GUARDRAILS=1 python applications_tracker/scheduled_job_scann
 # Direct single-URL autofill:
 source backend/venv/bin/activate
 BROWSER_USE_DISABLE_GUARDRAILS=1 python applications_tracker/scheduled_job_scanner.py "https://uk.linkedin.com/jobs/view/..."
+
+# Custom application timeout (e.g. 180s instead of default 300s):
+BROWSER_USE_TIMEOUT=180 BROWSER_USE_DISABLE_GUARDRAILS=1 python applications_tracker/scheduled_job_scanner.py
 ```
 
 ---
