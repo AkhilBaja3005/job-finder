@@ -157,12 +157,14 @@ def build_application_task_prompt(
        - If the page or modal displays 'Job not found', 'This job has closed', 'No longer accepting applications', or 'Applied', immediately call `done` with that reason without wasting extra steps.
     2. Open Form: Click 'Apply', 'Easy Apply', or 'Apply for this job'.
     3. Fill & Advance: In a single batched step, fill all contact/question inputs on the screen and click 'Next' or 'Continue'.
+       - Phone Country Code & Number:
+         * Many ATS portals (Greenhouse, Lever) use an international telephone widget (`.iti__selected-country` button or 'Select country'). If a phone country button/dropdown is present beside or inside the Phone field, click it, search or select 'India' / '+91' / 'United Kingdom' / '+44', before or together with typing the phone number.
+         * Type '{clean_mobile or phone}' into the phone input.
        - For Dropdowns: First read the list of valid options in that dropdown, then choose the best matching option for candidate profile:
-         * Phone Country Code: Inspect dropdown options and select the India option (e.g. '{country_code_hint}', '+91', 'India', or 'IN (+91)').
+         * Country / Location: Select 'United Kingdom' or 'London, UK'.
          * Work Authorization / Sponsorship: Inspect options and choose 'Yes' ({sponsorship_str}).
          * Gender: Inspect options and choose 'Male'.
          * Ethnicity: Inspect options and choose 'Asian' / 'Indian' / 'Asian or Pacific Islander'.
-       - For Phone Number input, type '{clean_mobile or phone}'.
        - For Resume, ensure the candidate's resume is selected or uploaded.
        - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
     4. Handle Email Verification / OTP Codes:
@@ -173,6 +175,7 @@ def build_application_task_prompt(
          d. Switch back to the application tab (or close the Gmail tab).
          e. Type the verification code into the OTP input field and proceed.
     5. Review & Conclude:
+       - After clicking 'Submit Application', DO NOT immediately call `done`. First check if any red validation error banners or unfulfilled required fields (like 'Select a country' or 'Required') appear. If validation errors appear, solve them and click 'Submit Application' again until the page displays a confirmation message ('Thank you for applying', 'Application submitted', or redirects).
     {submission_instruction}
     """
     return task

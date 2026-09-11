@@ -16,7 +16,7 @@ Usage:
   python applications_tracker/adhoc_auto_filler.py --job-ids 4455334729 4465614142 4464616151
 
   # 2. Apply to a single or comma-separated URLs
-  python applications_tracker/adhoc_auto_filler.py --url "https://job-boards.greenhouse.io/company/jobs/123"
+  python applications_tracker/adhoc_auto_filler.py --url "https://job-boards.greenhouse.io/buildkite/jobs/5415583008"
 
   # 3. Process jobs from tracker CSV matching a status filter (defaults to 'Ready to Apply' and 'Saved & Scored')
   python applications_tracker/adhoc_auto_filler.py --csv applications_tracker/job_applications_tracker.csv --limit 5
