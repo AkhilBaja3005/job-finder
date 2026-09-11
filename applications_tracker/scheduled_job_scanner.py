@@ -258,17 +258,17 @@ async def record_to_supabase_or_csv(record_data: dict):
                         shutil.copy2(pdf_p, dest_file)
                     pdf_url = f"/download_application_pdf/{user_id}/{dest_name}"
 
-                    # Asynchronously mirror to Hugging Face bucket if HF_TOKEN is configured
+                    # Asynchronously mirror to Hugging Face bucket in a non-blocking background thread
                     hf_tok = os.getenv("HF_TOKEN")
                     if hf_tok:
-                        try:
-                            # pyrefly: ignore [missing-import]
-                            from huggingface_hub import HfFileSystem
-                            hfs = HfFileSystem(token=hf_tok)
-                            bucket_dest = f"buckets/abaja/job-finder-storage/user_data/{user_id}/output/{dest_name}"
-                            hfs.put_file(dest_file, bucket_dest)
-                        except Exception as hfe:
-                            pass
+                        def _upload_hf(src, dst, tok):
+                            try:
+                                from huggingface_hub import HfFileSystem
+                                hfs = HfFileSystem(token=tok)
+                                hfs.put_file(src, dst)
+                            except Exception:
+                                pass
+                        asyncio.create_task(asyncio.to_thread(_upload_hf, dest_file, f"buckets/abaja/job-finder-storage/user_data/{user_id}/output/{dest_name}", hf_tok))
                 except Exception as cpy_err:
                     print(f"[Scanner] Note: Could not copy PDF to user output dir: {cpy_err}")
 
@@ -671,7 +671,8 @@ async def run_pipeline(target_url: Optional[str] = None):
         if (not jd_text or len(jd_text.strip()) < 100 or job.get("estimated", False)) and url:
             try:
                 print(f"[{idx}/{len(jobs)}] 📥 Fetching live JD on-demand for {title} @ {company} ({platform})...")
-                live_scraped = await scrape_job_description(url)
+                # Bound live scraping to a safe 30s timeout
+                live_scraped = await asyncio.wait_for(scrape_job_description(url), timeout=30.0)
 
                 # Check if Playwright got blocked by Cloudflare / Turnstile
                 is_blocked = live_scraped.get("is_bot_blocked", False) if isinstance(live_scraped, dict) else False
