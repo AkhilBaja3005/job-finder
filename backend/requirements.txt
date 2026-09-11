@@ -17,4 +17,4 @@ anthropic
 pytest
 sentry-sdk
 pyyaml
-
+browser-use

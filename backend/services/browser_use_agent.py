@@ -20,7 +20,16 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
 
-from browser_use import Agent, Browser, ChatGoogle
+try:
+    from browser_use import Agent, Browser, ChatGoogle, BrowserSession
+    HAS_BROWSER_USE = True
+except ImportError:
+    HAS_BROWSER_USE = False
+    Agent = None  # type: ignore
+    Browser = None  # type: ignore
+    ChatGoogle = None  # type: ignore
+    BrowserSession = None  # type: ignore
+
 from config.constants import (
     DEFAULT_FAST_LITE_MODELS,
     PREFERRED_GEMINI_MODEL,
@@ -300,6 +309,14 @@ async def run_browser_use_autofill(
     effective_auto_submit = DISABLE_GUARDRAILS or auto_submit
     if DISABLE_GUARDRAILS and not auto_submit:
         print("[browser-use] ⚠️  DISABLE_GUARDRAILS=True — overriding auto_submit to True. Application WILL be submitted.")
+
+    if not HAS_BROWSER_USE:
+        return {
+            "status": "failed",
+            "job_url": job_url,
+            "error": "browser-use library is not installed in the environment.",
+            "final_result": "Failed: browser-use library not installed."
+        }
 
     try:
         llm = get_browser_use_llm(model_name=model_name, custom_api_key=custom_api_key)

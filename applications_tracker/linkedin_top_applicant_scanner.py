@@ -82,14 +82,15 @@ def is_top_applicant_badge(text: str) -> bool:
 async def scan_linkedin_for_top_applicant_jobs(
     keywords_list: List[str],
     location: str = "London, UK",
-    timeframe_hours: int = 48,
-    max_pages_per_keyword: int = 2,
+    timeframe_hours: int = 24,
+    max_pages_per_keyword: int = 7,
     existing_urls: Optional[Set[str]] = None,
     headless: bool = False
 ) -> List[Dict[str, Any]]:
     """
     Navigates LinkedIn Job search using Playwright connected to the persistent Chrome session
     (or standalone) to detect 'You’d be a top applicant' badges directly from rendered DOM.
+    Scans up to 7 pages (~200+ jobs) per keyword for postings in the last 24 hours.
     """
     existing_urls = existing_urls or set()
     found_jobs: List[Dict[str, Any]] = []
@@ -119,11 +120,11 @@ async def scan_linkedin_for_top_applicant_jobs(
             window.chrome = { runtime: {} };
         """)
 
-        # Map timeframe to LinkedIn f_TPR param
+        # Map timeframe to LinkedIn f_TPR param (24h = 86400s)
         tpr_sec = timeframe_hours * 3600
 
         for kw in keywords_list:
-            print(f"\n[Top Applicant Scanner] 🔍 Searching LinkedIn for: '{kw}' in '{location}'...")
+            print(f"\n[Top Applicant Scanner] 🔍 Searching LinkedIn for: '{kw}' in '{location}' (Past {timeframe_hours}h, up to {max_pages_per_keyword} pages)...")
             for page_idx in range(max_pages_per_keyword):
                 start_offset = page_idx * 25
                 query_params = {
@@ -138,7 +139,7 @@ async def scan_linkedin_for_top_applicant_jobs(
                     await page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
                     await asyncio.sleep(2.5)  # Allow dynamic job list cards to hydrate
                 except Exception as ge:
-                    print(f"   ⚠️ Navigation error for '{kw}': {ge}")
+                    print(f"   ⚠️ Navigation error for '{kw}' on page {page_idx + 1}: {ge}")
                     continue
 
                 # Query all rendered job cards across both desktop layouts (authenticated & guest)
@@ -151,9 +152,11 @@ async def scan_linkedin_for_top_applicant_jobs(
                     ".scaffold-layout__list-container li"
                 )
 
-                print(f"   📄 Page {page_idx + 1}: Found {len(cards)} job listing cards.")
                 if not cards:
-                    break
+                    print(f"   📄 Page {page_idx + 1}: No cards rendered on this page.")
+                    continue
+
+                print(f"   📄 Page {page_idx + 1}: Found {len(cards)} job listing cards.")
 
                 for card in cards:
                     try:
@@ -218,6 +221,7 @@ async def scan_linkedin_for_top_applicant_jobs(
 
 async def run_top_applicant_pipeline(
     custom_keywords: Optional[str] = None,
+    timeframe_hours: int = 24,
     limit: int = 5,
     auto_submit: bool = False,
     headless: bool = False
@@ -258,7 +262,7 @@ async def run_top_applicant_pipeline(
     top_jobs = await scan_linkedin_for_top_applicant_jobs(
         keywords_list=target_roles,
         location=location,
-        timeframe_hours=48,
+        timeframe_hours=timeframe_hours,
         existing_urls=existing_urls,
         headless=headless
     )
@@ -329,6 +333,7 @@ async def run_top_applicant_pipeline(
 def main():
     parser = argparse.ArgumentParser(description="Scan LinkedIn for 'Top Applicant' jobs and auto-apply with master resume")
     parser.add_argument("--keywords", type=str, default=None, help="Comma-separated search keywords (e.g. 'Machine Learning, AI Engineer')")
+    parser.add_argument("--timeframe", type=int, default=24, help="Timeframe in hours to search for postings (default: 24)")
     parser.add_argument("--limit", type=int, default=5, help="Maximum number of applications to process (default: 5)")
     parser.add_argument("--auto-submit", action="store_true", help="Submit automatically without stopping for review")
     parser.add_argument("--headless", action="store_true", help="Run browser in headless mode")
@@ -338,6 +343,7 @@ def main():
 
     asyncio.run(run_top_applicant_pipeline(
         custom_keywords=args.keywords,
+        timeframe_hours=args.timeframe,
         limit=args.limit,
         auto_submit=auto_submit,
         headless=args.headless
