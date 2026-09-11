@@ -521,8 +521,8 @@ async def apply_to_job(
     headless = os.getenv("BROWSER_USE_HEADLESS", "false").lower() in ("1", "true", "yes")
     from config.constants import get_best_flash_lite_model
     selected_model = get_best_flash_lite_model()
-    # Safe execution timeout for each job filling session (default: 180s / 3 minutes, or BROWSER_USE_TIMEOUT env)
-    timeout_seconds = float(os.getenv("BROWSER_USE_TIMEOUT", "180"))
+    # Safe execution timeout for each job filling session (default: 300s / 5 minutes, or BROWSER_USE_TIMEOUT env)
+    timeout_seconds = float(os.getenv("BROWSER_USE_TIMEOUT", "300"))
     try:
         res = await asyncio.wait_for(
             run_browser_use_autofill(
@@ -532,7 +532,7 @@ async def apply_to_job(
                 headless=headless,
                 model_name=selected_model,
                 auto_submit=auto_submit,
-                max_steps=25
+                max_steps=50
             ),
             timeout=timeout_seconds
         )
