@@ -25,10 +25,10 @@ try:
     HAS_BROWSER_USE = True
 except ImportError:
     HAS_BROWSER_USE = False
-    Agent = None  # type: ignore
-    Browser = None  # type: ignore
-    ChatGoogle = None  # type: ignore
-    BrowserSession = None  # type: ignore
+    Agent: Any = None
+    Browser: Any = None
+    ChatGoogle: Any = None
+    BrowserSession: Any = None
 
 from config.constants import (
     DEFAULT_FAST_LITE_MODELS,
