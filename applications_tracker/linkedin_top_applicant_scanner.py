@@ -56,6 +56,7 @@ load_dotenv(os.path.join(BACKEND_DIR, ".env"))
 from mcp.tools.profile_tools import load_profile_data
 from services.browser_use_agent import run_browser_use_autofill, preflight_check_job_url
 from config.constants import get_best_flash_lite_model
+# pyrefly: ignore [missing-import]
 from scheduled_job_scanner import (
     find_master_resume_with_mac_tags,
     get_existing_tracked_urls,
@@ -98,6 +99,7 @@ async def scan_linkedin_for_top_applicant_jobs(
     os.makedirs(user_data_dir, exist_ok=True)
 
     try:
+        # pyrefly: ignore [missing-import]
         from playwright.async_api import async_playwright
     except ImportError:
         print("[Top Applicant Scanner] ❌ Playwright not installed in environment.")
