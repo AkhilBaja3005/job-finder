@@ -147,11 +147,15 @@ async def scan_linkedin_for_top_applicant_jobs(
                     print(f"   ⚠️ Navigation error for '{kw}': {ge}")
                     continue
 
-                # Query all rendered job cards on current search page
-                cards = await page.query_selector_all("li.jobs-search-results__list-item, div.job-card-container, div.base-card")
-                if not cards:
-                    # Alternative selector
-                    cards = await page.query_selector_all("[data-occludable-job-id], .jobs-search__results-list li")
+                # Query all rendered job cards across both desktop layouts (authenticated & guest)
+                cards = await page.query_selector_all(
+                    "ul.jobs-search__results-list > li, "
+                    "li.jobs-search-results__list-item, "
+                    "div.job-card-container, "
+                    "div.base-card, "
+                    "[data-occludable-job-id], "
+                    ".scaffold-layout__list-container li"
+                )
 
                 print(f"   📄 Page {page_idx + 1}: Found {len(cards)} job listing cards.")
                 if not cards:
