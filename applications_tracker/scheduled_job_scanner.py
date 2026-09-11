@@ -521,21 +521,40 @@ async def apply_to_job(
     headless = os.getenv("BROWSER_USE_HEADLESS", "false").lower() in ("1", "true", "yes")
     from config.constants import get_best_flash_lite_model
     selected_model = get_best_flash_lite_model()
+    # Safe execution timeout for each job filling session (default: 180s / 3 minutes, or BROWSER_USE_TIMEOUT env)
+    timeout_seconds = float(os.getenv("BROWSER_USE_TIMEOUT", "180"))
     try:
-        res = await run_browser_use_autofill(
-            job_url=url,
-            resume_data=candidate,
-            resume_pdf_path=resume_path,
-            headless=headless,
-            model_name=selected_model,
-            auto_submit=auto_submit,
-            max_steps=50
+        res = await asyncio.wait_for(
+            run_browser_use_autofill(
+                job_url=url,
+                resume_data=candidate,
+                resume_pdf_path=resume_path,
+                headless=headless,
+                model_name=selected_model,
+                auto_submit=auto_submit,
+                max_steps=25
+            ),
+            timeout=timeout_seconds
         )
         print(f"[Browser-Use] Result: {res}")
         return res
+    except asyncio.TimeoutError:
+        err_msg = f"Job application autofill timed out after {int(timeout_seconds)}s."
+        print(f"[Browser-Use] ⏱️ {err_msg}")
+        return {
+            "status": "failed",
+            "job_url": url,
+            "error": err_msg,
+            "final_result": f"SUBMISSION_FAILED: {err_msg}"
+        }
     except Exception as be:
         print(f"[Browser-Use] ❌ Autofill error: {be}")
-        return {"status": "error", "error": str(be)}
+        return {
+            "status": "failed",
+            "job_url": url,
+            "error": str(be),
+            "final_result": f"SUBMISSION_FAILED: {be}"
+        }
 
 
 async def run_pipeline(target_url: Optional[str] = None):
