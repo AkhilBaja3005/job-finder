@@ -57,7 +57,7 @@ HANDLERS = {
 }
 
 
-async def process_mcp_request(request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+async def process_mcp_request(request: Dict[str, Any]) -> Dict[str, Any]:
     req_id = request.get("id")
     method = request.get("method")
     params = request.get("params", {})
@@ -79,7 +79,7 @@ async def process_mcp_request(request: Dict[str, Any]) -> Optional[Dict[str, Any
         }
 
     elif method == "notifications/initialized":
-        return None
+        return {}
 
     elif method == "tools/list":
         return {

@@ -9,6 +9,9 @@ import os
 import sys
 import json
 import asyncio
+import subprocess
+import urllib.request
+import urllib.error
 from typing import Optional, Dict, Any, List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -145,9 +148,6 @@ def build_application_task_prompt(
     return task
 
 
-import subprocess
-import urllib.request
-
 _shared_browser_session: Optional[Any] = None
 _chrome_process: Optional[subprocess.Popen] = None
 CDP_PORT = 9222
@@ -220,7 +220,6 @@ def preflight_check_job_url(url: str) -> tuple[str, bool, Optional[str]]:
     Returns: (resolved_url, is_active, reason_if_inactive)
     """
     try:
-        import urllib.request
         req = urllib.request.Request(
             url,
             headers={

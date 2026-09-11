@@ -6,7 +6,7 @@ Parses job URLs to extract recruiter name, profile URL, and company info.
 import re
 import unicodedata
 import urllib.parse
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 from utils.ttl_cache import TTLCache
 
 
@@ -282,9 +282,12 @@ def extract_recruiter_from_indeed(job_url: str) -> Dict[str, Optional[str]]:
         }
 
 
-# In-memory TTL cache for recruiter company lookups (1 hour TTL)
-_recruiter_cache = TTLCache(ttl_seconds=3600)
+# Module-level bounded cache for grounded recruiter lookups (max 200 entries, 1 hr TTL).
+_recruiter_cache = TTLCache(ttl_seconds=3600, max_size=200)
+
+# Circuit breaker flag for grounded recruiter queries across the current run
 _recruiter_grounding_quota_exhausted = False
+
 
 def is_recruiter_grounding_quota_exhausted() -> bool:
     return _recruiter_grounding_quota_exhausted
@@ -295,7 +298,7 @@ def reset_recruiter_grounding_quota() -> None:
     _recruiter_grounding_quota_exhausted = False
 
 
-async def discover_recruiter_via_grounding(company_name: str, custom_api_key: Optional[str] = None) -> Dict[str, Optional[str]]:
+async def discover_recruiter_via_grounding(company_name: str, custom_api_key: Optional[str] = None) -> Dict[str, Any]:
     """
     Uses Gemini with Google Search Grounding to discover a technical recruiter
     or talent acquisition lead for companies when posting via Greenhouse, Lever, Ashby, etc.
@@ -360,7 +363,7 @@ async def discover_recruiter_via_grounding(company_name: str, custom_api_key: Op
     return result
 
 
-async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: Optional[str] = None, browser=None, company_hint: Optional[str] = None, custom_api_key: Optional[str] = None, allow_grounding: bool = True) -> Dict[str, Optional[str]]:
+async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: Optional[str] = None, browser=None, company_hint: Optional[str] = None, custom_api_key: Optional[str] = None, allow_grounding: bool = True) -> Dict[str, Any]:
     """
     Unified interface to extract recruiter info from a job posting URL.
 
@@ -414,7 +417,7 @@ async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: 
         else:
             platform = 'unknown'
 
-    res = {
+    res: Dict[str, Any] = {
         "recruiter_name": None,
         "recruiter_profile_url": None,
         "company_name": None,
@@ -422,9 +425,9 @@ async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: 
     }
 
     if platform == 'linkedin':
-        res = await extract_recruiter_from_linkedin(job_url, html=html, browser=browser)
+        res = dict(await extract_recruiter_from_linkedin(job_url, html=html, browser=browser))
     elif platform == 'indeed':
-        res = extract_recruiter_from_indeed(job_url)
+        res = dict(extract_recruiter_from_indeed(job_url))
 
     # If recruiter wasn't found on the page, only discover recruiter via Google Search Grounding
     # when allow_grounding is explicitly enabled (e.g. on-demand in outreach modal, NOT batch discovery)
