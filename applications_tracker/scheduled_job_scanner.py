@@ -426,7 +426,9 @@ async def run_pipeline(target_url: Optional[str] = None):
     timeframe = normalize_timeframe(raw_timeframe)
     min_ats_score = int(prefs.get("min_ats_score", 65))
     DIRECT_APPLY_ATS_THRESHOLD = 80  # >= 80%: apply directly with master resume without tailoring
-    max_applications = int(os.getenv("MAX_APPLICATIONS_PER_RUN", "10"))
+    max_apps_env = os.getenv("MAX_APPLICATIONS_PER_RUN", "0").strip()
+    max_applications = int(max_apps_env) if max_apps_env.isdigit() else 0
+    max_apps_str = "No limit (unlimited)" if max_applications <= 0 else str(max_applications)
 
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🚀 Starting scheduled unified scan...")
     print(f"Target roles: {keywords}")
@@ -434,7 +436,7 @@ async def run_pipeline(target_url: Optional[str] = None):
     print(f"Rule: >= {DIRECT_APPLY_ATS_THRESHOLD}% ATS -> Direct apply (Master Resume)")
     print(f"Rule: {min_ats_score}% - {DIRECT_APPLY_ATS_THRESHOLD - 1}% ATS -> Tailor 1-page LaTeX & PDF, then apply")
     print(f"Database Target: Supabase (`applications` table) with CSV backup")
-    print(f"Max Applications Cap: {max_applications}")
+    print(f"Max Applications Cap: {max_apps_str}")
     print(f"Guardrails Disabled: {disable_guardrails}\n")
 
     # Run full multi-source web discovery (Portals + LinkedIn + Indeed + Reed)
@@ -567,11 +569,12 @@ async def run_pipeline(target_url: Optional[str] = None):
 
         # Autofill application if score meets minimum threshold
         if score >= min_ats_score and url:
-            if applied_attempts >= max_applications:
+            if max_applications > 0 and applied_attempts >= max_applications:
                 print(f"[Scanner] ⏸️ Reached maximum application limit ({max_applications}) for this run. Remaining qualified matches are saved to tracker.")
             else:
                 applied_attempts += 1
-                print(f"[Scanner] 🚀 Dispatching application ({applied_attempts}/{max_applications})...")
+                disp_total = str(max_applications) if max_applications > 0 else "∞"
+                print(f"[Scanner] 🚀 Dispatching application ({applied_attempts}/{disp_total})...")
                 await apply_to_job(
                     url=url,
                     candidate=candidate,
