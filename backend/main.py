@@ -163,7 +163,16 @@ if os.path.exists(frontend_dist):
         return HTMLResponse("<h1>Job Finder Backend is Running 🟢</h1><p>Frontend assets not found.</p>", status_code=200)
 
 
+def start_server():
+    """Entrypoint for job-finder-server console script."""
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    host = os.getenv("HOST", "0.0.0.0")
+    uvicorn.run("backend.main:app", host=host, port=port, reload=False)
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+

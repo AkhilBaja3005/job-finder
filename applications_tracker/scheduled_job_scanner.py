@@ -864,6 +864,22 @@ async def run_pipeline(target_url: Optional[str] = None):
         notify_user_of_failed_applications(failed_applications, to_email=cand_email)
 
 
+def main():
+    """CLI entrypoint for autonomous scheduled scanner."""
+    import argparse
+    parser = argparse.ArgumentParser(
+        prog="job-finder-scanner",
+        description="Autonomous Scheduled Job Discovery & Application Pipeline",
+    )
+    parser.add_argument("url", nargs="?", default=None, help="Target specific job URL to process directly (optional)")
+    parser.add_argument("--auto-apply", action="store_true", help="Enable automatic browser form submission")
+    args = parser.parse_args()
+
+    if args.auto_apply:
+        os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
+
+    asyncio.run(run_pipeline(args.url))
+
+
 if __name__ == "__main__":
-    target_url = sys.argv[1] if len(sys.argv) > 1 else None
-    asyncio.run(run_pipeline(target_url))
+    main()

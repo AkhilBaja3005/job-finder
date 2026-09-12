@@ -176,5 +176,10 @@ async def run_stdio_server():
             sys.stdout.flush()
 
 
-if __name__ == "__main__":
+def main():
+    """CLI entrypoint for MCP server."""
     asyncio.run(run_stdio_server())
+
+
+if __name__ == "__main__":
+    main()
