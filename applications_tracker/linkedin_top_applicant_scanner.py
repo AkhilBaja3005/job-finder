@@ -40,18 +40,39 @@ import urllib.parse
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Set
 
-JOB_FINDER_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+# Ensure backend is on sys.path
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+_repo_candidate = os.path.dirname(_this_dir)
+for candidate_backend in [
+    os.path.join(_repo_candidate, "backend"),
+    os.path.join(os.getcwd(), "backend"),
+    _this_dir
+]:
+    if os.path.isdir(candidate_backend) and candidate_backend not in sys.path:
+        sys.path.insert(0, candidate_backend)
+
+from config.constants import (
+    resolve_workspace_root,
+    get_applications_tracker_dir,
+    get_tracker_csv_path
+)
+
+JOB_FINDER_ROOT = resolve_workspace_root()
 BACKEND_DIR = os.path.join(JOB_FINDER_ROOT, "backend")
-TRACKER_DIR = os.path.join(JOB_FINDER_ROOT, "applications_tracker")
-CSV_PATH = os.path.join(TRACKER_DIR, "job_applications_tracker.csv")
+TRACKER_DIR = get_applications_tracker_dir()
+CSV_PATH = get_tracker_csv_path()
 
 sys.path.insert(0, JOB_FINDER_ROOT)
-sys.path.insert(0, BACKEND_DIR)
+if os.path.isdir(BACKEND_DIR):
+    sys.path.insert(0, BACKEND_DIR)
 sys.path.insert(0, TRACKER_DIR)
 
 # pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
-load_dotenv(os.path.join(BACKEND_DIR, ".env"))
+load_dotenv()
+if os.path.exists(".env"):
+    load_dotenv(".env")
+
 
 from mcp.tools.profile_tools import load_profile_data
 from services.browser_use_agent import run_browser_use_autofill, preflight_check_job_url

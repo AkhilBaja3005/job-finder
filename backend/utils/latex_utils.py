@@ -917,11 +917,20 @@ def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, 
         with open(temp_tex, "w", encoding="utf-8") as f:
             f.write(fixed_code)
 
-        cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
-        if not os.path.exists(cls_source):
-            cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
-        if os.path.exists(cls_source):
-            shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
+        # Locate resume.cls across installed package, workspace, and assets
+        cls_candidates = [
+            os.path.join(OUTPUT_DIR, "resume.cls"),
+            os.path.join(UPLOAD_DIR, "resume.cls"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "resume.cls"),
+            os.path.join(BASE_DIR, "assets", "resume.cls"),
+            os.path.join(BASE_DIR, "backend", "assets", "resume.cls"),
+            os.path.join(os.getcwd(), "resume.cls"),
+            os.path.join(os.getcwd(), "applications_tracker", "tailored_resumes", "resume.cls"),
+        ]
+        found_cls = next((c for c in cls_candidates if os.path.exists(c)), None)
+        if found_cls and found_cls != os.path.join(OUTPUT_DIR, "resume.cls"):
+            shutil.copy2(found_cls, os.path.join(OUTPUT_DIR, "resume.cls"))
+
 
         result = subprocess.run(
             ["tectonic", temp_tex, "--outdir", OUTPUT_DIR],

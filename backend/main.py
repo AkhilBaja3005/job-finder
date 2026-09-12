@@ -1,8 +1,14 @@
 import os
+import sys
 import shutil
 import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+
+# Ensure backend root is always on sys.path across all invocation environments
+_backend_root = os.path.dirname(os.path.abspath(__file__))
+if _backend_root not in sys.path:
+    sys.path.insert(0, _backend_root)
 
 # Load environment variables
 load_dotenv()
@@ -129,14 +135,19 @@ if os.path.exists(os.path.join(BASE_DIR, "assets")):
     app.mount("/backend_assets", StaticFiles(directory=os.path.join(BASE_DIR, "assets")), name="backend_assets")
 
 # Mount Frontend Build & SPA Catch-All Route
-frontend_dist = os.path.abspath(os.path.join(BASE_DIR, "../frontend/dist"))
-if not os.path.exists(frontend_dist):
-    frontend_dist = "/app/frontend/dist"
-if not os.path.exists(frontend_dist):
-    frontend_dist = os.path.abspath(os.path.join(BASE_DIR, "frontend/dist"))
+_this_backend = os.path.dirname(os.path.abspath(__file__))
+frontend_candidates = [
+    os.path.join(_this_backend, "static_frontend"),
+    os.path.abspath(os.path.join(BASE_DIR, "frontend/dist")),
+    os.path.abspath(os.path.join(BASE_DIR, "../frontend/dist")),
+    "/app/frontend/dist",
+]
+frontend_dist = next((p for p in frontend_candidates if os.path.exists(os.path.join(p, "index.html"))), None)
 
-if os.path.exists(frontend_dist):
+
+if frontend_dist and os.path.exists(frontend_dist):
     assets_dir = os.path.join(frontend_dist, "assets")
+
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
@@ -148,22 +159,33 @@ if os.path.exists(frontend_dist):
             raise HTTPException(status_code=404, detail="Not Found")
 
         # 2. Block direct access to internal api routes if not handled by routers
-        if rest_of_path and not rest_of_path.startswith("api"):
+        dist_path = frontend_dist or ""
+        if rest_of_path and not rest_of_path.startswith("api") and dist_path:
             try:
                 # Resolve canonical safe path within frontend_dist
-                target = os.path.abspath(os.path.join(frontend_dist, rest_of_path))
-                if target.startswith(frontend_dist) and os.path.exists(target) and os.path.isfile(target):
+                target = os.path.abspath(os.path.join(dist_path, rest_of_path))
+                if target.startswith(dist_path) and os.path.exists(target) and os.path.isfile(target):
                     return FileResponse(target)
             except Exception:
                 pass
 
-        index_file = os.path.join(frontend_dist, "index.html")
-        if os.path.exists(index_file):
+        index_file = os.path.join(dist_path, "index.html") if dist_path else ""
+        if index_file and os.path.exists(index_file):
             return FileResponse(index_file)
         return HTMLResponse("<h1>Job Finder Backend is Running 🟢</h1><p>Frontend assets not found.</p>", status_code=200)
+
+
+
+def start_server():
+    """Entrypoint for job-finder-server console script."""
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    host = os.getenv("HOST", "0.0.0.0")
+    uvicorn.run("backend.main:app", host=host, port=port, reload=False)
 
 
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+

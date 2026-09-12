@@ -5,12 +5,15 @@ import queue
 import threading
 import asyncio
 from typing import Optional, Tuple, Any, Dict, List
+# pyrefly: ignore [missing-import]
 from services.auth import get_user_by_token
+# pyrefly: ignore [missing-import]
+from config.constants import resolve_workspace_root, get_output_dir
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = resolve_workspace_root()
 
-# Hugging Face Persistent Storage Mount Support:
-# When Persistent Storage is enabled in Space settings, HF mounts disk volume at /data
+# Persistent Storage Root:
+# If HF persistent volume (/data) is mounted, use it; otherwise use resolved workspace root.
 if os.path.exists("/data") and os.access("/data", os.W_OK):
     STORAGE_ROOT = "/data"
 else:
@@ -19,6 +22,7 @@ else:
 UPLOAD_DIR = os.path.join(STORAGE_ROOT, "uploads")
 OUTPUT_DIR = os.path.join(STORAGE_ROOT, "output")
 USER_DATA_DIR = os.path.join(STORAGE_ROOT, "user_data")
+
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -116,6 +120,7 @@ def get_session_data(token: Optional[str]) -> dict:
             if user:
                 user_id = user.get("id")
                 if user_id:
+                    # pyrefly: ignore [missing-import]
                     from services.auth import supabase_request
                     res = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
                     if res and len(res) > 0:
@@ -173,6 +178,7 @@ def set_session_data(token: Optional[str], data: dict, path: str):
             user = get_user_by_token(token)
             if user and user.get("id") and not str(user.get("id")).startswith("guest_"):
                 user_id = user["id"]
+                # pyrefly: ignore [missing-import]
                 from services.auth import supabase_request
                 existing = supabase_request(f"user_resumes?user_id=eq.{user_id}", "GET")
                 record = {

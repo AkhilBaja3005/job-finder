@@ -206,6 +206,13 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
         except Exception as file_err:
             print(f"[upload_resume] Could not save guest state file {guest_file}: {file_err}")
 
+        # Automatically sync parsed resume into candidate_profile.json
+        try:
+            from mcp.tools.profile_tools import sync_resume_data_to_profile
+            sync_resume_data_to_profile(data)
+        except Exception as sync_err:
+            print(f"[upload_resume] Note: Could not auto-sync to candidate_profile.json: {sync_err}")
+
         return {
             "message": "Resume uploaded and parsed successfully",
             "data": data,
@@ -655,8 +662,17 @@ async def download_extension(
     host = request.headers.get("x-forwarded-host") or request.headers.get("host", "www.job-finder.space")
     server_url = f"{proto}://{host}" if host else "https://www.job-finder.space"
 
-    ext_dir = os.path.abspath(os.path.join(BASE_DIR, "../extension"))
+    this_file_dir = os.path.dirname(os.path.abspath(__file__))
+    ext_candidates = [
+        os.path.abspath(os.path.join(BASE_DIR, "extension")),
+        os.path.abspath(os.path.join(BASE_DIR, "../extension")),
+        os.path.abspath(os.path.join(this_file_dir, "../../extension")),
+        os.path.abspath(os.path.join(this_file_dir, "../extension")),
+        "/app/extension",
+    ]
+    ext_dir = next((d for d in ext_candidates if os.path.isdir(d)), ext_candidates[0])
     zip_buffer = io.BytesIO()
+
 
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
         for root, dirs, files in os.walk(ext_dir):

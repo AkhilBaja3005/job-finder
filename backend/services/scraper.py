@@ -221,10 +221,13 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     import urllib.request
     # pyrefly: ignore [missing-import]
     from bs4 import BeautifulSoup
+    # pyrefly: ignore [missing-import]
     from utils.ssl_utils import SSL_CONTEXT
+    # pyrefly: ignore [missing-import]
     from services.log_queue import log_ist
 
     try:
+        # pyrefly: ignore [missing-import]
         from services.jd_cache import cache_get, cache_set
         cached_res = cache_get(url)
         if cached_res and cached_res.get("description") and len(cached_res.get("description", "")) > 50:
@@ -253,6 +256,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                         raw_html_desc = data.get("jobDescription", "")
                         parsed_text = BeautifulSoup(raw_html_desc, "html.parser").get_text(separator="\n").strip()
                         if parsed_text and len(parsed_text) > 50:
+                            # pyrefly: ignore [missing-import]
                             from services.log_queue import log_ist
                             log_ist(f"[Scraper] ⚡ Instantly fetched Reed JD via Official Details API for Job ID: {job_id}")
                             return {
@@ -264,6 +268,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                                 "html": raw_html_desc
                             }
                 except Exception as reed_err:
+                    # pyrefly: ignore [missing-import]
                     from services.log_queue import log_ist
                     log_ist(f"[Scraper] Reed Details API fallback to Playwright browser ({reed_err})")
 
@@ -291,7 +296,9 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     if "linkedin.com/jobs/view/" in url:
         try:
             import urllib.request, json
+            # pyrefly: ignore [missing-import]
             from utils.ssl_utils import SSL_CONTEXT
+            # pyrefly: ignore [missing-import]
             from services.log_queue import log_ist
             # Extract numeric job ID from URL: .../jobs/view/title-at-company-{jobId}
             li_id_match = re.search(r'/jobs/view/[^/]*?-?(\d{7,13})(?:/|\?|$)', url)
@@ -353,6 +360,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                         except Exception:
                             continue
         except Exception as li_err:
+            # pyrefly: ignore [missing-import]
             from services.log_queue import log_ist
             log_ist(f"[Scraper] LinkedIn guest API error ({li_err}), falling back to Playwright")
 
@@ -360,7 +368,9 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     if "indeed.com" in url:
         try:
             import urllib.request, json
+            # pyrefly: ignore [missing-import]
             from utils.ssl_utils import SSL_CONTEXT
+            # pyrefly: ignore [missing-import]
             from services.log_queue import log_ist
             # Extract Indeed job key (jk=...) — supports /rc/clk?jk=, /viewjob?jk=, and bare jk= params
             jk_match = (
@@ -455,6 +465,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
             else:
                 log_ist(f"[Scraper] Indeed URL has no jk= key, cannot use fast path: {url}")
         except Exception as indeed_err:
+            # pyrefly: ignore [missing-import]
             from services.log_queue import log_ist
             log_ist(f"[Scraper] Indeed direct fetch error ({indeed_err}), falling back to Playwright")
 
@@ -507,6 +518,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
         # Execute up to 3 retry attempts
         for attempt in range(3):
             try:
+                # pyrefly: ignore [missing-import]
                 from services.log_queue import log_ist
                 msg_attempt = f"[Scraper] Attempt {attempt + 1}/3 to scrape: {url}"
                 log_ist(msg_attempt)
@@ -621,10 +633,12 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
 
                 # Check if we successfully got a substantial block of text
                 if body_text and len(body_text.strip()) > 200:
+                    # pyrefly: ignore [missing-import]
                     from services.log_queue import log_ist
                     log_ist(f"[Scraper] Success on attempt {attempt + 1}! Length: {len(body_text)}")
                     break
             except Exception as attempt_err:
+                # pyrefly: ignore [missing-import]
                 from services.log_queue import log_ist
                 log_ist(f"[Scraper] Attempt {attempt + 1} failed: {attempt_err}")
                 if attempt == 2:
@@ -653,6 +667,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
         ---
         """
         try:
+            # pyrefly: ignore [missing-import]
             from services.gemini_client import generate_content_with_fallback
             # pyrefly: ignore [missing-import]
             from pydantic import BaseModel

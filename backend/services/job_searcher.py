@@ -5,6 +5,7 @@ import urllib.request
 import re
 import asyncio
 import hashlib
+import inspect
 # pyrefly: ignore [missing-import]
 from bs4 import BeautifulSoup
 from typing import List, Optional, Dict, Any
@@ -14,17 +15,25 @@ from pydantic import BaseModel, Field
 from google import genai
 # pyrefly: ignore [missing-import]
 from google.genai import types
+# pyrefly: ignore [missing-import]
 from services.gemini_client import generate_content_with_fallback
+# pyrefly: ignore [missing-import]
 from services.ats_scorer import (
     compute_ats_score, compute_overall_score, calculate_flattened_experience,
     estimate_role_fit_score, _extract_taxonomy_skills, get_candidate_seniority_tier,
     _COMPILED_TITLE_TIER_PATTERNS
 )
+# pyrefly: ignore [missing-import]
 from services.scraper import scrape_job_description
+# pyrefly: ignore [missing-import]
 from services.recruiter_extractor import extract_recruiter
+# pyrefly: ignore [missing-import]
 from utils.ssl_utils import SSL_CONTEXT
+# pyrefly: ignore [missing-import]
 from utils.ttl_cache import TTLCache
+# pyrefly: ignore [missing-import]
 from utils.location_resolver import get_indeed_domain_for_location, resolve_location_country
+# pyrefly: ignore [missing-import]
 from services.log_queue import LLMClientLogQueue, log_ist
 
 # ─── System Caps & TTL Cache ─────────────────────────────────────────────
@@ -96,7 +105,7 @@ def normalize_timeframe(timeframe: Optional[str]) -> str:
     """
     if not timeframe:
         return "48h"
-    t = str(timeframe).strip().lower().replace(" ", "_").replace("-", "_")
+    t = timeframe.strip().lower().replace(" ", "_").replace("-", "_")
     if t in ("24h", "24", "1d", "day", "past_24_hours", "past_24h", "past_1_day", "last_24_hours", "24_hours"):
         return "24h"
     if t in ("48h", "48", "2d", "past_48_hours", "past_48h", "past_2_days", "last_48_hours", "48_hours"):
@@ -158,7 +167,9 @@ For each match found, return a valid JSON array of objects with the exact schema
 ]
 Do not wrap in explanatory text. Only return the JSON array."""
     try:
+        # pyrefly: ignore [missing-import]
         from config.constants import DEFAULT_GROUNDED_SEARCH_MODELS
+        # pyrefly: ignore [missing-import]
         from services.gemini_client import get_gemini_api_keys
         
         available_keys = [api_key] if api_key else (get_gemini_api_keys() or [os.getenv("GEMINI_API_KEY", "")])
@@ -205,8 +216,6 @@ Do not wrap in explanatory text. Only return the JSON array."""
                     break
             if raw_text:
                 break
-                print(f"[Direct ATS Search] Model {search_model} failed: {model_err}, trying fallback...")
-                continue
         if not raw_text:
             if all_429:
                 _ats_grounding_quota_exhausted = True
@@ -793,6 +802,7 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
                 if scraped and scraped.get("description"):
                     _job_search_cache.set(url_cache_key, scraped)
                     try:
+                        # pyrefly: ignore [missing-import]
                         from services.jd_cache import cache_set
                         cache_set(job.url, scraped)
                     except Exception:
@@ -986,6 +996,7 @@ async def find_matching_jobs(
     yield json.dumps({"type": "log", "message": portal_start_msg}) + " " * 2048 + "\n"
     portal_jobs_raw = []
     try:
+        # pyrefly: ignore [missing-import]
         from services.portal_scanner import PortalScanner
         scanner = PortalScanner()
         portal_results = await scanner.scan_all_portals(target_keywords=queries, timeframe=timeframe, location=location)
@@ -1024,7 +1035,7 @@ async def find_matching_jobs(
     async def _fetch_query_cluster(q: str):
         async def _safe_run(coro_or_func, *args, default=[], timeout=20):
             try:
-                if asyncio.iscoroutinefunction(coro_or_func):
+                if inspect.iscoroutinefunction(coro_or_func):
                     return await asyncio.wait_for(coro_or_func(*args), timeout=timeout)
                 else:
                     return await asyncio.wait_for(asyncio.to_thread(coro_or_func, *args), timeout=timeout)

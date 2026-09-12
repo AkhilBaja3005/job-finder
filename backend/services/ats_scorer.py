@@ -904,6 +904,7 @@ def evaluate_master_resume(resume_data: dict, config: ScoringConfig = DEFAULT_SC
     # 5. Gemini AI Executive Qualitative Audit (Domain-Agnostic & Adaptive)
     ai_suggestions = []
     try:
+        # pyrefly: ignore [missing-import]
         from services.gemini_client import generate_content_with_fallback
         prompt = (
             "You are an Executive Recruiter and ATS Specialist auditing a candidate's master resume profile.\n"

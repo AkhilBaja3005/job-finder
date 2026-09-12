@@ -322,6 +322,7 @@ async def generate_pdf_resume(resume_data: dict, output_pdf_path: str):
 
     # Reuse app shared Playwright browser if ready; fallback to fresh launch if startup isn't complete
     try:
+        # pyrefly: ignore [missing-import]
         from services.scraper import _shared_browser
         browser: Any = _shared_browser
     except Exception:

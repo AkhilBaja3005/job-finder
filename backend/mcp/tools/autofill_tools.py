@@ -14,13 +14,19 @@ from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "backend", ".env"))
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
-
+# pyrefly: ignore [missing-import]
 from mcp.tools.profile_tools import load_profile_data
+# pyrefly: ignore [missing-import]
 from mcp.tools.ats_tools import handle_calculate_ats_score, handle_analyze_skill_gap
+# pyrefly: ignore [missing-import]
 from mcp.tools.discovery_tools import handle_search_jobs, handle_scrape_job_posting
+# pyrefly: ignore [missing-import]
 from mcp.tools.resume_tools import handle_tailor_resume_latex
+# pyrefly: ignore [missing-import]
 from utils.latex_utils import apply_latex_hotfix, compile_and_check_page_metrics
+# pyrefly: ignore [missing-import]
 from services.application_tracker import record_application, update_application_status
+# pyrefly: ignore [missing-import]
 from services.browser_use_agent import run_browser_use_autofill
 
 AUTOFILL_TOOLS_SPEC = [
@@ -110,34 +116,59 @@ AUTOFILL_TOOLS_SPEC = [
     }
 ]
 
+# pyrefly: ignore [missing-import]
+from config.constants import (
+    resolve_workspace_root,
+    get_applications_tracker_dir,
+    get_tailored_resumes_dir,
+    get_output_dir
+)
+
 
 def _get_base_dirs():
-    # File is at backend/mcp/tools/autofill_tools.py -> dirname x 4 = project root
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    return base_dir
+    return resolve_workspace_root()
 
 
 def _get_default_resume_path() -> Optional[str]:
+    custom = os.getenv("MASTER_RESUME_PATH")
+    if custom and os.path.exists(custom):
+        return custom
+
     base_dir = _get_base_dirs()
+    tailored_dir = get_tailored_resumes_dir()
+    out_dir = get_output_dir()
     candidate_resumes = [
-        os.path.join(base_dir, "backend", "output", "AKHIL_BAJA", "master_resume.pdf"),
-        os.path.join(base_dir, "applications_tracker", "tailored_resumes", "master_resume.pdf"),
+        os.path.join(out_dir, "master_resume.pdf"),
+        os.path.join(tailored_dir, "master_resume.pdf"),
         os.path.join(base_dir, "tests", "fixtures", "sample_resume.pdf"),
     ]
+    # Check any subfolder in output directory
+    if os.path.exists(out_dir):
+        for entry in os.listdir(out_dir):
+            sub_pdf = os.path.join(out_dir, entry, "master_resume.pdf")
+            if os.path.exists(sub_pdf):
+                candidate_resumes.append(sub_pdf)
+
     for p in candidate_resumes:
         if os.path.exists(p):
             return p
     return None
 
 
+
 def _get_master_latex_source() -> Optional[str]:
     base_dir = _get_base_dirs()
     candidates = [
-        os.path.join(base_dir, "backend", "output", "AKHIL_BAJA", "master_resume.tex"),
         os.path.join(base_dir, "backend", "assets", "master_resume_template.tex"),
         os.path.join(base_dir, "assets", "master_resume_template.tex"),
         os.path.join(base_dir, "output", "tailored_resume.tex"),
     ]
+    out_dir = os.path.join(base_dir, "backend", "output")
+    if os.path.exists(out_dir):
+        for entry in os.listdir(out_dir):
+            sub_tex = os.path.join(out_dir, entry, "master_resume.tex")
+            if os.path.exists(sub_tex):
+                candidates.insert(0, sub_tex)
     for p in candidates:
         if os.path.exists(p):
             try:
@@ -169,19 +200,25 @@ def build_and_compile_tailored_pdf(
     base_dir = _get_base_dirs()
 
     # Ensure resume.cls is available in the target build directory
+    _this_file = os.path.abspath(__file__)
+    pkg_root = os.path.dirname(os.path.dirname(os.path.dirname(_this_file)))
     cls_candidates = [
-        os.path.join(base_dir, "backend", "assets", "resume.cls"),
+        os.path.join(pkg_root, "assets", "resume.cls"),
         os.path.join(base_dir, "assets", "resume.cls"),
+        os.path.join(base_dir, "backend", "assets", "resume.cls"),
         os.path.join(base_dir, "backend", "uploads", "resume.cls"),
+        os.path.join(out_dir, "resume.cls"),
     ]
     for c in cls_candidates:
-        if os.path.exists(c):
+        if os.path.exists(c) and c != os.path.join(out_dir, "resume.cls"):
             shutil.copy2(c, os.path.join(out_dir, "resume.cls"))
             break
+
 
     skills_to_inject = [s.strip() for s in (missing_skills or []) if s and s.strip()]
     if not skills_to_inject and jd_text:
         try:
+            # pyrefly: ignore [missing-import]
             from services.ats_scorer import extract_jd_skills
             req, pref = extract_jd_skills(jd_text)
             skills_to_inject = (req + pref)[:5]
@@ -192,6 +229,7 @@ def build_and_compile_tailored_pdf(
     raw_tailored = None
     if skills_to_inject:
         try:
+            # pyrefly: ignore [missing-import]
             from utils.latex_utils import inject_tailored_slots
             slotted = inject_tailored_slots(
                 master_latex=master_latex,
@@ -206,6 +244,7 @@ def build_and_compile_tailored_pdf(
 
     # Fallback to LLM tailoring if slot injection was skipped or failed
     if not raw_tailored:
+        # pyrefly: ignore [missing-import]
         from services.llm_agent import tailor_latex_code
         try:
             raw_tailored = tailor_latex_code(
@@ -329,6 +368,7 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
     max_applications = int(arguments.get("max_applications", 3))
     model_name = arguments.get("model_name", "gemini-3.5-flash-lite")
 
+    # pyrefly: ignore [missing-import]
     from services.log_queue import log_ist
     print(f"\n[Pipeline] 🚀 Pipeline Auto-Apply Started", flush=True)
     print(f"[Pipeline] 🎯 Keywords: '{keywords}' | 📍 Location: '{location}' | 🎯 Min ATS: {min_ats_score}%", flush=True)
@@ -357,7 +397,7 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
     processed_jobs = []
     applied_count = 0
     base_dir = _get_base_dirs()
-    tailored_dir = os.path.join(base_dir, "applications_tracker", "tailored_resumes")
+    tailored_dir = get_tailored_resumes_dir()
     master_resume_pdf = _get_default_resume_path()
 
     for idx, job in enumerate(jobs, start=1):

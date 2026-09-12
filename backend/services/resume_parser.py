@@ -8,7 +8,7 @@ from docx import Document
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Union, Any
-
+# pyrefly: ignore [missing-import]
 from services.gemini_client import generate_content_with_fallback
 
 class WorkExperience(BaseModel):

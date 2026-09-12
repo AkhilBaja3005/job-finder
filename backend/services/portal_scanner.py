@@ -14,7 +14,7 @@ import asyncio
 # pyrefly: ignore [missing-import]
 import httpx
 from typing import List, Dict, Any, Optional
-
+# pyrefly: ignore [missing-import]
 from services.ats_scorer import compute_ats_score, estimate_role_fit_score
 
 DEFAULT_PORTALS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "portals.yml")

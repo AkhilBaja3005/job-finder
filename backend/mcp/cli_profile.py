@@ -13,6 +13,7 @@ import json
 import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# pyrefly: ignore [missing-import]
 from mcp.tools.profile_tools import load_profile_data, PROFILE_CONFIG_PATH
 
 def show_profile():
@@ -67,11 +68,25 @@ def main():
     set_parser.add_argument("--timeframe", help="Search timeframe (e.g. past_24_hours)")
     set_parser.add_argument("--ats", help="Min ATS score threshold (e.g. 65)")
 
+    sync_parser = subparsers.add_parser("sync", help="Sync profile details from a resume file (PDF/DOCX/LaTeX)")
+    sync_parser.add_argument("resume_path", nargs="?", default=None, help="Path to resume file (optional; defaults to auto-detected master resume)")
+
     args = parser.parse_args()
     if args.command == "show" or not args.command:
         show_profile()
     elif args.command == "set":
         set_profile(args)
+    elif args.command == "sync":
+        import asyncio
+        # pyrefly: ignore [missing-import]
+        from mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
+        res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": args.resume_path}))
+        if res.get("success"):
+            print(f"✅ {res.get('message')}")
+            print(f"📊 Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
+            show_profile()
+        else:
+            print(f"❌ Sync failed: {res.get('error')}")
 
 if __name__ == "__main__":
     main()

@@ -165,6 +165,7 @@ async def cached_scrape_job_description(
         return cached
 
     # 2. Cache miss — do the real scrape
+    # pyrefly: ignore [missing-import]
     from services.scraper import scrape_job_description
     result = await scrape_job_description(url, browser=browser, on_log=on_log)
 

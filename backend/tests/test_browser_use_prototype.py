@@ -151,7 +151,10 @@ def test_discover_gemini_models_excludes_pro():
 def test_format_posted_date_time():
     """Validates date; time parsing for relative strings, RFC-822, and standard formats."""
     import sys
-    sys.path.insert(0, "/Users/akhilbaja/Documents/Akhil/Job Finder/applications_tracker")
+    proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    tracker_p = os.path.join(proj_root, "applications_tracker")
+    if tracker_p not in sys.path:
+        sys.path.insert(0, tracker_p)
     from scheduled_job_scanner import format_posted_date_time
     import re
 
@@ -196,7 +199,10 @@ def test_adhoc_auto_filler_job_ids_parsing():
 def test_is_top_applicant_badge():
     """Validates regex matching for various LinkedIn top applicant and competitive badge variations."""
     import sys
-    sys.path.insert(0, "/Users/akhilbaja/Documents/Akhil/Job Finder/applications_tracker")
+    proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    tracker_p = os.path.join(proj_root, "applications_tracker")
+    if tracker_p not in sys.path:
+        sys.path.insert(0, tracker_p)
     from linkedin_top_applicant_scanner import is_top_applicant_badge
 
     assert is_top_applicant_badge("You’d be a top applicant for this job based on your profile")

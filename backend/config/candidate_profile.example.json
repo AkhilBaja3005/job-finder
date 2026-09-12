@@ -1,0 +1,109 @@
+{
+  "candidate": {
+    "user_id": 1,
+    "name": "Jane Doe",
+    "email": "jane.doe@example.com",
+    "phone": "+44 7123 456789",
+    "linkedin": "https://linkedin.com/in/janedoe",
+    "github": "https://github.com/janedoe",
+    "portfolio": "https://janedoe.dev",
+    "location": "London, UK",
+    "postal_code": "EC1A 1BB",
+    "gender": "Female",
+    "ethnicity": "Prefer not to say",
+    "citizenship": "United Kingdom",
+    "work_authorization": "Authorized to work in the UK without restriction",
+    "requires_sponsorship": false,
+    "veteran_status": "No",
+    "disability_status": "No",
+    "portals_password": "YourSecurePassword123!",
+    "experience_summary": "Staff Software Engineer with 6+ years of experience in distributed systems, high-throughput microservices, and AI infrastructure.",
+    "education": [
+      {
+        "institution": "University of Cambridge",
+        "degree": "B.A. in Computer Science",
+        "timeline": "2017 - 2020",
+        "location": "Cambridge, UK"
+      }
+    ],
+    "work_experience": [
+      {
+        "company": "Tech Innovations Ltd",
+        "role": "Senior Software Engineer",
+        "timeline": "2021 - Present",
+        "technologies": ["Python", "FastAPI", "Docker", "PostgreSQL", "Kafka"],
+        "highlights": [
+          "Architected low-latency microservices handling 25,000+ RPS with 99.99% uptime SLA.",
+          "Led development of real-time search indexing pipeline reducing query latencies by 45%."
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "title": "Open Source LLM Orchestrator",
+        "category": "GenAI / Systems",
+        "technologies": ["Python", "PyTorch", "FastAPI"],
+        "url": "https://github.com/janedoe/llm-orchestrator",
+        "description": "High-throughput model serving platform with automatic token-bucket rate limiting and fallback cascades."
+      }
+    ],
+    "core_skills": [
+      "Python",
+      "TypeScript",
+      "FastAPI",
+      "Docker",
+      "Kubernetes",
+      "PostgreSQL",
+      "Redis",
+      "Kafka",
+      "CI/CD",
+      "Distributed Systems"
+    ],
+    "skill_categories": {
+      "Languages": ["Python", "TypeScript", "SQL"],
+      "Backend & AI": ["FastAPI", "PyTorch", "Distributed Systems"],
+      "DevOps & Data": ["Docker", "Kubernetes", "PostgreSQL", "Redis", "Kafka"]
+    }
+  },
+  "search_preferences": {
+    "target_roles": [
+      "Senior Software Engineer",
+      "Staff Software Engineer",
+      "AI Systems Engineer"
+    ],
+    "target_locations": [
+      "London, UK",
+      "Remote"
+    ],
+    "timeframe": "past_24_hours",
+    "seniority": [
+      "Senior",
+      "Staff",
+      "Lead"
+    ],
+    "platforms": [
+      "Ashby",
+      "Greenhouse",
+      "Lever",
+      "LinkedIn",
+      "Indeed"
+    ],
+    "min_ats_score_threshold": 70
+  },
+  "networking_and_references": {
+    "reference_personas": [
+      {
+        "tier": "Tier 1 - Primary Verification",
+        "persona": "Engineering Director / VP of Engineering",
+        "context": "Direct supervision of core distributed systems architecture and system reliability."
+      }
+    ],
+    "referral_targets": [
+      {
+        "group": "Alumni & Professional Network",
+        "targets": ["Senior Engineering Leads", "Technical Recruiters"],
+        "focus": "Direct outreach highlighting distributed systems scale and reliability engineering."
+      }
+    ]
+  }
+}

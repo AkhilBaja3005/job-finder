@@ -1,13 +1,10 @@
 {
   "mcpServers": {
     "job-finder": {
-      "command": "/Users/akhilbaja/Documents/Akhil/Job Finder/backend/venv/bin/python",
+      "command": "job-finder",
       "args": [
-        "/Users/akhilbaja/Documents/Akhil/Job Finder/backend/mcp/server.py"
-      ],
-      "env": {
-        "PYTHONPATH": "/Users/akhilbaja/Documents/Akhil/Job Finder/backend"
-      }
+        "mcp"
+      ]
     }
   }
 }

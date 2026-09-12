@@ -121,3 +121,65 @@ def test_html_resume_renderer():
     assert "Imperial College London" in html
     assert "Professional Summary" in html
     assert "Technical Skills" in html
+
+
+def test_sync_resume_data_to_profile(tmp_path):
+    """Verify that sync_resume_data_to_profile correctly populates profile configuration."""
+    import os
+    import unittest.mock as mock
+    from mcp.tools.profile_tools import sync_resume_data_to_profile, PROFILE_CONFIG_PATH
+
+
+    sample_parsed = {
+        "name": "Jane Tester",
+        "email": "jane.tester@example.com",
+        "phone": "+44 7999 888777",
+        "location": "Edinburgh, UK",
+        "links": ["https://linkedin.com/in/janetester", "https://github.com/janetester"],
+        "summary": "Specialist in high-throughput data processing and AI architectures.",
+        "skills": {
+            "Languages": ["Python", "Go"],
+            "AI/ML": ["PyTorch", "Transformers"]
+        },
+        "experience": [
+            {
+                "company": "DataCorp",
+                "role": "Staff Data Engineer",
+                "start_date": "2022",
+                "end_date": "Present",
+                "technologies": "Python, Spark, Kafka",
+                "description": ["Scaled pipeline to 50k events/sec."]
+            }
+        ],
+        "education": [
+            {
+                "institution": "University of Edinburgh",
+                "degree": "MSc",
+                "field_of_study": "Informatics",
+                "start_date": "2020",
+                "graduation_date": "2021",
+                "location": "Edinburgh, UK"
+            }
+        ],
+        "projects": [
+            {
+                "title": "FastKafka",
+                "description": ["Lightweight Kafka consumer in Go."]
+            }
+        ]
+    }
+
+    dummy_config = str(tmp_path / "candidate_profile.json")
+    with mock.patch.dict(os.environ, {"CANDIDATE_PROFILE_PATH": dummy_config}), \
+         mock.patch("mcp.tools.profile_tools.load_profile_data", return_value={}):
+        result = sync_resume_data_to_profile(sample_parsed)
+        assert result["candidate"]["name"] == "Jane Tester"
+        assert result["candidate"]["email"] == "jane.tester@example.com"
+        assert result["candidate"]["location"] == "Edinburgh, UK"
+        assert "Python" in result["candidate"]["core_skills"]
+        assert len(result["candidate"]["work_experience"]) == 1
+        assert result["candidate"]["work_experience"][0]["company"] == "DataCorp"
+        assert len(result["candidate"]["education"]) == 1
+        assert result["candidate"]["education"][0]["institution"] == "University of Edinburgh"
+
+

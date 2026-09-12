@@ -57,7 +57,7 @@ except ImportError:
     ChatGoogle: Any = None
     BrowserSession: Any = None
     MultiFallbackAgent = None  # type: ignore
-
+# pyrefly: ignore [missing-import]
 from config.constants import (
     DEFAULT_FAST_LITE_MODELS,
     PREFERRED_GEMINI_MODEL,
@@ -85,6 +85,7 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
     Gemini Flash-Lite / Flash model (strictly excluding Pro models for high RPM & low latency).
     """
     try:
+        # pyrefly: ignore [missing-import]
         from services.gemini_client import get_next_gemini_api_key
         api_key = get_next_gemini_api_key(custom_api_key)
     except Exception:
@@ -112,6 +113,7 @@ def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[
     """
     fallback_instances: List[Any] = []
     try:
+        # pyrefly: ignore [missing-import]
         from services.gemini_client import get_gemini_api_keys
         all_keys = get_gemini_api_keys()
     except Exception:
@@ -169,18 +171,29 @@ def build_application_task_prompt(
     summary = resume_data.get("summary") or resume_data.get("candidate", {}).get("experience_summary", "")
 
     # Demographic & compliance answers commonly asked on job forms
-    gender = resume_data.get("gender") or resume_data.get("candidate", {}).get("gender", "Male")
-    ethnicity = resume_data.get("ethnicity") or resume_data.get("candidate", {}).get("ethnicity", "Asian")
-    citizenship = resume_data.get("citizenship") or resume_data.get("candidate", {}).get("citizenship", "Indian")
-    work_auth = resume_data.get("work_authorization") or resume_data.get("candidate", {}).get("work_authorization", "Authorized to work in the UK and India")
+    gender = resume_data.get("gender") or resume_data.get("candidate", {}).get("gender", "")
+    ethnicity = resume_data.get("ethnicity") or resume_data.get("candidate", {}).get("ethnicity", "")
+    citizenship = resume_data.get("citizenship") or resume_data.get("candidate", {}).get("citizenship", "")
+    work_auth = resume_data.get("work_authorization") or resume_data.get("candidate", {}).get("work_authorization", "")
     requires_sponsorship = resume_data.get("requires_sponsorship", False)
+    if not requires_sponsorship and isinstance(resume_data.get("candidate"), dict):
+        requires_sponsorship = resume_data["candidate"].get("requires_sponsorship", False)
     sponsorship_str = "Yes" if requires_sponsorship else "No"
+    sponsorship_choice = "Yes" if requires_sponsorship else "No"
     veteran_status = resume_data.get("veteran_status") or resume_data.get("candidate", {}).get("veteran_status", "No")
     disability_status = resume_data.get("disability_status") or resume_data.get("candidate", {}).get("disability_status", "No")
     # Phone parsing for easy international code selection
     phone_digits = "".join(c for c in phone if c.isdigit() or c == '+')
     country_code_hint = "India (+91)" if "+91" in phone_digits or "91" in phone_digits[:4] else "United Kingdom (+44)"
     clean_mobile = phone_digits.replace("+91", "").replace("+44", "").strip()
+
+    portals_password = (
+        resume_data.get("portals_password")
+        or resume_data.get("candidate", {}).get("portals_password")
+        or os.getenv("PORTALS_PASSWORD", "")
+    )
+
+    password_profile_line = f"- Account Creation / Portal Password: {portals_password}\n" if portals_password else ""
 
     task = f"""
     Navigate to the job application URL: {job_url}
@@ -204,7 +217,7 @@ def build_application_task_prompt(
     - Protected Veteran Status: {veteran_status}
     - Disability Status: {disability_status}
     - Professional Background: {summary}
-    """
+    {password_profile_line}"""
 
     if resume_pdf_path and os.path.exists(resume_pdf_path):
         task += f"\n- Resume File to attach: {os.path.abspath(resume_pdf_path)}\n"
@@ -219,6 +232,15 @@ def build_application_task_prompt(
        - NEVER claim success if you are still on an unsubmitted form with validation errors!"""
         if auto_submit
         else "5. SAFETY GUARDRAIL: Navigate through intermediate pages ('Next' / 'Continue'), but DO NOT click final 'Submit Application' or 'Send Application'. Stop on the final review/preview step and report a summary of completed fields."
+    )
+
+    password_action_instruction = (
+        f"""         * If asked to set a password, create an account, or enter portal password:
+           - Enter '{portals_password}' into the Password and Confirm Password fields.
+           - Enter '{email}' as the account username/email."""
+        if portals_password
+        else """         * If asked to create an account or password:
+           - Look for 'Sign in with Google' first. If explicit password creation is strictly required without Google OAuth and no password was configured, notify in final result."""
     )
 
     task += f"""
@@ -244,9 +266,12 @@ def build_application_task_prompt(
            - In Greenhouse, Ashby, and Lever, typing 'London' or 'United Kingdom' triggers a dynamic suggestion listbox/flyout menu.
            - Wait for or inspect the dynamic suggestion list to appear, then click the exact matching option (e.g. 'London, England, United Kingdom', 'London, UK', 'London (United Kingdom)', or 'United Kingdom').
            - Do not leave the input half-typed without selecting the flyout suggestion.
-         * Work Authorization / Sponsorship: Inspect options and choose 'Yes' ({sponsorship_str}).
-         * Gender: Inspect options and choose 'Male'.
-         * Ethnicity: Inspect options and choose 'Asian' / 'Indian' / 'Asian or Pacific Islander'.
+         * Work Authorization / Sponsorship: Inspect options and choose '{sponsorship_choice}' (Candidate requires sponsorship: {sponsorship_str}).
+         * Gender: Inspect options and choose '{gender}'.
+         * Race / Ethnicity: Inspect options and choose '{ethnicity}'.
+         * Citizenship / Nationality: Inspect options and choose '{citizenship}'.
+         * Veteran Status: Inspect options and choose '{veteran_status}'.
+         * Disability Status: Inspect options and choose '{disability_status}'.
        - For Resume, ensure the candidate's resume is selected or uploaded.
        - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
     4. Handle Email Verification / OTP Codes:
@@ -256,13 +281,14 @@ def build_application_task_prompt(
          c. Click or read the email snippet to extract the numeric or alphanumeric OTP code.
          d. Switch back to the application tab (or close the Gmail tab).
          e. Type the verification code into the OTP input field and proceed.
-    5. Handle Sign-in / Sign-up / Account Creation (e.g. Reed.co.uk, Workday, Lever, SmartRecruiters, Job Boards):
-       - If the site requires logging in, signing up, or creating an account before allowing you to apply (such as Reed.co.uk):
-         * ALWAYS look for and click 'Sign in with Google', 'Continue with Google', or 'Sign up with Google'.
+    5. Handle Sign-in / Sign-up / Account Creation / Password Setup (e.g. Reed.co.uk, Workday, Lever, SmartRecruiters, Job Boards):
+       - If the site requires logging in, signing up, or creating an account before allowing you to apply (such as Reed.co.uk or Workday):
+         * First, look for and click 'Sign in with Google', 'Continue with Google', or 'Sign up with Google'.
          * The browser session already has active Google credentials for '{email}'. If a Google account selection popup appears, click '{email}' or '{candidate_name}' to authenticate automatically.
          * If Google OAuth asks to confirm permissions or continue, click 'Confirm' / 'Continue' / 'Allow'.
-         * Once authenticated, proceed directly with completing the application form.
-         * Do NOT stop or fail saying credentials are missing without first attempting 'Sign in / Sign up with Google'!
+{password_action_instruction}
+         * Once authenticated or account created, proceed directly with completing the application form.
+         * Do NOT stop or fail saying credentials are missing!
     6. Handle Cloudflare Verification / Turnstile / "Verify you are human":
        - If the screen or an iframe displays "Verify you are human", "I am human", "Checking your browser", or a Cloudflare Turnstile checkbox / widget:
          * DO NOT abort or call done with failure.

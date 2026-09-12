@@ -19,7 +19,7 @@ from mcp.tools.resume_tools import RESUME_TOOLS_SPEC, handle_tailor_resume_latex
 from mcp.tools.networking_tools import NETWORKING_TOOLS_SPEC, handle_extract_recruiter_profile, handle_generate_outreach_inmail
 from mcp.tools.interview_tools import INTERVIEW_TOOLS_SPEC, handle_generate_interview_pack, handle_company_culture_brief
 from mcp.tools.tracking_tools import TRACKING_TOOLS_SPEC, handle_track_application, handle_list_applications, handle_check_duplicate_application
-from mcp.tools.profile_tools import PROFILE_TOOLS_SPEC, handle_save_candidate_profile, handle_get_candidate_profile
+from mcp.tools.profile_tools import PROFILE_TOOLS_SPEC, handle_save_candidate_profile, handle_get_candidate_profile, handle_sync_candidate_profile_from_resume
 from mcp.tools.autofill_tools import AUTOFILL_TOOLS_SPEC, handle_apply_to_job_browser, handle_pipeline_auto_apply
 
 ALL_TOOLS = (
@@ -52,12 +52,13 @@ HANDLERS = {
     "check_duplicate_application": handle_check_duplicate_application,
     "save_candidate_profile": handle_save_candidate_profile,
     "get_candidate_profile": handle_get_candidate_profile,
+    "sync_candidate_profile_from_resume": handle_sync_candidate_profile_from_resume,
     "apply_to_job_browser": handle_apply_to_job_browser,
     "pipeline_auto_apply": handle_pipeline_auto_apply,
 }
 
 
-async def process_mcp_request(request: Dict[str, Any]) -> Dict[str, Any]:
+async def process_mcp_request(request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     req_id = request.get("id")
     method = request.get("method")
     params = request.get("params", {})
@@ -78,8 +79,9 @@ async def process_mcp_request(request: Dict[str, Any]) -> Dict[str, Any]:
             }
         }
 
-    elif method == "notifications/initialized":
-        return {}
+    elif method in ("notifications/initialized", "initialized"):
+        # Notifications do not have an 'id' and MUST NOT receive a response in JSON-RPC 2.0
+        return None
 
     elif method == "tools/list":
         return {
@@ -134,6 +136,10 @@ async def process_mcp_request(request: Dict[str, Any]) -> Dict[str, Any]:
                 }
             }
 
+    # If it is a notification (no 'id'), do not send any response back
+    if req_id is None:
+        return None
+
     return {
         "jsonrpc": "2.0",
         "id": req_id,
@@ -146,6 +152,14 @@ async def process_mcp_request(request: Dict[str, Any]) -> Dict[str, Any]:
 
 async def run_stdio_server():
     """Runs the MCP server over standard input/output for CLI agents."""
+    if sys.stdin.isatty():
+        sys.stderr.write(
+            "🟢 Job Finder MCP Server is running over STDIO (JSON-RPC 2.0).\n"
+            "Waiting for JSON-RPC messages from Cursor, Claude Code, Gemini CLI, or Antigravity.\n"
+            "Press Ctrl+C to stop.\n"
+        )
+        sys.stderr.flush()
+
     loop = asyncio.get_event_loop()
     reader = asyncio.StreamReader()
     protocol = asyncio.StreamReaderProtocol(reader)
@@ -155,6 +169,7 @@ async def run_stdio_server():
         line = await reader.readline()
         if not line:
             break
+
 
         line_str = line.decode("utf-8").strip()
         if not line_str:
@@ -176,5 +191,10 @@ async def run_stdio_server():
             sys.stdout.flush()
 
 
-if __name__ == "__main__":
+def main():
+    """CLI entrypoint for MCP server."""
     asyncio.run(run_stdio_server())
+
+
+if __name__ == "__main__":
+    main()

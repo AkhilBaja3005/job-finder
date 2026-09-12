@@ -6,12 +6,66 @@ Allows users/agents to save, retrieve, and update candidate profile and search p
 import os
 import json
 from typing import Dict, Any, Optional
+# pyrefly: ignore [missing-import]
+from config.constants import resolve_workspace_root
 
-PROFILE_CONFIG_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "config",
-    "candidate_profile.json"
-)
+def get_profile_config_path() -> str:
+    """
+    Finds the candidate_profile.json to read.
+    Prioritizes the active workspace directory so user profiles are never tied to .venv.
+    """
+    custom = os.getenv("CANDIDATE_PROFILE_PATH")
+    if custom and os.path.exists(custom):
+        return custom
+
+    ws = resolve_workspace_root()
+    ws_candidates = [
+        os.path.join(ws, "candidate_profile.json"),
+        os.path.join(ws, "backend", "config", "candidate_profile.json"),
+        os.path.join(ws, "config", "candidate_profile.json"),
+    ]
+    for p in ws_candidates:
+        if os.path.exists(p):
+            return p
+
+    # Fallback to package template / defaults
+    pkg_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    pkg_candidates = [
+        os.path.join(pkg_root, "config", "candidate_profile.json"),
+        os.path.join(pkg_root, "backend", "config", "candidate_profile.json"),
+        os.path.join(pkg_root, "config", "candidate_profile.example.json"),
+        os.path.join(pkg_root, "backend", "config", "candidate_profile.example.json"),
+    ]
+    for p in pkg_candidates:
+        if os.path.exists(p):
+            return p
+
+    return os.path.join(ws, "candidate_profile.json")
+
+def get_profile_save_path() -> str:
+    """
+    Returns the target path to save candidate profile updates.
+    Always writes to the active workspace to prevent modifying library files in .venv.
+    """
+    custom = os.getenv("CANDIDATE_PROFILE_PATH")
+    if custom:
+        return custom
+
+    ws = resolve_workspace_root()
+    # If workspace has backend/config/candidate_profile.json (e.g. source repo), save there
+    ws_backend_cfg = os.path.join(ws, "backend", "config", "candidate_profile.json")
+    if os.path.exists(ws_backend_cfg):
+        return ws_backend_cfg
+    ws_cfg = os.path.join(ws, "candidate_profile.json")
+    if os.path.exists(ws_cfg):
+        return ws_cfg
+    # If in source repo root
+    if os.path.isdir(os.path.join(ws, "backend", "config")):
+        return ws_backend_cfg
+    return ws_cfg
+
+PROFILE_CONFIG_PATH = get_profile_config_path()
+
 
 PROFILE_TOOLS_SPEC = [
     {
@@ -88,17 +142,146 @@ PROFILE_TOOLS_SPEC = [
             "type": "object",
             "properties": {}
         }
+    },
+    {
+        "name": "sync_candidate_profile_from_resume",
+        "description": "Parses a resume file (PDF, DOCX, or LaTeX) and automatically populates candidate details, work experience, education, projects, skills, and summary in candidate_profile.json.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "resume_path": {
+                    "type": "string",
+                    "description": "Path to the resume file to parse. If omitted, automatically detects the master resume."
+                }
+            }
+        }
     }
 ]
 
 def load_profile_data() -> Dict[str, Any]:
-    if os.path.exists(PROFILE_CONFIG_PATH):
+    cfg_path = get_profile_config_path()
+    if os.path.exists(cfg_path):
         try:
-            with open(PROFILE_CONFIG_PATH, "r", encoding="utf-8") as f:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    example_path = cfg_path.replace("candidate_profile.json", "candidate_profile.example.json")
+    if os.path.exists(example_path):
+        try:
+            with open(example_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
     return {}
+
+
+def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Applies structured resume fields into candidate_profile.json, preserving
+    existing demographic / security fields (like portals_password, work_authorization)
+    while refreshing work experience, education, projects, skills, and summary.
+    """
+    current_data = load_profile_data()
+    candidate = current_data.setdefault("candidate", {})
+    search_prefs = current_data.setdefault("search_preferences", {})
+    networking = current_data.setdefault("networking_and_references", {})
+
+    # Core identity
+    if resume_dict.get("name") and not candidate.get("name"): candidate["name"] = resume_dict["name"]
+    if resume_dict.get("email") and not candidate.get("email"): candidate["email"] = resume_dict["email"]
+    if resume_dict.get("phone") and not candidate.get("phone"): candidate["phone"] = resume_dict["phone"]
+    if resume_dict.get("location") and not candidate.get("location"): candidate["location"] = resume_dict["location"]
+
+    # Links (LinkedIn, GitHub, Portfolio)
+    links = resume_dict.get("links") or []
+    for link in links:
+        link_str = str(link).strip()
+        if "linkedin.com" in link_str and not candidate.get("linkedin"):
+            candidate["linkedin"] = link_str
+        elif "github.com" in link_str and not candidate.get("github"):
+            candidate["github"] = link_str
+        elif ("http" in link_str or ".io" in link_str) and not candidate.get("portfolio"):
+            candidate["portfolio"] = link_str
+
+    # Summary
+    if resume_dict.get("summary"):
+        candidate["experience_summary"] = resume_dict["summary"]
+
+    # Education
+    if resume_dict.get("education"):
+        edu_list = []
+        for e in resume_dict["education"]:
+            edu_entry = {
+                "institution": e.get("institution", ""),
+                "degree": e.get("degree", "") + (f" in {e.get('field_of_study')}" if e.get("field_of_study") else ""),
+                "timeline": f"{e.get('start_date', '')} - {e.get('graduation_date', '')}".strip(" -"),
+                "location": e.get("location", ""),
+            }
+            if e.get("gpa"):
+                edu_entry["cpi"] = str(e["gpa"])
+            if e.get("highlights"):
+                edu_entry["highlights"] = e["highlights"]
+            edu_list.append(edu_entry)
+        candidate["education"] = edu_list
+
+    # Work Experience
+    if resume_dict.get("experience"):
+        exp_list = []
+        for exp in resume_dict["experience"]:
+            technologies = []
+            raw_tech = exp.get("technologies") or ""
+            if isinstance(raw_tech, str) and raw_tech.strip():
+                technologies = [t.strip() for t in raw_tech.split(",") if t.strip()]
+            elif isinstance(raw_tech, list):
+                technologies = raw_tech
+
+            exp_list.append({
+                "company": exp.get("company", ""),
+                "role": exp.get("role", ""),
+                "timeline": f"{exp.get('start_date', '')} – {exp.get('end_date', '')}".strip(" –"),
+                "technologies": technologies,
+                "highlights": exp.get("description", []) if isinstance(exp.get("description"), list) else [str(exp.get("description", ""))]
+            })
+        candidate["work_experience"] = exp_list
+
+    # Projects
+    if resume_dict.get("projects"):
+        proj_list = []
+        for p in resume_dict["projects"]:
+            proj_list.append({
+                "title": p.get("title", ""),
+                "category": "GenAI / Systems",
+                "technologies": p.get("technologies", []) if isinstance(p.get("technologies"), list) else [],
+                "url": p.get("url", ""),
+                "description": " ".join(p.get("description", [])) if isinstance(p.get("description"), list) else str(p.get("description", ""))
+            })
+        candidate["projects"] = proj_list
+
+    # Skills & Skill Categories
+    skills_val = resume_dict.get("skills")
+    if isinstance(skills_val, dict):
+        candidate["skill_categories"] = skills_val
+        all_skills = []
+        for cat_skills in skills_val.values():
+            if isinstance(cat_skills, list):
+                all_skills.extend(cat_skills)
+        candidate["core_skills"] = list(dict.fromkeys(all_skills))
+    elif isinstance(skills_val, list):
+        candidate["core_skills"] = list(dict.fromkeys(skills_val))
+
+    merged = {
+        "candidate": candidate,
+        "search_preferences": search_prefs,
+        "networking_and_references": networking
+    }
+
+    save_path = get_profile_save_path()
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "w", encoding="utf-8") as f:
+        json.dump(merged, f, indent=2)
+
+    return merged
 
 async def handle_save_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
     current_data = load_profile_data()
@@ -138,9 +321,11 @@ async def handle_save_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
         "networking_and_references": networking
     }
 
-    os.makedirs(os.path.dirname(PROFILE_CONFIG_PATH), exist_ok=True)
-    with open(PROFILE_CONFIG_PATH, "w", encoding="utf-8") as f:
+    save_path = get_profile_save_path()
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2)
+
 
     return {
         "success": True,
@@ -159,3 +344,39 @@ async def handle_get_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
         "found": True,
         "profile": data
     }
+
+async def handle_sync_candidate_profile_from_resume(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Parses resume file and writes structured sections into candidate_profile.json."""
+    # pyrefly: ignore [missing-import]
+    from services.resume_parser import parse_resume
+
+    resume_path = args.get("resume_path")
+    if not resume_path:
+        # Check master resume fallback
+        try:
+            # pyrefly: ignore [missing-import]
+            from applications_tracker.scheduled_job_scanner import find_master_resume_with_mac_tags  # type: ignore
+            resume_path = find_master_resume_with_mac_tags()
+        except Exception:
+            pass
+
+    if not resume_path or not os.path.exists(resume_path):
+        return {
+            "success": False,
+            "error": f"Resume file not found at '{resume_path}'"
+        }
+
+    structured = parse_resume(resume_path)
+    resume_dict = structured.model_dump()
+    updated_profile = sync_resume_data_to_profile(resume_dict)
+
+    return {
+        "success": True,
+        "message": f"Successfully synced profile from '{resume_path}' into {PROFILE_CONFIG_PATH}",
+        "resume_path": resume_path,
+        "candidate_name": updated_profile.get("candidate", {}).get("name"),
+        "skills_count": len(updated_profile.get("candidate", {}).get("core_skills", [])),
+        "experience_count": len(updated_profile.get("candidate", {}).get("work_experience", [])),
+        "education_count": len(updated_profile.get("candidate", {}).get("education", []))
+    }
+

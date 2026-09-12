@@ -7,6 +7,7 @@ import re
 import unicodedata
 import urllib.parse
 from typing import Optional, Dict, Any
+# pyrefly: ignore [missing-import]
 from utils.ttl_cache import TTLCache
 
 
@@ -154,12 +155,14 @@ async def extract_recruiter_from_linkedin(job_url: str, html: Optional[str] = No
     """
     if html is not None:
         try:
+            # pyrefly: ignore [missing-import]
             from services.log_queue import log_ist
             log_ist(f"[extract_recruiter_from_linkedin] Using pre-fetched HTML for: {job_url}")
             result = _parse_recruiter_html(html)
             log_ist(f"[recruiter_extractor] Found recruiter: {result.get('recruiter_name')}, profile: {result.get('recruiter_profile_url')}, company: {result.get('company_name')}")
             return result
         except Exception as e:
+            # pyrefly: ignore [missing-import]
             from services.log_queue import log_ist
             log_ist(f"[extract_recruiter_from_linkedin] Error parsing pre-fetched HTML: {e}")
             return {
@@ -172,6 +175,7 @@ async def extract_recruiter_from_linkedin(job_url: str, html: Optional[str] = No
     try:
         # pyrefly: ignore [missing-import]
         from playwright.async_api import async_playwright
+        # pyrefly: ignore [missing-import]
         from services.log_queue import log_ist
         log_ist(f"[extract_recruiter_from_linkedin] Scraping: {job_url}")
 
@@ -197,11 +201,13 @@ async def extract_recruiter_from_linkedin(job_url: str, html: Optional[str] = No
 
             html = await page.content()
             result = _parse_recruiter_html(html)
+            # pyrefly: ignore [missing-import]
             from services.log_queue import log_ist
             log_ist(f"[recruiter_extractor] Found recruiter: {result.get('recruiter_name')}, profile: {result.get('recruiter_profile_url')}, company: {result.get('company_name')}")
             return result
 
         except Exception as e:
+            # pyrefly: ignore [missing-import]
             from services.log_queue import log_ist
             log_ist(f"[extract_recruiter_from_linkedin] Scraping error: {e}")
             return {
@@ -219,6 +225,7 @@ async def extract_recruiter_from_linkedin(job_url: str, html: Optional[str] = No
                 await own_playwright.stop()
 
     except Exception as e:
+        # pyrefly: ignore [missing-import]
         from services.log_queue import log_ist
         log_ist(f"[extract_recruiter_from_linkedin] Error: {e}")
         import traceback
@@ -318,6 +325,7 @@ async def discover_recruiter_via_grounding(company_name: str, custom_api_key: Op
         return {"recruiter_name": None, "recruiter_profile_url": None, "quota_exhausted": True}
 
     try:
+        # pyrefly: ignore [missing-import]
         from services.gemini_client import call_gemini_grounded
         clean_company = re.sub(r'[^a-zA-Z0-9\s]', '', company_name).strip()
         query = (

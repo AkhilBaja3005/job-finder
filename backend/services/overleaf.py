@@ -4,7 +4,9 @@ import re
 import base64
 import zipfile
 import urllib.parse
+# pyrefly: ignore [missing-import]
 from services.session_store import BASE_DIR, UPLOAD_DIR
+# pyrefly: ignore [missing-import]
 from utils.latex_utils import apply_latex_hotfix
 
 
