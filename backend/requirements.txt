@@ -18,3 +18,4 @@ pytest
 sentry-sdk
 pyyaml
 browser-use
+pydantic-settings
