@@ -5,11 +5,15 @@ import sys
 import os
 import json
 
-# Ensure backend root is always on sys.path for CLI execution
+# Ensure backend root is always on sys.path for CLI execution across repo and installed wheel
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BACKEND_DIR = os.path.join(REPO_ROOT, "backend")
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
+for candidate in [
+    os.path.join(REPO_ROOT, "backend"),
+    os.path.join(REPO_ROOT, "site-packages", "backend"),
+    os.path.dirname(os.path.abspath(__file__)),
+]:
+    if os.path.isdir(candidate) and candidate not in sys.path:
+        sys.path.insert(0, candidate)
 
 
 def main():

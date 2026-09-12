@@ -1,8 +1,14 @@
 import os
+import sys
 import shutil
 import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+
+# Ensure backend root is always on sys.path across all invocation environments
+_backend_root = os.path.dirname(os.path.abspath(__file__))
+if _backend_root not in sys.path:
+    sys.path.insert(0, _backend_root)
 
 # Load environment variables
 load_dotenv()
