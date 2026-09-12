@@ -98,6 +98,13 @@ def load_profile_data() -> Dict[str, Any]:
                 return json.load(f)
         except Exception:
             pass
+    example_path = PROFILE_CONFIG_PATH.replace("candidate_profile.json", "candidate_profile.example.json")
+    if os.path.exists(example_path):
+        try:
+            with open(example_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
     return {}
 
 async def handle_save_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:

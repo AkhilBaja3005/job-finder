@@ -185,8 +185,10 @@ def build_application_task_prompt(
     portals_password = (
         resume_data.get("portals_password")
         or resume_data.get("candidate", {}).get("portals_password")
-        or os.getenv("PORTALS_PASSWORD", "Upendar@1976")
+        or os.getenv("PORTALS_PASSWORD", "")
     )
+
+    password_profile_line = f"- Account Creation / Portal Password: {portals_password}\n" if portals_password else ""
 
     task = f"""
     Navigate to the job application URL: {job_url}
@@ -210,8 +212,7 @@ def build_application_task_prompt(
     - Protected Veteran Status: {veteran_status}
     - Disability Status: {disability_status}
     - Professional Background: {summary}
-    - Account Creation / Portal Password: {portals_password}
-    """
+    {password_profile_line}"""
 
     if resume_pdf_path and os.path.exists(resume_pdf_path):
         task += f"\n- Resume File to attach: {os.path.abspath(resume_pdf_path)}\n"
@@ -226,6 +227,15 @@ def build_application_task_prompt(
        - NEVER claim success if you are still on an unsubmitted form with validation errors!"""
         if auto_submit
         else "5. SAFETY GUARDRAIL: Navigate through intermediate pages ('Next' / 'Continue'), but DO NOT click final 'Submit Application' or 'Send Application'. Stop on the final review/preview step and report a summary of completed fields."
+    )
+
+    password_action_instruction = (
+        f"""         * If asked to set a password, create an account, or enter portal password:
+           - Enter '{portals_password}' into the Password and Confirm Password fields.
+           - Enter '{email}' as the account username/email."""
+        if portals_password
+        else """         * If asked to create an account or password:
+           - Look for 'Sign in with Google' first. If explicit password creation is strictly required without Google OAuth and no password was configured, notify in final result."""
     )
 
     task += f"""
@@ -268,9 +278,7 @@ def build_application_task_prompt(
          * First, look for and click 'Sign in with Google', 'Continue with Google', or 'Sign up with Google'.
          * The browser session already has active Google credentials for '{email}'. If a Google account selection popup appears, click '{email}' or '{candidate_name}' to authenticate automatically.
          * If Google OAuth asks to confirm permissions or continue, click 'Confirm' / 'Continue' / 'Allow'.
-         * If asked to set a password, create an account, or enter portal password:
-           - Enter '{portals_password}' into the Password and Confirm Password fields.
-           - Enter '{email}' as the account username/email.
+{password_action_instruction}
          * Once authenticated or account created, proceed directly with completing the application form.
          * Do NOT stop or fail saying credentials are missing!
     6. Handle Cloudflare Verification / Turnstile / "Verify you are human":

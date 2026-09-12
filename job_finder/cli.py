@@ -86,6 +86,7 @@ def main():
         import json
         candidate_paths = [
             os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend", "config", "candidate_profile.json")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend", "config", "candidate_profile.example.json")),
             os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "candidate_profile.json")),
             os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "candidate_profile.json")),
         ]
