@@ -182,6 +182,12 @@ def build_application_task_prompt(
     country_code_hint = "India (+91)" if "+91" in phone_digits or "91" in phone_digits[:4] else "United Kingdom (+44)"
     clean_mobile = phone_digits.replace("+91", "").replace("+44", "").strip()
 
+    portals_password = (
+        resume_data.get("portals_password")
+        or resume_data.get("candidate", {}).get("portals_password")
+        or os.getenv("PORTALS_PASSWORD", "Upendar@1976")
+    )
+
     task = f"""
     Navigate to the job application URL: {job_url}
     
@@ -204,6 +210,7 @@ def build_application_task_prompt(
     - Protected Veteran Status: {veteran_status}
     - Disability Status: {disability_status}
     - Professional Background: {summary}
+    - Account Creation / Portal Password: {portals_password}
     """
 
     if resume_pdf_path and os.path.exists(resume_pdf_path):
@@ -256,13 +263,16 @@ def build_application_task_prompt(
          c. Click or read the email snippet to extract the numeric or alphanumeric OTP code.
          d. Switch back to the application tab (or close the Gmail tab).
          e. Type the verification code into the OTP input field and proceed.
-    5. Handle Sign-in / Sign-up / Account Creation (e.g. Reed.co.uk, Workday, Lever, SmartRecruiters, Job Boards):
-       - If the site requires logging in, signing up, or creating an account before allowing you to apply (such as Reed.co.uk):
-         * ALWAYS look for and click 'Sign in with Google', 'Continue with Google', or 'Sign up with Google'.
+    5. Handle Sign-in / Sign-up / Account Creation / Password Setup (e.g. Reed.co.uk, Workday, Lever, SmartRecruiters, Job Boards):
+       - If the site requires logging in, signing up, or creating an account before allowing you to apply (such as Reed.co.uk or Workday):
+         * First, look for and click 'Sign in with Google', 'Continue with Google', or 'Sign up with Google'.
          * The browser session already has active Google credentials for '{email}'. If a Google account selection popup appears, click '{email}' or '{candidate_name}' to authenticate automatically.
          * If Google OAuth asks to confirm permissions or continue, click 'Confirm' / 'Continue' / 'Allow'.
-         * Once authenticated, proceed directly with completing the application form.
-         * Do NOT stop or fail saying credentials are missing without first attempting 'Sign in / Sign up with Google'!
+         * If asked to set a password, create an account, or enter portal password:
+           - Enter '{portals_password}' into the Password and Confirm Password fields.
+           - Enter '{email}' as the account username/email.
+         * Once authenticated or account created, proceed directly with completing the application form.
+         * Do NOT stop or fail saying credentials are missing!
     6. Handle Cloudflare Verification / Turnstile / "Verify you are human":
        - If the screen or an iframe displays "Verify you are human", "I am human", "Checking your browser", or a Cloudflare Turnstile checkbox / widget:
          * DO NOT abort or call done with failure.

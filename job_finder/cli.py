@@ -66,7 +66,10 @@ def main():
     elif args.subcommand == "apply":
         import asyncio
         from applications_tracker.scheduled_job_scanner import run_browser_use_autofill
-        result = asyncio.run(run_browser_use_autofill(args.url, auto_submit=args.submit, model_name=args.model))
+        from backend.mcp.tools.profile_tools import load_profile_data
+        prof = load_profile_data() or {}
+        cand = prof.get("candidate", {})
+        result = asyncio.run(run_browser_use_autofill(args.url, resume_data=cand, auto_submit=args.submit, model_name=args.model))
         print(f"[Result] {result}")
 
     elif args.subcommand == "server":
