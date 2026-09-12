@@ -50,8 +50,18 @@ jobs:
           sed -i "s/^version = .*/version = \"${{ github.event.inputs.version_tag }}\"/" pyproject.toml
           echo "Building version: ${{ github.event.inputs.version_tag }}"
 
+      # Prepare static_frontend from frontend/dist if present
+      - name: Stage frontend assets for package distribution
+        run: |
+          if [ -d "frontend/dist" ]; then
+            mkdir -p backend/static_frontend
+            cp -r frontend/dist/* backend/static_frontend/
+            echo "Staged frontend/dist assets into backend/static_frontend/"
+          fi
+
       - name: Build sdist and wheel
         run: python -m build
+
 
       - name: Verify distributions with twine check
         run: python -m twine check dist/*

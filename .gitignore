@@ -22,3 +22,6 @@ backend/config/candidate_profile.json
 backend/data/
 *.egg-info/
 build/
+backend/static_frontend/
+backend/static_frontend/assets/index-DcforfPb.css
+
