@@ -51,6 +51,14 @@ def main():
     profile_parser.add_argument("--show", action="store_true", help="Display current candidate profile")
     profile_parser.add_argument("--sync", nargs="?", const="AUTO", default=None, help="Parse and sync profile from a resume file (default: auto-detect master resume)")
 
+    # 6. Setup subcommand
+    setup_parser = subparsers.add_parser(
+        "setup",
+        help="Interactive guided wizard to initialize candidate profile, environment, and master resume",
+    )
+    setup_parser.add_argument("--resume", type=str, default=None, help="Optional initial resume file to parse (PDF/DOCX/LaTeX)")
+    setup_parser.add_argument("--api-key", type=str, default=None, help="Gemini API Key")
+
     args, unknown = parser.parse_known_args()
 
     if not args.subcommand:
@@ -114,6 +122,66 @@ def main():
                 break
         if not found:
             print("Candidate profile configuration file not found.")
+
+    elif args.subcommand == "setup":
+        print("\n🚀 ========================================================")
+        print("          JOB FINDER AI - QUICK SETUP WIZARD")
+        print("========================================================\n")
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        env_path = os.path.join(repo_root, ".env")
+        example_env = os.path.join(repo_root, ".env.example")
+        profile_path = os.path.join(repo_root, "backend", "config", "candidate_profile.json")
+        example_profile = os.path.join(repo_root, "backend", "config", "candidate_profile.example.json")
+
+        # 1. Initialize .env
+        if not os.path.exists(env_path):
+            if os.path.exists(example_env):
+                import shutil
+                shutil.copy2(example_env, env_path)
+                print(f"📄 Initialized .env configuration from template: {env_path}")
+            else:
+                with open(env_path, "w", encoding="utf-8") as f:
+                    f.write("# Job Finder AI Environment Configuration\nPORT=8000\nSCRAPER_CONCURRENCY=5\n")
+                print(f"📄 Created initial .env configuration file: {env_path}")
+        else:
+            print(f"✓ Found existing .env at {env_path}")
+
+        # Inject GEMINI_API_KEY if provided
+        if args.api_key:
+            with open(env_path, "a", encoding="utf-8") as f:
+                f.write(f"\nGEMINI_API_KEY={args.api_key}\n")
+            print("🔑 Configured GEMINI_API_KEY into .env")
+
+        # 2. Initialize candidate_profile.json
+        if not os.path.exists(profile_path) and os.path.exists(example_profile):
+            import shutil
+            os.makedirs(os.path.dirname(profile_path), exist_ok=True)
+            shutil.copy2(example_profile, profile_path)
+            print(f"👤 Initialized candidate_profile.json from template: {profile_path}")
+
+        # 3. Resume sync if provided or present
+        resume_target = args.resume
+        if not resume_target:
+            from applications_tracker.scheduled_job_scanner import find_master_resume_with_mac_tags
+            resume_target = find_master_resume_with_mac_tags()
+
+        if resume_target and os.path.exists(resume_target):
+            print(f"📄 Syncing candidate profile from resume: {resume_target}")
+            import asyncio
+            from backend.mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
+            res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": resume_target}))
+            if res.get("success"):
+                print(f"✅ Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
+            else:
+                print(f"ℹ️ Could not auto-parse resume: {res.get('error')}")
+        else:
+            print("ℹ️ Tip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
+
+        print("\n✅ Setup complete! You're ready to run:")
+        print("   - `job-finder profile --show` : Review your parsed candidate profile")
+        print("   - `job-finder scan`           : Run autonomous job search and ATS tailoring")
+        print("   - `job-finder server`         : Start web dashboard on http://localhost:8000")
+        print("   - `job-finder mcp`            : Run MCP server for Claude/Cursor IDE\n")
 
 
 if __name__ == "__main__":

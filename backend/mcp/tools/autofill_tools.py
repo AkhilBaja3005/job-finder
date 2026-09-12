@@ -118,12 +118,24 @@ def _get_base_dirs():
 
 
 def _get_default_resume_path() -> Optional[str]:
+    custom = os.getenv("MASTER_RESUME_PATH")
+    if custom and os.path.exists(custom):
+        return custom
+
     base_dir = _get_base_dirs()
     candidate_resumes = [
-        os.path.join(base_dir, "backend", "output", "AKHIL_BAJA", "master_resume.pdf"),
+        os.path.join(base_dir, "output", "master_resume.pdf"),
         os.path.join(base_dir, "applications_tracker", "tailored_resumes", "master_resume.pdf"),
         os.path.join(base_dir, "tests", "fixtures", "sample_resume.pdf"),
     ]
+    # Check any subfolder in output directory
+    out_dir = os.path.join(base_dir, "backend", "output")
+    if os.path.exists(out_dir):
+        for entry in os.listdir(out_dir):
+            sub_pdf = os.path.join(out_dir, entry, "master_resume.pdf")
+            if os.path.exists(sub_pdf):
+                candidate_resumes.append(sub_pdf)
+
     for p in candidate_resumes:
         if os.path.exists(p):
             return p
@@ -133,11 +145,16 @@ def _get_default_resume_path() -> Optional[str]:
 def _get_master_latex_source() -> Optional[str]:
     base_dir = _get_base_dirs()
     candidates = [
-        os.path.join(base_dir, "backend", "output", "AKHIL_BAJA", "master_resume.tex"),
         os.path.join(base_dir, "backend", "assets", "master_resume_template.tex"),
         os.path.join(base_dir, "assets", "master_resume_template.tex"),
         os.path.join(base_dir, "output", "tailored_resume.tex"),
     ]
+    out_dir = os.path.join(base_dir, "backend", "output")
+    if os.path.exists(out_dir):
+        for entry in os.listdir(out_dir):
+            sub_tex = os.path.join(out_dir, entry, "master_resume.tex")
+            if os.path.exists(sub_tex):
+                candidates.insert(0, sub_tex)
     for p in candidates:
         if os.path.exists(p):
             try:
