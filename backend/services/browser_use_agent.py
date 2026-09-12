@@ -57,7 +57,7 @@ except ImportError:
     ChatGoogle: Any = None
     BrowserSession: Any = None
     MultiFallbackAgent = None  # type: ignore
-
+# pyrefly: ignore [missing-import]
 from config.constants import (
     DEFAULT_FAST_LITE_MODELS,
     PREFERRED_GEMINI_MODEL,
@@ -85,6 +85,7 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
     Gemini Flash-Lite / Flash model (strictly excluding Pro models for high RPM & low latency).
     """
     try:
+        # pyrefly: ignore [missing-import]
         from services.gemini_client import get_next_gemini_api_key
         api_key = get_next_gemini_api_key(custom_api_key)
     except Exception:
@@ -112,6 +113,7 @@ def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[
     """
     fallback_instances: List[Any] = []
     try:
+        # pyrefly: ignore [missing-import]
         from services.gemini_client import get_gemini_api_keys
         all_keys = get_gemini_api_keys()
     except Exception:

@@ -15,17 +15,25 @@ from pydantic import BaseModel, Field
 from google import genai
 # pyrefly: ignore [missing-import]
 from google.genai import types
+# pyrefly: ignore [missing-import]
 from services.gemini_client import generate_content_with_fallback
+# pyrefly: ignore [missing-import]
 from services.ats_scorer import (
     compute_ats_score, compute_overall_score, calculate_flattened_experience,
     estimate_role_fit_score, _extract_taxonomy_skills, get_candidate_seniority_tier,
     _COMPILED_TITLE_TIER_PATTERNS
 )
+# pyrefly: ignore [missing-import]
 from services.scraper import scrape_job_description
+# pyrefly: ignore [missing-import]
 from services.recruiter_extractor import extract_recruiter
+# pyrefly: ignore [missing-import]
 from utils.ssl_utils import SSL_CONTEXT
+# pyrefly: ignore [missing-import]
 from utils.ttl_cache import TTLCache
+# pyrefly: ignore [missing-import]
 from utils.location_resolver import get_indeed_domain_for_location, resolve_location_country
+# pyrefly: ignore [missing-import]
 from services.log_queue import LLMClientLogQueue, log_ist
 
 # ─── System Caps & TTL Cache ─────────────────────────────────────────────
@@ -159,7 +167,9 @@ For each match found, return a valid JSON array of objects with the exact schema
 ]
 Do not wrap in explanatory text. Only return the JSON array."""
     try:
+        # pyrefly: ignore [missing-import]
         from config.constants import DEFAULT_GROUNDED_SEARCH_MODELS
+        # pyrefly: ignore [missing-import]
         from services.gemini_client import get_gemini_api_keys
         
         available_keys = [api_key] if api_key else (get_gemini_api_keys() or [os.getenv("GEMINI_API_KEY", "")])
@@ -792,6 +802,7 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
                 if scraped and scraped.get("description"):
                     _job_search_cache.set(url_cache_key, scraped)
                     try:
+                        # pyrefly: ignore [missing-import]
                         from services.jd_cache import cache_set
                         cache_set(job.url, scraped)
                     except Exception:
@@ -985,6 +996,7 @@ async def find_matching_jobs(
     yield json.dumps({"type": "log", "message": portal_start_msg}) + " " * 2048 + "\n"
     portal_jobs_raw = []
     try:
+        # pyrefly: ignore [missing-import]
         from services.portal_scanner import PortalScanner
         scanner = PortalScanner()
         portal_results = await scanner.scan_all_portals(target_keywords=queries, timeframe=timeframe, location=location)

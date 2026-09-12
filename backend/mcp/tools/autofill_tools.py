@@ -14,13 +14,19 @@ from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "backend", ".env"))
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
-
+# pyrefly: ignore [missing-import]
 from mcp.tools.profile_tools import load_profile_data
+# pyrefly: ignore [missing-import]
 from mcp.tools.ats_tools import handle_calculate_ats_score, handle_analyze_skill_gap
+# pyrefly: ignore [missing-import]
 from mcp.tools.discovery_tools import handle_search_jobs, handle_scrape_job_posting
+# pyrefly: ignore [missing-import]
 from mcp.tools.resume_tools import handle_tailor_resume_latex
+# pyrefly: ignore [missing-import]
 from utils.latex_utils import apply_latex_hotfix, compile_and_check_page_metrics
+# pyrefly: ignore [missing-import]
 from services.application_tracker import record_application, update_application_status
+# pyrefly: ignore [missing-import]
 from services.browser_use_agent import run_browser_use_autofill
 
 AUTOFILL_TOOLS_SPEC = [
@@ -110,7 +116,7 @@ AUTOFILL_TOOLS_SPEC = [
     }
 ]
 
-
+# pyrefly: ignore [missing-import]
 from config.constants import (
     resolve_workspace_root,
     get_applications_tracker_dir,
@@ -212,6 +218,7 @@ def build_and_compile_tailored_pdf(
     skills_to_inject = [s.strip() for s in (missing_skills or []) if s and s.strip()]
     if not skills_to_inject and jd_text:
         try:
+            # pyrefly: ignore [missing-import]
             from services.ats_scorer import extract_jd_skills
             req, pref = extract_jd_skills(jd_text)
             skills_to_inject = (req + pref)[:5]
@@ -222,6 +229,7 @@ def build_and_compile_tailored_pdf(
     raw_tailored = None
     if skills_to_inject:
         try:
+            # pyrefly: ignore [missing-import]
             from utils.latex_utils import inject_tailored_slots
             slotted = inject_tailored_slots(
                 master_latex=master_latex,
@@ -236,6 +244,7 @@ def build_and_compile_tailored_pdf(
 
     # Fallback to LLM tailoring if slot injection was skipped or failed
     if not raw_tailored:
+        # pyrefly: ignore [missing-import]
         from services.llm_agent import tailor_latex_code
         try:
             raw_tailored = tailor_latex_code(
@@ -359,6 +368,7 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
     max_applications = int(arguments.get("max_applications", 3))
     model_name = arguments.get("model_name", "gemini-3.5-flash-lite")
 
+    # pyrefly: ignore [missing-import]
     from services.log_queue import log_ist
     print(f"\n[Pipeline] 🚀 Pipeline Auto-Apply Started", flush=True)
     print(f"[Pipeline] 🎯 Keywords: '{keywords}' | 📍 Location: '{location}' | 🎯 Min ATS: {min_ats_score}%", flush=True)

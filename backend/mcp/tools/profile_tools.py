@@ -6,7 +6,7 @@ Allows users/agents to save, retrieve, and update candidate profile and search p
 import os
 import json
 from typing import Dict, Any, Optional
-
+# pyrefly: ignore [missing-import]
 from config.constants import resolve_workspace_root
 
 def get_profile_config_path() -> str:
@@ -347,6 +347,7 @@ async def handle_get_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
 
 async def handle_sync_candidate_profile_from_resume(args: Dict[str, Any]) -> Dict[str, Any]:
     """Parses resume file and writes structured sections into candidate_profile.json."""
+    # pyrefly: ignore [missing-import]
     from services.resume_parser import parse_resume
 
     resume_path = args.get("resume_path")

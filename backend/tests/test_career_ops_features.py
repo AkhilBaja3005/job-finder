@@ -125,8 +125,10 @@ def test_html_resume_renderer():
 
 def test_sync_resume_data_to_profile(tmp_path):
     """Verify that sync_resume_data_to_profile correctly populates profile configuration."""
-    from mcp.tools.profile_tools import sync_resume_data_to_profile, PROFILE_CONFIG_PATH
+    import os
     import unittest.mock as mock
+    from mcp.tools.profile_tools import sync_resume_data_to_profile, PROFILE_CONFIG_PATH
+
 
     sample_parsed = {
         "name": "Jane Tester",
@@ -168,7 +170,8 @@ def test_sync_resume_data_to_profile(tmp_path):
     }
 
     dummy_config = str(tmp_path / "candidate_profile.json")
-    with mock.patch("mcp.tools.profile_tools.PROFILE_CONFIG_PATH", dummy_config):
+    with mock.patch.dict(os.environ, {"CANDIDATE_PROFILE_PATH": dummy_config}), \
+         mock.patch("mcp.tools.profile_tools.load_profile_data", return_value={}):
         result = sync_resume_data_to_profile(sample_parsed)
         assert result["candidate"]["name"] == "Jane Tester"
         assert result["candidate"]["email"] == "jane.tester@example.com"
@@ -178,4 +181,5 @@ def test_sync_resume_data_to_profile(tmp_path):
         assert result["candidate"]["work_experience"][0]["company"] == "DataCorp"
         assert len(result["candidate"]["education"]) == 1
         assert result["candidate"]["education"][0]["institution"] == "University of Edinburgh"
+
 

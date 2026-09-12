@@ -13,6 +13,7 @@ import json
 import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# pyrefly: ignore [missing-import]
 from mcp.tools.profile_tools import load_profile_data, PROFILE_CONFIG_PATH
 
 def show_profile():
@@ -77,6 +78,7 @@ def main():
         set_profile(args)
     elif args.command == "sync":
         import asyncio
+        # pyrefly: ignore [missing-import]
         from mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
         res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": args.resume_path}))
         if res.get("success"):

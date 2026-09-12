@@ -159,19 +159,21 @@ if frontend_dist and os.path.exists(frontend_dist):
             raise HTTPException(status_code=404, detail="Not Found")
 
         # 2. Block direct access to internal api routes if not handled by routers
-        if rest_of_path and not rest_of_path.startswith("api"):
+        dist_path = frontend_dist or ""
+        if rest_of_path and not rest_of_path.startswith("api") and dist_path:
             try:
                 # Resolve canonical safe path within frontend_dist
-                target = os.path.abspath(os.path.join(frontend_dist, rest_of_path))
-                if target.startswith(frontend_dist) and os.path.exists(target) and os.path.isfile(target):
+                target = os.path.abspath(os.path.join(dist_path, rest_of_path))
+                if target.startswith(dist_path) and os.path.exists(target) and os.path.isfile(target):
                     return FileResponse(target)
             except Exception:
                 pass
 
-        index_file = os.path.join(frontend_dist, "index.html")
-        if os.path.exists(index_file):
+        index_file = os.path.join(dist_path, "index.html") if dist_path else ""
+        if index_file and os.path.exists(index_file):
             return FileResponse(index_file)
         return HTMLResponse("<h1>Job Finder Backend is Running 🟢</h1><p>Frontend assets not found.</p>", status_code=200)
+
 
 
 def start_server():

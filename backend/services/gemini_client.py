@@ -10,7 +10,7 @@ from google import genai
 # pyrefly: ignore [missing-import]
 from google.genai import types
 from typing import Optional, Callable, Dict, Any, List
-
+# pyrefly: ignore [missing-import]
 from utils.ssl_utils import SSL_CONTEXT as _SSL_CONTEXT
 
 # pyrefly: ignore [missing-import]
@@ -25,6 +25,7 @@ CLOUDFLARE_DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 CLOUDFLARE_MAX_TOKENS = 8192
 
 try:
+    # pyrefly: ignore [missing-import]
     from config.constants import (
         DEFAULT_FAST_LITE_MODELS,
         DEFAULT_STRONG_MODELS,
@@ -35,6 +36,7 @@ try:
 except ImportError:
     import sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # pyrefly: ignore [missing-import]
     from config.constants import (
         DEFAULT_FAST_LITE_MODELS,
         DEFAULT_STRONG_MODELS,
@@ -325,6 +327,7 @@ def _generate_with_model_list(
                 try:
                     _throttle_for_rpm(model_name)
                     msg_llm = f"[LLM] Attempting generation with model: {model_name} (try {retry_attempt + 1})..."
+                    # pyrefly: ignore [missing-import]
                     from services.log_queue import log_ist
                     log_ist(msg_llm)
                     import concurrent.futures
@@ -340,6 +343,7 @@ def _generate_with_model_list(
                         try:
                             response = future.result(timeout=30.0)
                         except concurrent.futures.TimeoutError:
+                            # pyrefly: ignore [missing-import]
                             from services.log_queue import log_ist
                             timeout_msg = f"[LLM] Model {model_name} timed out after 30s. Moving to next candidate..."
                             print(timeout_msg)
@@ -354,6 +358,7 @@ def _generate_with_model_list(
                     last_error = e
                     err_str = str(e).lower()
                     if any(x in err_str for x in ["429", "quota", "rate limit", "resource_exhausted"]):
+                        # pyrefly: ignore [missing-import]
                         from services.log_queue import log_ist
                         key_hint = f"...{key_candidate[-6:]}" if len(key_candidate) >= 6 else "key"
                         log_ist(f"[LLM] Model {model_name} with key {key_hint} rate limited (429). Rotating to next API key/fallback model...")
@@ -655,6 +660,7 @@ def _execute_openrouter(prompt: str, model_list: list, response_schema, api_key:
 # ─────────────────────────────────────────────────────────────────────────────
 # High-Level Entrypoints
 # ─────────────────────────────────────────────────────────────────────────────
+# pyrefly: ignore [missing-import]
 from config.constants import discover_gemini_models
 
 def generate_content_with_fallback(
@@ -743,6 +749,7 @@ def call_gemini_grounded(
             try:
                 _throttle_for_rpm(model_name)
                 msg = f"[LLM Grounding] Executing grounded generation with {model_name}..."
+                # pyrefly: ignore [missing-import]
                 from services.log_queue import log_ist
                 log_ist(msg)
                 if on_log:
@@ -811,6 +818,7 @@ def call_gemini_grounded(
                 last_error = e
                 err_str = str(e).lower()
                 if any(x in err_str for x in ["429", "quota", "rate limit", "resource_exhausted"]):
+                    # pyrefly: ignore [missing-import]
                     from services.log_queue import log_ist
                     key_hint = f"...{key_candidate[-6:]}" if len(key_candidate) >= 6 else "key"
                     log_ist(f"[LLM Grounding] Model {model_name} with key {key_hint} rate limited (429). Rotating to next API key...")

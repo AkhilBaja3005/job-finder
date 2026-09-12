@@ -5,8 +5,9 @@ import re
 # pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Callable, Any
-
+# pyrefly: ignore [missing-import]
 from services.gemini_client import generate_content_with_fallback, generate_latex_with_strong_model
+# pyrefly: ignore [missing-import]
 from services.ats_scorer import compute_ats_score, compute_overall_score, calculate_flattened_experience
 
 # ─────────────────────────────────────────
@@ -186,6 +187,7 @@ def tailor_latex_code(
     # ── Surgical Slot Replacement Engine (Zero Layout Distortion) ──
     # If safe_suggestions has tailored summary or experience bullets, inject them directly into master_latex slots
     try:
+        # pyrefly: ignore [missing-import]
         from utils.latex_utils import inject_tailored_slots
         s_dict = safe_suggestions if isinstance(safe_suggestions, dict) else (safe_suggestions.model_dump() if hasattr(safe_suggestions, "model_dump") else {})
         tailored_summary = s_dict.get("summary")

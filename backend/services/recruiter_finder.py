@@ -7,6 +7,7 @@ import re
 import json
 import time
 from typing import Dict, Any, List, Optional
+# pyrefly: ignore [missing-import]
 from services.gemini_client import call_gemini_grounded
 
 # In-memory cache with 7-day TTL to conserve Grounding API calls

@@ -104,6 +104,22 @@ job-finder mcp
 
 ---
 
+## 🧩 Browser Extension (Chrome & Brave)
+
+Job Finder AI includes a lightweight Chrome/Brave browser extension for 1-click job scoring, autofill, and pipeline sync while browsing job boards:
+
+- **Instant ATS Scoring**: Inspect any active tab on Greenhouse, Ashby, Lever, or LinkedIn to instantly calculate compatibility against your master profile.
+- **One-Click Autofill**: Automatically populate form inputs, screening questions, and upload your resume directly from your browser toolbar.
+- **Live Sync**: Syncs application status seamlessly with your local CLI tracker or the cloud dashboard at [job-finder.space](https://www.job-finder.space).
+
+### Installing the Extension:
+1. Download or generate the extension ZIP from your local server or [https://www.job-finder.space](https://www.job-finder.space).
+2. In Chrome / Brave, navigate to `chrome://extensions`.
+3. Enable **Developer mode** in the top right corner.
+4. Click **Load unpacked** and select the extracted `extension/` directory.
+
+---
+
 ## ⚙️ Environment Variables
 
 You can configure environment settings in a local `.env` file or export them directly:
@@ -119,5 +135,7 @@ You can configure environment settings in a local `.env` file or export them dir
 ---
 
 ## 📄 License
+
+
 
 MIT License. Designed and maintained by [Akhil Baja](https://github.com/AkhilBaja3005).

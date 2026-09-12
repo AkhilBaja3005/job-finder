@@ -189,6 +189,7 @@ def main():
         example_profile = next((p for p in example_profile_candidates if os.path.exists(p)), None)
 
         # 1. Initialize .env in workspace root
+        os.makedirs(os.path.dirname(env_path), exist_ok=True)
         if not os.path.exists(env_path):
             if example_env and os.path.exists(example_env):
                 import shutil
@@ -198,6 +199,7 @@ def main():
                 with open(env_path, "w", encoding="utf-8") as f:
                     f.write("# Job Finder AI Environment Configuration\nPORT=8000\nSCRAPER_CONCURRENCY=5\n")
                 print(f"📄 Created initial .env configuration file: {env_path}")
+
         else:
             print(f"✓ Found existing .env at {env_path}")
 
@@ -236,10 +238,11 @@ def main():
             print("ℹ️ Tip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
 
         # 4. Review Candidate Profile Completeness (Demographics, Location, Portals Password)
-        profile_to_check = profile_path if os.path.exists(profile_path) else example_profile
-        if os.path.exists(profile_to_check):
+        profile_to_check = profile_path if (profile_path and os.path.exists(profile_path)) else example_profile
+        if profile_to_check and os.path.exists(profile_to_check):
             try:
                 with open(profile_to_check, "r", encoding="utf-8") as f:
+
                     prof_data = json.load(f)
                 cand = prof_data.get("candidate", {})
 

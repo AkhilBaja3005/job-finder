@@ -4,8 +4,9 @@ import asyncio
 import urllib.parse
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-
+# pyrefly: ignore [missing-import]
 from services.auth import supabase_request, _is_local_deployment
+# pyrefly: ignore [missing-import]
 from services.email_service import async_send_notification_email
 
 # India Standard Time (IST = UTC + 5:30)
@@ -51,6 +52,7 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
     # Fetch real matching jobs dynamically
     matching_jobs = []
     try:
+        # pyrefly: ignore [missing-import]
         from services.job_searcher import find_matching_jobs
         async for chunk in find_matching_jobs(
             resume_data=rdata,
@@ -70,6 +72,7 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
     # Fallback to 48h search if 24h returned no fresh postings
     if not matching_jobs:
         try:
+            # pyrefly: ignore [missing-import]
             from services.job_searcher import find_matching_jobs
             async for chunk in find_matching_jobs(
                 resume_data=rdata,
