@@ -132,10 +132,10 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
     networking = current_data.setdefault("networking_and_references", {})
 
     # Core identity
-    if resume_dict.get("name"): candidate["name"] = resume_dict["name"]
-    if resume_dict.get("email"): candidate["email"] = resume_dict["email"]
-    if resume_dict.get("phone"): candidate["phone"] = resume_dict["phone"]
-    if resume_dict.get("location"): candidate["location"] = resume_dict["location"]
+    if resume_dict.get("name") and not candidate.get("name"): candidate["name"] = resume_dict["name"]
+    if resume_dict.get("email") and not candidate.get("email"): candidate["email"] = resume_dict["email"]
+    if resume_dict.get("phone") and not candidate.get("phone"): candidate["phone"] = resume_dict["phone"]
+    if resume_dict.get("location") and not candidate.get("location"): candidate["location"] = resume_dict["location"]
 
     # Links (LinkedIn, GitHub, Portfolio)
     links = resume_dict.get("links") or []
