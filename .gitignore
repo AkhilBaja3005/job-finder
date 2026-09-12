@@ -21,4 +21,4 @@ applications_tracker/
 backend/config/candidate_profile.json
 backend/data/
 *.egg-info/
-
+build/
