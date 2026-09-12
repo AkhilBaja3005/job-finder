@@ -332,6 +332,26 @@ async def download_application_pdf(filepath: str):
             break
 
     if not pdf_path:
+        # Fallback: Attempt to fetch from Hugging Face storage bucket if available
+        hf_tok = os.getenv("HF_TOKEN")
+        if hf_tok and len(parts) >= 2:
+            try:
+                from huggingface_hub import HfFileSystem  # type: ignore
+                hfs = HfFileSystem(token=hf_tok)
+                user_key = parts[0]
+                filename = os.path.join(*parts[1:])
+                remote_hf_path = f"buckets/abaja/job-finder-storage/user_data/{user_key}/output/{os.path.basename(filename)}"
+                if hfs.exists(remote_hf_path):
+                    cached_dir = os.path.join(USER_DATA_DIR, user_key, "output")
+                    os.makedirs(cached_dir, exist_ok=True)
+                    cached_file = os.path.join(cached_dir, os.path.basename(filename))
+                    hfs.get_file(remote_hf_path, cached_file)
+                    if os.path.exists(cached_file):
+                        pdf_path = cached_file
+            except Exception as hf_err:
+                print(f"[Resume Route] Warning: Hugging Face bucket fallback error: {hf_err}")
+
+    if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF file not found")
 
     filename = os.path.basename(pdf_path)
