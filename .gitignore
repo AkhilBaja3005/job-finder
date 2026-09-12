@@ -17,7 +17,10 @@ bandit_report.txt
 .vscode/
 pyrightconfig.json
 *.swp
-applications_tracker/
+applications_tracker/*.csv
+applications_tracker/logs/
+applications_tracker/tailored_resumes/
+backend/applications_tracker/
 backend/config/candidate_profile.json
 backend/data/
 *.egg-info/

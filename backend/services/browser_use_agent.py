@@ -15,12 +15,13 @@ import urllib.error
 from typing import Optional, Dict, Any, List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
 
 try:
+    # pyrefly: ignore [missing-import]
     from browser_use import Agent, Browser, ChatGoogle, BrowserSession
     HAS_BROWSER_USE = True
 
@@ -405,6 +406,7 @@ def get_or_create_browser_session(headless: bool = False):
     the shared Chrome daemon via CDP so subsequent jobs run in the same browser window.
     Applies aggressive low-latency timings to eliminate idle waiting between actions.
     """
+    # pyrefly: ignore [missing-import]
     from browser_use import BrowserSession
     cdp_url = ensure_persistent_browser(headless=headless)
     return BrowserSession(

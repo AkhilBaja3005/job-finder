@@ -11,6 +11,7 @@ import asyncio
 import subprocess
 from typing import Dict, Any, Optional, List
 
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "backend", ".env"))
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
