@@ -61,6 +61,9 @@ def main():
     print(f"Repo Root : {repo_root}")
     print(f"Python    : {venv_py}")
 
+    # Ensure static_frontend placeholder exists so setuptools package discovery never fails
+    os.makedirs(os.path.join(backend_dir, "static_frontend", "assets"), exist_ok=True)
+
     # -------------------------------------------------------------------------
     # STEP 1: Leak & Git Isolation Verification
     # -------------------------------------------------------------------------
