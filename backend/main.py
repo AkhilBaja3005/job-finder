@@ -135,14 +135,19 @@ if os.path.exists(os.path.join(BASE_DIR, "assets")):
     app.mount("/backend_assets", StaticFiles(directory=os.path.join(BASE_DIR, "assets")), name="backend_assets")
 
 # Mount Frontend Build & SPA Catch-All Route
-frontend_dist = os.path.abspath(os.path.join(BASE_DIR, "../frontend/dist"))
-if not os.path.exists(frontend_dist):
-    frontend_dist = "/app/frontend/dist"
-if not os.path.exists(frontend_dist):
-    frontend_dist = os.path.abspath(os.path.join(BASE_DIR, "frontend/dist"))
+_this_backend = os.path.dirname(os.path.abspath(__file__))
+frontend_candidates = [
+    os.path.join(_this_backend, "static_frontend"),
+    os.path.abspath(os.path.join(BASE_DIR, "frontend/dist")),
+    os.path.abspath(os.path.join(BASE_DIR, "../frontend/dist")),
+    "/app/frontend/dist",
+]
+frontend_dist = next((p for p in frontend_candidates if os.path.exists(os.path.join(p, "index.html"))), None)
 
-if os.path.exists(frontend_dist):
+
+if frontend_dist and os.path.exists(frontend_dist):
     assets_dir = os.path.join(frontend_dist, "assets")
+
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 

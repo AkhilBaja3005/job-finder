@@ -152,6 +152,14 @@ async def process_mcp_request(request: Dict[str, Any]) -> Optional[Dict[str, Any
 
 async def run_stdio_server():
     """Runs the MCP server over standard input/output for CLI agents."""
+    if sys.stdin.isatty():
+        sys.stderr.write(
+            "🟢 Job Finder MCP Server is running over STDIO (JSON-RPC 2.0).\n"
+            "Waiting for JSON-RPC messages from Cursor, Claude Code, Gemini CLI, or Antigravity.\n"
+            "Press Ctrl+C to stop.\n"
+        )
+        sys.stderr.flush()
+
     loop = asyncio.get_event_loop()
     reader = asyncio.StreamReader()
     protocol = asyncio.StreamReaderProtocol(reader)
@@ -161,6 +169,7 @@ async def run_stdio_server():
         line = await reader.readline()
         if not line:
             break
+
 
         line_str = line.decode("utf-8").strip()
         if not line_str:
