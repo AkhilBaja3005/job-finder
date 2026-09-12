@@ -5,6 +5,12 @@ import sys
 import os
 import json
 
+# Ensure backend root is always on sys.path for CLI execution
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BACKEND_DIR = os.path.join(REPO_ROOT, "backend")
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -235,47 +241,59 @@ def main():
                     ("portals_password", "Portals / Job Board Password (for auto-signup)", "Optional (Leave blank to use Google OAuth)")
                 ]
 
+                # Categorize which fields were parsed from resume vs populated from template defaults
                 unfilled_fields = []
+                default_derived_fields = []
                 for key, label, placeholder in field_specs:
                     val = cand.get(key)
                     if val is None or val == "" or (isinstance(val, str) and (val.strip() == "" or val in ["Jane Doe", "jane.doe@example.com", "EC1A 1BB"])):
                         unfilled_fields.append((key, label, val if val is not None else ""))
+                    elif key in ("gender", "ethnicity", "citizenship", "work_authorization", "requires_sponsorship", "postal_code"):
+                        # Fields typically not on a standard resume, merged from defaults
+                        default_derived_fields.append((key, label, str(val)))
+
+                print("\n📋 ========================================================")
+                print("     CANDIDATE PROFILE DATA PROVENANCE & REVIEW")
+                print("========================================================")
+                print("  📄 From Resume : Name, Contact Info, Work Experience, Education & Skills")
+                print("  ⚙️ From Template: Demographic & compliance fields not present on standard resumes")
+                if default_derived_fields:
+                    print("\n  The following fields were initialized from defaults. Please verify them:")
+                    for k, lbl, cur in default_derived_fields:
+                        print(f"    • {lbl} ({k}): {cur}")
 
                 if unfilled_fields:
-                    print("\n⚠️ ========================================================")
-                    print("     CANDIDATE PROFILE REVIEW NEEDED")
-                    print("     The following required demographic / portal fields need your input:")
-                    print("========================================================\n")
+                    print("\n⚠️  The following fields are EMPTY or PLACEHOLDERS and require your input:")
                     for k, lbl, _ in unfilled_fields:
-                        print(f"  • {lbl} ({k})")
+                        print(f"    • {lbl} ({k})")
 
-                    # If interactive terminal session, prompt user to fill missing fields directly
-                    if sys.stdin.isatty():
-                        print("\n📝 Let's fill these remaining fields now (press Enter to keep default/skip):")
-                        updated = False
-                        for key, label, cur_val in unfilled_fields:
-                            default_hint = f" [{cur_val}]" if cur_val else ""
-                            try:
-                                user_input = input(f"  Enter {label}{default_hint}: ").strip()
-                                if user_input:
-                                    if key == "requires_sponsorship":
-                                        cand[key] = user_input.lower() in ("true", "1", "yes", "y")
-                                    else:
-                                        cand[key] = user_input
-                                    updated = True
-                            except (EOFError, KeyboardInterrupt):
-                                print("\nSkipping remaining prompts.")
-                                break
+                # If interactive terminal session, prompt user to review or update
+                fields_to_prompt = unfilled_fields + default_derived_fields
+                if sys.stdin.isatty():
+                    print("\n📝 Would you like to review or update any of these fields now?")
+                    print("   (Press Enter to keep current value, or type new value to update):")
+                    updated = False
+                    for key, label, cur_val in fields_to_prompt:
+                        default_hint = f" [{cur_val}]" if cur_val else ""
+                        try:
+                            user_input = input(f"  Enter {label}{default_hint}: ").strip()
+                            if user_input:
+                                if key == "requires_sponsorship":
+                                    cand[key] = user_input.lower() in ("true", "1", "yes", "y")
+                                else:
+                                    cand[key] = user_input
+                                updated = True
+                        except (EOFError, KeyboardInterrupt):
+                            print("\nSkipping remaining prompts.")
+                            break
 
-                        if updated:
-                            prof_data["candidate"] = cand
-                            with open(profile_path, "w", encoding="utf-8") as f:
-                                json.dump(prof_data, f, indent=2)
-                            print(f"\n✅ Updated candidate profile saved to: {profile_path}")
-                    else:
-                        print(f"\n💡 Note: You can edit these anytime in `{profile_path}` or run `job-finder profile`.")
+                    if updated:
+                        prof_data["candidate"] = cand
+                        with open(profile_path, "w", encoding="utf-8") as f:
+                            json.dump(prof_data, f, indent=2)
+                        print(f"\n✅ Updated candidate profile saved to: {profile_path}")
                 else:
-                    print("\n✅ Candidate profile is complete with all demographic, contact, and work authorization fields.")
+                    print(f"\n💡 Note: Review or edit these anytime in `{profile_path}` or run `job-finder profile`.")
             except Exception as pe:
                 print(f"ℹ️ Could not inspect candidate profile: {pe}")
 

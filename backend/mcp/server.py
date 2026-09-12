@@ -58,7 +58,7 @@ HANDLERS = {
 }
 
 
-async def process_mcp_request(request: Dict[str, Any]) -> Dict[str, Any]:
+async def process_mcp_request(request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     req_id = request.get("id")
     method = request.get("method")
     params = request.get("params", {})
@@ -79,8 +79,9 @@ async def process_mcp_request(request: Dict[str, Any]) -> Dict[str, Any]:
             }
         }
 
-    elif method == "notifications/initialized":
-        return {}
+    elif method in ("notifications/initialized", "initialized"):
+        # Notifications do not have an 'id' and MUST NOT receive a response in JSON-RPC 2.0
+        return None
 
     elif method == "tools/list":
         return {
@@ -134,6 +135,10 @@ async def process_mcp_request(request: Dict[str, Any]) -> Dict[str, Any]:
                     ]
                 }
             }
+
+    # If it is a notification (no 'id'), do not send any response back
+    if req_id is None:
+        return None
 
     return {
         "jsonrpc": "2.0",
