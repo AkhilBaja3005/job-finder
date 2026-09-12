@@ -22,7 +22,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path
 
 try:
     # pyrefly: ignore [missing-import]
-    from browser_use import Agent, Browser, ChatGoogle, BrowserSession
+    from browser_use import Agent, Browser, ChatGoogle, BrowserSession  # pyright: ignore[reportAssignmentType]
     HAS_BROWSER_USE = True
 
     class MultiFallbackAgent(Agent):  # pyright: ignore[reportRedeclaration]
