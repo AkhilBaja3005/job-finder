@@ -23,6 +23,7 @@ import json
 import csv
 import asyncio
 import re
+import subprocess
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Optional, Dict, Any
@@ -119,68 +120,93 @@ def normalize_job_url(u: Optional[str]) -> str:
             return f"linkedin.com/jobs/view/{m.group(1)}"
     return raw.split("?")[0].rstrip("/").lower()
 
-JOB_FINDER_ROOT = "/Users/akhilbaja/Documents/Akhil/Job Finder"
+JOB_FINDER_ROOT = os.getenv(
+    "JOB_FINDER_ROOT",
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 BACKEND_DIR = os.path.join(JOB_FINDER_ROOT, "backend")
 TRACKER_DIR = os.path.join(JOB_FINDER_ROOT, "applications_tracker")
 RESUMES_DIR = os.path.join(TRACKER_DIR, "tailored_resumes")
 CSV_PATH = os.path.join(TRACKER_DIR, "job_applications_tracker.csv")
 
-sys.path.insert(0, BACKEND_DIR)
+if BACKEND_DIR not in sys.path:
+    sys.path.insert(0, BACKEND_DIR)
 
 # pyrefly: ignore [missing-import]
-from dotenv import load_dotenv
-load_dotenv(os.path.join(BACKEND_DIR, ".env"))
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv(os.path.join(BACKEND_DIR, ".env"))
+except ImportError:
+    pass
 
-from mcp.tools.discovery_tools import handle_search_jobs
-from mcp.tools.profile_tools import load_profile_data
-from mcp.tools.tracking_tools import handle_track_application
-from mcp.tools.autofill_tools import build_and_compile_tailored_pdf, _get_default_resume_path
-from mcp.tools.ats_tools import handle_calculate_ats_score
-from services.browser_use_agent import run_browser_use_autofill
-from services.email_service import send_notification_email
-from services.job_searcher import normalize_timeframe
-from services.scraper import scrape_job_description
-from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
-from services.auth import async_supabase_request, supabase_request, SUPABASE_URL, SUPABASE_KEY
-import subprocess
+# Core backend imports
+# pyrefly: ignore [missing-import]
+from mcp.tools.discovery_tools import handle_search_jobs  # type: ignore
+from mcp.tools.profile_tools import load_profile_data  # type: ignore
+from mcp.tools.tracking_tools import handle_track_application  # type: ignore
+from mcp.tools.autofill_tools import build_and_compile_tailored_pdf, _get_default_resume_path  # type: ignore
+from mcp.tools.ats_tools import handle_calculate_ats_score  # type: ignore
+from services.browser_use_agent import run_browser_use_autofill  # type: ignore
+from services.email_service import send_notification_email  # type: ignore
+from services.job_searcher import normalize_timeframe  # type: ignore
+from services.scraper import scrape_job_description  # type: ignore
+from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score  # type: ignore
+from services.auth import async_supabase_request, supabase_request, SUPABASE_URL, SUPABASE_KEY  # type: ignore
 
 
 def find_master_resume_with_mac_tags() -> str:
     """
-    Finds the master resume PDF by checking macOS color tags in iCloud Drive.
+    Finds the master resume PDF by checking macOS color tags in iCloud Drive or custom directories.
     Irrespective of the file name, any PDF tagged with 'Red' is prioritized as the master resume.
-    Falls back to Resume_Akhil_Baja.pdf or repository master resume if no Red-tagged PDF exists.
+    Falls back to user-configured directory, repo master resume, or sample resume if no Red-tagged PDF exists.
     """
-    icloud_folder = "/Users/akhilbaja/Library/Mobile Documents/com~apple~CloudDocs/UK/Imperial/Job Info/Master Resume"
-    explicit_fallback = os.path.join(icloud_folder, "Resume_Akhil_Baja.pdf")
+    custom_master = os.getenv("MASTER_RESUME_PATH")
+    if custom_master and os.path.exists(custom_master):
+        return custom_master
 
-    if os.path.exists(icloud_folder):
-        try:
-            # 1. Scan every PDF file in the folder for the 'Red' macOS tag
-            for fname in sorted(os.listdir(icloud_folder)):
+    search_folders = []
+    env_dir = os.getenv("MASTER_RESUME_DIR")
+    if env_dir:
+        search_folders.append(os.path.expanduser(env_dir))
+
+    # Standard macOS iCloud Drive path if present
+    home_dir = os.path.expanduser("~")
+    icloud_base = os.path.join(home_dir, "Library", "Mobile Documents", "com~apple~CloudDocs")
+    if os.path.exists(icloud_base):
+        # Check potential resume directories under iCloud
+        search_folders.extend([
+            os.path.join(icloud_base, "UK", "Imperial", "Job Info", "Master Resume"),
+            os.path.join(icloud_base, "Master Resume"),
+            os.path.join(icloud_base, "Resumes")
+        ])
+
+    # Check each candidate folder
+    for folder in search_folders:
+        if os.path.exists(folder):
+            try:
+                for fname in sorted(os.listdir(folder)):
+                    if fname.lower().endswith(".pdf"):
+                        full_p = os.path.join(folder, fname)
+                        res = subprocess.run(["mdls", "-name", "kMDItemUserTags", full_p], capture_output=True, text=True)
+                        out = res.stdout or ""
+                        if "red" in out.lower():
+                            print(f"[Master Resume] 🏷️ Found Red-tagged master resume: {full_p}")
+                            return full_p
+            except Exception as e:
+                print(f"[Master Resume] Note: macOS tag inspection in '{folder}' skipped: {e}")
+
+            # Check for any PDF in candidate folder
+            for fname in sorted(os.listdir(folder)):
                 if fname.lower().endswith(".pdf"):
-                    full_p = os.path.join(icloud_folder, fname)
-                    res = subprocess.run(["mdls", "-name", "kMDItemUserTags", full_p], capture_output=True, text=True)
-                    out = res.stdout or ""
-                    # Check specifically for "Red" tag (case-insensitive)
-                    if "red" in out.lower():
-                        print(f"[Master Resume] 🏷️ Found Red-tagged master resume: {full_p}")
-                        return full_p
-        except Exception as e:
-            print(f"[Master Resume] Note: macOS tag inspection failed ({e}), checking fallback paths.")
+                    return os.path.join(folder, fname)
 
-    # 2. Fallback if no Red tag was found
-    if os.path.exists(explicit_fallback):
-        print(f"[Master Resume] 📄 No Red-tagged PDF found; falling back to: {explicit_fallback}")
-        return explicit_fallback
-
-    # 3. Secondary fallback to repository master resume
+    # Secondary fallback to repository master resume or local output
     repo_fallback = _get_default_resume_path()
     if repo_fallback and os.path.exists(repo_fallback):
-        print(f"[Master Resume] 📄 Falling back to repo master resume: {repo_fallback}")
+        print(f"[Master Resume] 📄 Using detected resume: {repo_fallback}")
         return repo_fallback
 
-    return explicit_fallback
+    return repo_fallback or ""
 
 
 def evaluate_pdf_ats(pdf_path: str, jd_text: str, candidate_info: dict) -> int:
@@ -513,17 +539,22 @@ async def apply_to_job(
     resume_path: Optional[str] = None,
     title: str = "Role",
     company: str = "Company",
-    auto_submit: bool = False
+    auto_submit: bool = False,
+    timeout_seconds: Optional[float] = None,
+    max_steps: Optional[int] = None,
+    model_name: Optional[str] = None,
+    headless_override: Optional[bool] = None
 ):
     print(f"\n[Browser-Use] 🌐 Launching browser autofill for: {title} @ {company}")
     print(f"[Browser-Use] 🔗 URL: {url}")
     print(f"[Browser-Use] 📄 Resume: {resume_path}")
     print(f"[Browser-Use] ⚡ Guardrails: {'Disabled (Auto-Submit Enabled)' if (auto_submit or os.getenv('BROWSER_USE_DISABLE_GUARDRAILS') in ('1', 'true', 'True')) else 'Enabled (Preview Mode)'}")
-    headless = os.getenv("BROWSER_USE_HEADLESS", "false").lower() in ("1", "true", "yes")
+    headless = headless_override if headless_override is not None else (os.getenv("BROWSER_USE_HEADLESS", "false").lower() in ("1", "true", "yes"))
     from config.constants import get_best_flash_lite_model
-    selected_model = get_best_flash_lite_model()
+    selected_model = model_name or get_best_flash_lite_model()
     # Safe execution timeout for each job filling session (default: 300s / 5 minutes, or BROWSER_USE_TIMEOUT env)
-    timeout_seconds = float(os.getenv("BROWSER_USE_TIMEOUT", "300"))
+    active_timeout = timeout_seconds or float(os.getenv("BROWSER_USE_TIMEOUT", "300"))
+    active_steps = max_steps or int(os.getenv("BROWSER_USE_MAX_STEPS", "50"))
     try:
         res = await asyncio.wait_for(
             run_browser_use_autofill(
@@ -533,14 +564,14 @@ async def apply_to_job(
                 headless=headless,
                 model_name=selected_model,
                 auto_submit=auto_submit,
-                max_steps=50
+                max_steps=active_steps
             ),
-            timeout=timeout_seconds
+            timeout=active_timeout
         )
         print(f"[Browser-Use] Result: {res}")
         return res
     except asyncio.TimeoutError:
-        err_msg = f"Job application autofill timed out after {int(timeout_seconds)}s."
+        err_msg = f"Job application autofill timed out after {int(active_timeout)}s."
         print(f"[Browser-Use] ⏱️ {err_msg}")
         return {
             "status": "failed",
@@ -558,13 +589,35 @@ async def apply_to_job(
         }
 
 
-async def run_pipeline(target_url: Optional[str] = None):
+async def run_pipeline(
+    target_url: Optional[str] = None,
+    timeout: Optional[float] = None,
+    tailor_timeout: Optional[float] = None,
+    max_steps: Optional[int] = None,
+    max_apps: Optional[int] = None,
+    min_ats: Optional[int] = None,
+    role: Optional[str] = None,
+    location_override: Optional[str] = None,
+    timeframe_override: Optional[str] = None,
+    model_override: Optional[str] = None,
+    headless: Optional[bool] = None,
+    auto_submit_override: Optional[bool] = None
+):
     profile = load_profile_data()
     candidate = profile.get("candidate", {})
     prefs = profile.get("search_preferences", {})
 
-    disable_guardrails = os.getenv("BROWSER_USE_DISABLE_GUARDRAILS") in ("1", "true", "True")
+    disable_guardrails = (
+        auto_submit_override
+        if auto_submit_override is not None
+        else os.getenv("BROWSER_USE_DISABLE_GUARDRAILS") in ("1", "true", "True")
+    )
     master_resume_pdf = find_master_resume_with_mac_tags()
+
+    # Dynamic configurable timeouts (defaults: 300s autofill, 90s tailoring)
+    autofill_timeout = timeout or float(os.getenv("BROWSER_USE_TIMEOUT", "300"))
+    resume_tailor_timeout = tailor_timeout or float(os.getenv("TAILORING_TIMEOUT", "90"))
+    steps_limit = max_steps or int(os.getenv("BROWSER_USE_MAX_STEPS", "50"))
 
     # Mode A: Direct application to single job URL passed via CLI
     if target_url:
@@ -575,12 +628,16 @@ async def run_pipeline(target_url: Optional[str] = None):
             resume_path=master_resume_pdf,
             title="Target Role",
             company="Company",
-            auto_submit=disable_guardrails
+            auto_submit=disable_guardrails,
+            timeout_seconds=autofill_timeout,
+            max_steps=steps_limit,
+            model_name=model_override,
+            headless_override=headless
         )
         return
 
     # Mode B: Unified Multi-Source Discovery, Selective Tailoring & Application
-    raw_target_roles = prefs.get("target_roles", [
+    raw_target_roles = [role] if role else prefs.get("target_roles", [
         "AI Engineer",
         "Generative AI Engineer",
         "Machine Learning Engineer",
@@ -590,14 +647,14 @@ async def run_pipeline(target_url: Optional[str] = None):
     # Deduplicate target roles while preserving order
     target_roles = list(dict.fromkeys(raw_target_roles))
     keywords = ", ".join(target_roles)
-    target_locations = prefs.get("target_locations", ["London, UK"])
+    target_locations = [location_override] if location_override else prefs.get("target_locations", ["London, UK"])
     location = target_locations[0] if target_locations else "London, UK"
-    raw_timeframe = prefs.get("timeframe", "48h")
+    raw_timeframe = timeframe_override or prefs.get("timeframe", "48h")
     timeframe = normalize_timeframe(raw_timeframe)
-    min_ats_score = int(prefs.get("min_ats_score", 65))
+    min_ats_score = int(min_ats if min_ats is not None else prefs.get("min_ats_score", 65))
     DIRECT_APPLY_ATS_THRESHOLD = 80  # >= 80%: apply directly with master resume without tailoring
     max_apps_env = os.getenv("MAX_APPLICATIONS_PER_RUN", "0").strip()
-    max_applications = int(max_apps_env) if max_apps_env.isdigit() else 0
+    max_applications = max_apps if max_apps is not None else (int(max_apps_env) if max_apps_env.isdigit() else 0)
     max_apps_str = "No limit (unlimited)" if max_applications <= 0 else str(max_applications)
 
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🚀 Starting scheduled unified scan...")
@@ -605,6 +662,7 @@ async def run_pipeline(target_url: Optional[str] = None):
     print(f"Location: {location} | Timeframe: {timeframe}")
     print(f"Rule: >= {DIRECT_APPLY_ATS_THRESHOLD}% ATS -> Direct apply (Master Resume)")
     print(f"Rule: {min_ats_score}% - {DIRECT_APPLY_ATS_THRESHOLD - 1}% ATS -> Tailor 1-page LaTeX & PDF, then apply")
+    print(f"Timeouts: Autofill = {int(autofill_timeout)}s | Tailoring = {int(resume_tailor_timeout)}s | Max Steps = {steps_limit}")
     print(f"Database Target: Supabase (`applications` table) with CSV backup")
     print(f"Max Applications Cap: {max_apps_str}")
     print(f"Guardrails Disabled: {disable_guardrails}\n")
@@ -765,7 +823,7 @@ async def run_pipeline(target_url: Optional[str] = None):
                             out_dir=RESUMES_DIR,
                             missing_skills=job_missing
                         ),
-                        timeout=90.0
+                        timeout=resume_tailor_timeout
                     )
                     if pdf_res and os.path.exists(pdf_res):
                         tailored_ats = evaluate_pdf_ats(pdf_res, jd_text, candidate)
@@ -832,7 +890,11 @@ async def run_pipeline(target_url: Optional[str] = None):
                     resume_path=pdf_to_submit,
                     title=title,
                     company=company,
-                    auto_submit=disable_guardrails
+                    auto_submit=disable_guardrails,
+                    timeout_seconds=autofill_timeout,
+                    max_steps=steps_limit,
+                    model_name=model_override,
+                    headless_override=headless
                 )
 
                 # Post-Submission Verification Check
@@ -865,7 +927,7 @@ async def run_pipeline(target_url: Optional[str] = None):
 
 
 def main():
-    """CLI entrypoint for autonomous scheduled scanner."""
+    """CLI entrypoint for autonomous scheduled scanner with comprehensive tuning options."""
     import argparse
     parser = argparse.ArgumentParser(
         prog="job-finder-scanner",
@@ -873,12 +935,35 @@ def main():
     )
     parser.add_argument("url", nargs="?", default=None, help="Target specific job URL to process directly (optional)")
     parser.add_argument("--auto-apply", action="store_true", help="Enable automatic browser form submission")
+    parser.add_argument("--timeout", type=float, default=300.0, help="Autofill session timeout in seconds (default: 300s)")
+    parser.add_argument("--tailor-timeout", type=float, default=90.0, help="Resume tailoring timeout in seconds (default: 90s)")
+    parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps per application (default: 50)")
+    parser.add_argument("--limit", type=int, default=0, help="Max applications to process per run (default: 0 = unlimited)")
+    parser.add_argument("--min-ats", type=int, default=None, help="Minimum ATS compatibility score threshold (default: from profile)")
+    parser.add_argument("--role", type=str, default=None, help="Target role override")
+    parser.add_argument("--location", type=str, default=None, help="Target location override")
+    parser.add_argument("--timeframe", type=str, default=None, help="Search freshness window override (e.g. 24h, 48h, 1w)")
+    parser.add_argument("--model", type=str, default=None, help="Gemini LLM model override for browser-use")
+    parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
     args = parser.parse_args()
 
     if args.auto_apply:
         os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
 
-    asyncio.run(run_pipeline(args.url))
+    asyncio.run(run_pipeline(
+        target_url=args.url,
+        timeout=args.timeout,
+        tailor_timeout=args.tailor_timeout,
+        max_steps=args.max_steps,
+        max_apps=args.limit if args.limit > 0 else None,
+        min_ats=args.min_ats,
+        role=args.role,
+        location_override=args.location,
+        timeframe_override=args.timeframe,
+        model_override=args.model,
+        headless=True if args.headless else None,
+        auto_submit_override=True if args.auto_apply else None
+    ))
 
 
 if __name__ == "__main__":

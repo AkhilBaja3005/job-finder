@@ -158,7 +158,24 @@ Job Finder/
 
 ## 🚀 Running Locally
 
-### 1. Backend Setup
+### 1. Quick Start via Unified CLI (`job-finder`)
+Install locally in editable mode or from source:
+```bash
+pip install -e .
+job-finder setup       # Interactive onboarding wizard: initializes .env, imports resume & reviews profile
+```
+
+### Available Unified CLI Commands:
+```bash
+job-finder scan --help             # Autonomous job discovery, ATS evaluation & tailoring
+job-finder apply <url>             # Direct job application autofill with browser-use
+job-finder profile --show          # Inspect candidate profile and target preferences
+job-finder profile --sync <resume> # Sync and extract skills/experience directly from PDF
+job-finder server                  # Start FastAPI backend server (http://localhost:8000)
+job-finder mcp                     # Start Model Context Protocol server for Claude/Cursor/Antigravity
+```
+
+### 2. Manual Backend Setup
 ```bash
 cd backend
 python3 -m venv venv

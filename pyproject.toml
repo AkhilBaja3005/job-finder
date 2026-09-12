@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "job-finder-ai"
-version = "0.1.0"
+version = "0.1.1"
 description = "Autonomous career agent, ATS resume tailor, and job search copilot."
-readme = "README.md"
+readme = "README_PYPI.md"
 license = { text = "MIT" }
 authors = [
     { name = "Akhil Baja", email = "akhilbaja.work@gmail.com" }
@@ -88,7 +88,7 @@ all = [
 
 [project.scripts]
 job-finder = "job_finder.cli:main"
-job-finder-scanner = "applications_tracker.scheduled_job_scanner:main"
+job-finder-scanner = "job_finder.cli:scanner_cli"
 job-finder-mcp = "backend.mcp.server:main"
 job-finder-server = "backend.main:start_server"
 

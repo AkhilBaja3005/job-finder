@@ -169,12 +169,15 @@ def build_application_task_prompt(
     summary = resume_data.get("summary") or resume_data.get("candidate", {}).get("experience_summary", "")
 
     # Demographic & compliance answers commonly asked on job forms
-    gender = resume_data.get("gender") or resume_data.get("candidate", {}).get("gender", "Male")
-    ethnicity = resume_data.get("ethnicity") or resume_data.get("candidate", {}).get("ethnicity", "Asian")
-    citizenship = resume_data.get("citizenship") or resume_data.get("candidate", {}).get("citizenship", "Indian")
-    work_auth = resume_data.get("work_authorization") or resume_data.get("candidate", {}).get("work_authorization", "Authorized to work in the UK and India")
+    gender = resume_data.get("gender") or resume_data.get("candidate", {}).get("gender", "")
+    ethnicity = resume_data.get("ethnicity") or resume_data.get("candidate", {}).get("ethnicity", "")
+    citizenship = resume_data.get("citizenship") or resume_data.get("candidate", {}).get("citizenship", "")
+    work_auth = resume_data.get("work_authorization") or resume_data.get("candidate", {}).get("work_authorization", "")
     requires_sponsorship = resume_data.get("requires_sponsorship", False)
+    if not requires_sponsorship and isinstance(resume_data.get("candidate"), dict):
+        requires_sponsorship = resume_data["candidate"].get("requires_sponsorship", False)
     sponsorship_str = "Yes" if requires_sponsorship else "No"
+    sponsorship_choice = "Yes" if requires_sponsorship else "No"
     veteran_status = resume_data.get("veteran_status") or resume_data.get("candidate", {}).get("veteran_status", "No")
     disability_status = resume_data.get("disability_status") or resume_data.get("candidate", {}).get("disability_status", "No")
     # Phone parsing for easy international code selection
@@ -261,9 +264,12 @@ def build_application_task_prompt(
            - In Greenhouse, Ashby, and Lever, typing 'London' or 'United Kingdom' triggers a dynamic suggestion listbox/flyout menu.
            - Wait for or inspect the dynamic suggestion list to appear, then click the exact matching option (e.g. 'London, England, United Kingdom', 'London, UK', 'London (United Kingdom)', or 'United Kingdom').
            - Do not leave the input half-typed without selecting the flyout suggestion.
-         * Work Authorization / Sponsorship: Inspect options and choose 'Yes' ({sponsorship_str}).
-         * Gender: Inspect options and choose 'Male'.
-         * Ethnicity: Inspect options and choose 'Asian' / 'Indian' / 'Asian or Pacific Islander'.
+         * Work Authorization / Sponsorship: Inspect options and choose '{sponsorship_choice}' (Candidate requires sponsorship: {sponsorship_str}).
+         * Gender: Inspect options and choose '{gender}'.
+         * Race / Ethnicity: Inspect options and choose '{ethnicity}'.
+         * Citizenship / Nationality: Inspect options and choose '{citizenship}'.
+         * Veteran Status: Inspect options and choose '{veteran_status}'.
+         * Disability Status: Inspect options and choose '{disability_status}'.
        - For Resume, ensure the candidate's resume is selected or uploaded.
        - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
     4. Handle Email Verification / OTP Codes:

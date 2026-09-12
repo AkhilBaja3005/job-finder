@@ -3,6 +3,7 @@
 import argparse
 import sys
 import os
+import json
 
 
 def main():
@@ -19,6 +20,16 @@ def main():
     )
     scanner_parser.add_argument("url", nargs="?", default=None, help="Target specific job URL to process directly (optional)")
     scanner_parser.add_argument("--auto-apply", action="store_true", help="Enable automatic browser form submission")
+    scanner_parser.add_argument("--timeout", type=float, default=300.0, help="Autofill session timeout in seconds (default: 300s)")
+    scanner_parser.add_argument("--tailor-timeout", type=float, default=90.0, help="Resume tailoring timeout in seconds (default: 90s)")
+    scanner_parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps per application (default: 50)")
+    scanner_parser.add_argument("--limit", type=int, default=0, help="Max applications to process (default: 0 = unlimited)")
+    scanner_parser.add_argument("--min-ats", type=int, default=None, help="Minimum ATS score threshold (default: from profile)")
+    scanner_parser.add_argument("--role", type=str, default=None, help="Target role filter override")
+    scanner_parser.add_argument("--location", type=str, default=None, help="Target location filter override")
+    scanner_parser.add_argument("--timeframe", type=str, default=None, help="Search freshness window (e.g. 24h, 48h, 1w)")
+    scanner_parser.add_argument("--model", type=str, default=None, help="Gemini LLM model override")
+    scanner_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
 
     # 2. Apply subcommand
     apply_parser = subparsers.add_parser(
@@ -27,7 +38,10 @@ def main():
     )
     apply_parser.add_argument("url", type=str, help="Job posting URL")
     apply_parser.add_argument("--submit", action="store_true", help="Auto-submit the application if safe")
-    apply_parser.add_argument("--model", type=str, default="gemini-3.5-flash-lite", help="LLM model to use")
+    apply_parser.add_argument("--timeout", type=float, default=300.0, help="Application timeout in seconds (default: 300s)")
+    apply_parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps (default: 50)")
+    apply_parser.add_argument("--model", type=str, default="gemini-3.5-flash-lite", help="LLM model to use (default: gemini-3.5-flash-lite)")
+    apply_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
 
     # 3. Server subcommand
     server_parser = subparsers.add_parser(
@@ -70,7 +84,20 @@ def main():
             os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
         import asyncio
         from applications_tracker.scheduled_job_scanner import run_pipeline
-        asyncio.run(run_pipeline(args.url))
+        asyncio.run(run_pipeline(
+            target_url=args.url,
+            timeout=args.timeout,
+            tailor_timeout=args.tailor_timeout,
+            max_steps=args.max_steps,
+            max_apps=args.limit if args.limit > 0 else None,
+            min_ats=args.min_ats,
+            role=args.role,
+            location_override=args.location,
+            timeframe_override=args.timeframe,
+            model_override=args.model,
+            headless=True if args.headless else None,
+            auto_submit_override=True if args.auto_apply else None
+        ))
 
     elif args.subcommand == "apply":
         import asyncio
@@ -78,7 +105,17 @@ def main():
         from backend.mcp.tools.profile_tools import load_profile_data
         prof = load_profile_data() or {}
         cand = prof.get("candidate", {})
-        result = asyncio.run(run_browser_use_autofill(args.url, resume_data=cand, auto_submit=args.submit, model_name=args.model))
+        result = asyncio.run(asyncio.wait_for(
+            run_browser_use_autofill(
+                args.url,
+                resume_data=cand,
+                auto_submit=args.submit,
+                model_name=args.model,
+                headless=args.headless,
+                max_steps=args.max_steps
+            ),
+            timeout=args.timeout
+        ))
         print(f"[Result] {result}")
 
     elif args.subcommand == "server":
@@ -104,7 +141,6 @@ def main():
                 print(f"❌ Sync failed: {res.get('error')}")
             return
 
-        import json
         candidate_paths = [
             os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend", "config", "candidate_profile.json")),
             os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend", "config", "candidate_profile.example.json")),
@@ -177,11 +213,119 @@ def main():
         else:
             print("ℹ️ Tip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
 
+        # 4. Review Candidate Profile Completeness (Demographics, Location, Portals Password)
+        profile_to_check = profile_path if os.path.exists(profile_path) else example_profile
+        if os.path.exists(profile_to_check):
+            try:
+                with open(profile_to_check, "r", encoding="utf-8") as f:
+                    prof_data = json.load(f)
+                cand = prof_data.get("candidate", {})
+
+                field_specs = [
+                    ("name", "Full Name", "Candidate Name"),
+                    ("email", "Email Address", "candidate@example.com"),
+                    ("phone", "Phone Number", "+44 7123 456789"),
+                    ("location", "Current Location", "London, UK"),
+                    ("postal_code", "Postal Code / Postcode", "EC1A 1BB"),
+                    ("gender", "Gender", "Male / Female / Non-binary / Prefer not to say"),
+                    ("ethnicity", "Race / Ethnicity", "Asian / White / Black / Hispanic / Two or more"),
+                    ("citizenship", "Citizenship / Nationality", "e.g. British / Indian / American"),
+                    ("work_authorization", "Work Authorization", "e.g. Authorized to work in the UK"),
+                    ("requires_sponsorship", "Requires Visa Sponsorship (True/False)", "False"),
+                    ("portals_password", "Portals / Job Board Password (for auto-signup)", "Optional (Leave blank to use Google OAuth)")
+                ]
+
+                unfilled_fields = []
+                for key, label, placeholder in field_specs:
+                    val = cand.get(key)
+                    if val is None or val == "" or (isinstance(val, str) and (val.strip() == "" or val in ["Jane Doe", "jane.doe@example.com", "EC1A 1BB"])):
+                        unfilled_fields.append((key, label, val if val is not None else ""))
+
+                if unfilled_fields:
+                    print("\n⚠️ ========================================================")
+                    print("     CANDIDATE PROFILE REVIEW NEEDED")
+                    print("     The following required demographic / portal fields need your input:")
+                    print("========================================================\n")
+                    for k, lbl, _ in unfilled_fields:
+                        print(f"  • {lbl} ({k})")
+
+                    # If interactive terminal session, prompt user to fill missing fields directly
+                    if sys.stdin.isatty():
+                        print("\n📝 Let's fill these remaining fields now (press Enter to keep default/skip):")
+                        updated = False
+                        for key, label, cur_val in unfilled_fields:
+                            default_hint = f" [{cur_val}]" if cur_val else ""
+                            try:
+                                user_input = input(f"  Enter {label}{default_hint}: ").strip()
+                                if user_input:
+                                    if key == "requires_sponsorship":
+                                        cand[key] = user_input.lower() in ("true", "1", "yes", "y")
+                                    else:
+                                        cand[key] = user_input
+                                    updated = True
+                            except (EOFError, KeyboardInterrupt):
+                                print("\nSkipping remaining prompts.")
+                                break
+
+                        if updated:
+                            prof_data["candidate"] = cand
+                            with open(profile_path, "w", encoding="utf-8") as f:
+                                json.dump(prof_data, f, indent=2)
+                            print(f"\n✅ Updated candidate profile saved to: {profile_path}")
+                    else:
+                        print(f"\n💡 Note: You can edit these anytime in `{profile_path}` or run `job-finder profile`.")
+                else:
+                    print("\n✅ Candidate profile is complete with all demographic, contact, and work authorization fields.")
+            except Exception as pe:
+                print(f"ℹ️ Could not inspect candidate profile: {pe}")
+
         print("\n✅ Setup complete! You're ready to run:")
         print("   - `job-finder profile --show` : Review your parsed candidate profile")
         print("   - `job-finder scan`           : Run autonomous job search and ATS tailoring")
         print("   - `job-finder server`         : Start web dashboard on http://localhost:8000")
         print("   - `job-finder mcp`            : Run MCP server for Claude/Cursor IDE\n")
+
+
+def scanner_cli():
+    """Direct entrypoint for job-finder-scanner with support for clean --help before loading dependencies."""
+    import argparse
+    parser = argparse.ArgumentParser(
+        prog="job-finder-scanner",
+        description="Autonomous Scheduled Job Discovery & Application Pipeline",
+    )
+    parser.add_argument("url", nargs="?", default=None, help="Target specific job URL to process directly (optional)")
+    parser.add_argument("--auto-apply", action="store_true", help="Enable automatic browser form submission")
+    parser.add_argument("--timeout", type=float, default=300.0, help="Autofill session timeout in seconds (default: 300s)")
+    parser.add_argument("--tailor-timeout", type=float, default=90.0, help="Resume tailoring timeout in seconds (default: 90s)")
+    parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps per application (default: 50)")
+    parser.add_argument("--limit", type=int, default=0, help="Max applications to process per run (default: 0 = unlimited)")
+    parser.add_argument("--min-ats", type=int, default=None, help="Minimum ATS compatibility score threshold (default: from profile)")
+    parser.add_argument("--role", type=str, default=None, help="Target role override")
+    parser.add_argument("--location", type=str, default=None, help="Target location override")
+    parser.add_argument("--timeframe", type=str, default=None, help="Search freshness window override (e.g. 24h, 48h, 1w)")
+    parser.add_argument("--model", type=str, default=None, help="Gemini LLM model override for browser-use")
+    parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
+    args = parser.parse_args()
+
+    if args.auto_apply:
+        os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
+
+    import asyncio
+    from applications_tracker.scheduled_job_scanner import run_pipeline
+    asyncio.run(run_pipeline(
+        target_url=args.url,
+        timeout=args.timeout,
+        tailor_timeout=args.tailor_timeout,
+        max_steps=args.max_steps,
+        max_apps=args.limit if args.limit > 0 else None,
+        min_ats=args.min_ats,
+        role=args.role,
+        location_override=args.location,
+        timeframe_override=args.timeframe,
+        model_override=args.model,
+        headless=True if args.headless else None,
+        auto_submit_override=True if args.auto_apply else None
+    ))
 
 
 if __name__ == "__main__":

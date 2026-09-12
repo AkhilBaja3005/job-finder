@@ -17,22 +17,23 @@
     "requires_sponsorship": true,
     "veteran_status": "No",
     "disability_status": "No",
-    "experience_summary": "AI/ML Systems Engineer with 3+ years of experience engineering production-grade GenAI, LLM infrastructure, and distributed data pipelines at Qualcomm and Axis Bank. Architected cross-language context pipelines reducing retrieval latency by 60% and boosting LLM accuracy by 46%, alongside enterprise GenAI platforms serving 1,000+ end users. Incoming MSc AI student at Imperial College London specializing in scalable AI infrastructure.",
+    "portals_password": "",
+    "experience_summary": "AI/ML Systems Engineer with 3+ years of experience building production-grade GenAI, LLM infrastructure, and machine learning systems at Qualcomm and Axis Bank. Engineered cross-language LLM context pipelines reducing retrieval latency by 60% and improving LLM accuracy by 46%, alongside enterprise GenAI systems serving 1,000+ users.",
     "education": [
       {
         "institution": "Imperial College London",
-        "degree": "MSc in Artificial Intelligence Applications and Innovation",
+        "degree": "MSc in Artificial Intelligence Applications and Innovation in Artificial Intelligence Applications and Innovation",
         "timeline": "Sept 2026 - Sept 2027",
         "location": "London, UK"
       },
       {
-        "institution": "IIT Hyderabad",
-        "degree": "B.Tech in Engineering Science",
-        "cpi": "8.04 / 10.0",
+        "institution": "Indian Institute of Technology Hyderabad (IIT Hyderabad)",
+        "degree": "B.Tech in Engineering Science in Engineering Science",
         "timeline": "Aug 2019 - May 2023",
-        "location": "Hyderabad, India",
+        "location": null,
+        "cpi": "CPI: 8.04 / 10.0",
         "highlights": [
-          "Internship and Placement Cell Coordinator \u2014 Managed corporate outreach and recruitment operations for 100+ technology and engineering firms."
+          "Internship & Placement Cell Coordinator\u2013 led corporate outreach and recruitment across 100+ tier-1 tech & engineering firms."
         ]
       }
     ],
@@ -49,13 +50,14 @@
           "RabbitMQ",
           "Docker",
           "Rancher",
+          "AST Parsing",
           "SQL",
           "Git"
         ],
         "highlights": [
-          "Engineered a cross-language LLM context engineering pipeline using AST-based dependency extraction across Java, Python, C and C++, reducing retrieval latency by 60% and improving LLM accuracy by 46% \u2014 Qualcomm Certificate of Recognition.",
-          "Re-architected a central data-harvesting pipeline for 1,000+ users, cutting deployment failure rate by 84% by replacing legacy Jenkins workflows with asynchronous RabbitMQ queues and containerizing microservices via Docker/Rancher for cross-OS deployment stability.",
-          "Slashed static analysis parser execution latency by 93% and consolidated 200+ unit tests into a Linux-compatible test harness, cutting ongoing maintenance overhead by 60%."
+          "Engineered a cross-language LLM context engineering pipeline utilizing AST-based dependency extraction across Java, Python, C, and C++, reducing context retrieval latency by 60% and improving code-generation accuracy by 46% (Awarded Qualcomm Certificate of Recognition).",
+          "Re-architected a distributed data-harvesting pipeline for 1,000+ internal engineers, cutting deployment failures by 84% by replacing legacy workflows with asynchronous RabbitMQ queues and containerized microservices on Docker/Rancher.",
+          "Slashed static analysis parser execution latency via in-memory dependency caching and consolidated the unit test suite into a Linux-compatible test harness, significantly cutting ongoing CI maintenance overhead."
         ]
       },
       {
@@ -67,14 +69,15 @@
           "Azure OpenAI",
           "PySpark",
           "Cloudera ML",
+          "XGBoost",
+          "Scikit-learn",
           "SAS EG",
-          "SQL",
-          "XGBoost"
+          "SQL"
         ],
         "highlights": [
-          "Built and deployed an enterprise GenAI assistant using Azure OpenAI and Cloudera ML, serving 1,000+ active employees and reducing internal query resolution time by 70%.",
-          "Engineered an Isolation Forest anomaly detection model for Gold Loans, flagging branch-level risk patterns tied to \u00a330M+ in projected annual portfolio loss exposure and cutting manual review time by 80% \u2014 BIU Star Award.",
-          "Automated customer Dynamic Risk Rating via XGBoost and Naive Bayes pipelines, reducing manual processing effort by ~40% and aligning the automated risk-rating process with RBI (Reserve Bank of India) regulatory requirements."
+          "Built and deployed an enterprise RAG assistant using Azure OpenAI, FAISS vector search, and Cloudera ML, serving 1,300+ bank employees and reducing internal support query resolution time by 70%.",
+          "Designed an Isolation Forest anomaly detection pipeline for Gold Loans, identifying high-risk branch patterns tied to \u00a330M+ (INR 300Cr+) in potential loss exposure and cutting manual audit time by 80% (Awarded BIU Star Award).",
+          "Automated customer Dynamic Risk Rating via XGBoost and Naive Bayes classification pipelines, reducing manual processing overhead while ensuring full regulatory compliance with RBI guidelines."
         ]
       }
     ],
@@ -82,38 +85,23 @@
       {
         "title": "AI Job Finder Agent & ATS Tailoring Engine",
         "category": "GenAI / Systems",
-        "technologies": [
-          "Python",
-          "Docker",
-          "FastAPI",
-          "React",
-          "LaTeX/Tectonic",
-          "Playwright"
-        ],
-        "url": "https://github.com/AkhilBaja3005/job-finder",
-        "description": "End-to-end job discovery, ATS fit-scoring, and automated resume/cover-letter tailoring with recruiter-review feedback loops; includes a Manifest V3 Chrome extension auto-filling applications across LinkedIn, Lever, Ashby, Workday, and Greenhouse -- cutting job discovery latency by 75%."
+        "technologies": [],
+        "url": "",
+        "description": "Python, Docker, FastAPI, React, LaTeX/Tectonic, Playwright End-to-end job discovery, ATS fit-scoring, and automated resume/cover-letter tailoring with recruiter-review feedback loops; includes a Manifest V3 Chrome extension auto-filling applications across LinkedIn, Lever, Ashby, Workday, and Greenhouse \u2013 cutting job discovery latency by 75%."
       },
       {
-        "title": "AI Study Copilot -- Autonomous Lecture Assistant",
+        "title": "AI Study Copilot \u2013 Autonomous Lecture Assistant",
         "category": "GenAI / Systems",
-        "technologies": [
-          "Python",
-          "Docker",
-          "Telegram Bot API",
-          "Hugging Face"
-        ],
-        "url": "https://github.com/AkhilBaja3005/notes-taker",
-        "description": "Cloud-deployed AI assistant for STEM coursework via a Telegram bot (mobile-to-server I/O): lecture transcription, slide OCR, and contextual Q&A; used a Render reverse proxy to bypass Hugging Face's Telegram API restrictions."
+        "technologies": [],
+        "url": "",
+        "description": "Python, Docker, Telegram Bot API, Hugging Face Cloud-deployed AI assistant for STEM coursework via a Telegram bot (mobile-to-server I/O): lecture transcription, slide OCR, and contextual Q&A; used a Render reverse proxy to bypass Hugging Face\u2019s Telegram API restrictions."
       },
       {
         "title": "Cosmic Ray Segmentation",
-        "category": "Computer Vision / Deep Learning",
-        "technologies": [
-          "Python",
-          "PyTorch"
-        ],
+        "category": "GenAI / Systems",
+        "technologies": [],
         "url": "",
-        "description": "Enhanced the deepCR model for cosmic-ray detection in astronomical images; evaluated U-Net and implemented residual connections, improving pixel-level segmentation precision by 15%."
+        "description": "Python, PyTorch Enhanced the deepCR model for cosmic-ray detection in astronomical images; evaluated U-Net and implemented residual connections, improving pixel-level segmentation precision by 15%."
       }
     ],
     "core_skills": [
@@ -122,8 +110,9 @@
       "Java",
       "SQL",
       "Generative AI",
-      "Large Language Models (LLMs)",
+      "LLMs",
       "RAG",
+      "FAISS",
       "LLM Context Engineering",
       "PyTorch",
       "Scikit-learn",
@@ -159,6 +148,7 @@
         "Generative AI",
         "LLMs",
         "RAG",
+        "FAISS",
         "LLM Context Engineering",
         "PyTorch",
         "Scikit-learn",
@@ -170,6 +160,7 @@
       "Data & Platforms": [
         "PySpark",
         "Azure OpenAI",
+        "FAISS",
         "Cloudera ML",
         "PostgreSQL",
         "RabbitMQ",
