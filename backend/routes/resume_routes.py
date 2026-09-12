@@ -206,6 +206,13 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
         except Exception as file_err:
             print(f"[upload_resume] Could not save guest state file {guest_file}: {file_err}")
 
+        # Automatically sync parsed resume into candidate_profile.json
+        try:
+            from mcp.tools.profile_tools import sync_resume_data_to_profile
+            sync_resume_data_to_profile(data)
+        except Exception as sync_err:
+            print(f"[upload_resume] Note: Could not auto-sync to candidate_profile.json: {sync_err}")
+
         return {
             "message": "Resume uploaded and parsed successfully",
             "data": data,

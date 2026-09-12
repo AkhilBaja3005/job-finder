@@ -19,7 +19,7 @@ from mcp.tools.resume_tools import RESUME_TOOLS_SPEC, handle_tailor_resume_latex
 from mcp.tools.networking_tools import NETWORKING_TOOLS_SPEC, handle_extract_recruiter_profile, handle_generate_outreach_inmail
 from mcp.tools.interview_tools import INTERVIEW_TOOLS_SPEC, handle_generate_interview_pack, handle_company_culture_brief
 from mcp.tools.tracking_tools import TRACKING_TOOLS_SPEC, handle_track_application, handle_list_applications, handle_check_duplicate_application
-from mcp.tools.profile_tools import PROFILE_TOOLS_SPEC, handle_save_candidate_profile, handle_get_candidate_profile
+from mcp.tools.profile_tools import PROFILE_TOOLS_SPEC, handle_save_candidate_profile, handle_get_candidate_profile, handle_sync_candidate_profile_from_resume
 from mcp.tools.autofill_tools import AUTOFILL_TOOLS_SPEC, handle_apply_to_job_browser, handle_pipeline_auto_apply
 
 ALL_TOOLS = (
@@ -52,6 +52,7 @@ HANDLERS = {
     "check_duplicate_application": handle_check_duplicate_application,
     "save_candidate_profile": handle_save_candidate_profile,
     "get_candidate_profile": handle_get_candidate_profile,
+    "sync_candidate_profile_from_resume": handle_sync_candidate_profile_from_resume,
     "apply_to_job_browser": handle_apply_to_job_browser,
     "pipeline_auto_apply": handle_pipeline_auto_apply,
 }

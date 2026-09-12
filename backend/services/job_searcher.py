@@ -5,6 +5,7 @@ import urllib.request
 import re
 import asyncio
 import hashlib
+import inspect
 # pyrefly: ignore [missing-import]
 from bs4 import BeautifulSoup
 from typing import List, Optional, Dict, Any
@@ -96,7 +97,7 @@ def normalize_timeframe(timeframe: Optional[str]) -> str:
     """
     if not timeframe:
         return "48h"
-    t = str(timeframe).strip().lower().replace(" ", "_").replace("-", "_")
+    t = timeframe.strip().lower().replace(" ", "_").replace("-", "_")
     if t in ("24h", "24", "1d", "day", "past_24_hours", "past_24h", "past_1_day", "last_24_hours", "24_hours"):
         return "24h"
     if t in ("48h", "48", "2d", "past_48_hours", "past_48h", "past_2_days", "last_48_hours", "48_hours"):
@@ -205,8 +206,6 @@ Do not wrap in explanatory text. Only return the JSON array."""
                     break
             if raw_text:
                 break
-                print(f"[Direct ATS Search] Model {search_model} failed: {model_err}, trying fallback...")
-                continue
         if not raw_text:
             if all_429:
                 _ats_grounding_quota_exhausted = True
@@ -1024,7 +1023,7 @@ async def find_matching_jobs(
     async def _fetch_query_cluster(q: str):
         async def _safe_run(coro_or_func, *args, default=[], timeout=20):
             try:
-                if asyncio.iscoroutinefunction(coro_or_func):
+                if inspect.iscoroutinefunction(coro_or_func):
                     return await asyncio.wait_for(coro_or_func(*args), timeout=timeout)
                 else:
                     return await asyncio.wait_for(asyncio.to_thread(coro_or_func, *args), timeout=timeout)

@@ -46,9 +46,10 @@ def main():
     # 5. Profile subcommand
     profile_parser = subparsers.add_parser(
         "profile",
-        help="View or inspect candidate profile configuration",
+        help="View, inspect, or auto-sync candidate profile configuration from resume",
     )
     profile_parser.add_argument("--show", action="store_true", help="Display current candidate profile")
+    profile_parser.add_argument("--sync", nargs="?", const="AUTO", default=None, help="Parse and sync profile from a resume file (default: auto-detect master resume)")
 
     args, unknown = parser.parse_known_args()
 
@@ -83,6 +84,18 @@ def main():
         mcp_main()
 
     elif args.subcommand == "profile":
+        if getattr(args, "sync", None):
+            import asyncio
+            from backend.mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
+            resume_arg = None if args.sync == "AUTO" else args.sync
+            res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": resume_arg}))
+            if res.get("success"):
+                print(f"✅ {res.get('message')}")
+                print(f"📊 Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
+            else:
+                print(f"❌ Sync failed: {res.get('error')}")
+            return
+
         import json
         candidate_paths = [
             os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend", "config", "candidate_profile.json")),

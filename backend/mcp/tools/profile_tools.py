@@ -88,6 +88,19 @@ PROFILE_TOOLS_SPEC = [
             "type": "object",
             "properties": {}
         }
+    },
+    {
+        "name": "sync_candidate_profile_from_resume",
+        "description": "Parses a resume file (PDF, DOCX, or LaTeX) and automatically populates candidate details, work experience, education, projects, skills, and summary in candidate_profile.json.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "resume_path": {
+                    "type": "string",
+                    "description": "Path to the resume file to parse. If omitted, automatically detects the master resume."
+                }
+            }
+        }
     }
 ]
 
@@ -106,6 +119,112 @@ def load_profile_data() -> Dict[str, Any]:
         except Exception:
             pass
     return {}
+
+def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Applies structured resume fields into candidate_profile.json, preserving
+    existing demographic / security fields (like portals_password, work_authorization)
+    while refreshing work experience, education, projects, skills, and summary.
+    """
+    current_data = load_profile_data()
+    candidate = current_data.setdefault("candidate", {})
+    search_prefs = current_data.setdefault("search_preferences", {})
+    networking = current_data.setdefault("networking_and_references", {})
+
+    # Core identity
+    if resume_dict.get("name"): candidate["name"] = resume_dict["name"]
+    if resume_dict.get("email"): candidate["email"] = resume_dict["email"]
+    if resume_dict.get("phone"): candidate["phone"] = resume_dict["phone"]
+    if resume_dict.get("location"): candidate["location"] = resume_dict["location"]
+
+    # Links (LinkedIn, GitHub, Portfolio)
+    links = resume_dict.get("links") or []
+    for link in links:
+        link_str = str(link).strip()
+        if "linkedin.com" in link_str and not candidate.get("linkedin"):
+            candidate["linkedin"] = link_str
+        elif "github.com" in link_str and not candidate.get("github"):
+            candidate["github"] = link_str
+        elif ("http" in link_str or ".io" in link_str) and not candidate.get("portfolio"):
+            candidate["portfolio"] = link_str
+
+    # Summary
+    if resume_dict.get("summary"):
+        candidate["experience_summary"] = resume_dict["summary"]
+
+    # Education
+    if resume_dict.get("education"):
+        edu_list = []
+        for e in resume_dict["education"]:
+            edu_entry = {
+                "institution": e.get("institution", ""),
+                "degree": e.get("degree", "") + (f" in {e.get('field_of_study')}" if e.get("field_of_study") else ""),
+                "timeline": f"{e.get('start_date', '')} - {e.get('graduation_date', '')}".strip(" -"),
+                "location": e.get("location", ""),
+            }
+            if e.get("gpa"):
+                edu_entry["cpi"] = str(e["gpa"])
+            if e.get("highlights"):
+                edu_entry["highlights"] = e["highlights"]
+            edu_list.append(edu_entry)
+        candidate["education"] = edu_list
+
+    # Work Experience
+    if resume_dict.get("experience"):
+        exp_list = []
+        for exp in resume_dict["experience"]:
+            technologies = []
+            raw_tech = exp.get("technologies") or ""
+            if isinstance(raw_tech, str) and raw_tech.strip():
+                technologies = [t.strip() for t in raw_tech.split(",") if t.strip()]
+            elif isinstance(raw_tech, list):
+                technologies = raw_tech
+
+            exp_list.append({
+                "company": exp.get("company", ""),
+                "role": exp.get("role", ""),
+                "timeline": f"{exp.get('start_date', '')} – {exp.get('end_date', '')}".strip(" –"),
+                "technologies": technologies,
+                "highlights": exp.get("description", []) if isinstance(exp.get("description"), list) else [str(exp.get("description", ""))]
+            })
+        candidate["work_experience"] = exp_list
+
+    # Projects
+    if resume_dict.get("projects"):
+        proj_list = []
+        for p in resume_dict["projects"]:
+            proj_list.append({
+                "title": p.get("title", ""),
+                "category": "GenAI / Systems",
+                "technologies": p.get("technologies", []) if isinstance(p.get("technologies"), list) else [],
+                "url": p.get("url", ""),
+                "description": " ".join(p.get("description", [])) if isinstance(p.get("description"), list) else str(p.get("description", ""))
+            })
+        candidate["projects"] = proj_list
+
+    # Skills & Skill Categories
+    skills_val = resume_dict.get("skills")
+    if isinstance(skills_val, dict):
+        candidate["skill_categories"] = skills_val
+        all_skills = []
+        for cat_skills in skills_val.values():
+            if isinstance(cat_skills, list):
+                all_skills.extend(cat_skills)
+        candidate["core_skills"] = list(dict.fromkeys(all_skills))
+    elif isinstance(skills_val, list):
+        candidate["core_skills"] = list(dict.fromkeys(skills_val))
+
+    merged = {
+        "candidate": candidate,
+        "search_preferences": search_prefs,
+        "networking_and_references": networking
+    }
+
+    os.makedirs(os.path.dirname(PROFILE_CONFIG_PATH), exist_ok=True)
+    with open(PROFILE_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(merged, f, indent=2)
+
+    return merged
 
 async def handle_save_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
     current_data = load_profile_data()
@@ -166,3 +285,38 @@ async def handle_get_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
         "found": True,
         "profile": data
     }
+
+async def handle_sync_candidate_profile_from_resume(args: Dict[str, Any]) -> Dict[str, Any]:
+    """Parses resume file and writes structured sections into candidate_profile.json."""
+    from services.resume_parser import parse_resume
+
+    resume_path = args.get("resume_path")
+    if not resume_path:
+        # Check master resume fallback
+        try:
+            # pyrefly: ignore [missing-import]
+            from applications_tracker.scheduled_job_scanner import find_master_resume_with_mac_tags  # type: ignore
+            resume_path = find_master_resume_with_mac_tags()
+        except Exception:
+            pass
+
+    if not resume_path or not os.path.exists(resume_path):
+        return {
+            "success": False,
+            "error": f"Resume file not found at '{resume_path}'"
+        }
+
+    structured = parse_resume(resume_path)
+    resume_dict = structured.model_dump()
+    updated_profile = sync_resume_data_to_profile(resume_dict)
+
+    return {
+        "success": True,
+        "message": f"Successfully synced profile from '{resume_path}' into {PROFILE_CONFIG_PATH}",
+        "resume_path": resume_path,
+        "candidate_name": updated_profile.get("candidate", {}).get("name"),
+        "skills_count": len(updated_profile.get("candidate", {}).get("core_skills", [])),
+        "experience_count": len(updated_profile.get("candidate", {}).get("work_experience", [])),
+        "education_count": len(updated_profile.get("candidate", {}).get("education", []))
+    }
+
