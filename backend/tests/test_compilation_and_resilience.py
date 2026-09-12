@@ -28,7 +28,7 @@ def test_compileall_backend_source_files():
 
 
 def test_pyright_type_check():
-    """Runs Pyright static type checker across backend and applications_tracker to ensure 0 type errors."""
+    """Runs Pyright static type checker across all Python project source directories (backend, applications_tracker, job_finder) to guarantee 0 type errors."""
     import subprocess
     import shutil
     pyright_bin = shutil.which("pyright") or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "venv", "bin", "pyright")
@@ -37,12 +37,12 @@ def test_pyright_type_check():
 
     root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     result = subprocess.run(
-        [pyright_bin, "backend/", "applications_tracker/"],
+        [pyright_bin, "backend/", "applications_tracker/", "job_finder/"],
         cwd=root_dir,
         capture_output=True,
         text=True
     )
-    assert result.returncode == 0, f"Pyright found type errors:\n{result.stdout}\n{result.stderr}"
+    assert result.returncode == 0, f"Pyright found type errors across project source files:\n{result.stdout}\n{result.stderr}"
 
 
 @pytest.mark.asyncio
