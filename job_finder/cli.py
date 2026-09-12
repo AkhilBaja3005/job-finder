@@ -5,6 +5,19 @@ import sys
 import os
 import json
 
+# Ensure .env from active workspace or current directory is loaded immediately
+try:
+    from dotenv import load_dotenv
+    for _env_candidate in [
+        os.path.join(os.getcwd(), ".env"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+    ]:
+        if os.path.exists(_env_candidate):
+            load_dotenv(_env_candidate)
+    load_dotenv()
+except Exception:
+    pass
+
 # Ensure backend root is always on sys.path for CLI execution across repo and installed wheel
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for candidate in [

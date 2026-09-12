@@ -9,6 +9,16 @@ from typing import Dict, Any, Optional
 # pyrefly: ignore [missing-import]
 from config.constants import resolve_workspace_root
 
+try:
+    from dotenv import load_dotenv
+    ws_env = os.path.join(resolve_workspace_root(), ".env")
+    if os.path.exists(ws_env):
+        load_dotenv(ws_env)
+    load_dotenv(os.path.join(os.getcwd(), ".env"))
+    load_dotenv()
+except Exception:
+    pass
+
 def get_profile_config_path() -> str:
     """
     Finds the candidate_profile.json to read.
