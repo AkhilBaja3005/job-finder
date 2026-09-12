@@ -6,11 +6,12 @@ import threading
 import asyncio
 from typing import Optional, Tuple, Any, Dict, List
 from services.auth import get_user_by_token
+from config.constants import resolve_workspace_root, get_output_dir
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = resolve_workspace_root()
 
-# Hugging Face Persistent Storage Mount Support:
-# When Persistent Storage is enabled in Space settings, HF mounts disk volume at /data
+# Persistent Storage Root:
+# If HF persistent volume (/data) is mounted, use it; otherwise use resolved workspace root.
 if os.path.exists("/data") and os.access("/data", os.W_OK):
     STORAGE_ROOT = "/data"
 else:
@@ -19,6 +20,7 @@ else:
 UPLOAD_DIR = os.path.join(STORAGE_ROOT, "uploads")
 OUTPUT_DIR = os.path.join(STORAGE_ROOT, "output")
 USER_DATA_DIR = os.path.join(STORAGE_ROOT, "user_data")
+
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)

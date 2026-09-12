@@ -151,37 +151,46 @@ def main():
                 print(f"❌ Sync failed: {res.get('error')}")
             return
 
-        candidate_paths = [
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend", "config", "candidate_profile.json")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend", "config", "candidate_profile.example.json")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "candidate_profile.json")),
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "candidate_profile.json")),
-        ]
-        found = False
-        for path in candidate_paths:
-            if os.path.exists(path):
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    print(f"Profile: {path}")
-                    print(json.dumps(data, indent=2))
-                found = True
-                break
-        if not found:
-            print("Candidate profile configuration file not found.")
+        from backend.mcp.tools.profile_tools import get_profile_config_path, load_profile_data
+        prof_path = get_profile_config_path()
+        data = load_profile_data()
+        if data:
+            print(f"Profile: {prof_path}")
+            print(json.dumps(data, indent=2))
+        else:
+            print(f"Candidate profile not found. Run `job-finder setup` to initialize one at: {prof_path}")
+
 
     elif args.subcommand == "setup":
         print("\n🚀 ========================================================")
         print("          JOB FINDER AI - QUICK SETUP WIZARD")
         print("========================================================\n")
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        env_path = os.path.join(repo_root, ".env")
-        example_env = os.path.join(repo_root, ".env.example")
-        profile_path = os.path.join(repo_root, "backend", "config", "candidate_profile.json")
-        example_profile = os.path.join(repo_root, "backend", "config", "candidate_profile.example.json")
+        from config.constants import resolve_workspace_root
+        from backend.mcp.tools.profile_tools import get_profile_config_path, get_profile_save_path
 
-        # 1. Initialize .env
+        ws = resolve_workspace_root()
+        env_path = os.path.join(ws, ".env")
+        
+        # Look for template .env.example
+        pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        example_env_candidates = [
+            os.path.join(ws, ".env.example"),
+            os.path.join(pkg_root, ".env.example"),
+            os.path.join(pkg_root, "backend", ".env.example"),
+        ]
+        example_env = next((p for p in example_env_candidates if os.path.exists(p)), None)
+
+        profile_path = get_profile_save_path()
+        example_profile_candidates = [
+            os.path.join(pkg_root, "backend", "config", "candidate_profile.example.json"),
+            os.path.join(pkg_root, "config", "candidate_profile.example.json"),
+            os.path.join(ws, "backend", "config", "candidate_profile.example.json"),
+        ]
+        example_profile = next((p for p in example_profile_candidates if os.path.exists(p)), None)
+
+        # 1. Initialize .env in workspace root
         if not os.path.exists(env_path):
-            if os.path.exists(example_env):
+            if example_env and os.path.exists(example_env):
                 import shutil
                 shutil.copy2(example_env, env_path)
                 print(f"📄 Initialized .env configuration from template: {env_path}")
@@ -198,12 +207,15 @@ def main():
                 f.write(f"\nGEMINI_API_KEY={args.api_key}\n")
             print("🔑 Configured GEMINI_API_KEY into .env")
 
-        # 2. Initialize candidate_profile.json
-        if not os.path.exists(profile_path) and os.path.exists(example_profile):
+        # 2. Initialize candidate_profile.json in workspace root
+        if not os.path.exists(profile_path) and example_profile and os.path.exists(example_profile):
             import shutil
             os.makedirs(os.path.dirname(profile_path), exist_ok=True)
             shutil.copy2(example_profile, profile_path)
-            print(f"👤 Initialized candidate_profile.json from template: {profile_path}")
+            print(f"👤 Initialized candidate_profile.json in workspace: {profile_path}")
+        elif os.path.exists(profile_path):
+            print(f"✓ Found existing candidate profile at: {profile_path}")
+
 
         # 3. Resume sync if provided or present
         resume_target = args.resume

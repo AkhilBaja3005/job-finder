@@ -7,11 +7,65 @@ import os
 import json
 from typing import Dict, Any, Optional
 
-PROFILE_CONFIG_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "config",
-    "candidate_profile.json"
-)
+from config.constants import resolve_workspace_root
+
+def get_profile_config_path() -> str:
+    """
+    Finds the candidate_profile.json to read.
+    Prioritizes the active workspace directory so user profiles are never tied to .venv.
+    """
+    custom = os.getenv("CANDIDATE_PROFILE_PATH")
+    if custom and os.path.exists(custom):
+        return custom
+
+    ws = resolve_workspace_root()
+    ws_candidates = [
+        os.path.join(ws, "candidate_profile.json"),
+        os.path.join(ws, "backend", "config", "candidate_profile.json"),
+        os.path.join(ws, "config", "candidate_profile.json"),
+    ]
+    for p in ws_candidates:
+        if os.path.exists(p):
+            return p
+
+    # Fallback to package template / defaults
+    pkg_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    pkg_candidates = [
+        os.path.join(pkg_root, "config", "candidate_profile.json"),
+        os.path.join(pkg_root, "backend", "config", "candidate_profile.json"),
+        os.path.join(pkg_root, "config", "candidate_profile.example.json"),
+        os.path.join(pkg_root, "backend", "config", "candidate_profile.example.json"),
+    ]
+    for p in pkg_candidates:
+        if os.path.exists(p):
+            return p
+
+    return os.path.join(ws, "candidate_profile.json")
+
+def get_profile_save_path() -> str:
+    """
+    Returns the target path to save candidate profile updates.
+    Always writes to the active workspace to prevent modifying library files in .venv.
+    """
+    custom = os.getenv("CANDIDATE_PROFILE_PATH")
+    if custom:
+        return custom
+
+    ws = resolve_workspace_root()
+    # If workspace has backend/config/candidate_profile.json (e.g. source repo), save there
+    ws_backend_cfg = os.path.join(ws, "backend", "config", "candidate_profile.json")
+    if os.path.exists(ws_backend_cfg):
+        return ws_backend_cfg
+    ws_cfg = os.path.join(ws, "candidate_profile.json")
+    if os.path.exists(ws_cfg):
+        return ws_cfg
+    # If in source repo root
+    if os.path.isdir(os.path.join(ws, "backend", "config")):
+        return ws_backend_cfg
+    return ws_cfg
+
+PROFILE_CONFIG_PATH = get_profile_config_path()
+
 
 PROFILE_TOOLS_SPEC = [
     {
@@ -105,13 +159,14 @@ PROFILE_TOOLS_SPEC = [
 ]
 
 def load_profile_data() -> Dict[str, Any]:
-    if os.path.exists(PROFILE_CONFIG_PATH):
+    cfg_path = get_profile_config_path()
+    if os.path.exists(cfg_path):
         try:
-            with open(PROFILE_CONFIG_PATH, "r", encoding="utf-8") as f:
+            with open(cfg_path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
-    example_path = PROFILE_CONFIG_PATH.replace("candidate_profile.json", "candidate_profile.example.json")
+    example_path = cfg_path.replace("candidate_profile.json", "candidate_profile.example.json")
     if os.path.exists(example_path):
         try:
             with open(example_path, "r", encoding="utf-8") as f:
@@ -119,6 +174,7 @@ def load_profile_data() -> Dict[str, Any]:
         except Exception:
             pass
     return {}
+
 
 def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -220,8 +276,9 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
         "networking_and_references": networking
     }
 
-    os.makedirs(os.path.dirname(PROFILE_CONFIG_PATH), exist_ok=True)
-    with open(PROFILE_CONFIG_PATH, "w", encoding="utf-8") as f:
+    save_path = get_profile_save_path()
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2)
 
     return merged
@@ -264,9 +321,11 @@ async def handle_save_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
         "networking_and_references": networking
     }
 
-    os.makedirs(os.path.dirname(PROFILE_CONFIG_PATH), exist_ok=True)
-    with open(PROFILE_CONFIG_PATH, "w", encoding="utf-8") as f:
+    save_path = get_profile_save_path()
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2)
+
 
     return {
         "success": True,

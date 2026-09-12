@@ -13,6 +13,63 @@ from typing import List, Dict, Optional, Tuple, Any
 APP_VERSION = "3.1.0"
 APP_NAME = "AI Job Finder Agent"
 
+# ── Workspace & User Data Root Resolution ─────────────────────────────────────────
+def resolve_workspace_root() -> str:
+    """
+    Determines the workspace root for candidate data, tracker history, and outputs.
+    Guarantees user data is NEVER saved inside .venv, site-packages, or python library folders.
+    Order of precedence:
+      1. Explicit JOB_FINDER_ROOT environment variable (if set and not empty).
+      2. Hugging Face /data persistent mount (if present and writable).
+      3. Current working directory (os.getcwd()), IF the package is executing from inside
+         site-packages, dist-packages, or a virtual environment (.venv/venv).
+      4. Repository root (if running from source checkout).
+    """
+    explicit = os.getenv("JOB_FINDER_ROOT")
+    if explicit and explicit.strip():
+        return os.path.abspath(explicit.strip())
+
+    # Hugging Face Spaces persistent volume
+    if os.path.exists("/data") and os.access("/data", os.W_OK):
+        return "/data"
+
+    # Inspect location of this file
+    this_file = os.path.abspath(__file__)
+    parts = this_file.split(os.sep)
+    is_installed_pkg = any(p in parts for p in ("site-packages", "dist-packages", ".venv", "venv"))
+
+    if is_installed_pkg:
+        # Running as installed package: save user data to current working directory
+        return os.path.abspath(os.getcwd())
+
+    # Running from source checkout: backend/config/constants.py -> backend -> repo root
+    repo_candidate = os.path.dirname(os.path.dirname(os.path.dirname(this_file)))
+    return repo_candidate
+
+def get_applications_tracker_dir() -> str:
+    """Returns directory path for applications tracking ledger and tailored resumes."""
+    ws = resolve_workspace_root()
+    d = os.path.join(ws, "applications_tracker")
+    return d
+
+def get_tailored_resumes_dir() -> str:
+    """Returns directory path for generated tailored resumes (.pdf and .tex)."""
+    t_dir = get_applications_tracker_dir()
+    d = os.path.join(t_dir, "tailored_resumes")
+    return d
+
+def get_tracker_csv_path() -> str:
+    """Returns path to the job applications CSV spreadsheet."""
+    t_dir = get_applications_tracker_dir()
+    return os.path.join(t_dir, "job_applications_tracker.csv")
+
+def get_output_dir() -> str:
+    """Returns output directory for resume outputs and per-user session history."""
+    ws = resolve_workspace_root()
+    d = os.path.join(ws, "output")
+    return d
+
+
 # ── Fallback Model Catalog (Guaranteed Flash Models, Strictly No Pro) ────────────
 # Used if offline or prior to API discovery
 DEFAULT_FAST_LITE_MODELS: List[str] = [

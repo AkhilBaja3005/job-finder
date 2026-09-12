@@ -111,10 +111,16 @@ AUTOFILL_TOOLS_SPEC = [
 ]
 
 
+from config.constants import (
+    resolve_workspace_root,
+    get_applications_tracker_dir,
+    get_tailored_resumes_dir,
+    get_output_dir
+)
+
+
 def _get_base_dirs():
-    # File is at backend/mcp/tools/autofill_tools.py -> dirname x 4 = project root
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    return base_dir
+    return resolve_workspace_root()
 
 
 def _get_default_resume_path() -> Optional[str]:
@@ -123,13 +129,14 @@ def _get_default_resume_path() -> Optional[str]:
         return custom
 
     base_dir = _get_base_dirs()
+    tailored_dir = get_tailored_resumes_dir()
+    out_dir = get_output_dir()
     candidate_resumes = [
-        os.path.join(base_dir, "output", "master_resume.pdf"),
-        os.path.join(base_dir, "applications_tracker", "tailored_resumes", "master_resume.pdf"),
+        os.path.join(out_dir, "master_resume.pdf"),
+        os.path.join(tailored_dir, "master_resume.pdf"),
         os.path.join(base_dir, "tests", "fixtures", "sample_resume.pdf"),
     ]
     # Check any subfolder in output directory
-    out_dir = os.path.join(base_dir, "backend", "output")
     if os.path.exists(out_dir):
         for entry in os.listdir(out_dir):
             sub_pdf = os.path.join(out_dir, entry, "master_resume.pdf")
@@ -140,6 +147,7 @@ def _get_default_resume_path() -> Optional[str]:
         if os.path.exists(p):
             return p
     return None
+
 
 
 def _get_master_latex_source() -> Optional[str]:
@@ -374,7 +382,7 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
     processed_jobs = []
     applied_count = 0
     base_dir = _get_base_dirs()
-    tailored_dir = os.path.join(base_dir, "applications_tracker", "tailored_resumes")
+    tailored_dir = get_tailored_resumes_dir()
     master_resume_pdf = _get_default_resume_path()
 
     for idx, job in enumerate(jobs, start=1):

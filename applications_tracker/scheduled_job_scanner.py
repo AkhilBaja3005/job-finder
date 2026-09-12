@@ -120,24 +120,42 @@ def normalize_job_url(u: Optional[str]) -> str:
             return f"linkedin.com/jobs/view/{m.group(1)}"
     return raw.split("?")[0].rstrip("/").lower()
 
-JOB_FINDER_ROOT = os.getenv(
-    "JOB_FINDER_ROOT",
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-BACKEND_DIR = os.path.join(JOB_FINDER_ROOT, "backend")
-TRACKER_DIR = os.path.join(JOB_FINDER_ROOT, "applications_tracker")
-RESUMES_DIR = os.path.join(TRACKER_DIR, "tailored_resumes")
-CSV_PATH = os.path.join(TRACKER_DIR, "job_applications_tracker.csv")
-
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
-
 # pyrefly: ignore [missing-import]
 try:
     from dotenv import load_dotenv  # type: ignore
-    load_dotenv(os.path.join(BACKEND_DIR, ".env"))
+    load_dotenv()
+    if os.path.exists(".env"):
+        load_dotenv(".env")
 except ImportError:
     pass
+
+# Ensure backend directory is discoverable
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+_repo_candidate = os.path.dirname(_this_dir)
+for candidate_backend in [
+    os.path.join(_repo_candidate, "backend"),
+    os.path.join(os.getcwd(), "backend"),
+    _this_dir
+]:
+    if os.path.isdir(candidate_backend) and candidate_backend not in sys.path:
+        sys.path.insert(0, candidate_backend)
+
+from config.constants import (
+    resolve_workspace_root,
+    get_applications_tracker_dir,
+    get_tailored_resumes_dir,
+    get_tracker_csv_path
+)
+
+JOB_FINDER_ROOT = resolve_workspace_root()
+BACKEND_DIR = os.path.join(JOB_FINDER_ROOT, "backend")
+TRACKER_DIR = get_applications_tracker_dir()
+RESUMES_DIR = get_tailored_resumes_dir()
+CSV_PATH = get_tracker_csv_path()
+
+if BACKEND_DIR not in sys.path and os.path.isdir(BACKEND_DIR):
+    sys.path.insert(0, BACKEND_DIR)
+
 
 # Core backend imports
 # pyrefly: ignore [missing-import]
@@ -333,6 +351,7 @@ async def record_to_supabase_or_csv(record_data: dict):
 
     # Record to local CSV ledger
     try:
+        os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
         file_exists = os.path.exists(CSV_PATH)
         csv_headers = [
             "Company", "Job Title", "Location", "Platform", "Posted Time",

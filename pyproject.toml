@@ -4,9 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "job-finder-ai"
-version = "0.1.2"
+version = "0.1.3"
 description = "Autonomous career agent, ATS resume tailor, and job search copilot."
 readme = "README_PYPI.md"
+
 license = { text = "MIT" }
 authors = [
     { name = "Akhil Baja", email = "akhilbaja.work@gmail.com" }

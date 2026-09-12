@@ -18,13 +18,11 @@ from datetime import datetime, timezone
 from typing import Optional, Any, Dict, List, Tuple
 
 from services.auth import supabase_request, get_user_by_token
+from config.constants import get_output_dir, resolve_workspace_root
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HF_DATA_DIR = "/data"
-if os.path.exists(HF_DATA_DIR) and os.access(HF_DATA_DIR, os.W_OK):
-    OUTPUT_DIR = os.path.join(HF_DATA_DIR, "output")
-else:
-    OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+BASE_DIR = resolve_workspace_root()
+OUTPUT_DIR = get_output_dir()
+
 
 # Cap on entries kept in the local JSON fallback file, so a long-running guest
 # session can't grow this file without bound.
