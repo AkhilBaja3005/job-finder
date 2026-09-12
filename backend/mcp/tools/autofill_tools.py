@@ -194,15 +194,20 @@ def build_and_compile_tailored_pdf(
     base_dir = _get_base_dirs()
 
     # Ensure resume.cls is available in the target build directory
+    _this_file = os.path.abspath(__file__)
+    pkg_root = os.path.dirname(os.path.dirname(os.path.dirname(_this_file)))
     cls_candidates = [
-        os.path.join(base_dir, "backend", "assets", "resume.cls"),
+        os.path.join(pkg_root, "assets", "resume.cls"),
         os.path.join(base_dir, "assets", "resume.cls"),
+        os.path.join(base_dir, "backend", "assets", "resume.cls"),
         os.path.join(base_dir, "backend", "uploads", "resume.cls"),
+        os.path.join(out_dir, "resume.cls"),
     ]
     for c in cls_candidates:
-        if os.path.exists(c):
+        if os.path.exists(c) and c != os.path.join(out_dir, "resume.cls"):
             shutil.copy2(c, os.path.join(out_dir, "resume.cls"))
             break
+
 
     skills_to_inject = [s.strip() for s in (missing_skills or []) if s and s.strip()]
     if not skills_to_inject and jd_text:

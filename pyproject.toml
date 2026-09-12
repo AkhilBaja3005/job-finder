@@ -4,9 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "job-finder-ai"
-version = "0.1.4"
+version = "0.1.5"
 description = "Autonomous career agent, ATS resume tailor, and job search copilot."
 readme = "README_PYPI.md"
+
 
 
 license = { text = "MIT" }
@@ -102,6 +103,7 @@ Repository = "https://github.com/AkhilBaja3005/job-finder.git"
 packages = [
     "job_finder",
     "backend",
+    "backend.assets",
     "backend.config",
     "backend.mcp",
     "backend.mcp.tools",
@@ -112,6 +114,7 @@ packages = [
     "backend.static_frontend.assets",
     "applications_tracker",
 ]
+
 
 [tool.setuptools.package-data]
 "*" = ["*.json", "*.cls", "*.tex", "*.md", "*.yaml", "*.yml", "*.html", "*.css", "*.js", "*.svg"]
