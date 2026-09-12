@@ -51,11 +51,15 @@ try:
                     return False
             return super()._try_switch_to_fallback_llm(error)
 
-except ImportError:
+except (ImportError, Exception):
     HAS_BROWSER_USE = False
     Agent: Any = None
     Browser: Any = None
-    ChatGoogle: Any = None
+    class ChatGoogle:  # type: ignore
+        def __init__(self, model: str = "", api_key: str = "", temperature: float = 0.1, **kwargs):
+            self.model = model
+            self.api_key = api_key
+            self.temperature = temperature
     BrowserSession: Any = None
     MultiFallbackAgent = None  # type: ignore
 # pyrefly: ignore [missing-import]

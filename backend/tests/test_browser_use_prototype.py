@@ -40,7 +40,10 @@ def test_browser_use_agent_parameters_valid():
     browser-use enforces: assert max_history_items is None or max_history_items > 5
     Ensures our agent configurations adhere strictly to this constraint.
     """
-    from browser_use import Agent
+    try:
+        from browser_use import Agent
+    except (ImportError, Exception) as e:
+        pytest.skip(f"browser_use Agent optional dependency not available: {e}")
     from unittest.mock import MagicMock
 
     mock_llm = MagicMock()

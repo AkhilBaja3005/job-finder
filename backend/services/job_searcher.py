@@ -1151,6 +1151,7 @@ async def find_matching_jobs(
                     return await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
                 else:
                     try:
+                        # pyrefly: ignore [missing-import]
                         from playwright.async_api import async_playwright
                         async with async_playwright() as p:
                             b = await p.chromium.launch(headless=True)
