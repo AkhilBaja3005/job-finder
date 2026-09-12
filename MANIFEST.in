@@ -1,0 +1,10 @@
+# Exclude local untracked personal profile & secrets
+exclude backend/config/candidate_profile.json
+exclude candidate_profile.json
+exclude .env
+exclude .env.*
+recursive-exclude * candidate_profile.json
+recursive-exclude * .env
+recursive-exclude applications_tracker *.csv
+recursive-exclude applications_tracker/logs *
+recursive-exclude applications_tracker/tailored_resumes *

@@ -1,0 +1,26 @@
+#!/bin/sh
+# Git pre-push hook: Runs the distribution verification suite
+# ONLY when pushing directly to the 'main' branch.
+
+is_pushing_to_main=false
+while read local_ref local_oid remote_ref remote_oid; do
+    if [ "$remote_ref" = "refs/heads/main" ]; then
+        is_pushing_to_main=true
+        break
+    fi
+done
+
+if [ "$is_pushing_to_main" = "true" ]; then
+    echo "🛡️  Target is 'main': Running Job Finder AI pre-push distribution verification..."
+    python3 scripts/verify_distribution.py
+    STATUS=$?
+    if [ $STATUS -ne 0 ]; then
+        echo "❌ Pre-push verification failed! Push to main aborted."
+        exit 1
+    fi
+    echo "✅ Pre-push verification passed successfully!"
+else
+    echo "⚡ Pushing to non-main branch. Skipping full distribution checks."
+fi
+
+exit 0

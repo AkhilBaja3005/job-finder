@@ -159,3 +159,54 @@ def test_browser_use_task_prompt_portal_password_handling():
         prompt_b = build_application_task_prompt("https://workday.com/job/789", profile_no_pass)
         assert "CustomSecurePassword999!" not in prompt_b
         assert "Look for 'Sign in with Google' first" in prompt_b
+
+
+def test_email_notifications_applied_and_failed():
+    """Validates that separate emails are formatted and dispatched for applied and failed applications."""
+    from applications_tracker.scheduled_job_scanner import (
+        notify_user_of_applied_applications,
+        notify_user_of_failed_applications
+    )
+
+    applied_jobs = [
+        {
+            "title": "Staff AI Engineer",
+            "company": "DeepMind",
+            "url": "https://deepmind.google/careers/101",
+            "ats_score": 94
+        }
+    ]
+
+    failed_jobs = [
+        {
+            "title": "Machine Learning Engineer",
+            "company": "Acme Corp",
+            "url": "https://acme.com/jobs/202",
+            "reason": "Missing required citizenship dropdown"
+        }
+    ]
+
+    with patch("applications_tracker.scheduled_job_scanner.send_notification_email", return_value=True) as mock_send:
+        # 1. Test applied email notification
+        sent_applied = notify_user_of_applied_applications(applied_jobs, to_email="candidate@example.com")
+        assert sent_applied is True
+        assert mock_send.call_count == 1
+        args, kwargs = mock_send.call_args
+        assert kwargs["to_email"] == "candidate@example.com"
+        assert "Submitted Successfully" in kwargs["subject"]
+        assert "Staff AI Engineer" in kwargs["text_body"]
+        assert "DeepMind" in kwargs["text_body"]
+        assert "94% ATS" in kwargs["html_body"]
+
+        mock_send.reset_mock()
+
+        # 2. Test failed email notification
+        sent_failed = notify_user_of_failed_applications(failed_jobs, to_email="candidate@example.com")
+        assert sent_failed is True
+        assert mock_send.call_count == 1
+        args, kwargs = mock_send.call_args
+        assert kwargs["to_email"] == "candidate@example.com"
+        assert "User Review Needed" in kwargs["subject"]
+        assert "Machine Learning Engineer" in kwargs["text_body"]
+        assert "Missing required citizenship dropdown" in kwargs["text_body"]
+

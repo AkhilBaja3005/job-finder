@@ -187,21 +187,42 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
     search_prefs = current_data.setdefault("search_preferences", {})
     networking = current_data.setdefault("networking_and_references", {})
 
-    # Core identity
-    if resume_dict.get("name") and not candidate.get("name"): candidate["name"] = resume_dict["name"]
-    if resume_dict.get("email") and not candidate.get("email"): candidate["email"] = resume_dict["email"]
-    if resume_dict.get("phone") and not candidate.get("phone"): candidate["phone"] = resume_dict["phone"]
-    if resume_dict.get("location") and not candidate.get("location"): candidate["location"] = resume_dict["location"]
+    # Core identity — parsed resume values always supersede empty values or template placeholders
+    placeholder_names = {"jane doe", "john doe", "candidate name", "your name"}
+    placeholder_emails = {"jane.doe@example.com", "candidate@example.com", "email@example.com"}
+    placeholder_locations = {"ec1a 1bb"}
+
+    if resume_dict.get("name"):
+        cur_name = (candidate.get("name") or "").strip().lower()
+        if not candidate.get("name") or cur_name in placeholder_names:
+            candidate["name"] = resume_dict["name"]
+
+    if resume_dict.get("email"):
+        cur_email = (candidate.get("email") or "").strip().lower()
+        if not candidate.get("email") or cur_email in placeholder_emails:
+            candidate["email"] = resume_dict["email"]
+
+    if resume_dict.get("phone"):
+        cur_phone = (candidate.get("phone") or "").strip()
+        if not candidate.get("phone") or "+44 7123" in cur_phone:
+            candidate["phone"] = resume_dict["phone"]
+
+    if resume_dict.get("location") and not candidate.get("location"):
+        candidate["location"] = resume_dict["location"]
 
     # Links (LinkedIn, GitHub, Portfolio)
     links = resume_dict.get("links") or []
     for link in links:
         link_str = str(link).strip()
-        if "linkedin.com" in link_str and not candidate.get("linkedin"):
+        cur_linkedin = (candidate.get("linkedin") or "").lower()
+        cur_github = (candidate.get("github") or "").lower()
+        cur_portfolio = (candidate.get("portfolio") or "").lower()
+
+        if "linkedin.com" in link_str and (not candidate.get("linkedin") or "janedoe" in cur_linkedin):
             candidate["linkedin"] = link_str
-        elif "github.com" in link_str and not candidate.get("github"):
+        elif "github.com" in link_str and (not candidate.get("github") or "janedoe" in cur_github):
             candidate["github"] = link_str
-        elif ("http" in link_str or ".io" in link_str) and not candidate.get("portfolio"):
+        elif ("http" in link_str or ".io" in link_str) and (not candidate.get("portfolio") or "janedoe" in cur_portfolio):
             candidate["portfolio"] = link_str
 
     # Summary
@@ -212,9 +233,16 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
     if resume_dict.get("education"):
         edu_list = []
         for e in resume_dict["education"]:
+            deg = (e.get("degree") or "").strip()
+            field = (e.get("field_of_study") or "").strip()
+            if field and field.lower() not in deg.lower():
+                deg_full = f"{deg} in {field}" if deg else field
+            else:
+                deg_full = deg
+
             edu_entry = {
                 "institution": e.get("institution", ""),
-                "degree": e.get("degree", "") + (f" in {e.get('field_of_study')}" if e.get("field_of_study") else ""),
+                "degree": deg_full,
                 "timeline": f"{e.get('start_date', '')} - {e.get('graduation_date', '')}".strip(" -"),
                 "location": e.get("location", ""),
             }
@@ -249,12 +277,26 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
     if resume_dict.get("projects"):
         proj_list = []
         for p in resume_dict["projects"]:
+            raw_tech = p.get("technologies") or []
+            if isinstance(raw_tech, str):
+                technologies = [t.strip() for t in raw_tech.split(",") if t.strip()]
+            elif isinstance(raw_tech, list):
+                technologies = raw_tech
+            else:
+                technologies = []
+
+            desc = p.get("description", "")
+            if isinstance(desc, list):
+                desc_str = " ".join(desc)
+            else:
+                desc_str = str(desc)
+
             proj_list.append({
                 "title": p.get("title", ""),
-                "category": "GenAI / Systems",
-                "technologies": p.get("technologies", []) if isinstance(p.get("technologies"), list) else [],
+                "category": p.get("category") or "GenAI / Systems",
+                "technologies": technologies,
                 "url": p.get("url", ""),
-                "description": " ".join(p.get("description", [])) if isinstance(p.get("description"), list) else str(p.get("description", ""))
+                "description": desc_str
             })
         candidate["projects"] = proj_list
 

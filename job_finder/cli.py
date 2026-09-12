@@ -203,11 +203,64 @@ def main():
         else:
             print(f"✓ Found existing .env at {env_path}")
 
-        # Inject GEMINI_API_KEY if provided
+        # Configure GEMINI_API_KEY
+        existing_key = os.getenv("GEMINI_API_KEY")
         if args.api_key:
             with open(env_path, "a", encoding="utf-8") as f:
                 f.write(f"\nGEMINI_API_KEY={args.api_key}\n")
+            os.environ["GEMINI_API_KEY"] = args.api_key
             print("🔑 Configured GEMINI_API_KEY into .env")
+        elif not existing_key:
+            if sys.stdin.isatty():
+                print("\n🔑 Gemini API Key is required for resume parsing, ATS scoring & browser automation.")
+                print("   (Get a free key at https://aistudio.google.com/)")
+                try:
+                    user_key = input("  Enter your GEMINI_API_KEY: ").strip()
+                    if user_key:
+                        with open(env_path, "a", encoding="utf-8") as f:
+                            f.write(f"\nGEMINI_API_KEY={user_key}\n")
+                        os.environ["GEMINI_API_KEY"] = user_key
+                        print("✅ GEMINI_API_KEY saved to .env")
+                except (EOFError, KeyboardInterrupt):
+                    print("\nSkipping API key prompt.")
+            else:
+                print("⚠️  GEMINI_API_KEY is not set in environment or .env. You can pass it via `job-finder setup --api-key <KEY>`")
+        else:
+            masked = existing_key[:4] + "..." + existing_key[-4:] if len(existing_key) > 8 else "***"
+            print(f"🔑 Gemini API Key configured ({masked})")
+
+        # Configure SMTP Notifications (Optional)
+        existing_smtp_user = os.getenv("SMTP_USER")
+        if sys.stdin.isatty():
+            if not existing_smtp_user:
+                print("\n📧 Email Notifications for Applied & Review Alerts (Optional)")
+                try:
+                    enable_smtp = input("  Would you like to configure email alerts for submitted & failed jobs? (y/N): ").strip().lower()
+                    if enable_smtp in ("y", "yes"):
+                        smtp_user = input("  Enter your SMTP email address (e.g. yourname@gmail.com): ").strip()
+                        if smtp_user:
+                            smtp_pass = input("  Enter your SMTP App Password: ").strip()
+                            # Update .env
+                            with open(env_path, "r", encoding="utf-8") as ef:
+                                lines = ef.readlines()
+                            new_lines = []
+                            for line in lines:
+                                if line.startswith("SMTP_USER="):
+                                    new_lines.append(f"SMTP_USER={smtp_user}\n")
+                                elif line.startswith("SMTP_PASSWORD="):
+                                    new_lines.append(f"SMTP_PASSWORD={smtp_pass}\n")
+                                elif line.startswith("EMAIL_FROM="):
+                                    new_lines.append(f"EMAIL_FROM={smtp_user}\n")
+                                else:
+                                    new_lines.append(line)
+                            with open(env_path, "w", encoding="utf-8") as ef:
+                                ef.writelines(new_lines)
+                            os.environ["SMTP_USER"] = smtp_user
+                            os.environ["SMTP_PASSWORD"] = smtp_pass
+                            os.environ["EMAIL_FROM"] = smtp_user
+                            print("✅ SMTP email notifications configured in .env")
+                except (EOFError, KeyboardInterrupt):
+                    print("\nSkipping email configuration.")
 
         # 2. Initialize candidate_profile.json in workspace root
         if not os.path.exists(profile_path) and example_profile and os.path.exists(example_profile):

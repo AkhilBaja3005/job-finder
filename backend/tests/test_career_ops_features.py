@@ -164,6 +164,8 @@ def test_sync_resume_data_to_profile(tmp_path):
         "projects": [
             {
                 "title": "FastKafka",
+                "technologies": ["Go", "Kafka", "Docker"],
+                "url": "https://github.com/janetester/fastkafka",
                 "description": ["Lightweight Kafka consumer in Go."]
             }
         ]
@@ -181,5 +183,8 @@ def test_sync_resume_data_to_profile(tmp_path):
         assert result["candidate"]["work_experience"][0]["company"] == "DataCorp"
         assert len(result["candidate"]["education"]) == 1
         assert result["candidate"]["education"][0]["institution"] == "University of Edinburgh"
+        assert len(result["candidate"]["projects"]) == 1
+        assert result["candidate"]["projects"][0]["technologies"] == ["Go", "Kafka", "Docker"]
+        assert result["candidate"]["projects"][0]["url"] == "https://github.com/janetester/fastkafka"
 
 

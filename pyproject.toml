@@ -117,5 +117,8 @@ packages = [
 
 
 [tool.setuptools.package-data]
-"*" = ["*.json", "*.cls", "*.tex", "*.md", "*.yaml", "*.yml", "*.html", "*.css", "*.js", "*.svg"]
+"*" = ["*.cls", "*.tex", "*.md", "*.yaml", "*.yml", "*.html", "*.css", "*.js", "*.svg", "candidate_profile.example.json"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["candidate_profile.json", ".env", "*.csv"]
 

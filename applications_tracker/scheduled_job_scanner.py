@@ -514,6 +514,96 @@ def notify_user_of_failed_applications(failed_jobs: list, to_email: Optional[str
         return False
 
 
+def notify_user_of_applied_applications(applied_jobs: list, to_email: Optional[str] = None) -> bool:
+    """
+    Dispatches a confirmation email alert to the user listing all applications successfully submitted.
+    """
+    if not applied_jobs:
+        return False
+
+    recipient = to_email or os.getenv("NOTIFY_EMAIL") or "akhilbaja.work@gmail.com"
+    subject = f"🚀 Job Finder Success: {len(applied_jobs)} Application(s) Submitted Successfully!"
+
+    # Build plain text summary
+    cand_name = "Candidate"
+    try:
+        from backend.mcp.tools.profile_tools import load_profile_data
+        prof = load_profile_data() or {}
+        cand_name = prof.get("candidate", {}).get("name", "Candidate").split()[0]
+    except Exception:
+        pass
+
+    text_lines = [
+        f"Hi {cand_name},",
+        f"",
+        f"Great news! During the recent job application run, {len(applied_jobs)} application(s) were submitted successfully:",
+        f""
+    ]
+    for idx, f in enumerate(applied_jobs, 1):
+        text_lines.append(f"{idx}. {f.get('title', 'Role')} @ {f.get('company', 'Company')}")
+        text_lines.append(f"   URL: {f.get('url', '')}")
+        if f.get('ats_score'):
+            text_lines.append(f"   ATS Compatibility: {f.get('ats_score')}%")
+        text_lines.append("")
+    text_lines.append("These applications are recorded in your application ledger with tailored resume backups.")
+    text_body = "\n".join(text_lines)
+
+    # Build HTML summary
+    table_rows = "".join([
+        f"""<tr>
+            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;"><b>{f.get('title', 'Role')}</b></td>
+            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">{f.get('company', 'Company')}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0; color: #2b6cb0; font-weight: 600;">{f.get('ats_score', 'N/A')}% ATS</td>
+            <td style="padding: 10px; border-bottom: 1px solid #e2e8f0;">
+                <a href="{f.get('url', '')}" style="background-color: #38a169; color: white; padding: 6px 12px; text-decoration: none; border-radius: 4px; font-weight: 500; font-size: 13px;" target="_blank">View Listing</a>
+            </td>
+        </tr>"""
+        for f in applied_jobs
+    ])
+
+    html_body = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 680px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h2 style="color: #276749; margin-top: 0;">🚀 Applications Submitted Successfully!</h2>
+        <p style="color: #4a5568; font-size: 15px;">
+            The autonomous job scanner successfully tailored your resume and submitted <b>{len(applied_jobs)}</b> application(s):
+        </p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; text-align: left;">
+            <thead>
+                <tr style="background-color: #f0fff4; color: #22543d;">
+                    <th style="padding: 10px; border-bottom: 2px solid #9ae6b4;">Job Title</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #9ae6b4;">Company</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #9ae6b4;">Match</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #9ae6b4;">Listing</th>
+                </tr>
+            </thead>
+            <tbody>
+                {table_rows}
+            </tbody>
+        </table>
+        <p style="color: #718096; font-size: 13px; margin-top: 24px;">
+            All tailored PDF resumes and application metadata have been logged to your application tracker.
+        </p>
+    </div>
+    """
+
+    print(f"\n[Email Alert] 📧 Sending 'Application Submitted' email for {len(applied_jobs)} applied role(s) to {recipient}...")
+    try:
+        sent = send_notification_email(
+            to_email=recipient,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body
+        )
+        if sent:
+            print(f"[Email Alert] ✅ Applied confirmation email sent successfully to {recipient}!")
+        else:
+            print(f"[Email Alert] ⚠️ Failed to send applied confirmation email to {recipient}.")
+        return sent
+    except Exception as ee:
+        print(f"[Email Alert] ❌ Error sending applied confirmation email: {ee}")
+        return False
+
+
 def get_existing_tracked_urls() -> set:
     """
     Collects normalized URLs of jobs already tracked or applied to.
@@ -715,6 +805,7 @@ async def run_pipeline(
     direct_applied_count = 0
     applied_attempts = 0
     failed_applications = []
+    applied_applications = []
 
     for idx, job in enumerate(jobs, start=1):
         title = job.get("title", "Role")
@@ -924,6 +1015,12 @@ async def run_pipeline(
                     if res_status == "success":
                         print(f"   ✅ Application verified & submitted successfully for {title} @ {company}")
                         await update_application_status(url, "applied")
+                        applied_applications.append({
+                            "title": title,
+                            "company": company,
+                            "url": url,
+                            "ats_score": score
+                        })
                     else:
                         fail_reason = final_res or "Form validation error or unconfirmed submission"
                         print(f"   ⚠️ Submission verification failed for {title} @ {company}: {fail_reason}")
@@ -939,9 +1036,14 @@ async def run_pipeline(
 
     print(f"\n[Scanner] ✅ Scan complete! Discovered & processed {new_jobs_added} new postings ({direct_applied_count} direct applied, {tailored_count} tailored).")
 
-    # Send summary email alert if any applications failed/need review
+    cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
+
+    # 1. Send separate confirmation email alert for successfully submitted applications
+    if applied_applications:
+        notify_user_of_applied_applications(applied_applications, to_email=cand_email)
+
+    # 2. Send summary email alert if any applications failed/need review
     if failed_applications:
-        cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
         notify_user_of_failed_applications(failed_applications, to_email=cand_email)
 
 

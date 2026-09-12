@@ -162,8 +162,14 @@ Job Finder/
 Install locally in editable mode or from source:
 ```bash
 pip install -e .
-job-finder setup       # Interactive onboarding wizard: initializes .env, imports resume & reviews profile
+job-finder setup       # Interactive onboarding wizard: initializes .env, configures API key & optional SMTP email alerts, imports resume & reviews profile
 ```
+
+The interactive `job-finder setup` wizard:
+- Configures your `.env` with safe local defaults.
+- Prompts for your **Gemini API Key**.
+- Asks if you want **Email Notifications**: if enabled (`y`), prompts for your sender email address and SMTP App Password to receive real-time notifications for submitted applications and review alerts.
+- Parses your master resume and fills demographic and portal preferences.
 
 ### Available Unified CLI Commands:
 ```bash

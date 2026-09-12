@@ -45,7 +45,9 @@ job-finder setup
 ```
 
 The wizard will:
-- Initialize your local `.env` configuration template.
+- Initialize your local `.env` configuration template with safe local defaults (`BROWSER_USE_HEADLESS=false`, `JOB_FINDER_DISABLE_GUARDRAILS=0`).
+- Prompt for your **Gemini API Key** (required for LLM reasoning and resume parsing).
+- Prompt whether you want to configure **Email Notifications** (Optional): if enabled (`y`), it asks for your sender email and SMTP App Password so you receive automated email confirmations when applications are submitted, and alerts if an application requires manual review.
 - Auto-detect and parse your master resume (`.pdf` / `.docx` / `.tex`).
 - Verify demographic, work authorization, and portal fields, interactively prompting for any missing details.
 

@@ -31,6 +31,8 @@ class Education(BaseModel):
 
 class Project(BaseModel):
     title: str
+    technologies: List[str] = Field(default_factory=list, description="Technologies / tools / frameworks used in project e.g. ['Python', 'Docker', 'FastAPI']")
+    url: Optional[str] = Field(default="", description="Repository, live demo, or deployment URL (e.g. GitHub link)")
     description: List[str]
 
 def sanitize_resume_summary(summary_val: Any) -> str:
@@ -261,6 +263,11 @@ def parse_resume(file_path: str) -> StructuredResume:
     5. Extract the phone number exactly as it appears.
     6. WORK EXPERIENCE BULLETS & SUB-PROJECTS: If a work experience entry contains sub-project headers (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), do NOT duplicate the sub-project title prefix on every child bullet point! Keep the sub-project header distinct or keep individual accomplishment bullets clean.
     7. WORK EXPERIENCE TECHNOLOGIES: If a work experience entry lists technologies under the role (e.g. "Technologies: Python, C++, Jedi, Jenkins..."), extract them into the `technologies` string field.
+    8. PROJECTS: For each project, extract:
+       - `title`: project title.
+       - `technologies`: list of technologies/tools mentioned in the project title, subtitle, or description (e.g. ["Python", "Docker", "FastAPI", "React"]).
+       - `url`: project link / repository URL / demo link if present (e.g. GitHub URL).
+       - `description`: list of accomplishment bullet points.
 
     Raw Resume Text:
     ---
