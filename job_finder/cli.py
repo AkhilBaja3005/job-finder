@@ -53,6 +53,7 @@ def main():
     apply_parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps (default: 50)")
     apply_parser.add_argument("--model", type=str, default="gemini-3.5-flash-lite", help="LLM model to use (default: gemini-3.5-flash-lite)")
     apply_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
+    apply_parser.add_argument("--resume", type=str, default=None, help="Path to resume PDF to upload (default: auto-detected master resume)")
 
     # 3. Server subcommand
     server_parser = subparsers.add_parser(
@@ -113,14 +114,16 @@ def main():
 
     elif args.subcommand == "apply":
         import asyncio
-        from applications_tracker.scheduled_job_scanner import run_browser_use_autofill
+        from applications_tracker.scheduled_job_scanner import run_browser_use_autofill, find_master_resume_with_mac_tags
         from backend.mcp.tools.profile_tools import load_profile_data
         prof = load_profile_data() or {}
         cand = prof.get("candidate", {})
+        target_resume = args.resume or find_master_resume_with_mac_tags()
         result = asyncio.run(asyncio.wait_for(
             run_browser_use_autofill(
                 args.url,
                 resume_data=cand,
+                resume_pdf_path=target_resume,
                 auto_submit=args.submit,
                 model_name=args.model,
                 headless=args.headless,

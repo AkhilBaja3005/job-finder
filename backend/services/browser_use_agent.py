@@ -298,8 +298,11 @@ def build_application_task_prompt(
             - Click the matching result item (e.g. 'LinkedIn' or 'LinkedIn Corporate Jobs') to firmly bind the option. Do not leave it unselected.
           * Veteran Status: Inspect options and choose '{veteran_status}'.
           * Disability Status: Inspect options and choose '{disability_status}'.
-        - For Resume, ensure the candidate's resume is selected or uploaded.
-        - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
+         - For Resume / CV File Upload:
+           * If the application form asks to attach/upload a resume, CV, or file (e.g. 'Upload a file', 'Attach Resume', 'Upload Resume/CV', 'Select file', or file input dropzone):
+           * You MUST upload the provided resume file path using `upload_file` action!
+           * Do NOT leave the file upload blank or skip it if a file is requested.
+         - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
     4. Handle Email Verification / OTP Codes:
        - If the form asks to enter a verification code / OTP sent to your email (e.g., micro1, Ashby, Workday):
          a. Open a new tab to Gmail: open a new tab with url 'https://mail.google.com'.
@@ -594,10 +597,22 @@ async def run_browser_use_autofill(
     if target_url != job_url and "indeed.com" not in target_url:
         print(f"[browser-use] 🎯 Resolved direct ATS application URL: {target_url}")
 
+    # Auto-detect master resume if not explicitly passed
+    resolved_resume_path = resume_pdf_path
+    if not resolved_resume_path or not os.path.exists(resolved_resume_path):
+        try:
+            from applications_tracker.scheduled_job_scanner import find_master_resume_with_mac_tags
+            detected_resume = find_master_resume_with_mac_tags()
+            if detected_resume and os.path.exists(detected_resume):
+                resolved_resume_path = detected_resume
+                print(f"[browser-use] 📄 Auto-detected master resume PDF: {resolved_resume_path}")
+        except Exception as e:
+            print(f"[browser-use] Note: resume auto-detection error: {e}")
+
     task_prompt = build_application_task_prompt(
         job_url=target_url,
         resume_data=resume_data,
-        resume_pdf_path=resume_pdf_path,
+        resume_pdf_path=resolved_resume_path,
         auto_submit=effective_auto_submit
     )
 
@@ -606,7 +621,7 @@ async def run_browser_use_autofill(
     # Configure initial navigation action so browser-use explicitly opens target_url
     nav_actions = [{"navigate": {"url": target_url, "new_tab": False}}]
 
-    available_paths = [os.path.abspath(resume_pdf_path)] if resume_pdf_path and os.path.exists(resume_pdf_path) else []
+    available_paths = [os.path.abspath(resolved_resume_path)] if resolved_resume_path and os.path.exists(resolved_resume_path) else []
 
     mode_str = "AUTO-SUBMIT (GUARDRAILS DISABLED)" if effective_auto_submit else "REVIEW ONLY (GUARDRAIL ACTIVE)"
 
