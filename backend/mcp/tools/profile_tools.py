@@ -186,6 +186,15 @@ def load_profile_data() -> Dict[str, Any]:
     return {}
 
 
+def save_profile_data(data: Dict[str, Any]) -> str:
+    """Saves candidate profile data dict into active candidate_profile.json."""
+    save_path = get_profile_save_path()
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    return save_path
+
+
 def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
     Applies structured resume fields into candidate_profile.json, preserving

@@ -105,6 +105,28 @@ def main():
     setup_parser.add_argument("--resume", type=str, default=None, help="Optional initial resume file to parse (PDF/DOCX/LaTeX)")
     setup_parser.add_argument("--api-key", type=str, default=None, help="Gemini API Key")
 
+    # 7. Status subcommand
+    subparsers.add_parser(
+        "status",
+        help="Display system configuration, environment status, master resume, and API keys",
+    )
+
+    # 8. ATS subcommand
+    ats_parser = subparsers.add_parser(
+        "ats",
+        help="Run standalone ATS Health Audit on your candidate profile or master resume",
+    )
+    ats_parser.add_argument("--resume", type=str, default=None, help="Path to resume file to evaluate (default: active candidate profile)")
+    ats_parser.add_argument("--optimize", action="store_true", help="Auto-optimize summary for ATS conversion using AI")
+
+    # 9. Tracker subcommand
+    tracker_parser = subparsers.add_parser(
+        "tracker",
+        help="List and inspect tracked applications, saved roles, and tailored resumes",
+    )
+    tracker_parser.add_argument("--status", type=str, default="all", help="Filter by status (all, saved, tailored, applied)")
+    tracker_parser.add_argument("--limit", type=int, default=20, help="Max entries to list (default: 20)")
+
     args, unknown = parser.parse_known_args()
 
     if not args.subcommand:
@@ -184,6 +206,115 @@ def main():
             print(json.dumps(data, indent=2))
         else:
             print(f"Candidate profile not found. Run `job-finder setup` to initialize one at: {prof_path}")
+
+    elif args.subcommand == "status":
+        from backend.mcp.tools.profile_tools import load_profile_data, get_profile_config_path
+        from applications_tracker.scheduled_job_scanner import find_master_resume_with_mac_tags
+
+        print("\n🔍 ========================================================")
+        print("        JOB FINDER AI SYSTEM HEALTH & STATUS")
+        print("========================================================")
+        g_key = os.getenv("GEMINI_API_KEY")
+        masked_key = f"{g_key[:4]}...{g_key[-4:]}" if (g_key and len(g_key) > 8) else ("Configured ✅" if g_key else "Missing ❌")
+        print(f"  • Gemini API Key    : {masked_key}")
+
+        master_resume = find_master_resume_with_mac_tags()
+        resume_status = f"{master_resume} (Exists ✅)" if (master_resume and os.path.exists(master_resume)) else "Not set (Run `job-finder setup`)"
+        print(f"  • Master Resume     : {resume_status}")
+
+        prof_path = get_profile_config_path()
+        data = load_profile_data()
+        if data and "candidate" in data:
+            cand = data["candidate"]
+            prefs = data.get("search_preferences", {})
+            print(f"  • Candidate Name    : {cand.get('name', 'N/A')}")
+            print(f"  • Base Location     : {cand.get('location', 'N/A')}")
+            print(f"  • Target Roles      : {', '.join(prefs.get('target_roles', [])) or 'N/A'}")
+            print(f"  • Target Locations  : {', '.join(prefs.get('target_locations', [])) or 'N/A'}")
+            print(f"  • ATS Score Floor   : {prefs.get('min_ats_score_threshold', 65)}%")
+        else:
+            print(f"  • Candidate Profile : Not configured ({prof_path})")
+        print("========================================================\n")
+
+    elif args.subcommand == "ats":
+        from backend.mcp.tools.profile_tools import load_profile_data, save_profile_data
+        from backend.services.ats_scorer import evaluate_master_resume
+
+        target_data = None
+        if args.resume and os.path.exists(args.resume):
+            from backend.services.resume_parser import parse_resume
+            print(f"📄 Parsing resume file: {args.resume}")
+            structured = parse_resume(args.resume)
+            target_data = structured.model_dump()
+        else:
+            prof_data = load_profile_data()
+            target_data = prof_data.get("candidate", {}) if prof_data else {}
+
+        if not target_data:
+            print("❌ No resume or candidate profile available to evaluate. Run `job-finder setup` first.")
+            return
+
+        ats_eval = evaluate_master_resume(target_data)
+        ats_score = ats_eval.get("ats_score", 80)
+        suggestions = ats_eval.get("suggestions", [])
+
+        print("\n📊 ========================================================")
+        print(f"           MASTER RESUME ATS HEALTH AUDIT: {ats_score}/100")
+        print("========================================================")
+        print(f"  • Skill Keywords  : {ats_eval.get('skills_count')} core taxonomy matches")
+        print(f"  • Quantified Ratio: {ats_eval.get('quantified_percentage')}% of bullets contain metrics (%, £/$, numbers)")
+        print(f"  • Estimated Tenure: {ats_eval.get('candidate_years')} years relevant experience")
+
+        if suggestions:
+            print("\n💡 Key ATS Improvement Tips:")
+            for tip in suggestions:
+                print(f"  • {tip}")
+
+        if args.optimize:
+            from backend.services.gemini_client import generate_content_with_fallback
+            prof_data = load_profile_data()
+            cand = prof_data.get("candidate", {})
+            cur_summary = cand.get("experience_summary", "")
+            skills_str = ", ".join(list(cand.get("core_skills", {}).keys())[:10]) if isinstance(cand.get("core_skills"), dict) else ""
+            prompt = (
+                "Optimize this professional summary for ATS conversion and executive impact.\n"
+                "Keep it to 2-3 visual lines (~25-45 words). Focus on quantified achievements and core skills.\n"
+                f"Candidate Name: {cand.get('name')}\n"
+                f"Current Summary: {cur_summary}\n"
+                f"Core Skills: {skills_str}\n"
+                "Return ONLY the plain optimized summary text without any markdown commentary or quotes."
+            )
+            print("\n✨ Generating AI-Optimized Summary...")
+            new_summary = generate_content_with_fallback(prompt)
+            if new_summary:
+                cand["experience_summary"] = new_summary.strip().strip('"')
+                prof_data["candidate"] = cand
+                save_profile_data(prof_data)
+                print(f"✅ Auto-Optimized Summary Saved:\n  \"{cand['experience_summary']}\"\n")
+
+    elif args.subcommand == "tracker":
+        from backend.services.application_tracker import list_applications
+        apps = list_applications()
+        if not apps:
+            print("ℹ️ No tracked job applications found.")
+            return
+
+        status_filter = args.status.lower()
+        if status_filter != "all":
+            apps = [a for a in apps if a.get("status", "").lower() == status_filter]
+
+        apps = apps[:args.limit]
+        print(f"\n📋 Tracker Pipeline ({len(apps)} entries):")
+        print(f"{'STATUS':<12} {'ATS':<6} {'COMPANY':<20} {'ROLE':<25} {'DATE':<12}")
+        print("-" * 78)
+        for a in apps:
+            st = a.get("status", "saved")[:11]
+            sc = f"{a.get('score', 'N/A')}%"
+            co = (a.get("company") or "Unknown")[:19]
+            ro = (a.get("job_title") or "Position")[:24]
+            dt = str(a.get("updated_at") or a.get("created_at") or "")[:10]
+            print(f"{st:<12} {sc:<6} {co:<20} {ro:<25} {dt:<12}")
+        print("-" * 78 + "\n")
 
 
     elif args.subcommand == "setup":

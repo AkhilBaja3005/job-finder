@@ -188,7 +188,7 @@ def update_application_status(
     return updated
 
 
-def list_applications(token: Optional[str]) -> list[dict]:
+def list_applications(token: Optional[str] = None) -> list[dict]:
     """Returns history entries newest-first."""
     user = get_user_by_token(token) if token else None
     if user and user.get("id"):

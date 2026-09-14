@@ -181,6 +181,20 @@ def run_test():
         assert res.returncode == 0
         print("  ✓ `job-finder server --help` executed successfully")
 
+        res = subprocess.run([jf_bin, "status"], capture_output=True, text=True)
+        assert res.returncode == 0
+        assert "JOB FINDER AI SYSTEM HEALTH" in res.stdout
+        print("  ✓ `job-finder status` executed successfully")
+
+        res = subprocess.run([jf_bin, "ats"], capture_output=True, text=True)
+        assert res.returncode == 0
+        assert "MASTER RESUME ATS HEALTH AUDIT" in res.stdout
+        print("  ✓ `job-finder ats` executed successfully")
+
+        res = subprocess.run([jf_bin, "tracker"], capture_output=True, text=True)
+        assert res.returncode == 0
+        print("  ✓ `job-finder tracker` executed successfully")
+
         # Test MCP Stdio
         p = subprocess.Popen(
             [jf_bin, "mcp"],
