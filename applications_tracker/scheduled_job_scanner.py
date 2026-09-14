@@ -170,6 +170,15 @@ from services.job_searcher import normalize_timeframe  # type: ignore
 from services.scraper import scrape_job_description  # type: ignore
 from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score  # type: ignore
 from services.auth import async_supabase_request, supabase_request, SUPABASE_URL, SUPABASE_KEY  # type: ignore
+try:
+    from applications_tracker.linkedin_top_applicant_scanner import is_top_applicant_badge  # type: ignore
+except ImportError:
+    try:
+        from linkedin_top_applicant_scanner import is_top_applicant_badge  # type: ignore
+    except ImportError:
+        def is_top_applicant_badge(text: str) -> bool:  # type: ignore
+            return False
+
 
 
 def find_master_resume_with_mac_tags() -> str:
@@ -710,7 +719,8 @@ async def run_pipeline(
     timeframe_override: Optional[str] = None,
     model_override: Optional[str] = None,
     headless: Optional[bool] = None,
-    auto_submit_override: Optional[bool] = None
+    auto_submit_override: Optional[bool] = None,
+    top_applicant_only: Optional[bool] = None
 ):
     profile = load_profile_data()
     candidate = profile.get("candidate", {})
@@ -769,6 +779,7 @@ async def run_pipeline(
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🚀 Starting scheduled unified scan...")
     print(f"Target roles: {keywords}")
     print(f"Location: {location} | Timeframe: {timeframe}")
+    print(f"Rule: LinkedIn Top Applicant Match -> Direct apply (Master Resume, Zero JD scoring/tailoring)")
     print(f"Rule: >= {DIRECT_APPLY_ATS_THRESHOLD}% ATS -> Direct apply (Master Resume)")
     print(f"Rule: {min_ats_score}% - {DIRECT_APPLY_ATS_THRESHOLD - 1}% ATS -> Tailor 1-page LaTeX & PDF, then apply")
     print(f"Timeouts: Autofill = {int(autofill_timeout)}s | Tailoring = {int(resume_tailor_timeout)}s | Max Steps = {steps_limit}")
@@ -776,25 +787,49 @@ async def run_pipeline(
     print(f"Max Applications Cap: {max_apps_str}")
     print(f"Guardrails Disabled: {disable_guardrails}\n")
 
-    # Run full multi-source web discovery (Portals + LinkedIn + Indeed + Reed)
-    search_res = await handle_search_jobs({
-        "keywords": keywords,
-        "location": location,
-        "timeframe": timeframe
-    })
-
-    jobs = search_res.get("jobs", [])
-    est_jobs = search_res.get("est_jobs", [])
-    
-    # Merge Indeed est_jobs if not already present in scored jobs
-    existing_scored_urls = {normalize_job_url(j.get("url", "")) for j in jobs if j.get("url")}
+    jobs = []
     merged_count = 0
-    for ej in est_jobs:
-        u_norm = normalize_job_url(ej.get("url", ""))
-        if u_norm and u_norm not in existing_scored_urls:
-            jobs.append(ej)
-            existing_scored_urls.add(u_norm)
-            merged_count += 1
+
+    if top_applicant_only:
+        print("[Scanner] 🌟 Running in LinkedIn Top Applicant Only mode...")
+        try:
+            from applications_tracker.linkedin_top_applicant_scanner import scan_linkedin_for_top_applicant_jobs
+        except ImportError:
+            from linkedin_top_applicant_scanner import scan_linkedin_for_top_applicant_jobs  # type: ignore
+
+        tf_hours = 24 if timeframe in ("24h", "1d") else (48 if timeframe in ("48h", "2d") else 168)
+        existing_urls_pre = get_existing_tracked_urls()
+        top_jobs = await scan_linkedin_for_top_applicant_jobs(
+            keywords_list=target_roles,
+            location=location,
+            timeframe_hours=tf_hours,
+            existing_urls=existing_urls_pre,
+            headless=headless if headless is not None else False
+        )
+        for tj in top_jobs:
+            tj["is_top_applicant"] = True
+            tj["ats_score"] = 95
+            tj["source"] = "LinkedIn (Top Applicant)"
+        jobs = top_jobs
+    else:
+        # Run full multi-source web discovery (Portals + LinkedIn + Indeed + Reed)
+        search_res = await handle_search_jobs({
+            "keywords": keywords,
+            "location": location,
+            "timeframe": timeframe
+        })
+
+        jobs = search_res.get("jobs", [])
+        est_jobs = search_res.get("est_jobs", [])
+        
+        # Merge Indeed est_jobs if not already present in scored jobs
+        existing_scored_urls = {normalize_job_url(j.get("url", "")) for j in jobs if j.get("url")}
+        for ej in est_jobs:
+            u_norm = normalize_job_url(ej.get("url", ""))
+            if u_norm and u_norm not in existing_scored_urls:
+                jobs.append(ej)
+                existing_scored_urls.add(u_norm)
+                merged_count += 1
 
     print(f"\n[Scanner] 📊 Total unique postings discovered and queued: {len(jobs)} ({len(jobs) - merged_count} primary scored + {merged_count} from Indeed/EST)")
 
@@ -835,129 +870,156 @@ async def run_pipeline(
         tex_path = ""
         jd_text = job.get("description") or ""
 
-        # If job description is missing or a brief placeholder (common for Indeed RSS / title-heuristic jobs),
-        # fetch the real JD on-demand via the scraper so ATS scoring & tailoring have 100% full content.
-        if (not jd_text or len(jd_text.strip()) < 100 or job.get("estimated", False)) and url:
-            try:
-                print(f"[{idx}/{len(jobs)}] 📥 Fetching live JD on-demand for {title} @ {company} ({platform})...")
-                # Bound live scraping to a safe 30s timeout
-                live_scraped = await asyncio.wait_for(scrape_job_description(url), timeout=30.0)
+        # Check if LinkedIn designated this posting as a 'Top Applicant' match
+        is_top_applicant = (
+            job.get("is_top_applicant", False)
+            or bool(job.get("badge") and is_top_applicant_badge(str(job.get("badge"))))
+            or bool(job.get("badge_text") and is_top_applicant_badge(str(job.get("badge_text"))))
+            or bool(is_top_applicant_badge(str(job.get("title_raw") or "")))
+            or bool(is_top_applicant_badge(str(job.get("description") or "")[:300]))
+            or ("top applicant" in (job.get("source") or "").lower())
+            or ("top applicant" in (job.get("platform") or "").lower())
+        )
 
-                # Check if Playwright got blocked by Cloudflare / Turnstile
-                is_blocked = live_scraped.get("is_bot_blocked", False) if isinstance(live_scraped, dict) else False
-                scraped_jd = (live_scraped.get("description") or "").strip() if isinstance(live_scraped, dict) else ""
-
-                # If bot-blocked or empty, and running locally, attempt browser-use fallback to solve Turnstile
-                is_cloud = any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")) or os.getenv("ENVIRONMENT") == "production"
-                if (is_blocked or not scraped_jd or len(scraped_jd) < 100) and not is_cloud:
-                    print(f"[{idx}/{len(jobs)}] 🛡️ Cloudflare verification detected on Indeed. Activating local browser-use agent to solve Turnstile...")
-                    try:
-                        from services.browser_use_agent import extract_jd_with_browser_use
-                        # Bound browser-use JD extraction to a safe 60s timeout
-                        bu_res = await asyncio.wait_for(extract_jd_with_browser_use(url), timeout=60.0)
-                        if bu_res and bu_res.get("description") and len(bu_res.get("description", "")) >= 100:
-                            live_scraped = bu_res
-                            scraped_jd = bu_res["description"].strip()
-                            is_blocked = False
-                            print(f"[{idx}/{len(jobs)}] ⚡ browser-use successfully solved Turnstile and retrieved JD!")
-                    except asyncio.TimeoutError:
-                        print(f"[{idx}/{len(jobs)}] ⏱️ browser-use JD extraction timed out after 60s, keeping original listing info.")
-                    except Exception as bu_err:
-                        print(f"[{idx}/{len(jobs)}] browser-use JD extraction note: {bu_err}")
-
-                # Only accept scraped result if it is NOT a bot-block page and has a substantial description
-                if scraped_jd and len(scraped_jd) >= 100 and not is_blocked:
-                    jd_text = scraped_jd
-                    job["description"] = jd_text
-                    scraped_title = live_scraped.get("title", "").strip()
-                    # Protect original title: NEVER overwrite with error/fallback strings like 'Unavailable' or 'Not found'
-                    invalid_titles = ("indeed job", "job posting", "unavailable", "not found", "just a moment", "target job", "cloudflare verification error")
-                    if scraped_title and scraped_title.lower() not in invalid_titles:
-                        title = scraped_title
-                    scraped_company = live_scraped.get("company", "").strip()
-                    if scraped_company and scraped_company.lower() not in ("indeed employer", "company", "not found", ""):
-                        company = scraped_company
-
-                    # Compute real deterministic ATS score with candidate profile
-                    cand_resume_data = {
-                        "name": candidate.get("name"),
-                        "location": candidate.get("location"),
-                        "skills": candidate.get("core_skills", []),
-                        "experience": [
-                            {"role": e.get("role", ""), "company": e.get("company", ""), "description": e.get("highlights", [])}
-                            for e in candidate.get("work_experience", [])
-                        ],
-                        "raw_text": ""
-                    }
-                    ats_res = compute_ats_score(cand_resume_data, jd_text)
-                    rf_res = estimate_role_fit_score(cand_resume_data, jd_text)
-                    score = compute_overall_score(ats_res.skills_score, ats_res.experience_score, rf_res)
-                    matched_skills = ", ".join(ats_res.matched_skills)
-                    missing_skills = ", ".join(ats_res.missing_skills)
-                    job["ats_score"] = score
-                    job["score"] = score
-                    job["matched_skills"] = ats_res.matched_skills
-                    job["missing_skills"] = ats_res.missing_skills
-                    job["skills_score"] = ats_res.skills_score
-                    job["exp_score"] = ats_res.experience_score
-                    job["role_fit_score"] = rf_res
-                    job["estimated"] = False
-                    print(f"   ✓ Successfully retrieved JD ({len(jd_text)} chars). Recomputed ATS Score: {score}% (Skills: {ats_res.skills_score}%, Exp: {ats_res.experience_score}%)")
-                else:
-                    print(f"   ℹ️ Live JD blocked or incomplete, keeping original title '{title}' and estimate ({score}%).")
-            except Exception as jd_err:
-                print(f"   ⚠️ Could not fetch live JD on-demand ({jd_err}), using current score ({score}%).")
-
-        if score >= DIRECT_APPLY_ATS_THRESHOLD:
-            # 🎯 DIRECT APPLY (>= 80% ATS match)
-            status = "Ready to Apply"
-            print(f"\n[{idx}/{len(jobs)}] 🌟 EXCELLENT MATCH ({score}% >= {DIRECT_APPLY_ATS_THRESHOLD}%): {title} @ {company}")
-            print(f"   ⚡ Direct Apply mode: Using master resume (no tailoring needed)")
+        if is_top_applicant:
+            # 🌟 LINKEDIN TOP APPLICANT DIRECT APPLY
+            # Bypass JD scraping, ATS scoring, and tailoring completely
+            status = "Top Applicant - Direct Apply"
+            score = 95
+            matched_skills = matched_skills or "LinkedIn Top Applicant Match"
+            job["ats_score"] = 95
+            job["score"] = 95
+            job["skills_score"] = 95
+            job["exp_score"] = 90
+            job["role_fit_score"] = 95
+            pdf_to_submit = master_resume_pdf
             direct_applied_count += 1
-        elif score >= min_ats_score:
-            # 🛠️ TAILOR & APPLY (65% - 79% ATS match)
-            status = "Tailored & Ready"
-            print(f"\n[{idx}/{len(jobs)}] 🎯 QUALIFIED MATCH ({score}% ATS): {title} @ {company}")
-            print(f"   📝 Tailoring 1-page LaTeX resume for keyword & skills alignment...")
-            if jd_text:
-                try:
-                    job_missing = job.get("missing_skills") or []
-                    # Bound tailoring & compiling to a safe 90s timeout
-                    pdf_res = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            build_and_compile_tailored_pdf,
-                            jd_text=jd_text,
-                            job_title=title,
-                            company=company,
-                            candidate_info=candidate,
-                            out_dir=RESUMES_DIR,
-                            missing_skills=job_missing
-                        ),
-                        timeout=resume_tailor_timeout
-                    )
-                    if pdf_res and os.path.exists(pdf_res):
-                        tailored_ats = evaluate_pdf_ats(pdf_res, jd_text, candidate)
-                        # Apples-to-apples: score the master PDF using the identical PDF text evaluator if exists, else fallback to score
-                        master_pdf_score = evaluate_pdf_ats(master_resume_pdf, jd_text, candidate) if (master_resume_pdf and os.path.exists(master_resume_pdf)) else score
-                        master_ats = master_pdf_score or score
-                        print(f"   📊 ATS Score Comparison: Tailored PDF = {tailored_ats}% vs Master PDF = {master_ats}%")
-                        if tailored_ats >= master_ats:
-                            pdf_to_submit = pdf_res
-                            tex_path = pdf_res.replace(".pdf", ".tex")
-                            score = tailored_ats
-                            tailored_count += 1
-                            print(f"   ✓ Tailored PDF outperforms master ({tailored_ats}% >= {master_ats}%). Selected: {os.path.basename(pdf_to_submit)}")
-                        else:
-                            pdf_to_submit = master_resume_pdf
-                            print(f"   ℹ️ Master resume scored higher ({master_ats}% > {tailored_ats}%). Keeping master resume: {os.path.basename(pdf_to_submit)}")
-                except asyncio.TimeoutError:
-                    print(f"   ⏱️ Resume tailoring timed out after 90s. Falling back to master resume.")
-                    pdf_to_submit = master_resume_pdf
-                except Exception as te:
-                    print(f"   ⚠️ Tailoring error: {te}. Falling back to master resume.")
+            print(f"\n[{idx}/{len(jobs)}] 🌟 LINKEDIN TOP APPLICANT MATCH: {title} @ {company}")
+            print(f"   ⚡ Bypassing JD scoring & tailoring — applying directly with Master Resume ({os.path.basename(pdf_to_submit)}).")
         else:
-            status = "Saved & Scored"
-            print(f"[{idx}/{len(jobs)}] ℹ️ Below threshold: {title} @ {company} ({score}% < {min_ats_score}%) - Saved.")
+            # If job description is missing or a brief placeholder (common for Indeed RSS / title-heuristic jobs),
+            # fetch the real JD on-demand via the scraper so ATS scoring & tailoring have 100% full content.
+            if (not jd_text or len(jd_text.strip()) < 100 or job.get("estimated", False)) and url:
+                try:
+                    print(f"[{idx}/{len(jobs)}] 📥 Fetching live JD on-demand for {title} @ {company} ({platform})...")
+                    # Bound live scraping to a safe 30s timeout
+                    live_scraped = await asyncio.wait_for(scrape_job_description(url), timeout=30.0)
+
+                    # Check if Playwright got blocked by Cloudflare / Turnstile
+                    is_blocked = live_scraped.get("is_bot_blocked", False) if isinstance(live_scraped, dict) else False
+                    scraped_jd = (live_scraped.get("description") or "").strip() if isinstance(live_scraped, dict) else ""
+
+                    # If bot-blocked or empty, and running locally, attempt browser-use fallback to solve Turnstile
+                    is_cloud = any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")) or os.getenv("ENVIRONMENT") == "production"
+                    if (is_blocked or not scraped_jd or len(scraped_jd) < 100) and not is_cloud:
+                        print(f"[{idx}/{len(jobs)}] 🛡️ Cloudflare verification detected on Indeed. Activating local browser-use agent to solve Turnstile...")
+                        try:
+                            from services.browser_use_agent import extract_jd_with_browser_use
+                            # Bound browser-use JD extraction to a safe 60s timeout
+                            bu_res = await asyncio.wait_for(extract_jd_with_browser_use(url), timeout=60.0)
+                            if bu_res and bu_res.get("description") and len(bu_res.get("description", "")) >= 100:
+                                live_scraped = bu_res
+                                scraped_jd = bu_res["description"].strip()
+                                is_blocked = False
+                                print(f"[{idx}/{len(jobs)}] ⚡ browser-use successfully solved Turnstile and retrieved JD!")
+                        except asyncio.TimeoutError:
+                            print(f"[{idx}/{len(jobs)}] ⏱️ browser-use JD extraction timed out after 60s, keeping original listing info.")
+                        except Exception as bu_err:
+                            print(f"[{idx}/{len(jobs)}] browser-use JD extraction note: {bu_err}")
+
+                    # Only accept scraped result if it is NOT a bot-block page and has a substantial description
+                    if scraped_jd and len(scraped_jd) >= 100 and not is_blocked:
+                        jd_text = scraped_jd
+                        job["description"] = jd_text
+                        scraped_title = live_scraped.get("title", "").strip()
+                        # Protect original title: NEVER overwrite with error/fallback strings like 'Unavailable' or 'Not found'
+                        invalid_titles = ("indeed job", "job posting", "unavailable", "not found", "just a moment", "target job", "cloudflare verification error")
+                        if scraped_title and scraped_title.lower() not in invalid_titles:
+                            title = scraped_title
+                        scraped_company = live_scraped.get("company", "").strip()
+                        if scraped_company and scraped_company.lower() not in ("indeed employer", "company", "not found", ""):
+                            company = scraped_company
+
+                        # Compute real deterministic ATS score with candidate profile
+                        cand_resume_data = {
+                            "name": candidate.get("name"),
+                            "location": candidate.get("location"),
+                            "skills": candidate.get("core_skills", []),
+                            "experience": [
+                                {"role": e.get("role", ""), "company": e.get("company", ""), "description": e.get("highlights", [])}
+                                for e in candidate.get("work_experience", [])
+                            ],
+                            "raw_text": ""
+                        }
+                        ats_res = compute_ats_score(cand_resume_data, jd_text)
+                        rf_res = estimate_role_fit_score(cand_resume_data, jd_text)
+                        score = compute_overall_score(ats_res.skills_score, ats_res.experience_score, rf_res)
+                        matched_skills = ", ".join(ats_res.matched_skills)
+                        missing_skills = ", ".join(ats_res.missing_skills)
+                        job["ats_score"] = score
+                        job["score"] = score
+                        job["matched_skills"] = ats_res.matched_skills
+                        job["missing_skills"] = ats_res.missing_skills
+                        job["skills_score"] = ats_res.skills_score
+                        job["exp_score"] = ats_res.experience_score
+                        job["role_fit_score"] = rf_res
+                        job["estimated"] = False
+                        print(f"   ✓ Successfully retrieved JD ({len(jd_text)} chars). Recomputed ATS Score: {score}% (Skills: {ats_res.skills_score}%, Exp: {ats_res.experience_score}%)")
+                    else:
+                        print(f"   ℹ️ Live JD blocked or incomplete, keeping original title '{title}' and estimate ({score}%).")
+                except Exception as jd_err:
+                    print(f"   ⚠️ Could not fetch live JD on-demand ({jd_err}), using current score ({score}%).")
+
+            if score >= DIRECT_APPLY_ATS_THRESHOLD:
+                # 🎯 DIRECT APPLY (>= 80% ATS match)
+                status = "Ready to Apply"
+                print(f"\n[{idx}/{len(jobs)}] 🌟 EXCELLENT MATCH ({score}% >= {DIRECT_APPLY_ATS_THRESHOLD}%): {title} @ {company}")
+                print(f"   ⚡ Direct Apply mode: Using master resume (no tailoring needed)")
+                direct_applied_count += 1
+            elif score >= min_ats_score:
+                # 🛠️ TAILOR & APPLY (65% - 79% ATS match)
+                status = "Tailored & Ready"
+                print(f"\n[{idx}/{len(jobs)}] 🎯 QUALIFIED MATCH ({score}% ATS): {title} @ {company}")
+                print(f"   📝 Tailoring 1-page LaTeX resume for keyword & skills alignment...")
+                if jd_text:
+                    try:
+                        job_missing = job.get("missing_skills") or []
+                        # Bound tailoring & compiling to a safe 90s timeout
+                        pdf_res = await asyncio.wait_for(
+                            asyncio.to_thread(
+                                build_and_compile_tailored_pdf,
+                                jd_text=jd_text,
+                                job_title=title,
+                                company=company,
+                                candidate_info=candidate,
+                                out_dir=RESUMES_DIR,
+                                missing_skills=job_missing
+                            ),
+                            timeout=resume_tailor_timeout
+                        )
+                        if pdf_res and os.path.exists(pdf_res):
+                            tailored_ats = evaluate_pdf_ats(pdf_res, jd_text, candidate)
+                            # Apples-to-apples: score the master PDF using the identical PDF text evaluator if exists, else fallback to score
+                            master_pdf_score = evaluate_pdf_ats(master_resume_pdf, jd_text, candidate) if (master_resume_pdf and os.path.exists(master_resume_pdf)) else score
+                            master_ats = master_pdf_score or score
+                            print(f"   📊 ATS Score Comparison: Tailored PDF = {tailored_ats}% vs Master PDF = {master_ats}%")
+                            if tailored_ats >= master_ats:
+                                pdf_to_submit = pdf_res
+                                tex_path = pdf_res.replace(".pdf", ".tex")
+                                score = tailored_ats
+                                tailored_count += 1
+                                print(f"   ✓ Tailored PDF outperforms master ({tailored_ats}% >= {master_ats}%). Selected: {os.path.basename(pdf_to_submit)}")
+                            else:
+                                pdf_to_submit = master_resume_pdf
+                                print(f"   ℹ️ Master resume scored higher ({master_ats}% > {tailored_ats}%). Keeping master resume: {os.path.basename(pdf_to_submit)}")
+                    except asyncio.TimeoutError:
+                        print(f"   ⏱️ Resume tailoring timed out after 90s. Falling back to master resume.")
+                        pdf_to_submit = master_resume_pdf
+                    except Exception as te:
+                        print(f"   ⚠️ Tailoring error: {te}. Falling back to master resume.")
+            else:
+                status = "Saved & Scored"
+                print(f"[{idx}/{len(jobs)}] ℹ️ Below threshold: {title} @ {company} ({score}% < {min_ats_score}%) - Saved.")
 
         # Record to Supabase (and CSV fallback)
         record_payload = {
@@ -986,8 +1048,8 @@ async def run_pipeline(
         existing_urls.add(url_norm)
         new_jobs_added += 1
 
-        # Autofill application if score meets minimum threshold
-        if score >= min_ats_score and url:
+        # Autofill application if Top Applicant or score meets minimum threshold
+        if (is_top_applicant or score >= min_ats_score) and url:
             if max_applications > 0 and applied_attempts >= max_applications:
                 print(f"[Scanner] ⏸️ Reached maximum application limit ({max_applications}) for this run. Remaining qualified matches are saved to tracker.")
             else:
@@ -1066,6 +1128,7 @@ def main():
     parser.add_argument("--timeframe", type=str, default=None, help="Search freshness window override (e.g. 24h, 48h, 1w)")
     parser.add_argument("--model", type=str, default=None, help="Gemini LLM model override for browser-use")
     parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
+    parser.add_argument("--top-applicant", action="store_true", help="Scan LinkedIn specifically for Top Applicant postings and auto-apply without JD scoring")
     args = parser.parse_args()
 
     if args.auto_apply:
@@ -1083,7 +1146,8 @@ def main():
         timeframe_override=args.timeframe,
         model_override=args.model,
         headless=True if args.headless else None,
-        auto_submit_override=True if args.auto_apply else None
+        auto_submit_override=True if args.auto_apply else None,
+        top_applicant_only=True if args.top_applicant else None
     ))
 
 
