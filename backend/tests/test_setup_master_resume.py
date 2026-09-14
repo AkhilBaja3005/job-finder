@@ -6,7 +6,13 @@ Unit test suite verifying master resume path prompting, .env persistence, and au
 import os
 import sys
 import json
-import pytest
+try:
+    import pytest
+except ImportError:
+    class PytestMock:
+        def fixture(self, func):
+            return func
+    pytest = PytestMock()
 from unittest.mock import patch
 from job_finder.cli import main
 
@@ -120,3 +126,126 @@ def test_setup_warns_on_nonexistent_resume(fake_workspace, monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert "Provided resume file does not exist" in captured.out
+
+
+def test_setup_prompts_and_launches_automation_browser(fake_workspace, monkeypatch):
+    """Verifies that the setup wizard prompts for dedicated automation browser setup and launches it when accepted."""
+    ws = fake_workspace["root"]
+    resume_file = str(fake_workspace["resume_path"])
+
+    monkeypatch.setenv("JOB_FINDER_ROOT", str(ws))
+    monkeypatch.delenv("MASTER_RESUME_PATH", raising=False)
+
+    call_count = 0
+    def mock_input(prompt=""):
+        nonlocal call_count
+        call_count += 1
+        p_lower = prompt.lower()
+        if "master resume path" in p_lower:
+            return resume_file
+        if "automation browser" in p_lower:
+            return "y"
+        if "finished logging in" in p_lower:
+            return ""
+        if "enter " in p_lower:
+            return ""
+        if prompt == "":
+            return "n"
+        return ""
+
+
+
+
+    with patch("sys.stdin.isatty", return_value=True):
+        with patch("builtins.input", side_effect=mock_input):
+            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
+                with patch("backend.services.browser_use_agent.ensure_persistent_browser", return_value="http://127.0.0.1:9222") as mock_ensure:
+                    with patch("urllib.request.urlopen") as mock_urlopen:
+                        # Return dummy JSON response for CDP /json/new calls
+                        from unittest.mock import MagicMock
+                        mock_resp = MagicMock()
+                        mock_resp.read.return_value = json.dumps({"id": "TAB_123"}).encode("utf-8")
+                        mock_resp.__enter__.return_value = mock_resp
+                        mock_urlopen.return_value = mock_resp
+
+                        with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaTestKey"]):
+                            main()
+
+    mock_ensure.assert_called_once_with(headless=False)
+    assert mock_urlopen.call_count >= 3
+
+
+
+
+def test_setup_browser_prompt_skipped(fake_workspace, monkeypatch):
+    """Verifies that declining the browser setup prompt skips browser launch cleanly."""
+    ws = fake_workspace["root"]
+    resume_file = str(fake_workspace["resume_path"])
+
+    monkeypatch.setenv("JOB_FINDER_ROOT", str(ws))
+    monkeypatch.delenv("MASTER_RESUME_PATH", raising=False)
+
+    def mock_input(prompt=""):
+        p_lower = prompt.lower()
+        if "master resume path" in p_lower:
+            return resume_file
+        if "optimize your summary" in p_lower:
+            return "n"
+        if "automation browser" in p_lower:
+            return "n"
+        return ""
+
+    with patch("sys.stdin.isatty", return_value=True):
+        with patch("builtins.input", side_effect=mock_input):
+            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
+                with patch("backend.services.browser_use_agent.ensure_persistent_browser") as mock_ensure:
+                    with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaTestKey"]):
+                        main()
+
+    mock_ensure.assert_not_called()
+
+
+if __name__ == "__main__":
+    import tempfile
+    import pathlib
+
+    print("Running test_setup_master_resume suite...")
+    # Run tests using a temporary directory
+    class MonkeyPatch:
+        def __init__(self):
+            self._saved = {}
+        def setenv(self, k, v):
+            if k not in self._saved:
+                self._saved[k] = os.environ.get(k)
+            os.environ[k] = v
+        def delenv(self, k, raising=False):
+            if k not in self._saved:
+                self._saved[k] = os.environ.get(k)
+            os.environ.pop(k, None)
+        def undo(self):
+            for k, v in self._saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp_p = pathlib.Path(td)
+        fw = fake_workspace(tmp_p)
+        mp = MonkeyPatch()
+        try:
+            test_setup_prompts_and_launches_automation_browser(fw, mp)
+            print("  ✅ test_setup_prompts_and_launches_automation_browser passed!")
+        finally:
+            mp.undo()
+
+        mp = MonkeyPatch()
+        try:
+            test_setup_browser_prompt_skipped(fw, mp)
+            print("  ✅ test_setup_browser_prompt_skipped passed!")
+        finally:
+            mp.undo()
+
+    print("All tests passed successfully.")
+
+

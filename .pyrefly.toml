@@ -1,0 +1,5 @@
+[environment]
+python_path = "/Users/akhilbaja/Documents/Akhil/Job Finder/backend/venv/bin/python"
+
+[errors]
+missing-import = false

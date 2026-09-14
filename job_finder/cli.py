@@ -4,6 +4,7 @@ import argparse
 import sys
 import os
 import json
+import re
 
 def load_workspace_env():
     """Loads .env configuration across all candidate locations prior to command execution."""
@@ -35,6 +36,69 @@ for candidate in [
 ]:
     if os.path.isdir(candidate) and candidate not in sys.path:
         sys.path.insert(0, candidate)
+
+
+def check_for_updates():
+    """
+    Non-blocking update check against PyPI / GitHub releases with local cache.
+    Caches check result for 24 hours to prevent network overhead on every CLI invocation.
+    """
+    try:
+        import time
+        import urllib.request
+        from importlib.metadata import version as get_pkg_version
+
+        from backend.config.constants import APP_VERSION
+        current_ver = APP_VERSION
+        try:
+            current_ver = get_pkg_version("job-finder-ai")
+        except Exception:
+            pass
+
+        cache_file = os.path.expanduser("~/.config/job-finder/.update_check.json")
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        now = time.time()
+
+        # Read cache
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cdata = json.load(f)
+                latest = cdata.get("latest_version")
+                last_check = cdata.get("last_check", 0)
+                # If checked within 24h (86400s), reuse cached latest version
+                if now - last_check < 86400 and latest:
+                    if _parse_ver(latest) > _parse_ver(current_ver):
+                        print(f"💡 Update available: v{current_ver} → v{latest}. Run 'pip install --upgrade job-finder-ai' to update.\n")
+                    return
+            except Exception:
+                pass
+
+        # Fetch latest version from PyPI with a strict 1.5s timeout
+        req = urllib.request.Request("https://pypi.org/pypi/job-finder-ai/json", headers={"User-Agent": "job-finder-cli"})
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            latest_ver = data.get("info", {}).get("version", current_ver)
+
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump({"latest_version": latest_ver, "last_check": now}, f)
+
+        if _parse_ver(latest_ver) > _parse_ver(current_ver):
+            print(f"💡 Update available: v{current_ver} → v{latest_ver}. Run 'pip install --upgrade job-finder-ai' to update.\n")
+    except Exception:
+        pass
+
+
+def _parse_ver(v_str: str):
+    """Simple tuple version parser (e.g. '1.2.4' -> (1, 2, 4))."""
+    try:
+        parts = []
+        for x in v_str.strip().lstrip("v").split("."):
+            num = re.search(r'\d+', x)
+            parts.append(int(num.group()) if num else 0)
+        return tuple(parts)
+    except Exception:
+        return (0, 0, 0)
 
 
 def main():
@@ -132,7 +196,12 @@ def main():
 
     if not args.subcommand:
         parser.print_help()
+        check_for_updates()
         sys.exit(0)
+
+    # Check for available package updates unless in quiet/mcp stdio mode
+    if args.subcommand != "mcp":
+        check_for_updates()
 
     if args.subcommand == "scan":
         if args.auto_apply:
@@ -276,10 +345,17 @@ def main():
             prof_data = load_profile_data()
             cand = prof_data.get("candidate", {})
             cur_summary = cand.get("experience_summary", "")
-            skills_str = ", ".join(list(cand.get("core_skills", {}).keys())[:10]) if isinstance(cand.get("core_skills"), dict) else ""
+            raw_skills = cand.get("core_skills", [])
+            if isinstance(raw_skills, list):
+                skills_str = ", ".join(str(s) for s in raw_skills[:12])
+            elif isinstance(raw_skills, dict):
+                skills_str = ", ".join(list(raw_skills.keys())[:12])
+            else:
+                skills_str = ""
             prompt = (
-                "Optimize this professional summary for ATS conversion and executive impact.\n"
-                "Keep it to 2-3 visual lines (~25-45 words). Focus on quantified achievements and core skills.\n"
+                "Optimize this professional summary for ATS conversion, keyword density, and executive impact.\n"
+                "Keep it to 2-3 visual lines (~25-45 words).\n"
+                "CRITICAL: You MUST explicitly include candidate's core technical keywords (e.g. LLMs, RAG, Vector Search, PyTorch, Python, GenAI) and quantified metrics (%, latency cuts, user volume).\n"
                 f"Candidate Name: {cand.get('name')}\n"
                 f"Current Summary: {cur_summary}\n"
                 f"Core Skills: {skills_str}\n"
@@ -291,7 +367,12 @@ def main():
                 cand["experience_summary"] = new_summary.strip().strip('"')
                 prof_data["candidate"] = cand
                 save_profile_data(prof_data)
-                print(f"✅ Auto-Optimized Summary Saved:\n  \"{cand['experience_summary']}\"\n")
+                print(f"✅ Auto-Optimized Summary Saved:\n  \"{cand['experience_summary']}\"")
+                
+                # Re-evaluate ATS health score after optimization
+                post_eval = evaluate_master_resume(cand)
+                post_score = post_eval.get("ats_score", 80)
+                print(f"📈 Updated Master Resume ATS Health Score: {post_score}/100 ({post_eval.get('skills_count')} taxonomy keywords matched)\n")
 
     elif args.subcommand == "tracker":
         from backend.services.application_tracker import list_applications
@@ -628,6 +709,59 @@ def main():
                     print(f"\n💡 Note: Review or edit these anytime in `{profile_path}` or run `job-finder profile`.")
             except Exception as pe:
                 print(f"ℹ️ Could not inspect candidate profile: {pe}")
+
+        # 5. Interactive Dedicated Browser Setup for One-Time Login (LinkedIn, Indeed, Gmail)
+        if sys.stdin.isatty():
+            print("\n🌐 ========================================================")
+            print("         DEDICATED AUTOMATION BROWSER SETUP")
+            print("========================================================")
+            print("  Job Finder uses a dedicated Chrome profile (`browser_use_chrome_session`)")
+            print("  for automated job discovery and application auto-filling.")
+            print("  Log in ONCE to LinkedIn, Indeed, and Gmail so the AI agent runs seamlessly.")
+            try:
+                open_browser_setup = input("  Would you like to open the Automation Browser now to log in? [Y/n]: ").strip().lower()
+                if open_browser_setup in ("y", "yes", ""):
+                    try:
+                        from backend.services.browser_use_agent import ensure_persistent_browser, CDP_PORT
+                        print("\n🌐 Launching dedicated automation browser...")
+                        cdp_url = ensure_persistent_browser(headless=False)
+                        
+                        import urllib.request
+                        urls_to_open = [
+                            "https://www.linkedin.com/login",
+                            "https://uk.indeed.com/",
+                            "https://mail.google.com/"
+                        ]
+                        print("  Opening tabs in Automation Chrome profile: LinkedIn, Indeed, Gmail...")
+                        for u in urls_to_open:
+                            try:
+                                req = urllib.request.Request(f"{cdp_url}/json/new?{u}", data=b"", method="PUT")
+                                with urllib.request.urlopen(req, timeout=3) as resp:
+                                    tab_data = json.load(resp)
+                                    tab_id = tab_data.get("id")
+                                    if tab_id:
+                                        try:
+                                            with urllib.request.urlopen(f"{cdp_url}/json/activate/{tab_id}", timeout=2):
+                                                pass
+                                        except Exception:
+                                            pass
+                            except Exception as u_err:
+                                pass
+                        
+                        # Bring Chrome to the front
+                        if sys.platform == "darwin":
+                            import subprocess
+                            subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to activate'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+                        print("\n✅ Dedicated Automation Browser window opened!")
+                        print("   👉 Look for the Google Chrome window that opened LinkedIn, Indeed, and Gmail.")
+                        print("   👉 (This window runs on a dedicated profile so it won't affect your personal browser).")
+                        input("   Press [Enter] when you have finished logging in to proceed... ")
+                    except Exception as b_err:
+                        print(f"⚠️ Could not launch automation browser automatically: {b_err}")
+
+            except (EOFError, KeyboardInterrupt):
+                print("\nSkipping browser login setup.")
 
         print("\n✅ Setup complete! You're ready to run:")
         print("   - `job-finder profile --show` : Review your parsed candidate profile")

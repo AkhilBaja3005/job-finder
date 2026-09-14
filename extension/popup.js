@@ -1409,6 +1409,79 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // AI Q&A Copilot Elements
+  const customQaQuestion = document.getElementById("custom-qa-question");
+  const btnGenerateQaAns = document.getElementById("btn-generate-qa-ans");
+  const qaResultBox = document.getElementById("qa-result-box");
+  const qaResultText = document.getElementById("qa-result-text");
+  const btnCopyQaAns = document.getElementById("btn-copy-qa-ans");
+
+  if (btnGenerateQaAns) {
+    btnGenerateQaAns.addEventListener("click", () => {
+      const qText = (customQaQuestion?.value || "").trim();
+      if (!qText) {
+        showToast("⚠️ Please enter or paste a question first!");
+        return;
+      }
+      btnGenerateQaAns.textContent = "⌛ Generating Tailored Answer...";
+      btnGenerateQaAns.disabled = true;
+
+      chrome.storage.local.get(["candidateProfile", "userToken"], async (items) => {
+        const candidateProfile = items?.candidateProfile || {};
+        const token = (items?.userToken || userTokenInput?.value || "").trim();
+        const company = currentJobInfo?.company || "Hiring Company";
+        const title = currentJobInfo?.title || "Target Position";
+        const jobDescription = currentJobInfo?.description || "";
+
+        try {
+          const res = await fetch(`${API_BASE_URL}/answer_question`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token || "guest"}`
+            },
+            body: JSON.stringify({
+              question: qText,
+              company_name: company,
+              job_title: title,
+              job_description: jobDescription,
+              candidate_profile: candidateProfile
+            })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.answer) {
+              if (qaResultText) qaResultText.textContent = data.answer;
+              if (qaResultBox) qaResultBox.style.display = "block";
+              showToast("✨ Company-Tailored Answer Ready!");
+            } else {
+              showToast("⚠️ Backend returned empty answer.");
+            }
+          } else {
+            showToast("❌ Backend failed to generate answer.");
+          }
+        } catch (e) {
+          showToast("❌ Error connecting to backend server.");
+        } finally {
+          btnGenerateQaAns.textContent = "💡 Generate Tailored Answer";
+          btnGenerateQaAns.disabled = false;
+        }
+      });
+    });
+  }
+
+  if (btnCopyQaAns) {
+    btnCopyQaAns.addEventListener("click", () => {
+      const txt = (qaResultText?.textContent || "").trim();
+      if (txt) {
+        navigator.clipboard.writeText(txt).then(() => {
+          showToast("📋 Answer Copied to Clipboard!");
+        });
+      }
+    });
+  }
+
   if (btnSaveSettings) {
     btnSaveSettings.addEventListener("click", () => {
       const userToken = getAuthToken();

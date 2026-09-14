@@ -186,7 +186,7 @@ You can configure environment settings in a local `.env` file or export them dir
 | `PORTALS_PASSWORD` | Password for automated job board account creation |
 | `BROWSER_USE_TIMEOUT` | Autofill session timeout in seconds (default: `300`) |
 | `TAILORING_TIMEOUT` | Resume tailoring timeout in seconds (default: `90`) |
-| `MASTER_RESUME_PATH` | Path to master resume PDF (or iCloud Drive Red tag) |
+| `MASTER_RESUME_PATH` | Path to master resume PDF |
 
 ## 👥 Authors & Contributors
 

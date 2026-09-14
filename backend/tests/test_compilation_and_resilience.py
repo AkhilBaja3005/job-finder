@@ -244,7 +244,7 @@ def test_extension_version_and_asset_integrity():
         manifest = json.load(f)
 
     assert manifest.get("manifest_version") == 3
-    assert manifest.get("version") == "3.1.0"
+    assert manifest.get("version") == "3.1.1"
     assert "activeTab" in manifest.get("permissions", [])
 
     for req_file in ["popup.html", "popup.css", "popup.js", "content.js", "content.css", "background.js"]:
@@ -257,7 +257,7 @@ def test_extension_version_and_asset_integrity():
     res = client.get("/extension_version_hash")
     assert res.status_code == 200
     data = res.json()
-    assert data.get("version") == "3.1.0"
+    assert data.get("version") == "3.1.1"
     assert "hash" in data
     assert len(data["hash"]) == 32
 

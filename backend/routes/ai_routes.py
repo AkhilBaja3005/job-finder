@@ -1020,6 +1020,7 @@ async def send_application_pdf_email(request: SendApplicationPdfEmailRequest, au
     from services.email_service import async_send_notification_email
     dest_email = user["email"]
     cand_name = session_resume_data.get("name", "").strip() or "Candidate" if isinstance(session_resume_data, dict) else "Candidate"
+    ats_display = f"{request.score}%" if request.score is not None else "N/A"
     email_subj = f"[Resume Delivery] Tailored Resume [{ats_display}]: {request.job_title} at {request.company}"
     email_text = (
         f"On-Demand Resume Delivery: Tailored Resume PDF\n"

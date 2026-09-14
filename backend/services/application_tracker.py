@@ -20,8 +20,8 @@ try:
     # pyrefly: ignore [missing-import]
     from services.auth import supabase_request, get_user_by_token
 except ImportError:
-    def supabase_request(*args, **kwargs): return None
-    def get_user_by_token(*args, **kwargs): return None
+    def supabase_request(*args: Any, **kwargs: Any) -> Any: return None
+    def get_user_by_token(*args: Any, **kwargs: Any) -> Any: return None
 # pyrefly: ignore [missing-import]
 from config.constants import get_output_dir, resolve_workspace_root
 
@@ -241,7 +241,7 @@ def list_applications(token: Optional[str] = None) -> list[dict]:
             f"applications?user_id=eq.{user['id']}&order=created_at.desc&limit={MAX_LOCAL_HISTORY_ENTRIES}",
             "GET",
         )
-        if rows:
+        if isinstance(rows, list):
             return [
                 {
                     "job_title": r.get("job_title", ""),
@@ -257,6 +257,7 @@ def list_applications(token: Optional[str] = None) -> list[dict]:
                     "timestamp": datetime.fromisoformat(r["created_at"]).timestamp() if r.get("created_at") else None,
                 }
                 for r in rows
+                if isinstance(r, dict)
             ]
 
     entries = _read_local_history(token)

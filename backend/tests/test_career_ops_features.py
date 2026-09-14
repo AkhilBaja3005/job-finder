@@ -188,3 +188,46 @@ def test_sync_resume_data_to_profile(tmp_path):
         assert result["candidate"]["projects"][0]["url"] == "https://github.com/janetester/fastkafka"
 
 
+def test_sync_resume_preserves_work_experience_technologies(tmp_path):
+    """Verify that when a resume is synced without technologies per role, existing technologies are preserved."""
+    from unittest import mock
+    import os
+    from mcp.tools.profile_tools import sync_resume_data_to_profile
+
+    existing_profile = {
+        "candidate": {
+            "name": "Jane Tester",
+            "work_experience": [
+                {
+                    "company": "DataCorp",
+                    "role": "Staff Data Engineer",
+                    "technologies": ["Python", "Spark", "Kafka", "Docker"]
+                }
+            ]
+        }
+    }
+
+    incoming_parsed = {
+        "name": "Jane Tester",
+        "experience": [
+            {
+                "company": "DataCorp",
+                "role": "Staff Data Engineer",
+                "start_date": "2022",
+                "end_date": "Present",
+                "technologies": None,
+                "description": ["Scaled pipeline to 100k events/sec."]
+            }
+        ]
+    }
+
+    dummy_config = str(tmp_path / "candidate_profile.json")
+    with mock.patch.dict(os.environ, {"CANDIDATE_PROFILE_PATH": dummy_config}), \
+         mock.patch("mcp.tools.profile_tools.load_profile_data", return_value=existing_profile):
+        result = sync_resume_data_to_profile(incoming_parsed)
+        exp = result["candidate"]["work_experience"][0]
+        assert exp["technologies"] == ["Python", "Spark", "Kafka", "Docker"]
+        assert exp["highlights"] == ["Scaled pipeline to 100k events/sec."]
+
+
+

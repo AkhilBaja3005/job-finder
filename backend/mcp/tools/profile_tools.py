@@ -274,6 +274,11 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
 
     # Work Experience
     if resume_dict.get("experience"):
+        existing_exp_map = {
+            (exp.get("company", "").strip().lower(), exp.get("role", "").strip().lower()): exp.get("technologies", [])
+            for exp in candidate.get("work_experience", [])
+            if isinstance(exp, dict) and exp.get("technologies")
+        }
         exp_list = []
         for exp in resume_dict["experience"]:
             technologies = []
@@ -282,6 +287,11 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
                 technologies = [t.strip() for t in raw_tech.split(",") if t.strip()]
             elif isinstance(raw_tech, list):
                 technologies = raw_tech
+
+            # If parsed technologies are empty, fallback to existing technologies for this company/role
+            if not technologies:
+                key = (exp.get("company", "").strip().lower(), exp.get("role", "").strip().lower())
+                technologies = existing_exp_map.get(key, [])
 
             exp_list.append({
                 "company": exp.get("company", ""),

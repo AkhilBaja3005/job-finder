@@ -370,7 +370,7 @@ BROWSER_USE_TIMEOUT=180 BROWSER_USE_DISABLE_GUARDRAILS=1 python applications_tra
 When you have a list of job URLs or an existing tracker and want to **immediately auto-fill using your Master Resume** without LaTeX recompilation or tailoring overhead:
 
 ### Features:
-- **Zero Tailoring Compilation**: Directly attaches your macOS Red-tagged Master Resume from iCloud or repository fallback.
+- **Zero Tailoring Compilation**: Directly attaches your Master Resume from your configured path or repository fallback.
 - **Multiple Input Formats**: Takes jobs directly from a CSV file (`--csv`), an Excel spreadsheet (`--excel`), or command-line URLs (`--url`).
 - **Status & Limit Filtering**: Selectively runs on specific statuses (e.g. `--filter "Ready to Apply"`) and controls batch sizes (`--limit 5`).
 - **Safety Modes**: Supports preview/review mode (default) or autonomous submission (`--auto-submit`).
@@ -409,7 +409,7 @@ Dedicated autonomous scanner and pipeline integration that specifically targets 
 - **Unified & Standalone CLI Access**: Run via the unified CLI (`job-finder scan --top-applicant --auto-apply`) or direct script execution (`python applications_tracker/linkedin_top_applicant_scanner.py --auto-submit`).
 - **Persistent Chrome Session (CDP Port 9222)**: Reuses your authenticated Chrome profile (`backend/user_data/browser_use_chrome_session`), eliminating repetitive LinkedIn logins, captcha prompts, and session resets.
 - **Top Applicant Badge DOM Filter**: Evaluates rendered search listing cards and detail views to pinpoint roles where you have an unfair competitive advantage.
-- **Master Resume Direct Dispatch**: Dispatches your macOS Red-tagged Master Resume directly without unnecessary LaTeX recompilation.
+- **Master Resume Direct Dispatch**: Dispatches your Master Resume directly without unnecessary LaTeX recompilation.
 - **Automated Email OTP Retrieval via Gmail Tab**: If an external application portal (e.g. micro1, Ashby, Workday) asks for an email verification code, the agent automatically opens `https://mail.google.com` in a new tab, extracts the latest OTP code, and enters it seamlessly.
 - **Dual Persistence**: Every submission is automatically logged to Supabase and tracked in `job_applications_tracker.csv` with status `Top Applicant - Direct Apply` and 95% compatibility score.
 

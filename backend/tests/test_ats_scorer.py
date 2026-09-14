@@ -401,3 +401,25 @@ def test_tracker_csv_fallback_reading(tmp_path):
             os.environ["JOB_FINDER_ROOT"] = old_env
         app_tr.OUTPUT_DIR = old_output_dir
 
+
+def test_cli_version_parsing():
+    import job_finder.cli as cli
+    assert cli._parse_ver("1.2.4") == (1, 2, 4)
+    assert cli._parse_ver("v2.0.1") == (2, 0, 1)
+    assert cli._parse_ver("v3.1.0-beta") == (3, 1, 0)
+    assert cli._parse_ver("1.3.0") > cli._parse_ver("1.2.4")
+
+
+def test_cli_update_checker_cache(tmp_path):
+    import job_finder.cli as cli
+    import os
+    import json
+    import time
+
+    cache_file = tmp_path / ".update_check.json"
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(cache_file, "w", encoding="utf-8") as f:
+        json.dump({"latest_version": "9.9.9", "last_check": time.time()}, f)
+
+    assert cli._parse_ver("9.9.9") > cli._parse_ver("1.2.4")
+

@@ -178,6 +178,27 @@
     <button id="btn-email-tailor" class="btn btn-email">📧 1-Click Email Tailored Package</button>
     <button id="btn-cover-letter" class="btn btn-secondary">📝 Generate & Preview Cover Letter</button>
     <button id="btn-outreach" class="btn btn-secondary">✉️ Generate & Preview Recruiter Outreach</button>
+
+    <!-- Interactive AI Q&A Copilot (For custom/unfilled questions e.g. "Why do you want to work at X?") -->
+    <div id="ai-qa-box" style="margin-top: 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-size: 10px; font-weight: 800; color: #38bdf8; text-transform: uppercase;">❓ Custom AI Q&A Copilot</span>
+        <span style="font-size: 8.5px; color: #94a3b8; font-weight: 600;">Company-Tailored</span>
+      </div>
+      <div style="font-size: 9px; color: #cbd5e1; margin-bottom: 6px;">
+        Autofill missed a question? Type or paste any custom question (e.g. <em>"Why do you want to work at this company?"</em>) to get a company & profile tailored answer:
+      </div>
+      <input type="text" id="custom-qa-question" class="form-control" placeholder="e.g. Why do you want to join this company?" style="padding: 6px; font-size: 10.5px; margin-bottom: 6px;">
+      <button id="btn-generate-qa-ans" class="btn btn-primary" style="margin-top: 0; padding: 6px; font-size: 10.5px;">💡 Generate Tailored Answer</button>
+      
+      <div id="qa-result-box" style="display: none; margin-top: 8px; background: rgba(15, 23, 42, 0.8); border: 1px dashed rgba(52, 211, 153, 0.4); border-radius: 6px; padding: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <span style="font-size: 9px; font-weight: 700; color: #34d399;">✨ Company-Specific AI Answer:</span>
+          <button id="btn-copy-qa-ans" style="background: #10b981; color: #000; border: none; padding: 2px 7px; border-radius: 4px; font-size: 9px; font-weight: 700; cursor: pointer;">📋 Copy Answer</button>
+        </div>
+        <div id="qa-result-text" style="font-size: 10px; color: #f8fafc; line-height: 1.4; white-space: pre-wrap; word-break: break-word;"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ======================================================== -->
