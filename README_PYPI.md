@@ -16,23 +16,38 @@ Upload your resume once, and let Job Finder AI:
 
 ## ⚡ Quick Start & Installation
 
+### 1. Create & Activate Virtual Environment (Windows PowerShell)
+
+```powershell
+# Create a virtual environment
+python -m venv venv
+
+# Activate the virtual environment in PowerShell
+.\venv\Scripts\Activate.ps1
+```
+
+*(On macOS/Linux: `python3 -m venv venv && source venv/bin/activate`)*
+
+### 2. Install Package
+
 Install the package directly from PyPI:
 
-```bash
+```powershell
 pip install job-finder-ai
 ```
 
 Or install with all cloud & database integrations:
 
-```bash
+```powershell
 pip install "job-finder-ai[all]"
 ```
 
 Playwright browser dependencies (for browser auto-fill & web scraping):
 
-```bash
+```powershell
 playwright install chromium
 ```
+
 
 ---
 
@@ -143,15 +158,8 @@ You can configure environment settings in a local `.env` file or export them dir
 
 ---
 
-## 🚀 Recent Feature Updates & Pull Requests
-
-- **Smart Pre-filled Form Fields Handling ([PR #60](https://github.com/AkhilBaja3005/job-finder/pull/60))**: Inspects pre-filled input fields across application portals (Workday, Greenhouse, Ashby, Lever). Clears and replaces outdated browser auto-filled text with verified candidate profile data, while preserving pre-filled fields if no candidate value exists.
-- **Workday Prompt Button ("Hamburger" Menu) Enter Selection ([PR #61](https://github.com/AkhilBaja3005/job-finder/pull/61))**: Enhanced browser-use automation prompts to properly trigger Workday multi-select / prompt buttons by typing the target option followed immediately by the `Enter` key (e.g. source attribution question selecting *"LinkedIn"* $\rightarrow$ *"LinkedIn corporate jobs"*).
-- **LinkedIn Top Applicant Direct Apply ([PR #62](https://github.com/AkhilBaja3005/job-finder/pull/62))**: Detects LinkedIn jobs where you have the *"You'd be a top applicant"* (or top 10% / 25% / stand out / competitive applicant) badge. Bypasses JD scraping, ATS scoring, and LaTeX tailoring latency entirely, directly auto-applying with your Master Resume via `job-finder scan --top-applicant --auto-apply`.
-
----
-
 ## 📄 License
+
 
 MIT License. Designed and maintained by [Akhil Baja](https://github.com/AkhilBaja3005).
 
