@@ -163,3 +163,68 @@ def test_autofill_populates_empty_input():
         assert "firstname" in session_filled
 
     asyncio.run(run_test())
+
+
+def test_task_prompt_contains_workday_prompt_button_rules():
+    """Verifies that the LLM agent prompt contains explicit handling for Workday prompt buttons and Enter key."""
+    sample_resume = {
+        "name": "Jane Developer",
+        "email": "jane@example.com",
+        "phone": "+44 7123 456789",
+        "location": "London, UK"
+    }
+    prompt = build_application_task_prompt("https://example.com/job/1", sample_resume)
+
+    assert "WORKDAY PROMPT BUTTONS (TRIPLE-BAR / 3 DOTS / HAMBURGER MENU) HANDLING" in prompt
+    assert "WORKDAY PROMPT BUTTON RULE" in prompt
+    assert "Press 'Enter' immediately to trigger the menu search/filter" in prompt
+    assert "How did you hear about this job?" in prompt
+    assert "LinkedIn Corporate Jobs" in prompt
+
+
+def test_autofill_presses_enter_on_prompt_combobox_field():
+    """Verifies that fill_visible_fields types and presses Enter on prompt/combobox fields."""
+    async def run_test():
+        mock_page = AsyncMock()
+        mock_input = AsyncMock()
+
+        mock_input.is_visible.return_value = True
+        mock_input.get_attribute.side_effect = lambda attr: {
+            "data-autofilled": None,
+            "type": "text",
+            "id": "source_channel",
+            "name": "source_channel"
+        }.get(attr, "")
+        mock_input.evaluate_handle.return_value = None
+        mock_page.evaluate.return_value = ""
+
+        # JS evaluate: input is empty initially, and is a combobox/prompt field
+        async def evaluate_side_effect(script, *args):
+            if "selectedOptions" in script or "value.trim()" in script:
+                return False  # not prefilled
+            if "is_prompt_or_combobox" in script or "aria-haspopup" in script or "combobox" in script:
+                return True
+            return ""
+        mock_input.evaluate.side_effect = evaluate_side_effect
+
+        mock_page.query_selector_all.return_value = [mock_input]
+        mock_page.query_selector.return_value = None
+
+        session_filled = set()
+        resume_data = {"name": "Jane Doe", "email": "jane@example.com"}
+
+        with patch("backend.services.autofill_agent.get_answer_from_llm", return_value="LinkedIn"):
+            await fill_visible_fields(
+                page=mock_page,
+                resume_data=resume_data,
+                resume_pdf_path="/path/to/resume.pdf",
+                session_filled_questions=session_filled
+            )
+
+        # It should fill the text AND press Enter on the prompt button input
+        mock_input.fill.assert_called_once_with("LinkedIn")
+        mock_input.press.assert_called_once_with("Enter")
+        assert "source_channel" in session_filled
+
+    asyncio.run(run_test())
+
