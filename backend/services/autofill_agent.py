@@ -103,6 +103,33 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                 await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
                 continue
 
+            # 2. Skip if the field is ALREADY pre-filled with a valid value (e.g. from browser autofill or portal state)
+            is_prefilled = await inp.evaluate("""el => {
+                if (el.tagName === 'SELECT') {
+                    const sel = el.selectedOptions && el.selectedOptions.length > 0 ? el.selectedOptions[0] : null;
+                    if (sel && sel.value && sel.value.trim() !== '' && !sel.disabled) {
+                        const txt = (sel.text || '').toLowerCase().trim();
+                        if (!txt.startsWith('select') && !txt.startsWith('choose') && !txt.startsWith('--')) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                if (el.type === 'checkbox' || el.type === 'radio') {
+                    return el.checked;
+                }
+                if (el.type === 'file') {
+                    return el.files && el.files.length > 0;
+                }
+                return el.value && el.value.trim().length > 0;
+            }""")
+
+            if is_prefilled:
+                print(f"[autofill] ⏭️ Skipping already pre-filled field: '{question_text}'")
+                await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
+                session_filled_questions.add(question_text)
+                continue
+
             # 2. Resume PDF upload
             if inp_type == "file":
                 placeholder = await inp.get_attribute("placeholder") or ""

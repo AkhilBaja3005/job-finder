@@ -250,6 +250,10 @@ def build_application_task_prompt(
 
     task += f"""
     CRITICAL SPEED & EFFICIENCY RULES:
+    - PRESERVE ALREADY AUTO-FILLED FIELDS (DO NOT OVERWRITE):
+      * Before entering data into any input, textarea, or dropdown, check whether it already contains a valid value.
+      * If a field is ALREADY filled with a valid value (e.g. pre-populated name, email, phone, location, address, or uploaded file from browser autofill, saved profile, or prior step), DO NOT clear, re-type, or overwrite it! Leave it untouched and immediately proceed to the next field.
+      * Only fill in fields that are EMPTY, incomplete, unselected, or contain invalid placeholder text.
     - DO NOT USE THE WAIT ACTION: The browser environment automatically handles DOM mutations and page loads. Never use `wait: seconds: ...`. Elements are immediately actionable.
     - BATCH ALL ACTIONS: Fill out ALL inputs, selects, and checkboxes on the visible screen in a single turn together with the 'Next' or 'Continue' click. Do not submit one field per step!
     - DROPDOWNS HANDLING:
@@ -263,7 +267,11 @@ def build_application_task_prompt(
        - If the page or modal displays 'Job not found', 'This job has closed', 'No longer accepting applications', or 'Applied', immediately call `done` with that reason without wasting extra steps.
     2. Open Form: Click 'Apply', 'Easy Apply', or 'Apply for this job'.
     3. Fill & Advance: In a single batched step, fill all contact/question inputs on the screen and click 'Next' or 'Continue'.
+       - PRE-FILLED FIELDS CHECK:
+         * Inspect each form control before acting. If an input already has your name, email, phone number, location, or an attached resume, leave it as-is. Do not re-type into it.
+         * Only populate empty, missing, or required fields that have not yet been completed.
        - Phone Country Code & Number:
+         * If the phone number field is already filled, leave it as-is.
          * Many ATS portals (Greenhouse, Lever) use an international telephone widget (`.iti__selected-country` button or 'Select country'). If a phone country button/dropdown is present beside or inside the Phone field, click it, search or select 'India' / '+91' / 'United Kingdom' / '+44', before or together with typing the phone number.
          * Type '{clean_mobile or phone}' into the phone input.
        - For Dropdowns & Autocomplete Fields:
