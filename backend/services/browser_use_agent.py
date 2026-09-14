@@ -250,6 +250,11 @@ def build_application_task_prompt(
 
     task += f"""
     CRITICAL SPEED & EFFICIENCY RULES:
+    - OVERWRITE OUTDATED PRE-FILLED FIELDS WITH CANDIDATE PROFILE DATA:
+      * When inspecting form controls (name, email, phone, location, LinkedIn, GitHub, portfolio, work authorization, etc.):
+        - If the field is ALREADY pre-filled but our candidate profile has a corresponding value for it, CLEAR the existing text in that field and replace it with our profile value! (Autofilled text on portals/browsers is frequently outdated or stale, so our candidate profile value takes absolute priority even if similar).
+        - If the field is pre-filled and we do NOT have a specific value for it in our candidate profile, leave it as-is without clearing it.
+      * For completely empty fields, fill them in directly using the candidate profile details.
     - DO NOT USE THE WAIT ACTION: The browser environment automatically handles DOM mutations and page loads. Never use `wait: seconds: ...`. Elements are immediately actionable.
     - BATCH ALL ACTIONS: Fill out ALL inputs, selects, and checkboxes on the visible screen in a single turn together with the 'Next' or 'Continue' click. Do not submit one field per step!
     - DROPDOWNS HANDLING:
@@ -263,7 +268,11 @@ def build_application_task_prompt(
        - If the page or modal displays 'Job not found', 'This job has closed', 'No longer accepting applications', or 'Applied', immediately call `done` with that reason without wasting extra steps.
     2. Open Form: Click 'Apply', 'Easy Apply', or 'Apply for this job'.
     3. Fill & Advance: In a single batched step, fill all contact/question inputs on the screen and click 'Next' or 'Continue'.
+       - PRE-FILLED FIELDS & OUTDATED DATA OVERWRITE RULE:
+         * If an input already contains a pre-filled value and our candidate profile contains that data (e.g. Name: '{candidate_name}', Email: '{email}', Phone: '{clean_mobile or phone}', Location: '{location}', LinkedIn, GitHub, Website), clear and re-enter our profile value to guarantee the application uses current data.
+         * If a pre-filled field is for an unknown or custom question where we have no candidate profile value, leave it as-is.
        - Phone Country Code & Number:
+         * Check and ensure the phone number matches '{clean_mobile or phone}' (clear and replace any outdated phone number).
          * Many ATS portals (Greenhouse, Lever) use an international telephone widget (`.iti__selected-country` button or 'Select country'). If a phone country button/dropdown is present beside or inside the Phone field, click it, search or select 'India' / '+91' / 'United Kingdom' / '+44', before or together with typing the phone number.
          * Type '{clean_mobile or phone}' into the phone input.
        - For Dropdowns & Autocomplete Fields:

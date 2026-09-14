@@ -103,67 +103,103 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                 await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
                 continue
 
-            # 2. Resume PDF upload
+            # 2. Check if the field is ALREADY pre-filled with a valid value (e.g. from browser autofill or portal state)
+            is_prefilled = await inp.evaluate("""el => {
+                if (el.tagName === 'SELECT') {
+                    const sel = el.selectedOptions && el.selectedOptions.length > 0 ? el.selectedOptions[0] : null;
+                    if (sel && sel.value && sel.value.trim() !== '' && !sel.disabled) {
+                        const txt = (sel.text || '').toLowerCase().trim();
+                        if (!txt.startsWith('select') && !txt.startsWith('choose') && !txt.startsWith('--')) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                if (el.type === 'checkbox' || el.type === 'radio') {
+                    return el.checked;
+                }
+                if (el.type === 'file') {
+                    return el.files && el.files.length > 0;
+                }
+                return el.value && el.value.trim().length > 0;
+            }""")
+
+            # 3. Resume PDF upload
             if inp_type == "file":
                 placeholder = await inp.get_attribute("placeholder") or ""
                 if "resume" in inp_name.lower() or "cv" in inp_name.lower() or "resume" in placeholder.lower():
-                    await inp.set_input_files(resume_pdf_path)
-                    await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
-                    session_filled_questions.add(question_text)
-                    print(f"Uploaded tailored resume PDF: {resume_pdf_path}")
-                    continue
+                    if resume_pdf_path and os.path.exists(resume_pdf_path):
+                        await inp.set_input_files(resume_pdf_path)
+                        await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
+                        session_filled_questions.add(question_text)
+                        print(f"Uploaded tailored resume PDF: {resume_pdf_path}")
+                        continue
+                    elif is_prefilled:
+                        # If already has a file and we don't have a new resume path, keep it
+                        print(f"[autofill] ⏭️ Leaving pre-filled file input: '{question_text}'")
+                        await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
+                        session_filled_questions.add(question_text)
+                        continue
 
-            # Heuristic matching for common personal fields
+            # 4. Resolve candidate profile value for known contact/profile fields
+            candidate_value = None
             if "first name" in field_key or "firstname" in field_key:
-                name = resume_data.get("name", "John")
-                first_name = name.split()[0] if name and isinstance(name, str) else "John"
-                await inp.fill(first_name)
-                session_filled_questions.add(question_text)
+                name = resume_data.get("name", "")
+                if name:
+                    candidate_value = name.split()[0]
             elif "last name" in field_key or "lastname" in field_key:
-                name = resume_data.get("name", "Doe")
-                names = name.split() if name and isinstance(name, str) else ["Doe"]
-                last_name = names[-1] if len(names) > 0 else "Doe"
-                await inp.fill(last_name)
-                session_filled_questions.add(question_text)
+                name = resume_data.get("name", "")
+                if name:
+                    names = name.split()
+                    candidate_value = names[-1] if len(names) > 0 else ""
             elif "email" in field_key:
-                await inp.fill(resume_data.get("email", ""))
-                session_filled_questions.add(question_text)
+                candidate_value = resume_data.get("email") or ""
             elif "phone" in field_key or "mobile" in field_key:
-                await inp.fill(resume_data.get("phone", ""))
-                session_filled_questions.add(question_text)
+                candidate_value = resume_data.get("phone") or ""
             elif "linkedin" in field_key and len(resume_data.get("links", [])) > 0:
-                li_url = next((link for link in resume_data["links"] if "linkedin" in link), "")
-                if li_url:
-                    await inp.fill(li_url)
-                    session_filled_questions.add(question_text)
+                candidate_value = next((link for link in resume_data["links"] if "linkedin" in link), "")
             elif "github" in field_key and len(resume_data.get("links", [])) > 0:
-                gh_url = next((link for link in resume_data["links"] if "github" in link), "")
-                if gh_url:
-                    await inp.fill(gh_url)
-                    session_filled_questions.add(question_text)
-            else:
-                # LLM-based answering for custom questions with page context
-                if question_text and len(question_text) > 3:
-                    print(f"Asking LLM to answer: '{question_text}' with visual HTML context...")
-                    answer = await asyncio.to_thread(get_answer_from_llm, question_text, parent_html, resume_data, custom_api_key)
-                    if answer:
-                        print(f"LLM Answer: {answer}")
-                        if inp_type == "checkbox":
-                            if "yes" in answer.lower() or "true" in answer.lower():
-                                await inp.check()
-                        elif await inp.evaluate("el => el.tagName") == "SELECT":
-                            options = await inp.query_selector_all("option")
-                            for opt in options:
-                                val = await opt.get_attribute("value") or ""
-                                text = await opt.inner_text() or ""
-                                if answer.lower() in val.lower() or answer.lower() in text.lower():
-                                    await inp.select_option(value=val)
-                                    break
-                        else:
-                            await inp.fill(answer)
+                candidate_value = next((link for link in resume_data["links"] if "github" in link), "")
 
-                    # Mark as successfully handled in this run
-                    session_filled_questions.add(question_text)
+            # If we have an authoritative value from candidate profile, ALWAYS fill it (clearing any outdated text)
+            if candidate_value is not None and str(candidate_value).strip() != "":
+                if is_prefilled:
+                    print(f"[autofill] 🔄 Replacing outdated pre-filled value for '{question_text}' with candidate profile data: '{candidate_value}'")
+                # Clear and overwrite with authoritative candidate profile data
+                await inp.fill(str(candidate_value).strip())
+                session_filled_questions.add(question_text)
+                await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
+                continue
+
+            # If the field is already pre-filled and we do NOT have candidate profile data for it, leave it as-is
+            if is_prefilled:
+                print(f"[autofill] ⏭️ Preserving pre-filled field with no profile override: '{question_text}'")
+                await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
+                session_filled_questions.add(question_text)
+                continue
+
+            # 5. LLM-based answering for custom questions with page context (only if empty)
+            if question_text and len(question_text) > 3:
+                print(f"Asking LLM to answer: '{question_text}' with visual HTML context...")
+                answer = await asyncio.to_thread(get_answer_from_llm, question_text, parent_html, resume_data, custom_api_key)
+                if answer:
+                    print(f"LLM Answer: {answer}")
+                    if inp_type == "checkbox":
+                        if "yes" in answer.lower() or "true" in answer.lower():
+                            await inp.check()
+                    elif await inp.evaluate("el => el.tagName") == "SELECT":
+                        options = await inp.query_selector_all("option")
+                        for opt in options:
+                            val = await opt.get_attribute("value") or ""
+                            text = await opt.inner_text() or ""
+                            if answer.lower() in val.lower() or answer.lower() in text.lower():
+                                await inp.select_option(value=val)
+                                break
+                    else:
+                        await inp.fill(answer)
+
+                # Mark as successfully handled in this run
+                session_filled_questions.add(question_text)
 
             # Mark as filled in the DOM
             await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")

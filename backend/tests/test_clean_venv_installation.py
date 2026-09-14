@@ -26,11 +26,11 @@ def test_clean_venv_and_entrypoints(tmp_path):
     builder = venv.EnvBuilder(with_pip=True)
     builder.create(venv_dir)
 
-    bin_dir = os.path.join(venv_dir, "bin")
-    pip_exe = os.path.join(bin_dir, "pip")
-    py_exe = os.path.join(bin_dir, "python")
-    job_finder_bin = os.path.join(bin_dir, "job-finder")
-    scanner_bin = os.path.join(bin_dir, "job-finder-scanner")
+    bin_dir = os.path.join(venv_dir, "Scripts" if sys.platform == "win32" else "bin")
+    pip_exe = os.path.join(bin_dir, "pip.exe" if sys.platform == "win32" else "pip")
+    py_exe = os.path.join(bin_dir, "python.exe" if sys.platform == "win32" else "python")
+    job_finder_bin = os.path.join(bin_dir, "job-finder.exe" if sys.platform == "win32" else "job-finder")
+    scanner_bin = os.path.join(bin_dir, "job-finder-scanner.exe" if sys.platform == "win32" else "job-finder-scanner")
 
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -94,6 +94,8 @@ def test_clean_venv_and_entrypoints(tmp_path):
     server_env = os.environ.copy()
     server_env["PORT"] = str(test_port)
     server_env["HOST"] = "127.0.0.1"
+    server_env["PYTHONIOENCODING"] = "utf-8"
+    server_env["PYTHONUTF8"] = "1"
 
     # In sandbox without network access, allow the test server to load the core dependencies from host environment
     import site
