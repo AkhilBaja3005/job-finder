@@ -65,12 +65,19 @@ job-finder scan
 # Autonomous mode (Submits applications directly):
 job-finder scan --auto-apply
 
+# Apply directly to LinkedIn Top Applicant postings without JD scoring:
+job-finder scan --top-applicant
+
+# Auto-apply directly to all LinkedIn Top Applicant postings:
+job-finder scan --top-applicant --auto-apply
+
 # Direct single-URL application:
 job-finder scan "https://boards.greenhouse.io/company/jobs/12345" --auto-apply
 
 # Advanced tuning (timeouts, steps, ATS thresholds, roles, freshness):
-job-finder scan   --role "AI Systems Engineer"   --location "London, UK"   --timeframe "24h"   --min-ats 70   --timeout 180   --auto-apply
+job-finder scan --role "AI Systems Engineer" --location "London, UK" --timeframe "24h" --min-ats 70 --timeout 180 --auto-apply
 ```
+
 
 ### 2. Direct Application Autofill (`job-finder apply`)
 Run ad-hoc browser auto-filler on any specific job application URL:
@@ -136,8 +143,15 @@ You can configure environment settings in a local `.env` file or export them dir
 
 ---
 
+## 🚀 Recent Feature Updates & Pull Requests
+
+- **Smart Pre-filled Form Fields Handling ([PR #60](https://github.com/AkhilBaja3005/job-finder/pull/60))**: Inspects pre-filled input fields across application portals (Workday, Greenhouse, Ashby, Lever). Clears and replaces outdated browser auto-filled text with verified candidate profile data, while preserving pre-filled fields if no candidate value exists.
+- **Workday Prompt Button ("Hamburger" Menu) Enter Selection ([PR #61](https://github.com/AkhilBaja3005/job-finder/pull/61))**: Enhanced browser-use automation prompts to properly trigger Workday multi-select / prompt buttons by typing the target option followed immediately by the `Enter` key (e.g. source attribution question selecting *"LinkedIn"* $\rightarrow$ *"LinkedIn corporate jobs"*).
+- **LinkedIn Top Applicant Direct Apply ([PR #62](https://github.com/AkhilBaja3005/job-finder/pull/62))**: Detects LinkedIn jobs where you have the *"You'd be a top applicant"* (or top 10% / 25% / stand out / competitive applicant) badge. Bypasses JD scraping, ATS scoring, and LaTeX tailoring latency entirely, directly auto-applying with your Master Resume via `job-finder scan --top-applicant --auto-apply`.
+
+---
+
 ## 📄 License
 
-
-
 MIT License. Designed and maintained by [Akhil Baja](https://github.com/AkhilBaja3005).
+
