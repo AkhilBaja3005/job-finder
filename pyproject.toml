@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "job-finder-ai"
-version = "1.2.0"
+version = "1.2.1"
 description = "Autonomous career agent, ATS resume tailor, and job search copilot."
 readme = "README_PYPI.md"
 
@@ -12,8 +12,14 @@ readme = "README_PYPI.md"
 
 license = { text = "MIT" }
 authors = [
-    { name = "Akhil Baja", email = "akhilbaja.work@gmail.com" }
+    { name = "Akhil Baja", email = "akhilbaja.work@gmail.com" },
+    { name = "Bhavesh Nivas" }
 ]
+maintainers = [
+    { name = "Akhil Baja", email = "akhilbaja.work@gmail.com" },
+    { name = "Bhavesh Nivas" }
+]
+
 requires-python = ">=3.10"
 keywords = ["job-search", "ats-resume-tailor", "browser-use", "career-agent", "mcp-server", "playwright"]
 classifiers = [
