@@ -166,13 +166,15 @@ def get_user_by_token(token: str) -> Optional[dict]:
     except Exception as e:
         print(f"Supabase auth lookup fallback: {e}")
 
-    # Fallback to local guest user representation if Supabase is unreachable/unconfigured
+    # Fallback to local guest user representation if Supabase is unreachable/unconfigured or token is a guest session
     guest_user = {
         "id": f"guest_{token[:8]}",
-        "email": "akhilbaja.work@gmail.com",
+        "email": "guest@job-finder.space",
+        "name": "Guest User",
+        "is_guest": True,
         "gemini_api_key": None,
-        "sync_code": clean_token if len(clean_token) == 6 else "GABY48",
-        "send_tailored_email": True
+        "sync_code": clean_token if len(clean_token) == 6 else f"G{token[:5].upper()}",
+        "send_tailored_email": False
     }
     _token_cache.set(token, guest_user)
     return guest_user

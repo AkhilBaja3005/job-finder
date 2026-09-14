@@ -7,7 +7,8 @@ and auto-scores matches deterministically against the candidate's profile.
 
 import os
 try:
-    import yaml
+    # pyrefly: ignore [untyped-import]
+    import yaml  # type: ignore
 except ImportError:
     yaml = None
 import asyncio

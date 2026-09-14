@@ -200,7 +200,7 @@ async def extract_recruiter_from_linkedin(job_url: str, html: Optional[str] = No
             await page.wait_for_timeout(1500)
 
             html = await page.content()
-            result = _parse_recruiter_html(html)
+            result = _parse_recruiter_html(html or "")
             # pyrefly: ignore [missing-import]
             from services.log_queue import log_ist
             log_ist(f"[recruiter_extractor] Found recruiter: {result.get('recruiter_name')}, profile: {result.get('recruiter_profile_url')}, company: {result.get('company_name')}")

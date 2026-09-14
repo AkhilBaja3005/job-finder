@@ -239,7 +239,7 @@ function App() {
   const [showExtensionGuide, setShowExtensionGuide] = useState(false);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
-  const [configStepActive, setConfigStepActive] = useState(true);
+  const [configStepActive, setConfigStepActive] = useState(false);
 
   // Optimization #1: Progressive Disclosure - compact mode for mobile
   const [compactMode, setCompactMode] = useState(window.innerWidth < 640);
@@ -2466,6 +2466,17 @@ function App() {
                     }}
                   >
                     <span>1-Click Auto-Sync & Download</span>
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '7px 10px', fontSize: '0.76rem', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
+                    onClick={() => {
+                      setConfigStepActive(true);
+                      setProfileDropdownOpen(false);
+                    }}
+                  >
+                    <span>⚙️ Setup & AI Settings</span>
                   </button>
 
                   <button
