@@ -55,8 +55,10 @@ The project includes:
 ### ⚡ 4. Autonomous Web Autofill Engine (`browser-use` + Gemini)
 - **Two-Phase Adaptive Execution**: Fast pure-DOM pass (`use_vision=False`, `use_thinking=False`) for sub-10s filling, with an adaptive fallback to **Vision + Deep Reasoning (`use_thinking=True`)** for custom canvas widgets or shadow DOM hurdles.
 - **Pre-Flight HTTP Probing**: Follows redirects to resolve direct ATS destinations (e.g. LinkedIn $\rightarrow$ Ashby) and exits in **~200ms** on closed/expired listings without launching Chrome.
+- **Smart Form Field Preservation & Updating**: Inspects auto-filled inputs on application portals; if candidate profile has current data, outdated browser/portal auto-filled values are cleanly cleared and replaced with verified candidate details, while preserving pre-filled fields if no candidate value exists.
+- **Workday Prompt Button & Menu Selection**: Accurately handles Workday triple-bar ("hamburger" / prompt button) multi-select menus by typing the target value followed by Enter to trigger native platform option selection (e.g., source questions, dropdowns).
 - **Persistent Chrome Instance**: Reuses a dedicated Chrome daemon on CDP port 9222 with performance flags (disabled image painting, timer throttling bypass).
-- **Safety Guardrails**: Default `REVIEW_ONLY` mode navigates through multi-step forms and pauses on the final preview step; `AUTO_SUBMIT` mode autonomously submits when enabled.
+- **Safety Guardrails**: Default `REVIEW_ONLY` mode navigates through multi-step forms and pauses on the final preview step; `AUTO_SUBMIT` mode autonomously submits when enabled (`--auto-apply` or `--auto-submit`).
 - 📖 **Full Architecture Guide**: See [`docs/AUTONOMOUS_AUTOFILL_README.md`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/docs/AUTONOMOUS_AUTOFILL_README.md).
 
 ### 🧩 5. In-Page Chrome Extension Assistant
@@ -174,12 +176,17 @@ The interactive `job-finder setup` wizard:
 ### Available Unified CLI Commands:
 ```bash
 job-finder scan --help             # Autonomous job discovery, ATS evaluation & tailoring
+job-finder scan --auto-apply       # Autonomous scan with auto-submit enabled (auto-applies to matches)
+job-finder scan --top-applicant    # Direct apply to LinkedIn Top Applicant postings without JD scoring
+job-finder scan --top-applicant --auto-apply  # Auto-apply directly to all LinkedIn Top Applicant postings
 job-finder apply <url>             # Direct job application autofill with browser-use
+job-finder apply <url> --submit    # Direct job application with autonomous auto-submit
 job-finder profile --show          # Inspect candidate profile and target preferences
 job-finder profile --sync <resume> # Sync and extract skills/experience directly from PDF
 job-finder server                  # Start FastAPI backend server (http://localhost:8000)
 job-finder mcp                     # Start Model Context Protocol server for Claude/Cursor/Antigravity
 ```
+
 
 ### 2. Manual Backend Setup
 ```bash
@@ -388,31 +395,43 @@ python applications_tracker/adhoc_auto_filler.py \
 
 ---
 
-## 🌟 LinkedIn 'Top Applicant' Scanner & Auto-Apply (`linkedin_top_applicant_scanner.py`)
+## 🌟 LinkedIn 'Top Applicant' Scanner & Auto-Apply (`linkedin_top_applicant_scanner.py` & `job-finder scan --top-applicant`)
 
-Dedicated autonomous scanner that specifically targets LinkedIn postings where your profile has the **"You’d be a top applicant"** (or top 10% / top 25% / stand out) badge, auto-applying with zero-tailoring latency using your Master Resume.
+Dedicated autonomous scanner and pipeline integration that specifically targets LinkedIn postings where your profile has the **"You’d be a top applicant"** (or top 10% / top 25% / stand out / competitive applicant) badge, auto-applying with **zero job description scoring or tailoring latency** using your Master Resume.
 
 ### Key Capabilities:
+- **Zero-JD Scoring & Tailoring Bypass**: Because LinkedIn already validates candidate suitability, the scanner skips live JD scraping, ATS scoring, and LaTeX compilation, immediately queuing for direct application with the master resume.
+- **Full Auto-Apply Support**: Seamlessly supports both `REVIEW_ONLY` (preview form filling and pause) and `AUTO_SUBMIT` (`--auto-apply` / `--auto-submit`) to autonomously submit applications end-to-end.
+- **Unified & Standalone CLI Access**: Run via the unified CLI (`job-finder scan --top-applicant --auto-apply`) or direct script execution (`python applications_tracker/linkedin_top_applicant_scanner.py --auto-submit`).
 - **Persistent Chrome Session (CDP Port 9222)**: Reuses your authenticated Chrome profile (`backend/user_data/browser_use_chrome_session`), eliminating repetitive LinkedIn logins, captcha prompts, and session resets.
 - **Top Applicant Badge DOM Filter**: Evaluates rendered search listing cards and detail views to pinpoint roles where you have an unfair competitive advantage.
 - **Master Resume Direct Dispatch**: Dispatches your macOS Red-tagged Master Resume directly without unnecessary LaTeX recompilation.
 - **Automated Email OTP Retrieval via Gmail Tab**: If an external application portal (e.g. micro1, Ashby, Workday) asks for an email verification code, the agent automatically opens `https://mail.google.com` in a new tab, extracts the latest OTP code, and enters it seamlessly.
-- **Dual Persistence**: Every submission is automatically logged to Supabase and tracked in `job_applications_tracker.csv`.
+- **Dual Persistence**: Every submission is automatically logged to Supabase and tracked in `job_applications_tracker.csv` with status `Top Applicant - Direct Apply` and 95% compatibility score.
 
 ### CLI Usage:
 ```bash
-# 1. Preview Mode (Safety Guardrails active):
+# 1. Via Unified CLI Dispatcher:
+# Preview Mode:
+job-finder scan --top-applicant
+
+# Autonomous Auto-Apply Mode:
+job-finder scan --top-applicant --auto-apply
+
+# 2. Via Standalone Scanner Script:
+# Preview Mode:
 python applications_tracker/linkedin_top_applicant_scanner.py
 
-# 2. Autonomous Auto-Submit Mode:
+# Autonomous Auto-Submit Mode:
 python applications_tracker/linkedin_top_applicant_scanner.py --auto-submit
 
-# 3. Custom keywords and limit:
+# Custom search keywords, limit, and auto-submit:
 python applications_tracker/linkedin_top_applicant_scanner.py \
   --keywords "Machine Learning Engineer, AI Engineer" \
   --limit 10 \
   --auto-submit
 ```
+
 
 ---
 
@@ -426,4 +445,14 @@ The pipeline includes an automated daily scheduler that executes every morning a
   1. **Phase 1 (ATS Scanner)**: Searches Ashby, Greenhouse, Lever, Workday for high-fit roles and applies/tailors resumes.
   2. **Phase 2 (LinkedIn Top Applicant)**: Scans LinkedIn for Top Applicant badge matches and executes autonomous auto-submission.
 - **Daily Logs**: Stored under `applications_tracker/logs/scanner_YYYY-MM-DD.log`.
+
+---
+
+## 🚀 Recent Feature Updates & Pull Requests
+
+| PR # | Branch / Feature | Status | Description |
+| :---: | :--- | :---: | :--- |
+| **[#60](https://github.com/AkhilBaja3005/job-finder/pull/60)** | `feat/preserve-prefilled-form-fields` | **Merged** | **Smart Pre-filled Form Fields Handling**: Inspects input fields on application portals (Workday, Greenhouse, Ashby, Lever). If the candidate profile contains verified values, outdated auto-filled browser text is cleared and replaced with accurate profile data; if no candidate value exists, existing portal values are preserved untouched. |
+| **[#61](https://github.com/AkhilBaja3005/job-finder/pull/61)** | `feat/workday-prompt-buttons-enter-selection` | **Open** | **Workday Prompt Button ("Hamburger" Menu) Enter Selection**: Enhanced browser-use automation prompts to properly trigger Workday multi-select / prompt buttons by typing the target option followed immediately by the `Enter` key (e.g. source attribution question selecting *"LinkedIn"* $\rightarrow$ *"LinkedIn corporate jobs"*). |
+| **[#62](https://github.com/AkhilBaja3005/job-finder/pull/62)** | `feat/top-applicant-direct-apply` | **Open** | **LinkedIn Top Applicant Direct Apply (Zero JD Scoring)**: Identifies LinkedIn jobs with the *"You'd be a top applicant"* (or top 10% / 25% / stand out / competitive applicant) badge. Bypasses JD scraping, ATS scoring, and LaTeX tailoring latency entirely, directly auto-applying with the Master Resume. Supported via `job-finder scan --top-applicant --auto-apply`. |
 
