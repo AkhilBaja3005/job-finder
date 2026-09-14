@@ -112,14 +112,46 @@ job-finder profile --show
 job-finder profile --sync /path/to/resume.pdf
 ```
 
-### 4. Local Web Server & Dashboard (`job-finder server`)
+### 4. System Status & Health Check (`job-finder status`)
+Display system health, environment status, API key configuration, master resume path, and active profile details:
+
+```bash
+job-finder status
+```
+
+### 5. Standalone ATS Health Audit & AI Optimization (`job-finder ats`)
+Run a standalone ATS audit on your master resume or candidate profile, compute keyword matches and bullet metrics ratio, and auto-optimize your summary:
+
+```bash
+# Run baseline ATS audit:
+job-finder ats
+
+# Evaluate a specific resume PDF:
+job-finder ats --resume /path/to/resume.pdf
+
+# Run audit and auto-optimize summary for ATS conversion using AI:
+job-finder ats --optimize
+```
+
+### 6. Application Pipeline Tracker (`job-finder tracker`)
+List and inspect your tracked job applications, tailored resumes, and saved roles:
+
+```bash
+# View all tracked entries:
+job-finder tracker
+
+# Filter by application status (applied, saved, tailored):
+job-finder tracker --status applied --limit 10
+```
+
+### 7. Local Web Server & Dashboard (`job-finder server`)
 Launch the backend server locally on port 8000:
 
 ```bash
 job-finder server --port 8000
 ```
 
-### 5. Model Context Protocol Server (`job-finder mcp`)
+### 8. Model Context Protocol Server (`job-finder mcp`)
 Launch the stdio MCP server for integration with **Cursor IDE**, **Claude Code**, **Claude Desktop**, and **Antigravity**:
 
 ```bash
