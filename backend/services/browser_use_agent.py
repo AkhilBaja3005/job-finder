@@ -229,6 +229,7 @@ def build_application_task_prompt(
     - Citizenship: {citizenship}
     - Work Authorization: {work_auth}
     - Requires Visa Sponsorship: {sponsorship_str}
+    - Notice Period / Earliest Availability: {notice_period} (Immediate / Available immediately)
     - Protected Veteran Status: {veteran_status}
     - Disability Status: {disability_status}
     - Professional Background: {summary}
@@ -299,6 +300,16 @@ def build_application_task_prompt(
            - Wait for or inspect the dynamic suggestion list to appear, then click the exact matching option (e.g. 'London, England, United Kingdom', 'London, UK', 'London (United Kingdom)', or 'United Kingdom').
            - Do not leave the input half-typed without selecting the flyout suggestion.
          * Work Authorization / Sponsorship: Inspect options and choose '{sponsorship_choice}' (Candidate requires sponsorship: {sponsorship_str}).
+         * Notice Period / Earliest Start Date / Availability:
+           - If asked 'Notice Period', 'Earliest start date', 'When can you start?', or 'Earliest available date':
+             1. Free-form text input: Enter '{notice_period}' or 'Available immediately'.
+             2. Dropdown select: Inspect options and choose 'Immediately', 'Available immediately', '0 weeks', or '1 month'.
+             3. HTML5 date input or Calendar Date-Picker (e.g. `<input type="date">`, date modal, or calendar picker that strictly requires MM/DD/YYYY or YYYY-MM-DD):
+                - Input today's date or tomorrow:
+                  * ISO format: '{today_iso}'
+                  * UK format: '{today_uk}'
+                  * US format: '{today_us}'
+                - If a calendar widget popup opens, click today's date or the first highlighted available weekday.
          * Gender: Inspect options and choose '{gender}'.
          * Race / Ethnicity: Inspect options and choose '{ethnicity}'.
          * Citizenship / Nationality: Inspect options and choose '{citizenship}'.

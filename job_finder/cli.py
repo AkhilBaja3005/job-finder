@@ -353,6 +353,56 @@ def main():
             res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": resume_target}))
             if res.get("success"):
                 print(f"✅ Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
+                
+                # Run ATS Health Audit & Display Improvement Tips
+                try:
+                    from backend.services.ats_scorer import evaluate_master_resume
+                    from backend.mcp.tools.profile_tools import load_profile_data, save_profile_data
+                    profile_data = load_profile_data()
+                    ats_eval = evaluate_master_resume(profile_data.get("candidate", {}))
+                    ats_score = ats_eval.get("ats_score", 80)
+                    suggestions = ats_eval.get("suggestions", [])
+
+                    print("\n📊 ========================================================")
+                    print(f"           MASTER RESUME ATS HEALTH SCORE: {ats_score}/100")
+                    print("========================================================")
+                    print(f"  • Skill Keywords  : {ats_eval.get('skills_count')} core taxonomy matches")
+                    print(f"  • Quantified Ratio: {ats_eval.get('quantified_percentage')}% of bullets contain metrics (%, £/$, numbers)")
+                    print(f"  • Estimated Tenure: {ats_eval.get('candidate_years')} years relevant experience")
+
+                    if suggestions:
+                        print("\n💡 Key ATS Improvement Tips:")
+                        for tip in suggestions:
+                            print(f"  • {tip}")
+
+                    # Interactive prompt to auto-enhance summary if suggestions exist
+                    if sys.stdin.isatty() and suggestions:
+                        try:
+                            print("\n✨ Would you like AI to auto-optimize your summary to improve ATS conversion? [Y/n]: ", end="")
+                            opt_choice = input().strip().lower()
+                            if opt_choice in ("y", "yes", ""):
+                                from backend.services.gemini_client import generate_content_with_fallback
+                                cand = profile_data.get("candidate", {})
+                                cur_summary = cand.get("experience_summary", "")
+                                skills_str = ", ".join(list(cand.get("core_skills", {}).keys())[:10]) if isinstance(cand.get("core_skills"), dict) else ""
+                                prompt = (
+                                    "Optimize this professional summary for ATS conversion and executive impact.\n"
+                                    "Keep it to 2-3 visual lines (~25-45 words). Focus on quantified achievements and core skills.\n"
+                                    f"Candidate Name: {cand.get('name')}\n"
+                                    f"Current Summary: {cur_summary}\n"
+                                    f"Core Skills: {skills_str}\n"
+                                    "Return ONLY the plain optimized summary text without any markdown commentary or quotes."
+                                )
+                                new_summary = generate_content_with_fallback(prompt)
+                                if new_summary:
+                                    cand["experience_summary"] = new_summary.strip().strip('"')
+                                    profile_data["candidate"] = cand
+                                    save_profile_data(profile_data)
+                                    print(f"\n✅ Auto-Optimized Summary Saved:\n  \"{cand['experience_summary']}\"")
+                        except (EOFError, KeyboardInterrupt):
+                            print("\nSkipping summary optimization.")
+                except Exception as ats_err:
+                    print(f"ℹ️ Could not compute ATS baseline: {ats_err}")
             else:
                 print(f"ℹ️ Could not auto-parse resume: {res.get('error')}")
         elif resume_target and not os.path.exists(resume_target):
