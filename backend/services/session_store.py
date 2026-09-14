@@ -65,6 +65,33 @@ def _user_output_paths(token: Optional[str]) -> Tuple[str, str]:
     return tex_path, pdf_path
 
 
+def _ensure_resume_cls(target_dir: str) -> Optional[str]:
+    """Finds resume.cls across package roots, workspace, and assets, and copies it to target_dir."""
+    import shutil
+    dest = os.path.join(target_dir, "resume.cls")
+    if os.path.exists(dest) and os.path.getsize(dest) > 100:
+        return dest
+
+    candidates = [
+        os.path.join(UPLOAD_DIR, "resume.cls"),
+        os.path.join(BASE_DIR, "assets", "resume.cls"),
+        os.path.join(BASE_DIR, "backend", "assets", "resume.cls"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "resume.cls"),
+        os.path.join(OUTPUT_DIR, "resume.cls"),
+        os.path.join(os.getcwd(), "resume.cls"),
+        os.path.join(os.getcwd(), "backend", "assets", "resume.cls"),
+    ]
+    for c in candidates:
+        if os.path.exists(c) and os.path.isfile(c) and os.path.getsize(c) > 100:
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+                shutil.copy2(c, dest)
+                return dest
+            except Exception:
+                pass
+    return None
+
+
 def drain_llm_logs() -> list:
     """Non-blocking drain of all currently-queued LLM client log messages."""
     messages = []

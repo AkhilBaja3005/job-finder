@@ -220,9 +220,8 @@ def apply_latex_hotfix(
 
     # ── Strict 1-Page PDF Budget Clamping: tighten itemize and margin if scaled
     if spacing_scale <= 0.90 or linespread <= 0.95:
-        # Tighten list item padding and section baseline padding
+        # Tighten list item padding and section baseline padding without cutting top margin
         spacing_overrides.append("\\addtolength{\\textheight}{0.28in}")
-        spacing_overrides.append("\\addtolength{\\topmargin}{-0.14in}")
         spacing_overrides.append("\\let\\olditem\\item")
         spacing_overrides.append("\\renewcommand{\\item}{\\vspace{-1.5pt}\\olditem}")
 
@@ -698,7 +697,11 @@ def generate_latex_from_json(
             end      = exp.get("end_date", "")
             dates    = f"{start} -- {end}" if start and end else (start or end or exp.get("dates", ""))
             bullets  = exp.get("description", [])
-            techs    = exp.get("technologies", "")
+            raw_techs = exp.get("technologies", "")
+            if isinstance(raw_techs, list):
+                techs = ", ".join(str(t) for t in raw_techs if t)
+            else:
+                techs = str(raw_techs or "")
 
             # Match user format: {\bf Company $|$ \textnormal{Role} $|$ \em Dates $|$ Location}
             header_components = []
@@ -714,7 +717,8 @@ def generate_latex_from_json(
             header_str = " $|$ ".join(header_components)
             latex.append(f"{{{header_str}}} \\\\")
             if techs:
-                latex.append(f"{{\\em Technologies: {techs}}}")
+                safe_exp_techs = re.sub(r'(?<!\\)&', r'\\&', techs)
+                latex.append(f"{{\\em Technologies: {safe_exp_techs}}}")
             if bullets:
                 latex.append("\\vspace{-0.6em}")
                 latex.append("\\begin{itemize}")
@@ -771,6 +775,14 @@ def generate_latex_from_json(
                     tech_stack = first_item
                     bullets = bullets[1:]
 
+            # Normalize tech_stack to string if parsed as a list
+            if isinstance(tech_stack, list):
+                tech_stack = ", ".join(str(t) for t in tech_stack if t)
+            elif tech_stack is not None:
+                tech_stack = str(tech_stack)
+            else:
+                tech_stack = ""
+
             body_text   = ""
             if bullets:
                 if isinstance(bullets, list):
@@ -782,7 +794,7 @@ def generate_latex_from_json(
             formatted_body = _format_bullet_bolding(body_text, skills_list)
 
             # Escape LaTeX special chars in title and tech_stack if unescaped
-            safe_title = re.sub(r'(?<!\\)&', r'\\&', title)
+            safe_title = re.sub(r'(?<!\\)&', r'\\&', str(title or ""))
             safe_tech = re.sub(r'(?<!\\)&', r'\\&', tech_stack) if tech_stack else ""
 
             proj_header = f"    \\item \\textbf{{{safe_title}}}"
@@ -805,7 +817,9 @@ def generate_latex_from_json(
         fallback_skills = []
         for exp in data.get("experience", []):
             techs = exp.get("technologies") or ""
-            if techs:
+            if isinstance(techs, list):
+                fallback_skills.extend([str(t).strip() for t in techs if str(t).strip()])
+            elif isinstance(techs, str) and techs:
                 fallback_skills.extend([t.strip() for t in techs.split(",") if t.strip()])
         if fallback_skills:
             from services.resume_parser import categorize_skills_with_llm

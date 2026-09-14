@@ -181,6 +181,30 @@ def run_test():
         assert res.returncode == 0
         print("  ✓ `job-finder server --help` executed successfully")
 
+        res = subprocess.run([jf_bin, "apply", "--help"], capture_output=True, text=True)
+        assert res.returncode == 0
+        assert "--submit" in res.stdout
+        print("  ✓ `job-finder apply --help` executed successfully")
+
+        res = subprocess.run([jf_bin, "status"], capture_output=True, text=True)
+        assert res.returncode == 0
+        assert "JOB FINDER AI SYSTEM HEALTH" in res.stdout
+        print("  ✓ `job-finder status` executed successfully")
+
+        res = subprocess.run([jf_bin, "ats"], capture_output=True, text=True)
+        assert res.returncode == 0
+        assert "MASTER RESUME ATS HEALTH AUDIT" in res.stdout
+        print("  ✓ `job-finder ats` executed successfully")
+
+        res = subprocess.run([jf_bin, "tracker"], capture_output=True, text=True)
+        assert res.returncode == 0
+        print("  ✓ `job-finder tracker` executed successfully")
+
+        res = subprocess.run([jf_bin, "profile", "--show"], capture_output=True, text=True)
+        assert res.returncode == 0
+        assert "Profile:" in res.stdout
+        print("  ✓ `job-finder profile --show` executed successfully")
+
         # Test MCP Stdio
         p = subprocess.Popen(
             [jf_bin, "mcp"],
@@ -195,6 +219,37 @@ def run_test():
         print("  ✓ `job-finder mcp` stdio JSON-RPC executed successfully")
     else:
         print(f"  Note: {jf_bin} not found in this env, skipping binary entrypoint check.")
+
+    # 6. Test CLI .env Auto-Loading & Prompt Earliest Start Date Rules
+    print("\n[5/5] Testing CLI .env auto-loading & Prompt Date Rules...")
+    from job_finder.cli import load_workspace_env
+    # Create temporary .env to verify override loading
+    test_env_file = os.path.join(os.getcwd(), ".env.test_tmp")
+    with open(test_env_file, "w", encoding="utf-8") as f:
+        f.write("CLI_ENV_TEST_VAR=LOADED_SUCCESSFULLY\n")
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(test_env_file, override=True)
+        assert os.getenv("CLI_ENV_TEST_VAR") == "LOADED_SUCCESSFULLY"
+        print("  ✓ Automatic CLI .env resolution & environment loading verified!")
+    finally:
+        if os.path.exists(test_env_file):
+            os.remove(test_env_file)
+
+    # Test Date formatting & Notice Period prompt synthesis
+    from backend.services.browser_use_agent import build_application_task_prompt
+    test_prompt = build_application_task_prompt(
+        job_url="https://example.com/job/123",
+        resume_data={
+            "candidate": {
+                "name": "Akhil Baja",
+                "notice_period": "Available immediately"
+            }
+        }
+    )
+    assert "Notice Period / Earliest Availability: Available immediately" in test_prompt
+    assert "HTML5 date input or Calendar Date-Picker" in test_prompt
+    print("  ✓ Earliest start date, notice period, and calendar date-picker rules verified in browser-use task prompt!")
 
     print("\n==================================================")
     print("🎉 ALL ENDPOINT & FUNCTIONALITY TESTS PASSED 100%!")

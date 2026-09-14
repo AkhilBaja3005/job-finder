@@ -450,7 +450,7 @@ def notify_user_of_failed_applications(failed_jobs: list, to_email: Optional[str
         return False
 
     recipient = to_email or os.getenv("NOTIFY_EMAIL") or "akhilbaja.work@gmail.com"
-    subject = f"⚠️ Job Finder Alert: User Review Needed for {len(failed_jobs)} Application(s)"
+    subject = f"Job Finder Alert: User Review Needed for {len(failed_jobs)} Application(s)"
 
     # Build plain text summary
     text_lines = [
@@ -482,7 +482,7 @@ def notify_user_of_failed_applications(failed_jobs: list, to_email: Optional[str
 
     html_body = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 680px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-        <h2 style="color: #c53030; margin-top: 0;">⚠️ User Review Needed: Unable to Submit Applications</h2>
+        <h2 style="color: #c53030; margin-top: 0;">User Review Needed: Unable to Submit Applications</h2>
         <p style="color: #4a5568; font-size: 15px;">
             The autonomous job scanner attempted to apply for the following <b>{len(failed_jobs)}</b> role(s), but encountered form validation errors, unselected required fields, or unconfirmed submissions:
         </p>
@@ -531,7 +531,7 @@ def notify_user_of_applied_applications(applied_jobs: list, to_email: Optional[s
         return False
 
     recipient = to_email or os.getenv("NOTIFY_EMAIL") or "akhilbaja.work@gmail.com"
-    subject = f"🚀 Job Finder Success: {len(applied_jobs)} Application(s) Submitted Successfully!"
+    subject = f"Job Finder Success: {len(applied_jobs)} Application(s) Submitted Successfully!"
 
     # Build plain text summary
     cand_name = "Candidate"
@@ -572,7 +572,7 @@ def notify_user_of_applied_applications(applied_jobs: list, to_email: Optional[s
 
     html_body = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 680px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-        <h2 style="color: #276749; margin-top: 0;">🚀 Applications Submitted Successfully!</h2>
+        <h2 style="color: #276749; margin-top: 0;">Applications Submitted Successfully!</h2>
         <p style="color: #4a5568; font-size: 15px;">
             The autonomous job scanner successfully tailored your resume and submitted <b>{len(applied_jobs)}</b> application(s):
         </p>

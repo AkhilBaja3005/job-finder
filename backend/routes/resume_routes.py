@@ -19,6 +19,7 @@ from services.session_store import (
     _safe_key,
     _get_user_storage_dirs,
     _user_output_paths,
+    _ensure_resume_cls,
     get_session_data,
     set_session_data
 )
@@ -150,12 +151,9 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
 
         # Baseline PDF Compilation
         try:
-            cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
-            if not os.path.exists(cls_source):
-                cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
-            if os.path.exists(cls_source):
-                shutil.copy2(cls_source, os.path.join(user_up_dir, "resume.cls"))
-                shutil.copy2(cls_source, os.path.join(user_out_dir, "resume.cls"))
+            _ensure_resume_cls(user_up_dir)
+            _ensure_resume_cls(user_out_dir)
+            _ensure_resume_cls(OUTPUT_DIR)
 
             with open(path, "r", encoding="utf-8") as _f:
                 canonical_tex_content = _f.read()
@@ -164,6 +162,7 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
                 await asyncio.to_thread(
                     subprocess.run,
                     ["tectonic", path, "--outdir", user_out_dir],
+                    cwd=user_out_dir,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
                 )
             else:
@@ -332,6 +331,26 @@ async def download_application_pdf(filepath: str):
             break
 
     if not pdf_path:
+        # Fallback: Attempt to fetch from Hugging Face storage bucket if available
+        hf_tok = os.getenv("HF_TOKEN")
+        if hf_tok and len(parts) >= 2:
+            try:
+                from huggingface_hub import HfFileSystem  # type: ignore
+                hfs = HfFileSystem(token=hf_tok)
+                user_key = parts[0]
+                filename = os.path.join(*parts[1:])
+                remote_hf_path = f"buckets/abaja/job-finder-storage/user_data/{user_key}/output/{os.path.basename(filename)}"
+                if hfs.exists(remote_hf_path):
+                    cached_dir = os.path.join(USER_DATA_DIR, user_key, "output")
+                    os.makedirs(cached_dir, exist_ok=True)
+                    cached_file = os.path.join(cached_dir, os.path.basename(filename))
+                    hfs.get_file(remote_hf_path, cached_file)
+                    if os.path.exists(cached_file):
+                        pdf_path = cached_file
+            except Exception as hf_err:
+                print(f"[Resume Route] Warning: Hugging Face bucket fallback error: {hf_err}")
+
+    if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF file not found")
 
     filename = os.path.basename(pdf_path)
@@ -361,16 +380,13 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
         with open(tex_path, "w", encoding="utf-8") as f:
             f.write(fixed_code)
 
-        cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
-        if not os.path.exists(cls_source):
-            cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
-        if os.path.exists(cls_source):
-            shutil.copy2(cls_source, os.path.join(user_out_dir, "resume.cls"))
-            shutil.copy2(cls_source, os.path.join(OUTPUT_DIR, "resume.cls"))
+        _ensure_resume_cls(user_out_dir)
+        _ensure_resume_cls(OUTPUT_DIR)
 
         result = await asyncio.to_thread(
             subprocess.run,
             ["tectonic", tex_path, "--outdir", user_out_dir],
+            cwd=user_out_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -450,11 +466,8 @@ async def compile_master_pdf(request: OriginalOverleafRequest, authorization: Op
         user_out_dir = os.path.join(OUTPUT_DIR, safe_name)
         os.makedirs(user_out_dir, exist_ok=True)
 
-        cls_src = os.path.join(UPLOAD_DIR, "resume.cls")
-        if not os.path.exists(cls_src):
-            cls_src = os.path.join(BASE_DIR, "assets", "resume.cls")
-        if os.path.exists(cls_src):
-            shutil.copy2(cls_src, os.path.join(user_out_dir, "resume.cls"))
+        _ensure_resume_cls(user_out_dir)
+        _ensure_resume_cls(OUTPUT_DIR)
 
         pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, latex_code, 1.0, 1.0, None)
         opt_scale = 1.0
@@ -528,12 +541,9 @@ async def apply_suggestion(request: ApplySuggestionRequest, authorization: Optio
         with open(canonical_tex_path, "w", encoding="utf-8") as f:
             f.write(canonical_tex)
 
-        cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
-        if not os.path.exists(cls_source):
-            cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
-        if os.path.exists(cls_source):
-            shutil.copy2(cls_source, os.path.join(user_up_dir, "resume.cls"))
-            shutil.copy2(cls_source, os.path.join(user_out_dir, "resume.cls"))
+        _ensure_resume_cls(user_up_dir)
+        _ensure_resume_cls(user_out_dir)
+        _ensure_resume_cls(OUTPUT_DIR)
 
         after_pdf_filename = f"master_after_{uuid.uuid4().hex[:8]}.pdf"
         after_pdf_path = os.path.join(user_out_dir, after_pdf_filename)

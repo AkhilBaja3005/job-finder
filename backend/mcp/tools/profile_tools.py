@@ -9,6 +9,16 @@ from typing import Dict, Any, Optional
 # pyrefly: ignore [missing-import]
 from config.constants import resolve_workspace_root
 
+try:
+    from dotenv import load_dotenv
+    ws_env = os.path.join(resolve_workspace_root(), ".env")
+    if os.path.exists(ws_env):
+        load_dotenv(ws_env)
+    load_dotenv(os.path.join(os.getcwd(), ".env"))
+    load_dotenv()
+except Exception:
+    pass
+
 def get_profile_config_path() -> str:
     """
     Finds the candidate_profile.json to read.
@@ -174,6 +184,15 @@ def load_profile_data() -> Dict[str, Any]:
         except Exception:
             pass
     return {}
+
+
+def save_profile_data(data: Dict[str, Any]) -> str:
+    """Saves candidate profile data dict into active candidate_profile.json."""
+    save_path = get_profile_save_path()
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    return save_path
 
 
 def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -411,6 +430,34 @@ async def handle_sync_candidate_profile_from_resume(args: Dict[str, Any]) -> Dic
     structured = parse_resume(resume_path)
     resume_dict = structured.model_dump()
     updated_profile = sync_resume_data_to_profile(resume_dict)
+
+    # Persist synced resume path into workspace .env MASTER_RESUME_PATH
+    try:
+        ws = resolve_workspace_root()
+        env_file = os.path.join(ws, ".env")
+        lines = []
+        if os.path.exists(env_file):
+            with open(env_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        
+        updated = False
+        new_lines = []
+        for line in lines:
+            if line.strip().startswith("MASTER_RESUME_PATH="):
+                new_lines.append(f'MASTER_RESUME_PATH="{resume_path}"\n')
+                updated = True
+            else:
+                new_lines.append(line)
+        if not updated:
+            if new_lines and not new_lines[-1].endswith("\n"):
+                new_lines.append("\n")
+            new_lines.append(f'MASTER_RESUME_PATH="{resume_path}"\n')
+        
+        with open(env_file, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+        os.environ["MASTER_RESUME_PATH"] = resume_path
+    except Exception:
+        pass
 
     return {
         "success": True,

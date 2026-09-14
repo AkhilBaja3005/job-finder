@@ -210,3 +210,60 @@ def test_email_notifications_applied_and_failed():
         assert "Machine Learning Engineer" in kwargs["text_body"]
         assert "Missing required citizenship dropdown" in kwargs["text_body"]
 
+
+def test_generate_latex_from_json_technologies_list_and_string():
+    """Validates generate_latex_from_json handles list-type and string-type technologies without throwing TypeError."""
+    from utils.latex_utils import generate_latex_from_json
+
+    data_with_lists = {
+        "name": "Jane Doe",
+        "email": "jane@example.com",
+        "phone": "+44 7123 456789",
+        "location": "London, UK",
+        "skills": {
+            "Languages": ["Python", "C++"],
+            "Frameworks": ["FastAPI", "PyTorch"]
+        },
+        "projects": [
+            {
+                "title": "Autonomous Agent & Tools",
+                # Structured resume parser returns List[str]
+                "technologies": ["Python", "Docker", "FastAPI & Redis"],
+                "url": "https://github.com/janedoe/agent",
+                "description": ["Engineered distributed agent workflow.", "Reduced latency by 40%."]
+            }
+        ],
+        "experience": [
+            {
+                "company": "Tech Corp & Co",
+                "role": "Software Engineer",
+                "start_date": "Jan 2023",
+                "end_date": "Present",
+                "location": "London, UK",
+                # Technologies passed as List[str]
+                "technologies": ["FastAPI", "Docker", "PostgreSQL & Redis"],
+                "description": ["Developed high throughput async endpoints."]
+            }
+        ],
+        "education": [
+            {
+                "institution": "Imperial College London",
+                "degree": "MSc Computing",
+                "start_date": "Sept 2022",
+                "graduation_date": "Sept 2023",
+                "location": "London, UK",
+                "gpa": "Distinction"
+            }
+        ]
+    }
+
+    tex_output = generate_latex_from_json(data_with_lists)
+    assert isinstance(tex_output, str)
+    assert len(tex_output) > 200
+    # Ampersands in technologies and projects should be safely escaped
+    assert "FastAPI \\& Redis" in tex_output
+    assert "PostgreSQL \\& Redis" in tex_output
+    assert "Autonomous Agent \\& Tools" in tex_output
+    assert "Tech Corp & Co" in tex_output or "Tech Corp \\& Co" in tex_output
+
+

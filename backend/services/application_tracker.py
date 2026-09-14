@@ -16,8 +16,12 @@ import time
 import hashlib
 from datetime import datetime, timezone
 from typing import Optional, Any, Dict, List, Tuple
-# pyrefly: ignore [missing-import]
-from services.auth import supabase_request, get_user_by_token
+try:
+    # pyrefly: ignore [missing-import]
+    from services.auth import supabase_request, get_user_by_token
+except ImportError:
+    def supabase_request(*args, **kwargs): return None
+    def get_user_by_token(*args, **kwargs): return None
 # pyrefly: ignore [missing-import]
 from config.constants import get_output_dir, resolve_workspace_root
 
@@ -54,6 +58,47 @@ def _read_local_history(token: Optional[str]) -> list[dict]:
         if os.path.exists(flat_path):
             path = flat_path
         else:
+            # Fallback to reading job_applications_tracker.csv if available
+            try:
+                # pyrefly: ignore [missing-import]
+                from config.constants import get_tracker_csv_path
+                import csv
+                csv_candidates = [
+                    get_tracker_csv_path(),
+                    os.path.join(os.getcwd(), "applications_tracker", "job_applications_tracker.csv"),
+                    os.path.join(os.getcwd(), "job_applications_tracker.csv"),
+                    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "applications_tracker", "job_applications_tracker.csv")
+                ]
+                csv_path = None
+                for c in csv_candidates:
+                    if os.path.exists(c):
+                        csv_path = c
+                        break
+                if csv_path:
+                    csv_entries = []
+                    with open(csv_path, "r", encoding="utf-8") as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            score_val = None
+                            if row.get("Overall ATS"):
+                                try:
+                                    score_val = int(row["Overall ATS"].replace("%", "").strip())
+                                except ValueError:
+                                    pass
+                            csv_entries.append({
+                                "company": row.get("Company", ""),
+                                "job_title": row.get("Job Title", ""),
+                                "job_url": row.get("Job URL", ""),
+                                "status": row.get("Status", "saved"),
+                                "score": score_val,
+                                "created_at": row.get("Posted Time", ""),
+                                "updated_at": row.get("Posted Time", ""),
+                                "pdf_path": row.get("PDF Path", ""),
+                                "source_mode": row.get("Platform", "csv").lower(),
+                            })
+                    return csv_entries
+            except Exception as csv_err:
+                print(f"[application_tracker] CSV fallback read notice: {csv_err}")
             return []
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -188,7 +233,7 @@ def update_application_status(
     return updated
 
 
-def list_applications(token: Optional[str]) -> list[dict]:
+def list_applications(token: Optional[str] = None) -> list[dict]:
     """Returns history entries newest-first."""
     user = get_user_by_token(token) if token else None
     if user and user.get("id"):

@@ -239,7 +239,7 @@ function App() {
   const [showExtensionGuide, setShowExtensionGuide] = useState(false);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
-  const [configStepActive, setConfigStepActive] = useState(true);
+  const [configStepActive, setConfigStepActive] = useState(false);
 
   // Optimization #1: Progressive Disclosure - compact mode for mobile
   const [compactMode, setCompactMode] = useState(window.innerWidth < 640);
@@ -247,6 +247,7 @@ function App() {
 
   // Optimization #5: Loading skeleton state
   const [showSkeleton, setShowSkeleton] = useState(false);
+  const [isDraggingResume, setIsDraggingResume] = useState(false);
 
   // Outreach feature state
   const [outreachModalOpen, setOutreachModalOpen] = useState(false);
@@ -577,9 +578,10 @@ function App() {
   useEffect(() => {
     const fetchResume = async () => {
       try {
+        const tokenToUse = getAuthHeader();
         const headers = {};
-        if (authToken) {
-          headers['Authorization'] = `Bearer ${authToken}`;
+        if (tokenToUse) {
+          headers['Authorization'] = `Bearer ${tokenToUse}`;
         }
         const res = await fetch(`${API_BASE}/user/resume`, { headers });
         if (res.ok) {
@@ -856,9 +858,16 @@ function App() {
     }
   };
 
-  // Handle Resume Upload
-  const handleResumeUpload = async (e) => {
-    const file = e.target.files[0];
+  // Handle Resume Upload (supports both file input event and drag-and-drop file object)
+  const handleResumeUpload = async (eOrFile) => {
+    let file = null;
+    if (eOrFile instanceof File) {
+      file = eOrFile;
+    } else if (eOrFile?.target?.files?.[0]) {
+      file = eOrFile.target.files[0];
+    } else if (eOrFile?.dataTransfer?.files?.[0]) {
+      file = eOrFile.dataTransfer.files[0];
+    }
     if (!file) return;
 
     setLoading(true);
@@ -2462,6 +2471,17 @@ function App() {
 
                   <button
                     className="btn btn-secondary"
+                    style={{ padding: '7px 10px', fontSize: '0.76rem', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
+                    onClick={() => {
+                      setConfigStepActive(true);
+                      setProfileDropdownOpen(false);
+                    }}
+                  >
+                    <span>⚙️ Setup & AI Settings</span>
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
                     style={{ padding: '7px 10px', fontSize: '0.76rem', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}
                     onClick={() => {
                       setShowExtensionGuide(true);
@@ -2535,6 +2555,23 @@ function App() {
               Sign in with Google
             </button>
 
+            <button
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.86rem', padding: '11px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px',
+                borderColor: 'rgba(255,255,255,0.15)', color: 'var(--text-main)', background: 'rgba(255,255,255,0.03)'
+              }}
+              onClick={() => {
+                const guestToken = 'guest_' + Math.random().toString(36).substring(2, 12);
+                localStorage.setItem('auth_token', guestToken);
+                setAuthToken(guestToken);
+                setUser({ id: guestToken, email: 'guest@job-finder.space', name: 'Guest User', is_guest: true });
+                setStatusMessage('Exploring in Guest Mode!');
+              }}
+            >
+              <span>Explore as Guest without Sign-in →</span>
+            </button>
+
             {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
               <>
                 <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', margin: '10px 0' }}>— OR —</div>
@@ -2594,7 +2631,7 @@ function App() {
             {/* API Key section */}
             <div>
               <div className="section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>LLM API Key</span>
+                <span>LLM API Key <span style={{ fontSize: '0.72rem', color: 'var(--accent-green)', fontWeight: 500 }}>(Optional - Server Free Tier Active)</span></span>
                 <a
                   href="https://aistudio.google.com/app/apikey"
                   target="_blank"
@@ -2607,7 +2644,7 @@ function App() {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
                   type="password"
-                  placeholder="Paste Gemini (AIza...), Groq (gsk_...), or Claude (sk-ant-...) key"
+                  placeholder="Leave blank to use Server Free Tier, or paste Gemini/Groq/Claude key"
                   value={geminiApiKey}
                   onChange={handleApiKeyChange}
                   style={{ fontFamily: 'var(--font-mono)', flexGrow: 1, marginBottom: 0, fontSize: '0.84rem' }}
@@ -2617,20 +2654,48 @@ function App() {
                 </button>
               </div>
               <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-                Supports Gemini, Groq, and Anthropic Claude keys. Stored securely in your session/cloud account.
+                Optional: You can start immediately without entering a key. Add your own key anytime for higher rate limits and unlimited runs.
               </div>
             </div>
 
             {/* Resume upload section */}
             <div>
               <div className="section-label">Master Resume</div>
-              <label style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-                padding: '24px 20px', borderRadius: '12px', cursor: 'pointer',
-                border: resumeData ? '1.5px solid rgba(16,185,129,0.4)' : '1.5px dashed var(--border-color)',
-                background: resumeData ? 'rgba(16,185,129,0.04)' : 'var(--panel-bg)',
-                transition: 'all 0.25s ease'
-              }}>
+              <label
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDraggingResume(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDraggingResume(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDraggingResume(false);
+                  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    handleResumeUpload(e.dataTransfer.files[0]);
+                  }
+                }}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                  padding: '24px 20px', borderRadius: '12px', cursor: 'pointer',
+                  border: isDraggingResume
+                    ? '2px dashed var(--accent-primary)'
+                    : resumeData
+                      ? '1.5px solid rgba(16,185,129,0.4)'
+                      : '1.5px dashed var(--border-color)',
+                  background: isDraggingResume
+                    ? 'rgba(56, 189, 248, 0.1)'
+                    : resumeData
+                      ? 'rgba(16,185,129,0.04)'
+                      : 'var(--panel-bg)',
+                  transition: 'all 0.25s ease'
+                }}
+              >
                 <input type="file" accept=".tex,.pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
                 {resumeData ? (
                   <>
@@ -3073,10 +3138,10 @@ function App() {
                       <button
                         onClick={() => {
                           setTelemetryForm({
-                            name: resumeData.name || 'Akhil Baja',
-                            email: resumeData.email || 'akhilbaja.work@gmail.com',
-                            phone: resumeData.phone || '+91 9948083135',
-                            location: resumeData.location || 'London, UK'
+                            name: resumeData.name || '',
+                            email: resumeData.email || '',
+                            phone: resumeData.phone || '',
+                            location: resumeData.location || ''
                           });
                           setTelemetryModalOpen(true);
                         }}
@@ -3105,19 +3170,19 @@ function App() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
                     <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
                       <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Name</div>
-                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.name || 'Akhil Baja'}</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.name || '—'}</div>
                     </div>
                     <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
                       <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Email</div>
-                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={resumeData.email || 'akhilbaja.work@gmail.com'}>{resumeData.email || 'akhilbaja.work@gmail.com'}</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={resumeData.email || '—'}>{resumeData.email || '—'}</div>
                     </div>
                     <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
                       <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Phone</div>
-                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.phone || '+91 9948083135'}</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.phone || '—'}</div>
                     </div>
                     <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
                       <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Location</div>
-                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.location || 'London, UK'}</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.location || '—'}</div>
                     </div>
                   </div>
                 </div>
@@ -3507,12 +3572,12 @@ function App() {
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: '4px',
-                  background: 'rgba(16, 185, 129, 0.12)',
-                  color: '#10B981',
-                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  background: resumeEvaluation ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.12)',
+                  color: resumeEvaluation ? '#10B981' : '#94a3b8',
+                  border: `1px solid ${resumeEvaluation ? 'rgba(16, 185, 129, 0.25)' : 'rgba(148, 163, 184, 0.25)'}`,
                   fontFamily: 'var(--font-mono)'
                 }}>
-                  {resumeEvaluation ? `${resumeEvaluation.ats_score || 93}% Match` : 'Calibrated'}
+                  {resumeEvaluation ? `${resumeEvaluation.ats_score}% Match` : 'Awaiting Resume'}
                 </span>
               </div>
 
@@ -3523,16 +3588,16 @@ function App() {
                     <circle cx="42" cy="42" r="34" fill="none" stroke="#1E293B" strokeWidth="6" />
                     <circle
                       cx="42" cy="42" r="34" fill="none"
-                      stroke="#10B981"
+                      stroke={resumeEvaluation ? '#10B981' : '#475569'}
                       strokeWidth="6"
-                      strokeDasharray={`${((resumeEvaluation?.ats_score || 93) / 100) * (2 * Math.PI * 34)} ${2 * Math.PI * 34}`}
+                      strokeDasharray={`${((resumeEvaluation ? (resumeEvaluation.ats_score || 0) : 0) / 100) * (2 * Math.PI * 34)} ${2 * Math.PI * 34}`}
                       strokeLinecap="round"
                       transform="rotate(-90 42 42)"
                     />
                   </svg>
                   <div style={{ position: 'absolute', textAlign: 'center' }}>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1, fontFamily: 'var(--font-mono)' }}>
-                      {resumeEvaluation?.ats_score || 93}%
+                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: resumeEvaluation ? '#FFFFFF' : '#64748b', lineHeight: 1, fontFamily: 'var(--font-mono)' }}>
+                      {resumeEvaluation ? `${resumeEvaluation.ats_score}%` : '—'}
                     </div>
                     <div style={{ fontSize: '0.52rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.04em' }}>
                       Overall
@@ -3544,15 +3609,15 @@ function App() {
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
                     <span style={{ color: '#94a3b8' }}>Readability</span>
-                    <span style={{ fontWeight: 600, color: '#10B981', fontFamily: 'var(--font-mono)' }}>96%</span>
+                    <span style={{ fontWeight: 600, color: resumeEvaluation ? '#10B981' : '#64748b', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation ? `${resumeEvaluation.readability_score || 95}%` : '—'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
                     <span style={{ color: '#94a3b8' }}>Keywords</span>
-                    <span style={{ fontWeight: 600, color: '#38BDF8', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation ? `${resumeEvaluation.skills_count ? Math.min(99, resumeEvaluation.skills_count * 5) : 91}%` : '91%'}</span>
+                    <span style={{ fontWeight: 600, color: resumeEvaluation ? '#38BDF8' : '#64748b', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation ? `${resumeEvaluation.skills_count ? Math.min(99, resumeEvaluation.skills_count * 5) : 85}%` : '—'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
                     <span style={{ color: '#94a3b8' }}>Formatting</span>
-                    <span style={{ fontWeight: 600, color: '#10B981', fontFamily: 'var(--font-mono)' }}>95%</span>
+                    <span style={{ fontWeight: 600, color: resumeEvaluation ? '#10B981' : '#64748b', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation ? `${resumeEvaluation.formatting_score || 95}%` : '—'}</span>
                   </div>
                 </div>
               </div>
@@ -3824,14 +3889,42 @@ function App() {
                 <div className="section-label">Master Profile Controls</div>
                 
                 {/* Upload & Re-calibrate Box */}
-                <label style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-                  padding: '18px 16px', borderRadius: '10px', cursor: 'pointer',
-                  border: resumeData ? '1.5px solid rgba(16,185,129,0.35)' : '1.5px dashed var(--border-color)',
-                  background: resumeData ? 'rgba(16,185,129,0.04)' : 'rgba(255,255,255,0.02)',
-                  transition: 'all 0.2s ease',
-                  textAlign: 'center'
-                }}>
+                <label
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingResume(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingResume(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingResume(false);
+                    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                      handleResumeUpload(e.dataTransfer.files[0]);
+                    }
+                  }}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                    padding: '18px 16px', borderRadius: '10px', cursor: 'pointer',
+                    border: isDraggingResume
+                      ? '2px dashed var(--accent-primary)'
+                      : resumeData
+                        ? '1.5px solid rgba(16,185,129,0.35)'
+                        : '1.5px dashed var(--border-color)',
+                    background: isDraggingResume
+                      ? 'rgba(56, 189, 248, 0.1)'
+                      : resumeData
+                        ? 'rgba(16,185,129,0.04)'
+                        : 'rgba(255,255,255,0.02)',
+                    transition: 'all 0.2s ease',
+                    textAlign: 'center'
+                  }}
+                >
                   <input type="file" accept=".tex,.pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
                   <div style={{
                     width: '36px', height: '36px', borderRadius: '8px',

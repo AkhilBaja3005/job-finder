@@ -181,6 +181,10 @@ job-finder scan --top-applicant    # Direct apply to LinkedIn Top Applicant post
 job-finder scan --top-applicant --auto-apply  # Auto-apply directly to all LinkedIn Top Applicant postings
 job-finder apply <url>             # Direct job application autofill with browser-use
 job-finder apply <url> --submit    # Direct job application with autonomous auto-submit
+job-finder status                  # Inspect system configuration, environment health, master resume & profile
+job-finder ats                     # Run standalone ATS Health Audit on candidate profile or master resume
+job-finder ats --optimize          # Auto-optimize summary for ATS conversion using AI
+job-finder tracker                 # List and inspect tracked job applications, tailored resumes & saved roles
 job-finder profile --show          # Inspect candidate profile and target preferences
 job-finder profile --sync <resume> # Sync and extract skills/experience directly from PDF
 job-finder server                  # Start FastAPI backend server (http://localhost:8000)
