@@ -247,6 +247,7 @@ function App() {
 
   // Optimization #5: Loading skeleton state
   const [showSkeleton, setShowSkeleton] = useState(false);
+  const [isDraggingResume, setIsDraggingResume] = useState(false);
 
   // Outreach feature state
   const [outreachModalOpen, setOutreachModalOpen] = useState(false);
@@ -856,9 +857,16 @@ function App() {
     }
   };
 
-  // Handle Resume Upload
-  const handleResumeUpload = async (e) => {
-    const file = e.target.files[0];
+  // Handle Resume Upload (supports both file input event and drag-and-drop file object)
+  const handleResumeUpload = async (eOrFile) => {
+    let file = null;
+    if (eOrFile instanceof File) {
+      file = eOrFile;
+    } else if (eOrFile?.target?.files?.[0]) {
+      file = eOrFile.target.files[0];
+    } else if (eOrFile?.dataTransfer?.files?.[0]) {
+      file = eOrFile.dataTransfer.files[0];
+    }
     if (!file) return;
 
     setLoading(true);
@@ -2535,6 +2543,23 @@ function App() {
               Sign in with Google
             </button>
 
+            <button
+              className="btn btn-secondary"
+              style={{
+                fontSize: '0.86rem', padding: '11px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px',
+                borderColor: 'rgba(255,255,255,0.15)', color: 'var(--text-main)', background: 'rgba(255,255,255,0.03)'
+              }}
+              onClick={() => {
+                const guestToken = 'guest_' + Math.random().toString(36).substring(2, 12);
+                localStorage.setItem('auth_token', guestToken);
+                setAuthToken(guestToken);
+                setUser({ id: guestToken, email: 'guest@job-finder.space', name: 'Guest User', is_guest: true });
+                setStatusMessage('Exploring in Guest Mode!');
+              }}
+            >
+              <span>Explore as Guest without Sign-in →</span>
+            </button>
+
             {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
               <>
                 <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', margin: '10px 0' }}>— OR —</div>
@@ -2594,7 +2619,7 @@ function App() {
             {/* API Key section */}
             <div>
               <div className="section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>LLM API Key</span>
+                <span>LLM API Key <span style={{ fontSize: '0.72rem', color: 'var(--accent-green)', fontWeight: 500 }}>(Optional - Server Free Tier Active)</span></span>
                 <a
                   href="https://aistudio.google.com/app/apikey"
                   target="_blank"
@@ -2607,7 +2632,7 @@ function App() {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
                   type="password"
-                  placeholder="Paste Gemini (AIza...), Groq (gsk_...), or Claude (sk-ant-...) key"
+                  placeholder="Leave blank to use Server Free Tier, or paste Gemini/Groq/Claude key"
                   value={geminiApiKey}
                   onChange={handleApiKeyChange}
                   style={{ fontFamily: 'var(--font-mono)', flexGrow: 1, marginBottom: 0, fontSize: '0.84rem' }}
@@ -2617,20 +2642,48 @@ function App() {
                 </button>
               </div>
               <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-                Supports Gemini, Groq, and Anthropic Claude keys. Stored securely in your session/cloud account.
+                Optional: You can start immediately without entering a key. Add your own key anytime for higher rate limits and unlimited runs.
               </div>
             </div>
 
             {/* Resume upload section */}
             <div>
               <div className="section-label">Master Resume</div>
-              <label style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
-                padding: '24px 20px', borderRadius: '12px', cursor: 'pointer',
-                border: resumeData ? '1.5px solid rgba(16,185,129,0.4)' : '1.5px dashed var(--border-color)',
-                background: resumeData ? 'rgba(16,185,129,0.04)' : 'var(--panel-bg)',
-                transition: 'all 0.25s ease'
-              }}>
+              <label
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDraggingResume(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDraggingResume(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDraggingResume(false);
+                  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    handleResumeUpload(e.dataTransfer.files[0]);
+                  }
+                }}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                  padding: '24px 20px', borderRadius: '12px', cursor: 'pointer',
+                  border: isDraggingResume
+                    ? '2px dashed var(--accent-primary)'
+                    : resumeData
+                      ? '1.5px solid rgba(16,185,129,0.4)'
+                      : '1.5px dashed var(--border-color)',
+                  background: isDraggingResume
+                    ? 'rgba(56, 189, 248, 0.1)'
+                    : resumeData
+                      ? 'rgba(16,185,129,0.04)'
+                      : 'var(--panel-bg)',
+                  transition: 'all 0.25s ease'
+                }}
+              >
                 <input type="file" accept=".tex,.pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
                 {resumeData ? (
                   <>
@@ -3824,14 +3877,42 @@ function App() {
                 <div className="section-label">Master Profile Controls</div>
                 
                 {/* Upload & Re-calibrate Box */}
-                <label style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-                  padding: '18px 16px', borderRadius: '10px', cursor: 'pointer',
-                  border: resumeData ? '1.5px solid rgba(16,185,129,0.35)' : '1.5px dashed var(--border-color)',
-                  background: resumeData ? 'rgba(16,185,129,0.04)' : 'rgba(255,255,255,0.02)',
-                  transition: 'all 0.2s ease',
-                  textAlign: 'center'
-                }}>
+                <label
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingResume(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingResume(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingResume(false);
+                    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                      handleResumeUpload(e.dataTransfer.files[0]);
+                    }
+                  }}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                    padding: '18px 16px', borderRadius: '10px', cursor: 'pointer',
+                    border: isDraggingResume
+                      ? '2px dashed var(--accent-primary)'
+                      : resumeData
+                        ? '1.5px solid rgba(16,185,129,0.35)'
+                        : '1.5px dashed var(--border-color)',
+                    background: isDraggingResume
+                      ? 'rgba(56, 189, 248, 0.1)'
+                      : resumeData
+                        ? 'rgba(16,185,129,0.04)'
+                        : 'rgba(255,255,255,0.02)',
+                    transition: 'all 0.2s ease',
+                    textAlign: 'center'
+                  }}
+                >
                   <input type="file" accept=".tex,.pdf,.docx" onChange={handleResumeUpload} style={{ display: 'none' }} />
                   <div style={{
                     width: '36px', height: '36px', borderRadius: '8px',
