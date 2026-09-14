@@ -308,6 +308,91 @@ _shared_browser_session: Optional[Any] = None
 _chrome_process: Optional[subprocess.Popen] = None
 CDP_PORT = 9222
 
+def find_browser_executable() -> str:
+    """
+    Locates an available Chromium-based browser executable across Windows, macOS, and Linux.
+    Checks environment overrides, standard Chrome install locations, Edge, Brave, and Playwright Chromium.
+    """
+    import shutil
+    import glob
+
+    # 1. Explicit environment variable override
+    env_path = os.getenv("CHROME_PATH") or os.getenv("BROWSER_PATH")
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    # 2. Windows candidate locations
+    if sys.platform == "win32":
+        prog_files = os.getenv("ProgramFiles", r"C:\Program Files")
+        prog_files_x86 = os.getenv("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        local_appdata = os.getenv("LOCALAPPDATA", "")
+
+        candidates = [
+            os.path.join(prog_files, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(prog_files_x86, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(local_appdata, "Google", "Chrome", "Application", "chrome.exe") if local_appdata else "",
+            os.path.join(prog_files_x86, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(prog_files, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(local_appdata, "Microsoft", "Edge", "Application", "msedge.exe") if local_appdata else "",
+            os.path.join(prog_files, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(prog_files_x86, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            os.path.join(local_appdata, "BraveSoftware", "Brave-Browser", "Application", "brave.exe") if local_appdata else "",
+        ]
+
+        # Also check Playwright-managed Chromium if present
+        if local_appdata:
+            pw_dir = os.path.join(local_appdata, "ms-playwright")
+            if os.path.exists(pw_dir):
+                candidates.extend(glob.glob(os.path.join(pw_dir, "**", "chrome.exe"), recursive=True))
+
+        for p in candidates:
+            if p and os.path.exists(p):
+                return p
+
+        for cmd in ["chrome", "chrome.exe", "msedge", "msedge.exe", "brave", "brave.exe"]:
+            found = shutil.which(cmd)
+            if found:
+                return found
+
+        return "chrome.exe"
+
+    # 3. macOS candidate locations
+    elif sys.platform == "darwin":
+        home_dir = os.path.expanduser("~")
+        mac_candidates = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            os.path.join(home_dir, "Applications", "Google Chrome.app", "Contents", "MacOS", "Google Chrome"),
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            os.path.join(home_dir, "Applications", "Chromium.app", "Contents", "MacOS", "Chromium"),
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        ]
+        # Check Playwright-managed Chromium on macOS
+        pw_mac = os.path.join(home_dir, "Library", "Caches", "ms-playwright")
+        if os.path.exists(pw_mac):
+            mac_candidates.extend(glob.glob(os.path.join(pw_mac, "**", "Chromium.app", "Contents", "MacOS", "Chromium"), recursive=True))
+
+        for p in mac_candidates:
+            if os.path.exists(p):
+                return p
+
+    # 4. Linux / Generic PATH lookup
+    for cmd in ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "microsoft-edge-stable", "brave-browser"]:
+        found = shutil.which(cmd)
+        if found:
+            return found
+
+    # Check Linux Playwright cache
+    home_dir = os.path.expanduser("~")
+    pw_linux = os.path.join(home_dir, ".cache", "ms-playwright")
+    if os.path.exists(pw_linux):
+        linux_pw = glob.glob(os.path.join(pw_linux, "**", "chrome"), recursive=True)
+        if linux_pw:
+            return linux_pw[0]
+
+    return "chrome"
+
+
 def ensure_persistent_browser(headless: bool = False) -> str:
     """
     Ensures a single dedicated Chrome browser process is running in the background with CDP enabled.
@@ -327,11 +412,8 @@ def ensure_persistent_browser(headless: bool = False) -> str:
     user_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "user_data", "browser_use_chrome_session"))
     os.makedirs(user_data_dir, exist_ok=True)
 
-    # Detect Chrome executable
-    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    if not os.path.exists(chrome_path):
-        import shutil
-        chrome_path = shutil.which("google-chrome") or shutil.which("chromium") or "google-chrome"
+    # Detect Chrome executable across platforms (Windows, macOS, Linux)
+    chrome_path = find_browser_executable()
 
     launch_args = [
         chrome_path,
@@ -344,13 +426,16 @@ def ensure_persistent_browser(headless: bool = False) -> str:
     if headless:
         launch_args.append("--headless=new")
 
-    print(f"[browser-use] Launching persistent Chrome instance on port {CDP_PORT}...")
+    print(f"[browser-use] Launching persistent Chrome instance ({chrome_path}) on port {CDP_PORT}...")
     _chrome_process = subprocess.Popen(launch_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
     # Wait for CDP endpoint to be ready
     import time
-    for _ in range(15):
+    for _ in range(20):
         time.sleep(0.5)
+        if _chrome_process.poll() is not None:
+            print(f"[browser-use] ⚠️ Chrome process exited prematurely with code {_chrome_process.poll()}")
+            break
         try:
             with urllib.request.urlopen(f"{cdp_url}/json/version", timeout=1) as resp:
                 if resp.status == 200:

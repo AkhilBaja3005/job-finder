@@ -3,8 +3,34 @@ from playwright.async_api import async_playwright
 
 async def main():
     profile_dir = os.path.abspath("backend/user_data/top_applicant_scanner_profile")
-    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    print(f"🚀 Launching clean persistent Chrome window...")
+    try:
+        from backend.services.browser_use_agent import find_browser_executable
+        chrome_path = find_browser_executable()
+    except Exception:
+        import sys, shutil
+        chrome_path = None
+        if sys.platform == "win32":
+            prog_files = os.getenv("ProgramFiles", r"C:\Program Files")
+            prog_files_x86 = os.getenv("ProgramFiles(x86)", r"C:\Program Files (x86)")
+            local_appdata = os.getenv("LOCALAPPDATA", "")
+            candidates = [
+                os.path.join(prog_files, "Google", "Chrome", "Application", "chrome.exe"),
+                os.path.join(prog_files_x86, "Google", "Chrome", "Application", "chrome.exe"),
+                os.path.join(local_appdata, "Google", "Chrome", "Application", "chrome.exe") if local_appdata else "",
+                os.path.join(prog_files_x86, "Microsoft", "Edge", "Application", "msedge.exe"),
+            ]
+            for c in candidates:
+                if c and os.path.exists(c):
+                    chrome_path = c
+                    break
+        elif sys.platform == "darwin":
+            mac_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+            if os.path.exists(mac_path):
+                chrome_path = mac_path
+        if not chrome_path:
+            chrome_path = shutil.which("chrome") or shutil.which("google-chrome") or shutil.which("chromium") or "chrome"
+
+    print(f"🚀 Launching clean persistent Chrome window ({chrome_path})...")
     print(f"👉 Target Profile: {profile_dir}")
     print(f"👉 TIP: You can sign in using your LinkedIn email/password or 'Sign in with Google'.")
     print(f"👉 Once signed in and you reach your feed, this window will automatically detect it and save.\n")
