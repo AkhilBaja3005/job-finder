@@ -228,3 +228,17 @@ def test_autofill_presses_enter_on_prompt_combobox_field():
 
     asyncio.run(run_test())
 
+
+def test_resume_upload_instructions_in_prompt():
+    """Verifies that task prompt instructs agent to upload resume when encountering file upload field."""
+    from backend.services.browser_use_agent import build_application_task_prompt
+    prompt = build_application_task_prompt(
+        job_url="https://example.com/apply",
+        resume_data={"name": "Jane Doe", "email": "jane@example.com"},
+        resume_pdf_path=None
+    )
+    assert "For Resume / CV File Upload" in prompt
+    assert "Upload a file" in prompt
+    assert "upload_file" in prompt
+
+
