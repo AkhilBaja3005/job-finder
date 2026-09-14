@@ -187,6 +187,16 @@ def build_application_task_prompt(
     sponsorship_choice = "Yes" if requires_sponsorship else "No"
     veteran_status = resume_data.get("veteran_status") or resume_data.get("candidate", {}).get("veteran_status", "No")
     disability_status = resume_data.get("disability_status") or resume_data.get("candidate", {}).get("disability_status", "No")
+    notice_period = (
+        resume_data.get("notice_period")
+        or resume_data.get("candidate", {}).get("notice_period")
+        or "Available immediately"
+    )
+    import datetime
+    today_iso = datetime.date.today().strftime("%Y-%m-%d")
+    today_uk = datetime.date.today().strftime("%d/%m/%Y")
+    today_us = datetime.date.today().strftime("%m/%d/%Y")
+
     # Phone parsing for easy international code selection
     phone_digits = "".join(c for c in phone if c.isdigit() or c == '+')
     country_code_hint = "India (+91)" if "+91" in phone_digits or "91" in phone_digits[:4] else "United Kingdom (+44)"

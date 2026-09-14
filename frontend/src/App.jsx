@@ -578,9 +578,10 @@ function App() {
   useEffect(() => {
     const fetchResume = async () => {
       try {
+        const tokenToUse = getAuthHeader();
         const headers = {};
-        if (authToken) {
-          headers['Authorization'] = `Bearer ${authToken}`;
+        if (tokenToUse) {
+          headers['Authorization'] = `Bearer ${tokenToUse}`;
         }
         const res = await fetch(`${API_BASE}/user/resume`, { headers });
         if (res.ok) {
@@ -3137,10 +3138,10 @@ function App() {
                       <button
                         onClick={() => {
                           setTelemetryForm({
-                            name: resumeData.name || 'Akhil Baja',
-                            email: resumeData.email || 'akhilbaja.work@gmail.com',
-                            phone: resumeData.phone || '+91 9948083135',
-                            location: resumeData.location || 'London, UK'
+                            name: resumeData.name || '',
+                            email: resumeData.email || '',
+                            phone: resumeData.phone || '',
+                            location: resumeData.location || ''
                           });
                           setTelemetryModalOpen(true);
                         }}
@@ -3169,19 +3170,19 @@ function App() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.78rem' }}>
                     <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
                       <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Name</div>
-                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.name || 'Akhil Baja'}</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.name || '—'}</div>
                     </div>
                     <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
                       <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Email</div>
-                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={resumeData.email || 'akhilbaja.work@gmail.com'}>{resumeData.email || 'akhilbaja.work@gmail.com'}</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={resumeData.email || '—'}>{resumeData.email || '—'}</div>
                     </div>
                     <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
                       <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Phone</div>
-                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.phone || '+91 9948083135'}</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.phone || '—'}</div>
                     </div>
                     <div style={{ background: 'rgba(0,0,0,0.25)', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
                       <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Location</div>
-                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.location || 'London, UK'}</div>
+                      <div style={{ fontWeight: 600, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{resumeData.location || '—'}</div>
                     </div>
                   </div>
                 </div>
@@ -3571,12 +3572,12 @@ function App() {
                   fontWeight: 700,
                   padding: '2px 8px',
                   borderRadius: '4px',
-                  background: 'rgba(16, 185, 129, 0.12)',
-                  color: '#10B981',
-                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  background: resumeEvaluation ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.12)',
+                  color: resumeEvaluation ? '#10B981' : '#94a3b8',
+                  border: `1px solid ${resumeEvaluation ? 'rgba(16, 185, 129, 0.25)' : 'rgba(148, 163, 184, 0.25)'}`,
                   fontFamily: 'var(--font-mono)'
                 }}>
-                  {resumeEvaluation ? `${resumeEvaluation.ats_score || 93}% Match` : 'Calibrated'}
+                  {resumeEvaluation ? `${resumeEvaluation.ats_score}% Match` : 'Awaiting Resume'}
                 </span>
               </div>
 
@@ -3587,16 +3588,16 @@ function App() {
                     <circle cx="42" cy="42" r="34" fill="none" stroke="#1E293B" strokeWidth="6" />
                     <circle
                       cx="42" cy="42" r="34" fill="none"
-                      stroke="#10B981"
+                      stroke={resumeEvaluation ? '#10B981' : '#475569'}
                       strokeWidth="6"
-                      strokeDasharray={`${((resumeEvaluation?.ats_score || 93) / 100) * (2 * Math.PI * 34)} ${2 * Math.PI * 34}`}
+                      strokeDasharray={`${((resumeEvaluation ? (resumeEvaluation.ats_score || 0) : 0) / 100) * (2 * Math.PI * 34)} ${2 * Math.PI * 34}`}
                       strokeLinecap="round"
                       transform="rotate(-90 42 42)"
                     />
                   </svg>
                   <div style={{ position: 'absolute', textAlign: 'center' }}>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1, fontFamily: 'var(--font-mono)' }}>
-                      {resumeEvaluation?.ats_score || 93}%
+                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: resumeEvaluation ? '#FFFFFF' : '#64748b', lineHeight: 1, fontFamily: 'var(--font-mono)' }}>
+                      {resumeEvaluation ? `${resumeEvaluation.ats_score}%` : '—'}
                     </div>
                     <div style={{ fontSize: '0.52rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', marginTop: '3px', letterSpacing: '0.04em' }}>
                       Overall
@@ -3608,15 +3609,15 @@ function App() {
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
                     <span style={{ color: '#94a3b8' }}>Readability</span>
-                    <span style={{ fontWeight: 600, color: '#10B981', fontFamily: 'var(--font-mono)' }}>96%</span>
+                    <span style={{ fontWeight: 600, color: resumeEvaluation ? '#10B981' : '#64748b', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation ? `${resumeEvaluation.readability_score || 95}%` : '—'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
                     <span style={{ color: '#94a3b8' }}>Keywords</span>
-                    <span style={{ fontWeight: 600, color: '#38BDF8', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation ? `${resumeEvaluation.skills_count ? Math.min(99, resumeEvaluation.skills_count * 5) : 91}%` : '91%'}</span>
+                    <span style={{ fontWeight: 600, color: resumeEvaluation ? '#38BDF8' : '#64748b', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation ? `${resumeEvaluation.skills_count ? Math.min(99, resumeEvaluation.skills_count * 5) : 85}%` : '—'}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem' }}>
                     <span style={{ color: '#94a3b8' }}>Formatting</span>
-                    <span style={{ fontWeight: 600, color: '#10B981', fontFamily: 'var(--font-mono)' }}>95%</span>
+                    <span style={{ fontWeight: 600, color: resumeEvaluation ? '#10B981' : '#64748b', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation ? `${resumeEvaluation.formatting_score || 95}%` : '—'}</span>
                   </div>
                 </div>
               </div>

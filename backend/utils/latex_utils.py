@@ -220,9 +220,8 @@ def apply_latex_hotfix(
 
     # ── Strict 1-Page PDF Budget Clamping: tighten itemize and margin if scaled
     if spacing_scale <= 0.90 or linespread <= 0.95:
-        # Tighten list item padding and section baseline padding
+        # Tighten list item padding and section baseline padding without cutting top margin
         spacing_overrides.append("\\addtolength{\\textheight}{0.28in}")
-        spacing_overrides.append("\\addtolength{\\topmargin}{-0.14in}")
         spacing_overrides.append("\\let\\olditem\\item")
         spacing_overrides.append("\\renewcommand{\\item}{\\vspace{-1.5pt}\\olditem}")
 

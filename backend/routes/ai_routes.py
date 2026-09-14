@@ -19,6 +19,7 @@ from services.session_store import (
     _safe_key,
     _get_user_storage_dirs,
     _user_output_paths,
+    _ensure_resume_cls,
     get_session_data,
     LLMClientLogQueue,
     _stream_task_logs,
@@ -434,11 +435,8 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             tex_path = os.path.join(user_out_dir, f"tailored_resume_{safe_key}.tex")
             temp_pdf_path = os.path.join(user_out_dir, f"tailored_resume_{safe_key}.pdf")
 
-            cls_source = os.path.join(UPLOAD_DIR, "resume.cls")
-            if not os.path.exists(cls_source):
-                cls_source = os.path.join(BASE_DIR, "assets", "resume.cls")
-            if os.path.exists(cls_source):
-                shutil.copy2(cls_source, os.path.join(user_out_dir, "resume.cls"))
+            _ensure_resume_cls(user_out_dir)
+            _ensure_resume_cls(OUTPUT_DIR)
 
             pages, _ = await asyncio.to_thread(compile_and_check_page_metrics, raw_tailored_latex, 1.0, 1.0, master_latex)
             opt_scale, opt_ls = 1.0, 1.0
@@ -463,6 +461,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             proc = await asyncio.to_thread(
                 subprocess.run,
                 ["tectonic", tex_path, "--outdir", user_out_dir],
+                cwd=user_out_dir,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
             if proc.returncode != 0:
@@ -1021,8 +1020,7 @@ async def send_application_pdf_email(request: SendApplicationPdfEmailRequest, au
     from services.email_service import async_send_notification_email
     dest_email = user["email"]
     cand_name = session_resume_data.get("name", "").strip() or "Candidate" if isinstance(session_resume_data, dict) else "Candidate"
-    ats_display = f"{request.score}% Match" if request.score is not None else "Tailored"
-    email_subj = f"📄 [Resume Delivery] Tailored Resume [{ats_display}]: {request.job_title} at {request.company}"
+    email_subj = f"[Resume Delivery] Tailored Resume [{ats_display}]: {request.job_title} at {request.company}"
     email_text = (
         f"On-Demand Resume Delivery: Tailored Resume PDF\n"
         f"For your application at {request.company}\n\n"
