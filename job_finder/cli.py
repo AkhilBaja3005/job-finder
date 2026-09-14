@@ -40,6 +40,7 @@ def main():
     scanner_parser.add_argument("--timeframe", type=str, default=None, help="Search freshness window (e.g. 24h, 48h, 1w)")
     scanner_parser.add_argument("--model", type=str, default=None, help="Gemini LLM model override")
     scanner_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
+    scanner_parser.add_argument("--top-applicant", action="store_true", help="Scan LinkedIn specifically for Top Applicant postings and apply directly without JD scoring")
 
     # 2. Apply subcommand
     apply_parser = subparsers.add_parser(
@@ -106,7 +107,8 @@ def main():
             timeframe_override=args.timeframe,
             model_override=args.model,
             headless=True if args.headless else None,
-            auto_submit_override=True if args.auto_apply else None
+            auto_submit_override=True if args.auto_apply else None,
+            top_applicant_only=True if args.top_applicant else None
         ))
 
     elif args.subcommand == "apply":
@@ -448,6 +450,7 @@ def scanner_cli():
     parser.add_argument("--timeframe", type=str, default=None, help="Search freshness window override (e.g. 24h, 48h, 1w)")
     parser.add_argument("--model", type=str, default=None, help="Gemini LLM model override for browser-use")
     parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
+    parser.add_argument("--top-applicant", action="store_true", help="Scan LinkedIn specifically for Top Applicant postings and apply directly without JD scoring")
     args = parser.parse_args()
 
     if args.auto_apply:
@@ -467,7 +470,8 @@ def scanner_cli():
         timeframe_override=args.timeframe,
         model_override=args.model,
         headless=True if args.headless else None,
-        auto_submit_override=True if args.auto_apply else None
+        auto_submit_override=True if args.auto_apply else None,
+        top_applicant_only=True if args.top_applicant else None
     ))
 
 

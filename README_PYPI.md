@@ -16,23 +16,38 @@ Upload your resume once, and let Job Finder AI:
 
 ## ⚡ Quick Start & Installation
 
+### 1. Create & Activate Virtual Environment (Windows PowerShell)
+
+```powershell
+# Create a virtual environment
+python -m venv venv
+
+# Activate the virtual environment in PowerShell
+.\venv\Scripts\Activate.ps1
+```
+
+*(On macOS/Linux: `python3 -m venv venv && source venv/bin/activate`)*
+
+### 2. Install Package
+
 Install the package directly from PyPI:
 
-```bash
+```powershell
 pip install job-finder-ai
 ```
 
 Or install with all cloud & database integrations:
 
-```bash
+```powershell
 pip install "job-finder-ai[all]"
 ```
 
 Playwright browser dependencies (for browser auto-fill & web scraping):
 
-```bash
+```powershell
 playwright install chromium
 ```
+
 
 ---
 
@@ -65,12 +80,19 @@ job-finder scan
 # Autonomous mode (Submits applications directly):
 job-finder scan --auto-apply
 
+# Apply directly to LinkedIn Top Applicant postings without JD scoring:
+job-finder scan --top-applicant
+
+# Auto-apply directly to all LinkedIn Top Applicant postings:
+job-finder scan --top-applicant --auto-apply
+
 # Direct single-URL application:
 job-finder scan "https://boards.greenhouse.io/company/jobs/12345" --auto-apply
 
 # Advanced tuning (timeouts, steps, ATS thresholds, roles, freshness):
-job-finder scan   --role "AI Systems Engineer"   --location "London, UK"   --timeframe "24h"   --min-ats 70   --timeout 180   --auto-apply
+job-finder scan --role "AI Systems Engineer" --location "London, UK" --timeframe "24h" --min-ats 70 --timeout 180 --auto-apply
 ```
+
 
 ### 2. Direct Application Autofill (`job-finder apply`)
 Run ad-hoc browser auto-filler on any specific job application URL:
@@ -139,5 +161,5 @@ You can configure environment settings in a local `.env` file or export them dir
 ## 📄 License
 
 
-
 MIT License. Designed and maintained by [Akhil Baja](https://github.com/AkhilBaja3005).
+

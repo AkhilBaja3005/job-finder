@@ -218,3 +218,100 @@ def test_is_top_applicant_badge():
     assert not is_top_applicant_badge("")
 
 
+@pytest.mark.asyncio
+async def test_top_applicant_bypasses_jd_scoring_and_tailoring():
+    """
+    Verifies that when a job has is_top_applicant=True, scheduled_job_scanner:
+    1. Does NOT call compute_ats_score
+    2. Does NOT call scrape_job_description
+    3. Does NOT call build_and_compile_tailored_pdf
+    4. Directly dispatches application with master_resume_pdf and sets status to 'Top Applicant - Direct Apply'
+    """
+    from unittest.mock import AsyncMock, patch
+    from applications_tracker.scheduled_job_scanner import run_pipeline
+
+    mock_profile = {
+        "candidate": {
+            "name": "Alex Developer",
+            "email": "alex@example.com",
+            "phone": "+44 7123 456789",
+            "location": "London, UK",
+            "core_skills": ["Python", "PyTorch"],
+            "work_experience": []
+        },
+        "search_preferences": {
+            "target_roles": ["AI Engineer"],
+            "target_locations": ["London, UK"],
+            "min_ats_score": 65
+        }
+    }
+
+    mock_job = {
+        "title": "Staff AI Engineer",
+        "company": "DeepMind Partner",
+        "url": "https://www.linkedin.com/jobs/view/999888777/",
+        "is_top_applicant": True,
+        "badge_text": "You'd be a top applicant",
+        "source": "LinkedIn (Top Applicant)",
+        "description": "Short placeholder description"
+    }
+
+    dispatched_apps = []
+
+    async def mock_apply_to_job(**kwargs):
+        dispatched_apps.append(kwargs)
+        return {"status": "success", "final_result": "SUBMITTED"}
+
+    with patch("applications_tracker.scheduled_job_scanner.load_profile_data", return_value=mock_profile), \
+         patch("applications_tracker.scheduled_job_scanner.find_master_resume_with_mac_tags", return_value="/dummy/master_resume.pdf"), \
+         patch("applications_tracker.scheduled_job_scanner.get_existing_tracked_urls", return_value=set()), \
+         patch("applications_tracker.scheduled_job_scanner.handle_search_jobs", new_callable=AsyncMock) as mock_search, \
+         patch("applications_tracker.scheduled_job_scanner.scrape_job_description", new_callable=AsyncMock) as mock_scrape, \
+         patch("applications_tracker.scheduled_job_scanner.compute_ats_score") as mock_ats, \
+         patch("applications_tracker.scheduled_job_scanner.build_and_compile_tailored_pdf") as mock_tailor, \
+         patch("applications_tracker.scheduled_job_scanner.apply_to_job", side_effect=mock_apply_to_job), \
+         patch("applications_tracker.scheduled_job_scanner.record_to_supabase_or_csv", new_callable=AsyncMock) as mock_record, \
+         patch("applications_tracker.scheduled_job_scanner.update_application_status", new_callable=AsyncMock):
+
+        mock_search.return_value = {"jobs": [mock_job], "est_jobs": []}
+
+        await run_pipeline(auto_submit_override=True)
+
+        # 1. Verification: JD scraper, ATS scorer, and LaTeX compiler were NEVER called
+        mock_scrape.assert_not_called()
+        mock_ats.assert_not_called()
+        mock_tailor.assert_not_called()
+
+        # 2. Verification: Application was dispatched directly with master resume
+        assert len(dispatched_apps) == 1
+        app = dispatched_apps[0]
+        assert app["url"] == mock_job["url"]
+        assert app["title"] == "Staff AI Engineer"
+        assert app["resume_path"] == "/dummy/master_resume.pdf"
+
+        # 3. Verification: Record payload was saved with Top Applicant status and 95 score
+        mock_record.assert_called_once()
+        recorded = mock_record.call_args[0][0]
+        assert recorded["status"] == "Top Applicant - Direct Apply"
+        assert recorded["overall_ats"] == 95
+        assert recorded["pdf_path"] == "/dummy/master_resume.pdf"
+
+
+def test_cli_top_applicant_flag_parsing():
+    """Validates that CLI parsers in both job-finder scan and scanner_cli recognize --top-applicant."""
+    from unittest.mock import AsyncMock, patch
+    from job_finder import cli
+
+    test_args = ["scan", "--top-applicant", "--headless"]
+    with patch("sys.argv", ["job-finder"] + test_args), \
+         patch("applications_tracker.scheduled_job_scanner.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
+        try:
+            cli.main()
+        except SystemExit:
+            pass
+        mock_pipeline.assert_called_once()
+        call_kwargs = mock_pipeline.call_args[1]
+        assert call_kwargs.get("top_applicant_only") is True
+        assert call_kwargs.get("headless") is True
+
+
