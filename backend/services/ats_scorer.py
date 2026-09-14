@@ -291,7 +291,8 @@ def _flatten_resume_skills(raw_skills: Any) -> str:
     """Safely flattens dictionary or list skills into a single string for taxonomy extraction."""
     if isinstance(raw_skills, dict):
         all_skills = []
-        for v in raw_skills.values():
+        for k, v in raw_skills.items():
+            all_skills.append(str(k))
             if isinstance(v, list):
                 all_skills.extend([str(item) for item in v])
             elif isinstance(v, str):
@@ -452,7 +453,8 @@ def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, Lis
     job_durations = []
     parse_failures = []
 
-    for idx, exp in enumerate(resume_data.get("experience", [])):
+    exp_list = resume_data.get("experience") or resume_data.get("work_experience") or []
+    for idx, exp in enumerate(exp_list):
         if not isinstance(exp, dict):
             continue
         role_label = exp.get("role") or f"Position #{idx+1}"
@@ -461,6 +463,13 @@ def calculate_flattened_experience(resume_data: dict) -> Tuple[float, float, Lis
 
         start_str = exp.get("start_date", "")
         end_str = exp.get("end_date", "")
+        timeline_str = exp.get("timeline", "")
+        if not start_str and timeline_str:
+            parts = re.split(r'\s*[\u2013\u2014\-to]+\s*', timeline_str, maxsplit=1)
+            start_str = parts[0]
+            if len(parts) > 1:
+                end_str = parts[1]
+
         if not end_str:
             end_str = "Present"
 
@@ -862,32 +871,38 @@ def evaluate_master_resume(resume_data: dict, config: ScoringConfig = DEFAULT_SC
     # 1. Experience Timeline & Metrics Check
     cand_years, avg_tenure, weighted_segments, _ = calculate_flattened_experience(resume_data)
     
-    exp_list = resume_data.get("experience", [])
+    exp_list = resume_data.get("experience", []) or resume_data.get("work_experience", []) or []
     total_bullets = 0
     quantified_bullets = 0
     
     for exp in exp_list:
-        bullets = exp.get("description", [])
+        bullets = exp.get("description", []) or []
+        if isinstance(bullets, str):
+            bullets = [bullets]
+        highlights = exp.get("highlights", []) or exp.get("bullet_points", []) or []
+        if isinstance(highlights, list):
+            bullets = list(bullets) + list(highlights)
         total_bullets += len(bullets)
         for b in bullets:
-            if re.search(r'\b\d+(?:\.\d+)?%|\b\$\d+|\b£\d+|\bINR\s*\d+|\b\d+\+|\b\d+x\b', b, re.IGNORECASE):
+            if isinstance(b, str) and re.search(r'\b\d+(?:\.\d+)?%|\b\$\d+|\b£\d+|\bINR\s*\d+|\b\d+\+|\b\d+x\b', b, re.IGNORECASE):
                 quantified_bullets += 1
                 
     quant_ratio = (quantified_bullets / total_bullets) if total_bullets > 0 else 0
     quant_score = min(100, int(quant_ratio * 120))
     
     if quant_ratio < 0.5:
-        suggestions.append("📊 Quantify more achievements: Only " + str(round(quant_ratio*100)) + "% of bullet points contain measurable metrics (e.g. %, £/$, latency cut, user count). Aim for 60%+.")
+        suggestions.append("Quantify more achievements: Only " + str(round(quant_ratio*100)) + "% of bullet points contain measurable metrics (e.g. %, £/$, latency cut, user count). Aim for 60%+.")
         
     # 2. Skill Taxonomy Audit
-    found_skills = _extract_taxonomy_skills(_flatten_resume_skills(resume_data.get("skills", [])))
+    skills_raw = resume_data.get("skills", []) or resume_data.get("core_skills", []) or []
+    found_skills = _extract_taxonomy_skills(_flatten_resume_skills(skills_raw))
     
     tech_score = min(100, max(40, len(found_skills) * 8))
     if len(found_skills) < 8:
         suggestions.append("💡 Expand Technical Skills: Found " + str(len(found_skills)) + " core ATS taxonomy keywords. Consider adding specific frameworks (e.g. PySpark, Docker, Azure OpenAI, XGBoost).")
 
     # 3. Summary & Positioning Check
-    summary = resume_data.get("summary", "")
+    summary = resume_data.get("summary", "") or resume_data.get("experience_summary", "") or ""
     summary_words = len(summary.split())
     if not summary:
         suggestions.append("📝 Add a Professional Summary: Standout positioning (AI/ML Engineer, 3+ years experience, key differentiators) increases initial recruiter scan conversion.")

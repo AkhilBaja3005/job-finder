@@ -28,6 +28,7 @@ load_workspace_env()
 # Ensure backend root is always on sys.path for CLI execution across repo and installed wheel
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for candidate in [
+    REPO_ROOT,
     os.path.join(REPO_ROOT, "backend"),
     os.path.join(REPO_ROOT, "site-packages", "backend"),
     os.path.dirname(os.path.abspath(__file__)),
@@ -193,7 +194,7 @@ def main():
             res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": resume_arg}))
             if res.get("success"):
                 print(f"✅ {res.get('message')}")
-                print(f"📊 Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
+                print(f"Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
             else:
                 print(f"❌ Sync failed: {res.get('error')}")
             return
@@ -258,7 +259,7 @@ def main():
         ats_score = ats_eval.get("ats_score", 80)
         suggestions = ats_eval.get("suggestions", [])
 
-        print("\n📊 ========================================================")
+        print("\n========================================================")
         print(f"           MASTER RESUME ATS HEALTH AUDIT: {ats_score}/100")
         print("========================================================")
         print(f"  • Skill Keywords  : {ats_eval.get('skills_count')} core taxonomy matches")

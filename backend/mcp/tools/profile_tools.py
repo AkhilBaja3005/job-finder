@@ -431,6 +431,34 @@ async def handle_sync_candidate_profile_from_resume(args: Dict[str, Any]) -> Dic
     resume_dict = structured.model_dump()
     updated_profile = sync_resume_data_to_profile(resume_dict)
 
+    # Persist synced resume path into workspace .env MASTER_RESUME_PATH
+    try:
+        ws = resolve_workspace_root()
+        env_file = os.path.join(ws, ".env")
+        lines = []
+        if os.path.exists(env_file):
+            with open(env_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        
+        updated = False
+        new_lines = []
+        for line in lines:
+            if line.strip().startswith("MASTER_RESUME_PATH="):
+                new_lines.append(f'MASTER_RESUME_PATH="{resume_path}"\n')
+                updated = True
+            else:
+                new_lines.append(line)
+        if not updated:
+            if new_lines and not new_lines[-1].endswith("\n"):
+                new_lines.append("\n")
+            new_lines.append(f'MASTER_RESUME_PATH="{resume_path}"\n')
+        
+        with open(env_file, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+        os.environ["MASTER_RESUME_PATH"] = resume_path
+    except Exception:
+        pass
+
     return {
         "success": True,
         "message": f"Successfully synced profile from '{resume_path}' into {PROFILE_CONFIG_PATH}",
