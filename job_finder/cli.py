@@ -272,13 +272,63 @@ def main():
             print(f"✓ Found existing candidate profile at: {profile_path}")
 
 
-        # 3. Resume sync if provided or present
+        # 3. Master Resume Path Configuration & Profile Sync
+        existing_master = os.getenv("MASTER_RESUME_PATH")
         resume_target = args.resume
-        if not resume_target:
-            from applications_tracker.scheduled_job_scanner import find_master_resume_with_mac_tags
-            resume_target = find_master_resume_with_mac_tags()
+
+        if resume_target:
+            resume_target = os.path.abspath(os.path.expanduser(resume_target.strip('\'"')))
+        elif sys.stdin.isatty():
+            print("\n📄 ========================================================")
+            print("             MASTER RESUME CONFIGURATION")
+            print("========================================================")
+            detected_resume = existing_master
+            if not detected_resume or not os.path.exists(detected_resume):
+                from applications_tracker.scheduled_job_scanner import find_master_resume_with_mac_tags
+                detected_resume = find_master_resume_with_mac_tags()
+
+            default_hint = f" [{detected_resume}]" if (detected_resume and os.path.exists(detected_resume)) else ""
+            print("  Please provide the path to your Master Resume (PDF/DOCX).")
+            print("  This will be saved as MASTER_RESUME_PATH in .env and used for all job applications.")
+            try:
+                user_resume = input(f"  Enter Master Resume path{default_hint}: ").strip().strip('\'"')
+                if user_resume:
+                    resume_target = os.path.abspath(os.path.expanduser(user_resume))
+                elif detected_resume and os.path.exists(detected_resume):
+                    resume_target = detected_resume
+            except (EOFError, KeyboardInterrupt):
+                print("\nSkipping resume path prompt.")
+                if detected_resume and os.path.exists(detected_resume):
+                    resume_target = detected_resume
+        else:
+            if existing_master and os.path.exists(existing_master):
+                resume_target = existing_master
+            else:
+                from applications_tracker.scheduled_job_scanner import find_master_resume_with_mac_tags
+                resume_target = find_master_resume_with_mac_tags()
 
         if resume_target and os.path.exists(resume_target):
+            # Save or update MASTER_RESUME_PATH in .env
+            try:
+                with open(env_path, "r", encoding="utf-8") as ef:
+                    lines = ef.readlines()
+                new_lines = []
+                found_master = False
+                for line in lines:
+                    if line.startswith("MASTER_RESUME_PATH="):
+                        new_lines.append(f"MASTER_RESUME_PATH={resume_target}\n")
+                        found_master = True
+                    else:
+                        new_lines.append(line)
+                if not found_master:
+                    new_lines.append(f"\nMASTER_RESUME_PATH={resume_target}\n")
+                with open(env_path, "w", encoding="utf-8") as ef:
+                    ef.writelines(new_lines)
+                os.environ["MASTER_RESUME_PATH"] = resume_target
+                print(f"✅ Saved MASTER_RESUME_PATH in .env: {resume_target}")
+            except Exception as env_err:
+                print(f"⚠️ Could not write MASTER_RESUME_PATH to .env: {env_err}")
+
             print(f"📄 Syncing candidate profile from resume: {resume_target}")
             import asyncio
             from backend.mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
@@ -287,6 +337,9 @@ def main():
                 print(f"✅ Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
             else:
                 print(f"ℹ️ Could not auto-parse resume: {res.get('error')}")
+        elif resume_target and not os.path.exists(resume_target):
+            print(f"⚠️ Provided resume file does not exist: {resume_target}")
+            print("ℹ️ Tip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
         else:
             print("ℹ️ Tip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
 
