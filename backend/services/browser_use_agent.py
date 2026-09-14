@@ -257,10 +257,18 @@ def build_application_task_prompt(
       * For completely empty fields, fill them in directly using the candidate profile details.
     - DO NOT USE THE WAIT ACTION: The browser environment automatically handles DOM mutations and page loads. Never use `wait: seconds: ...`. Elements are immediately actionable.
     - BATCH ALL ACTIONS: Fill out ALL inputs, selects, and checkboxes on the visible screen in a single turn together with the 'Next' or 'Continue' click. Do not submit one field per step!
-    - DROPDOWNS HANDLING:
-      * Always read/inspect the available `<option>` choices on the dropdown first before selecting.
-      * Match against the actual options available in the DOM (e.g. for phone country code, check if options use '+91', 'India', 'India (+91)', or 'IN (+91)', then pick the exact matching option string).
-      * Never click raw `<select>` elements directly without an option target. Always use `select_dropdown` with the exact option text found in the dropdown.
+    - DROPDOWNS & WORKDAY PROMPT BUTTONS (TRIPLE-BAR / 3 DOTS / HAMBURGER MENU) HANDLING:
+      * Many ATS platforms (especially Workday, Taleo, SuccessFactors) feature a "Prompt Button" on the right side of the field with a triple-bar (three slashes / hamburger) or 3 dots icon (often with aria-haspopup="listbox" or data-automation-id="promptOption").
+      * For these prompt button fields, DO NOT expect raw text typing alone to be accepted without item selection!
+      * WORKDAY PROMPT BUTTON RULE:
+        1. Click the input field or its prompt button.
+        2. Type the target search term into the field (e.g. for "How did you hear about this job?", type 'LinkedIn' or 'Company Website').
+        3. Press 'Enter' immediately to trigger the menu search/filter.
+        4. When the matching menu option appears (e.g. 'LinkedIn', 'LinkedIn Corporate Jobs', or the filtered listbox item), click that matching item to commit the selection, or press Enter / Down-Arrow + Enter to select it.
+      * For standard `<select>` dropdowns:
+        - Always read/inspect the available `<option>` choices on the dropdown first before selecting.
+        - Match against the actual options available in the DOM (e.g. for phone country code, check if options use '+91', 'India', 'India (+91)', or 'IN (+91)', then pick the exact matching option string).
+        - Never click raw `<select>` elements directly without an option target. Always use `select_dropdown` with the exact option text found in the dropdown.
     - NEW TAB HANDLING: If clicking 'Apply' or a link opens an external ATS site (Ashby, Greenhouse, Lever, Workday) in a new tab, ALWAYS stay in that new tab and fill the form there. NEVER switch back to the referrer/LinkedIn tab.
 
     Execution Instructions:
@@ -284,10 +292,14 @@ def build_application_task_prompt(
          * Gender: Inspect options and choose '{gender}'.
          * Race / Ethnicity: Inspect options and choose '{ethnicity}'.
          * Citizenship / Nationality: Inspect options and choose '{citizenship}'.
-         * Veteran Status: Inspect options and choose '{veteran_status}'.
-         * Disability Status: Inspect options and choose '{disability_status}'.
-       - For Resume, ensure the candidate's resume is selected or uploaded.
-       - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
+          * Workday Prompt Buttons & "How did you hear about this job?" (Triple-bar / 3 dots):
+            - If a field has a triple-bar (hamburger / prompt) button or requires searching options from a prompt list (e.g. source questions like "How did you hear about us?"):
+            - Type the search query (e.g. 'LinkedIn') and press 'Enter' so the listbox filters automatically.
+            - Click the matching result item (e.g. 'LinkedIn' or 'LinkedIn Corporate Jobs') to firmly bind the option. Do not leave it unselected.
+          * Veteran Status: Inspect options and choose '{veteran_status}'.
+          * Disability Status: Inspect options and choose '{disability_status}'.
+        - For Resume, ensure the candidate's resume is selected or uploaded.
+        - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
     4. Handle Email Verification / OTP Codes:
        - If the form asks to enter a verification code / OTP sent to your email (e.g., micro1, Ashby, Workday):
          a. Open a new tab to Gmail: open a new tab with url 'https://mail.google.com'.

@@ -197,6 +197,27 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                                 break
                     else:
                         await inp.fill(answer)
+                        # Check if element is a prompt button/combobox/search field (e.g. Workday prompt button with triple-bar)
+                        is_prompt_or_combobox = await inp.evaluate("""el => {
+                            const ariaHasPopup = el.getAttribute('aria-haspopup');
+                            const role = el.getAttribute('role');
+                            const autoId = el.getAttribute('data-automation-id') || '';
+                            const parent = el.closest('div');
+                            const hasPromptBtn = parent && parent.querySelector('[data-automation-id*=\"prompt\"], [aria-label*=\"prompt\" i], button[aria-haspopup=\"listbox\"]');
+                            return role === 'combobox' || ariaHasPopup === 'listbox' || ariaHasPopup === 'true' || Boolean(hasPromptBtn) || autoId.includes('prompt');
+                        }""")
+                        if is_prompt_or_combobox:
+                            # Press Enter to trigger search/filter in Workday prompt menu
+                            try:
+                                await inp.press("Enter")
+                                await asyncio.sleep(0.5)
+                                # If a filtered listbox item appears matching the answer, click it
+                                if hasattr(page, "query_selector"):
+                                    matched_item = await page.query_selector(f"[role='option']:has-text('{answer}'), [data-automation-id*='promptOption']:has-text('{answer}')")
+                                    if matched_item and await matched_item.is_visible():
+                                        await matched_item.click()
+                            except Exception:
+                                pass
 
                 # Mark as successfully handled in this run
                 session_filled_questions.add(question_text)
