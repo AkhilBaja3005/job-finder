@@ -7,8 +7,10 @@ try:
     try:
         __version__ = version("job-finder-ai")
     except PackageNotFoundError:
-        __version__ = "1.2.0"
+        __version__ = "1.2.1"
 except ImportError:
-    __version__ = "1.2.0"
+    __version__ = "1.2.1"
 
 __author__ = "Akhil Baja"
+__contributors__ = ["Bhavesh Nivas"]
+

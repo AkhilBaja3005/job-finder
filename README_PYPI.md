@@ -156,10 +156,15 @@ You can configure environment settings in a local `.env` file or export them dir
 | `TAILORING_TIMEOUT` | Resume tailoring timeout in seconds (default: `90`) |
 | `MASTER_RESUME_PATH` | Path to master resume PDF (or iCloud Drive Red tag) |
 
+## 👥 Authors & Contributors
+
+- **Author & Maintainer**: [Akhil Baja](https://github.com/AkhilBaja3005)
+- **Contributor**: **Bhavesh Nivas** ([@bhaveshnivas77392](https://github.com/bhaveshnivas77392))
+
 ---
 
 ## 📄 License
 
+MIT License. Designed and maintained by [Akhil Baja](https://github.com/AkhilBaja3005) and [Bhavesh Nivas](https://github.com/bhaveshnivas77392).
 
-MIT License. Designed and maintained by [Akhil Baja](https://github.com/AkhilBaja3005).
 
