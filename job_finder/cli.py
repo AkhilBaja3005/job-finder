@@ -5,18 +5,25 @@ import sys
 import os
 import json
 
-# Ensure .env from active workspace or current directory is loaded immediately
-try:
-    from dotenv import load_dotenv
-    for _env_candidate in [
-        os.path.join(os.getcwd(), ".env"),
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
-    ]:
-        if os.path.exists(_env_candidate):
-            load_dotenv(_env_candidate)
-    load_dotenv()
-except Exception:
-    pass
+def load_workspace_env():
+    """Loads .env configuration across all candidate locations prior to command execution."""
+    try:
+        from dotenv import load_dotenv
+        env_candidates = [
+            os.path.join(os.getcwd(), ".env"),
+            os.path.expanduser("~/.config/job-finder/.env"),
+            os.path.expanduser("~/.job-finder/.env"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+        ]
+        for env_path in env_candidates:
+            if os.path.exists(env_path):
+                load_dotenv(env_path, override=True)
+        load_dotenv(override=True)
+    except Exception:
+        pass
+
+# Immediately load environment variables
+load_workspace_env()
 
 # Ensure backend root is always on sys.path for CLI execution across repo and installed wheel
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
