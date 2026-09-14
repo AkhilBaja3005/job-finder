@@ -446,13 +446,3 @@ The pipeline includes an automated daily scheduler that executes every morning a
   2. **Phase 2 (LinkedIn Top Applicant)**: Scans LinkedIn for Top Applicant badge matches and executes autonomous auto-submission.
 - **Daily Logs**: Stored under `applications_tracker/logs/scanner_YYYY-MM-DD.log`.
 
----
-
-## 🚀 Recent Feature Updates & Pull Requests
-
-| PR # | Branch / Feature | Status | Description |
-| :---: | :--- | :---: | :--- |
-| **[#60](https://github.com/AkhilBaja3005/job-finder/pull/60)** | `feat/preserve-prefilled-form-fields` | **Merged** | **Smart Pre-filled Form Fields Handling**: Inspects input fields on application portals (Workday, Greenhouse, Ashby, Lever). If the candidate profile contains verified values, outdated auto-filled browser text is cleared and replaced with accurate profile data; if no candidate value exists, existing portal values are preserved untouched. |
-| **[#61](https://github.com/AkhilBaja3005/job-finder/pull/61)** | `feat/workday-prompt-buttons-enter-selection` | **Open** | **Workday Prompt Button ("Hamburger" Menu) Enter Selection**: Enhanced browser-use automation prompts to properly trigger Workday multi-select / prompt buttons by typing the target option followed immediately by the `Enter` key (e.g. source attribution question selecting *"LinkedIn"* $\rightarrow$ *"LinkedIn corporate jobs"*). |
-| **[#62](https://github.com/AkhilBaja3005/job-finder/pull/62)** | `feat/top-applicant-direct-apply` | **Open** | **LinkedIn Top Applicant Direct Apply (Zero JD Scoring)**: Identifies LinkedIn jobs with the *"You'd be a top applicant"* (or top 10% / 25% / stand out / competitive applicant) badge. Bypasses JD scraping, ATS scoring, and LaTeX tailoring latency entirely, directly auto-applying with the Master Resume. Supported via `job-finder scan --top-applicant --auto-apply`. |
-
