@@ -209,6 +209,16 @@ def main():
     interview_parser.add_argument("--role", type=str, default="Software Engineer", help="Target role")
     interview_parser.add_argument("--youtube", type=str, default=None, help="Optional YouTube technical interview or system design URL")
 
+    # 12. TargetJobs UK subcommand
+    tj_parser = subparsers.add_parser(
+        "targetjobs",
+        help="Search TargetJobs.co.uk graduate & early career IT jobs (UK only)",
+    )
+    tj_parser.add_argument("keyword", nargs="?", default="software", help="Search keyword / role (default: 'software')")
+    tj_parser.add_argument("--location", type=str, default="London", help="UK location filter (default: 'London')")
+    tj_parser.add_argument("--timeframe", type=str, default="48h", help="Timeframe filter (default: '48h')")
+    tj_parser.add_argument("--limit", type=int, default=15, help="Maximum number of listings to show (default: 15)")
+
     args, unknown = parser.parse_known_args()
 
     if not args.subcommand:
@@ -463,6 +473,47 @@ Output Markdown with 4 sections:
         print(f"    INTERVIEW PREP PACK: {args.company.upper()} ({args.role})")
         print("========================================================\n")
         print(prep_md)
+
+
+    elif args.subcommand == "targetjobs":
+        import asyncio
+        from services.job_searcher import search_targetjobs_uk
+        from utils.location_resolver import resolve_location_country
+
+        country = resolve_location_country(args.location)
+        if country != "GB":
+            print(f"\n[Warning] TargetJobs only serves jobs in the United Kingdom. '{args.location}' resolved to country code '{country}'.")
+            print("   Please provide a UK location (e.g. London, Manchester, Leeds, Edinburgh, or UK).\n")
+            sys.exit(1)
+
+        print(f"\n========================================================")
+        print(f"   TARGETJOBS UK: Graduate & Early Career IT Search")
+        print(f"   Keyword: '{args.keyword}' | Location: '{args.location}'")
+        print(f"========================================================\n")
+
+        results = asyncio.run(search_targetjobs_uk(
+            keyword=args.keyword,
+            location=args.location,
+            timeframe=args.timeframe
+        ))
+
+        if not results:
+            print(f"No active graduate tech jobs found on TargetJobs.co.uk matching '{args.keyword}' in {args.location}.\n")
+        else:
+            display_limit = args.limit or 15
+            print(f"Found {len(results)} graduate technology postings on TargetJobs (showing top {min(len(results), display_limit)}):\n")
+            for idx, job in enumerate(results[:display_limit], start=1):
+                print(f"[{idx}] {job.title}")
+                print(f"    Company  : {job.company}")
+                print(f"    Location : {job.location}")
+                print(f"    Apply URL: {job.url}")
+                if hasattr(job, 'full_description') and job.full_description:
+                    snippet = job.full_description.replace('\n', ' ')[:140]
+                    print(f"    Summary  : {snippet}...")
+                print()
+
+            print(f"Tip: Run `job-finder scan --location London, UK` to auto-tailor and apply to these roles!")
+            print(f"Or tailor directly: open dashboard at http://localhost:8000 and paste any TargetJobs URL.\n")
 
 
     elif args.subcommand == "setup":
