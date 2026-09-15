@@ -214,10 +214,13 @@ def main():
         "targetjobs",
         help="Search TargetJobs.co.uk graduate & early career IT jobs (UK only)",
     )
-    tj_parser.add_argument("keyword", nargs="?", default="software", help="Search keyword / role (default: 'software')")
+    tj_parser.add_argument("keyword", nargs="?", default=None, help="Search keyword / role (default: from candidate profile)")
     tj_parser.add_argument("--location", type=str, default="London", help="UK location filter (default: 'London')")
     tj_parser.add_argument("--timeframe", type=str, default="48h", help="Timeframe filter (default: '48h')")
-    tj_parser.add_argument("--limit", type=int, default=15, help="Maximum number of listings to show (default: 15)")
+    tj_parser.add_argument("--limit", type=int, default=15, help="Maximum number of listings to show/process (default: 15)")
+    tj_parser.add_argument("--auto-apply", "--auto-submit", dest="auto_apply", action="store_true", help="Automatically autofill and submit applications for discovered TargetJobs listings")
+    tj_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
+    tj_parser.add_argument("--timeout", type=float, default=300.0, help="Autofill session timeout in seconds (default: 300s)")
 
     args, unknown = parser.parse_known_args()
 
@@ -479,6 +482,22 @@ Output Markdown with 4 sections:
         import asyncio
         from services.job_searcher import search_targetjobs_uk
         from utils.location_resolver import resolve_location_country
+        from backend.mcp.tools.profile_tools import load_profile_data
+
+        # 1. Resolve keyword from candidate profile if not explicitly passed
+        keyword = args.keyword
+        profile = load_profile_data() or {}
+        search_prefs = profile.get("search_preferences", {})
+        cand_info = profile.get("candidate", {})
+
+        if not keyword:
+            target_roles = search_prefs.get("target_roles", [])
+            if target_roles:
+                keyword = target_roles[0]
+            elif cand_info.get("headline"):
+                keyword = cand_info["headline"]
+            else:
+                keyword = "Software Engineer"
 
         country = resolve_location_country(args.location)
         if country != "GB":
@@ -488,21 +507,24 @@ Output Markdown with 4 sections:
 
         print(f"\n========================================================")
         print(f"   TARGETJOBS UK: Graduate & Early Career IT Search")
-        print(f"   Keyword: '{args.keyword}' | Location: '{args.location}'")
+        print(f"   Keyword: '{keyword}' (from {'CLI arg' if args.keyword else 'candidate profile'}) | Location: '{args.location}'")
+        if args.auto_apply:
+            print(f"   Mode: Auto-Submit Enabled (Guardrails Disabled)")
         print(f"========================================================\n")
 
         results = asyncio.run(search_targetjobs_uk(
-            keyword=args.keyword,
+            keyword=keyword,
             location=args.location,
             timeframe=args.timeframe
         ))
 
         if not results:
-            print(f"No active graduate tech jobs found on TargetJobs.co.uk matching '{args.keyword}' in {args.location}.\n")
+            print(f"No active graduate tech jobs found on TargetJobs.co.uk matching '{keyword}' in {args.location}.\n")
         else:
             display_limit = args.limit or 15
-            print(f"Found {len(results)} graduate technology postings on TargetJobs (showing top {min(len(results), display_limit)}):\n")
-            for idx, job in enumerate(results[:display_limit], start=1):
+            selected_jobs = results[:display_limit]
+            print(f"Found {len(results)} graduate technology postings on TargetJobs (showing top {len(selected_jobs)}):\n")
+            for idx, job in enumerate(selected_jobs, start=1):
                 print(f"[{idx}] {job.title}")
                 print(f"    Company  : {job.company}")
                 print(f"    Location : {job.location}")
@@ -512,8 +534,33 @@ Output Markdown with 4 sections:
                     print(f"    Summary  : {snippet}...")
                 print()
 
-            print(f"Tip: Run `job-finder scan --location London, UK` to auto-tailor and apply to these roles!")
-            print(f"Or tailor directly: open dashboard at http://localhost:8000 and paste any TargetJobs URL.\n")
+            if args.auto_apply:
+                from applications_tracker.scheduled_job_scanner import apply_to_job, find_master_resume_with_mac_tags
+                os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
+                master_resume_pdf = find_master_resume_with_mac_tags()
+                print(f"Starting automatic submission for {len(selected_jobs)} TargetJobs role(s)...")
+
+                async def _apply_all():
+                    for idx, j in enumerate(selected_jobs, 1):
+                        print(f"\n[{idx}/{len(selected_jobs)}] Auto-submitting application: {j.title} @ {j.company}")
+                        try:
+                            await apply_to_job(
+                                url=j.url,
+                                candidate=cand_info,
+                                resume_path=master_resume_pdf,
+                                title=j.title,
+                                company=j.company,
+                                auto_submit=True,
+                                timeout_seconds=args.timeout,
+                                headless_override=args.headless
+                            )
+                        except Exception as app_err:
+                            print(f"[Warning] Auto-submit failed for {j.title}: {app_err}")
+
+                asyncio.run(_apply_all())
+            else:
+                print(f"Tip: Run `job-finder targetjobs --auto-submit --limit 3` to auto-apply to these roles!")
+                print(f"Or run `job-finder scan --location London, UK` for full unified scanning & tailoring.\n")
 
 
     elif args.subcommand == "setup":
