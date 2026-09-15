@@ -522,6 +522,111 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "2
 
     return []
 
+
+# ─── TargetJobs UK Graduate Scraper ───────────────────────────────────────
+
+async def search_targetjobs_uk(keyword: str, location: str = "Remote", timeframe: str = "48h") -> List[JobSearchResult]:
+    """
+    Scrapes TargetJobs.co.uk graduate & IT technology jobs for UK locations.
+    Uses direct JSON search service API with full descriptions for instant ATS scoring.
+    Gates execution: skips network calls if location is outside UK (GB).
+    """
+    country_code = resolve_location_country(location)
+    if country_code != "GB":
+        log_ist(f"[Job Searcher] Skipping TargetJobs.co.uk search for non-UK location: '{location}' (Country={country_code})")
+        return []
+
+    log_ist(f"[Job Searcher] Fetching TargetJobs UK graduate IT listings for '{keyword}' (Location={location})...")
+    api_url = "https://targetjobs.co.uk/ext/svc/inferno-search-service-1-0/search"
+
+    payload = {
+        "fields": [
+            "nid", "uuid", "title", "parent_organisation_title", "location", "regions",
+            "url", "path", "body", "salary_range", "salary_lower", "salary_upper",
+            "currency", "opportunity_type", "application_url", "application_deadline_date"
+        ],
+        "keys": [keyword.strip()] if keyword and keyword.strip() else [""],
+        "conditionGroup": {
+            "conjunction": "AND",
+            "groups": [
+                {
+                    "conjunction": "OR",
+                    "conditions": [{"name": "sectors", "value": "Technology", "operator": "="}],
+                    "tags": ["facet:sectors"]
+                },
+                {
+                    "conjunction": "OR",
+                    "conditions": [{"name": "opportunity_type", "value": "Graduate job", "operator": "="}],
+                    "tags": ["facet:opportunity_type"]
+                }
+            ]
+        },
+        "sort": [{"field": "last_published", "value": "desc"}],
+        "limit": 30,
+        "offset": 0,
+        "includePromoted": True
+    }
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Referer": "https://targetjobs.co.uk/graduate-jobs/it",
+        "Origin": "https://targetjobs.co.uk"
+    }
+
+    results: List[JobSearchResult] = []
+
+    def _do_targetjobs_request():
+        req = urllib.request.Request(api_url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+        with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=10) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        data = await asyncio.to_thread(_do_targetjobs_request)
+        docs = data.get("search", {}).get("documents", [])
+        promoted = data.get("promoted", {}).get("documents", []) if isinstance(data.get("promoted"), dict) else []
+        all_items = docs + promoted
+
+        seen_nids = set()
+        for doc in all_items:
+            nid = str(doc.get("nid", "") or doc.get("uuid", ""))
+            if not nid or nid in seen_nids:
+                continue
+            seen_nids.add(nid)
+
+            title = doc.get("title", "").strip() or "Graduate IT Role"
+            org_info = doc.get("organisation", {}) if isinstance(doc.get("organisation"), dict) else {}
+            company = doc.get("parent_organisation_title") or org_info.get("title") or "TargetJobs Verified Employer"
+            doc_loc = doc.get("location") or doc.get("regions") or "UK (Hybrid/Remote)"
+            path = doc.get("path") or doc.get("url") or f"/jobs/{nid}"
+            full_url = f"https://targetjobs.co.uk{path}" if path.startswith("/") else path
+            raw_body = doc.get("body") or ""
+
+            # Extract clean description from HTML body
+            clean_jd = ""
+            if raw_body:
+                soup = BeautifulSoup(raw_body, "html.parser")
+                clean_jd = soup.get_text(separator="\n", strip=True)
+
+            results.append(JobSearchResult(
+                title=title,
+                company=company,
+                location=str(doc_loc),
+                url=full_url,
+                platform="TargetJobs",
+                post_date_raw="Recent",
+                job_id=f"targetjobs_{nid}",
+                full_description=clean_jd
+            ))
+
+        log_ist(f"[Job Searcher] ✓ TargetJobs API returned {len(results)} graduate tech jobs for '{keyword}'")
+    except Exception as te:
+        log_ist(f"[Job Searcher] TargetJobs search error for '{keyword}': {te}")
+
+    return results
+
+
 # ─── Indeed Scraper ───────────────────────────────────────────────────────
 
 # ─── Indeed Scraper (Playwright Stealth Browser) ───────────────────────────
@@ -1048,19 +1153,21 @@ async def find_matching_jobs(
 
         li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=18)
         reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=14)
+        targetjobs_task = _safe_run(search_targetjobs_uk, q, location, timeframe, timeout=15)
         ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=22)
 
-        li_j, reed_j, ind_j = await asyncio.gather(li_task, reed_task, ind_task)
-        return q, li_j, reed_j, ind_j
+        li_j, reed_j, tj_j, ind_j = await asyncio.gather(li_task, reed_task, targetjobs_task, ind_task)
+        return q, li_j, reed_j, tj_j, ind_j
 
     query_tasks = [asyncio.create_task(_fetch_query_cluster(q)) for q in queries]
     for completed_task in asyncio.as_completed(query_tasks):
-        q, li_jobs, reed_jobs, ind_jobs = await completed_task
+        q, li_jobs, reed_jobs, tj_jobs, ind_jobs = await completed_task
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
+        raw_jobs.extend(tj_jobs)
         raw_jobs.extend(ind_jobs)
         indeed_jobs_for_est.extend(ind_jobs)
-        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed & {len(reed_jobs)} Reed.co.uk postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{q}'"
+        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed, {len(reed_jobs)} Reed.co.uk & {len(tj_jobs)} TargetJobs postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{q}'"
         log_ist(res_msg)
         yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 
@@ -1089,8 +1196,8 @@ async def find_matching_jobs(
 
     yield json.dumps({"type": "log", "message": f"📊 Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + " " * 2048 + "\n"
 
-    # Separate instant API jobs (Reed, Greenhouse, Ashby, Lever, Workday, Direct ATS) from web-scraped jobs (LinkedIn/Indeed)
-    fast_platforms = ("reed", "greenhouse", "ashby", "lever", "workday", "direct ats")
+    # Separate instant API jobs (TargetJobs, Reed, Greenhouse, Ashby, Lever, Workday, Direct ATS) from web-scraped jobs (LinkedIn/Indeed)
+    fast_platforms = ("targetjobs", "reed", "greenhouse", "ashby", "lever", "workday", "direct ats")
     api_fast_jobs = [j for j in deduped_jobs if j.platform.lower() in fast_platforms]
     scraped_jobs = [j for j in deduped_jobs if j.platform.lower() not in fast_platforms]
     
@@ -1098,9 +1205,9 @@ async def find_matching_jobs(
 
     scored_jobs = []
 
-    # Phase A: Instant in-memory scoring for direct ATS API jobs (Greenhouse, Ashby, Lever, Workday, Reed)
+    # Phase A: Instant in-memory scoring for direct ATS API jobs (TargetJobs, Greenhouse, Ashby, Lever, Workday, Reed)
     if api_fast_jobs:
-        yield json.dumps({"type": "log", "message": f"⚡ Instantly computing ATS match scores for {len(api_fast_jobs)} direct ATS portal openings..."}) + " " * 2048 + "\n"
+        yield json.dumps({"type": "log", "message": f"⚡ Instantly computing ATS match scores for {len(api_fast_jobs)} direct ATS portal & TargetJobs openings..."}) + " " * 2048 + "\n"
         for job in api_fast_jobs:
             try:
                 if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 50:

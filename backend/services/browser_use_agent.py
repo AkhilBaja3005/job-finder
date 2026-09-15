@@ -261,6 +261,11 @@ def build_application_task_prompt(
 
     task += f"""
     CRITICAL SPEED & EFFICIENCY RULES:
+    - PREVENT REPEATING SIGN-IN LOOPS:
+      * If you enter sign-in credentials and click 'Sign In', but the page does NOT advance and returns to the same Sign In form with pre-filled inputs:
+        1. DO NOT repeatedly re-type the exact same password and click 'Sign In' in a loop!
+        2. Inspect if there is a 'Forgot Password', 'Create Account', or 'Send One-Time Passcode' button, or if the form requires verifying an email link.
+        3. If sign-in is stuck after 2 attempts, proceed directly by navigating back to the main job application page or click 'Apply' / 'Apply Manually' to start fresh.
     - OVERWRITE OUTDATED PRE-FILLED FIELDS WITH CANDIDATE PROFILE DATA:
       * When inspecting form controls (name, email, phone, location, LinkedIn, GitHub, portfolio, work authorization, etc.):
         - If the field is ALREADY pre-filled but our candidate profile has a corresponding value for it, CLEAR the existing text in that field and replace it with our profile value! (Autofilled text on portals/browsers is frequently outdated or stale, so our candidate profile value takes absolute priority even if similar).
@@ -292,13 +297,20 @@ def build_application_task_prompt(
          * If a pre-filled field is for an unknown or custom question where we have no candidate profile value, leave it as-is.
        - Phone Country Code & Number:
          * Check and ensure the phone number matches '{clean_mobile or phone}' (clear and replace any outdated phone number).
-         * Many ATS portals (Greenhouse, Lever) use an international telephone widget (`.iti__selected-country` button or 'Select country'). If a phone country button/dropdown is present beside or inside the Phone field, click it, search or select 'India' / '+91' / 'United Kingdom' / '+44', before or together with typing the phone number.
-         * Type '{clean_mobile or phone}' into the phone input.
+         * INTERNATIONAL PHONE COUNTRY CODE WIDGET RULE:
+           - Many ATS portals (Greenhouse, Lever, Workday, SmartRecruiters) use a separate phone country selector (e.g. `.iti__selected-country`, `button[aria-label*="Country code"]`, `div[class*="country-select"]`, or a flag/dial-code dropdown beside the phone field).
+           - ALWAYS inspect if a country code selector/flag is present beside the phone input.
+           - If present, click the country code selector, search/type 'United Kingdom' or 'India' (or '+44' / '+91'), and CLICK the matching country item from the dropdown list to ensure the country code is bound!
+           - After binding the country code, type '{clean_mobile or phone}' into the main phone input field.
        - For Dropdowns & Autocomplete Fields:
          * Country / Location (Autocomplete / Select):
-           - In Greenhouse, Ashby, and Lever, typing 'London' or 'United Kingdom' triggers a dynamic suggestion listbox/flyout menu.
-           - Wait for or inspect the dynamic suggestion list to appear, then click the exact matching option (e.g. 'London, England, United Kingdom', 'London, UK', 'London (United Kingdom)', or 'United Kingdom').
-           - Do not leave the input half-typed without selecting the flyout suggestion.
+           - DYNAMIC LOCATION DROPDOWN RULE:
+             1. DO NOT just type 'London, UK' or 'London' into a location field and move away! Typing plain text alone leaves location fields invalid on platforms like Greenhouse, Ashby, Workday, and Lever.
+             2. Type 'London' into the location input.
+             3. WAIT for the dynamic suggestion listbox/flyout menu to appear below the input (or inspect the dropdown list items).
+             4. CLICK the exact matching suggestion item from the flyout menu (e.g., click 'London, Greater London, United Kingdom', 'London, England, United Kingdom', 'London, UK', or 'London, United Kingdom').
+             5. If no dropdown appears immediately after typing 'London', press 'Down Arrow' then 'Enter' to select the first suggestion item, or type 'London, Greater London' to filter further.
+             6. VERIFY the location input has committed the selected option from the dropdown menu before advancing!
          * Work Authorization / Sponsorship: Inspect options and choose '{sponsorship_choice}' (Candidate requires sponsorship: {sponsorship_str}).
          * Notice Period / Earliest Start Date / Availability:
            - If asked 'Notice Period', 'Earliest start date', 'When can you start?', or 'Earliest available date':
@@ -337,6 +349,9 @@ def build_application_task_prompt(
          * The browser session already has active Google credentials for '{email}'. If a Google account selection popup appears, click '{email}' or '{candidate_name}' to authenticate automatically.
          * If Google OAuth asks to confirm permissions or continue, click 'Confirm' / 'Continue' / 'Allow'.
 {password_action_instruction}
+         * WORKDAY ACCOUNT CREATION & SIGN-IN RULES:
+           - Terms & Conditions Checkbox: On Workday's "Create Account" modal, ALWAYS check the "I have read and agree to the Terms and Conditions" checkbox before clicking "Create Account".
+           - Existing Account Warning: If Workday displays an error "An account with this email address already exists" or "Sign In to your existing account", click "Sign In" instead, enter '{email}' and password '{portals_password}', then submit.
          * Once authenticated or account created, proceed directly with completing the application form.
          * Do NOT stop or fail saying credentials are missing!
     6. Handle Cloudflare Verification / Turnstile / "Verify you are human":

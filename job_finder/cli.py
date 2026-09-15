@@ -132,7 +132,7 @@ def main():
         "apply",
         help="Run ad-hoc browser auto-filler on a specific job application URL",
     )
-    apply_parser.add_argument("url", type=str, help="Job posting URL")
+    apply_parser.add_argument("target", type=str, help="Job posting URL, or path to a .txt/.json/.csv file containing job URLs")
     apply_parser.add_argument("--submit", action="store_true", help="Auto-submit the application if safe")
     apply_parser.add_argument("--timeout", type=float, default=300.0, help="Application timeout in seconds (default: 300s)")
     apply_parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps (default: 50)")
@@ -209,6 +209,19 @@ def main():
     interview_parser.add_argument("--role", type=str, default="Software Engineer", help="Target role")
     interview_parser.add_argument("--youtube", type=str, default=None, help="Optional YouTube technical interview or system design URL")
 
+    # 12. TargetJobs UK subcommand
+    tj_parser = subparsers.add_parser(
+        "targetjobs",
+        help="Search TargetJobs.co.uk graduate & early career IT jobs (UK only)",
+    )
+    tj_parser.add_argument("keyword", nargs="?", default=None, help="Search keyword / role (default: from candidate profile)")
+    tj_parser.add_argument("--location", type=str, default="London", help="UK location filter (default: 'London')")
+    tj_parser.add_argument("--timeframe", type=str, default="48h", help="Timeframe filter (default: '48h')")
+    tj_parser.add_argument("--limit", type=int, default=15, help="Maximum number of listings to show/process (default: 15)")
+    tj_parser.add_argument("--auto-apply", "--auto-submit", dest="auto_apply", action="store_true", help="Automatically autofill and submit applications for discovered TargetJobs listings")
+    tj_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
+    tj_parser.add_argument("--timeout", type=float, default=300.0, help="Autofill session timeout in seconds (default: 300s)")
+
     args, unknown = parser.parse_known_args()
 
     if not args.subcommand:
@@ -243,24 +256,174 @@ def main():
 
     elif args.subcommand == "apply":
         import asyncio
+        import re
         from applications_tracker.scheduled_job_scanner import run_browser_use_autofill, find_master_resume_with_mac_tags
         from backend.mcp.tools.profile_tools import load_profile_data
+
+        urls_to_process = []
+        target_path = args.target.strip()
+
+        if os.path.exists(target_path) and os.path.isfile(target_path):
+            print(f"[Apply Batch] Reading URLs from file: {target_path}")
+            try:
+                with open(target_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+
+                if target_path.lower().endswith(".json"):
+                    data = json.loads(content)
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, str) and item.startswith("http"):
+                                urls_to_process.append(item)
+                            elif isinstance(item, dict):
+                                u = item.get("url") or item.get("job_url") or item.get("link")
+                                if u:
+                                    urls_to_process.append(u)
+                    elif isinstance(data, dict):
+                        u_list = data.get("urls") or data.get("jobs") or []
+                        for item in u_list:
+                            if isinstance(item, str):
+                                urls_to_process.append(item)
+                            elif isinstance(item, dict):
+                                u = item.get("url") or item.get("job_url")
+                                if u:
+                                    urls_to_process.append(u)
+                else:
+                    # Parse .txt or .csv files by extracting HTTP/HTTPS links
+                    found = re.findall(r'https?://[^\s,"]+', content)
+                    urls_to_process = [u.rstrip(")") for u in found]
+            except Exception as fe:
+                print(f"[Error] Failed to parse batch file '{target_path}': {fe}")
+                sys.exit(1)
+        elif target_path.startswith("http://") or target_path.startswith("https://"):
+            urls_to_process = [target_path]
+        else:
+            print(f"[Error] '{target_path}' is neither a valid HTTP/HTTPS URL nor an existing file path.")
+            sys.exit(1)
+
+        if not urls_to_process:
+            print(f"[Warning] No valid HTTP/HTTPS job URLs found in '{target_path}'.")
+            sys.exit(0)
+
+        # Deduplicate preserving order
+        urls_to_process = list(dict.fromkeys(urls_to_process))
+
+        # Check against local tracker & Supabase to skip previously applied roles
+        try:
+            from applications_tracker.scheduled_job_scanner import get_existing_tracked_urls, normalize_job_url
+            existing_tracked = get_existing_tracked_urls()
+            unapplied_urls = []
+            skipped_count = 0
+            for u in urls_to_process:
+                norm_u = normalize_job_url(u)
+                if norm_u and norm_u in existing_tracked:
+                    skipped_count += 1
+                else:
+                    unapplied_urls.append(u)
+
+            if skipped_count > 0:
+                print(f"[Tracker] ⏭️ Skipped {skipped_count} URL(s) that were already applied/tracked in database.")
+            urls_to_process = unapplied_urls
+        except Exception as te:
+            print(f"[Tracker] Note: Tracker duplicate check skipped: {te}")
+
+        if not urls_to_process:
+            print(f"[Apply] All URLs in '{target_path}' have already been applied to!")
+            sys.exit(0)
+
+        print(f"[Apply] Ready to process {len(urls_to_process)} job application URL(s).")
+
         prof = load_profile_data() or {}
         cand = prof.get("candidate", {})
         target_resume = args.resume or find_master_resume_with_mac_tags()
-        result = asyncio.run(asyncio.wait_for(
-            run_browser_use_autofill(
-                args.url,
-                resume_data=cand,
-                resume_pdf_path=target_resume,
-                auto_submit=args.submit,
-                model_name=args.model,
-                headless=args.headless,
-                max_steps=args.max_steps
-            ),
-            timeout=args.timeout
-        ))
-        print(f"[Result] {result}")
+
+        failed_jobs = []
+        successful_jobs = []
+
+        async def _batch_apply():
+            nonlocal failed_jobs, successful_jobs
+            from mcp.tools.tracking_tools import handle_track_application
+
+            for idx, url in enumerate(urls_to_process, 1):
+                print(f"\n========================================================")
+                print(f"[{idx}/{len(urls_to_process)}] Processing Application: {url}")
+                print(f"========================================================\n")
+                status = "failed"
+                err_text = ""
+                try:
+                    res = await asyncio.wait_for(
+                        run_browser_use_autofill(
+                            url,
+                            resume_data=cand,
+                            resume_pdf_path=target_resume,
+                            auto_submit=args.submit,
+                            model_name=args.model,
+                            headless=args.headless,
+                            max_steps=args.max_steps
+                        ),
+                        timeout=args.timeout
+                    )
+                    res_status = str(res.get("status", "")).lower() if isinstance(res, dict) else ""
+                    final_res = str(res.get("final_result", "")) if isinstance(res, dict) else str(res)
+
+                    if "submitted" in res_status or "confirmed" in final_res.lower() or "applied" in final_res.lower():
+                        status = "applied"
+                        successful_jobs.append(url)
+                        print(f"[{idx}/{len(urls_to_process)} Success] Application completed for: {url}")
+                    else:
+                        status = "failed"
+                        err_text = res.get("error") or final_res or "Autofill incomplete"
+                        failed_jobs.append({"url": url, "reason": err_text})
+                        print(f"[{idx}/{len(urls_to_process)} Failed] {err_text}")
+                except asyncio.TimeoutError:
+                    err_text = f"Application timed out after {int(args.timeout)}s"
+                    status = "failed"
+                    failed_jobs.append({"url": url, "reason": err_text})
+                    print(f"[{idx}/{len(urls_to_process)} Error] {err_text}")
+                except Exception as ex:
+                    err_text = str(ex)
+                    status = "failed"
+                    failed_jobs.append({"url": url, "reason": err_text})
+                    print(f"[{idx}/{len(urls_to_process)} Error] Failed to process {url}: {ex}")
+
+                # Formally record the application state (failed or applied) into the database & CSV tracker
+                try:
+                    handle_track_application(
+                        job_url=url,
+                        status=status,
+                        job_title="Target Role",
+                        company="Company",
+                        score=0
+                    )
+                except Exception as trk_err:
+                    print(f"[Tracker] Note: Could not record application state: {trk_err}")
+
+        asyncio.run(_batch_apply())
+
+        # Trigger email alerts for failed and successful applications
+        try:
+            from applications_tracker.scheduled_job_scanner import notify_user_of_failed_applications, notify_user_of_applied_applications
+            if failed_jobs:
+                formatted_failed = [{"url": f["url"], "title": "Target Role", "company": "Company", "reason": f["reason"]} for f in failed_jobs]
+                notify_user_of_failed_applications(formatted_failed)
+            if successful_jobs:
+                formatted_applied = [{"url": u, "title": "Target Role", "company": "Company"} for u in successful_jobs]
+                notify_user_of_applied_applications(formatted_applied)
+        except Exception as mail_err:
+            print(f"[Email Alert] Note: Could not send summary email alert: {mail_err}")
+
+        print(f"\n========================================================")
+        print(f"   BATCH APPLICATION SUMMARY")
+        print(f"========================================================")
+        print(f"Total Processed: {len(urls_to_process)}")
+        print(f"Successful     : {len(successful_jobs)}")
+        print(f"Failed         : {len(failed_jobs)}")
+        if failed_jobs:
+            print(f"\nFailed Application Details:")
+            for f_item in failed_jobs:
+                print(f"  ❌ {f_item['url']}")
+                print(f"     Reason: {f_item['reason']}")
+        print(f"========================================================\n")
 
     elif args.subcommand == "server":
         os.environ["PORT"] = str(args.port)
@@ -463,6 +626,131 @@ Output Markdown with 4 sections:
         print(f"    INTERVIEW PREP PACK: {args.company.upper()} ({args.role})")
         print("========================================================\n")
         print(prep_md)
+
+
+    elif args.subcommand == "targetjobs":
+        import asyncio
+        from services.job_searcher import search_targetjobs_uk
+        from utils.location_resolver import resolve_location_country
+        from backend.mcp.tools.profile_tools import load_profile_data
+
+        # 1. Resolve keyword from candidate profile if not explicitly passed
+        keyword = args.keyword
+        profile = load_profile_data() or {}
+        search_prefs = profile.get("search_preferences", {})
+        cand_info = profile.get("candidate", {})
+
+        if not keyword:
+            target_roles = search_prefs.get("target_roles", [])
+            if target_roles:
+                keyword = target_roles[0]
+            elif cand_info.get("headline"):
+                keyword = cand_info["headline"]
+            else:
+                keyword = "Software Engineer"
+
+        country = resolve_location_country(args.location)
+        if country != "GB":
+            print(f"\n[Warning] TargetJobs only serves jobs in the United Kingdom. '{args.location}' resolved to country code '{country}'.")
+            print("   Please provide a UK location (e.g. London, Manchester, Leeds, Edinburgh, or UK).\n")
+            sys.exit(1)
+
+        print(f"\n========================================================")
+        print(f"   TARGETJOBS UK: Graduate & Early Career IT Search")
+        print(f"   Keyword: '{keyword}' (from {'CLI arg' if args.keyword else 'candidate profile'}) | Location: '{args.location}'")
+        if args.auto_apply:
+            print(f"   Mode: Auto-Submit Enabled (Guardrails Disabled)")
+        print(f"========================================================\n")
+
+        results = asyncio.run(search_targetjobs_uk(
+            keyword=keyword,
+            location=args.location,
+            timeframe=args.timeframe
+        ))
+
+        if not results:
+            print(f"No active graduate tech jobs found on TargetJobs.co.uk matching '{keyword}' in {args.location}.\n")
+        else:
+            display_limit = args.limit or 15
+            selected_jobs = results[:display_limit]
+            print(f"Found {len(results)} graduate technology postings on TargetJobs (showing top {len(selected_jobs)}):\n")
+            for idx, job in enumerate(selected_jobs, start=1):
+                print(f"[{idx}] {job.title}")
+                print(f"    Company  : {job.company}")
+                print(f"    Location : {job.location}")
+                print(f"    Apply URL: {job.url}")
+                if hasattr(job, 'full_description') and job.full_description:
+                    snippet = job.full_description.replace('\n', ' ')[:140]
+                    print(f"    Summary  : {snippet}...")
+                print()
+
+            if args.auto_apply:
+                from applications_tracker.scheduled_job_scanner import apply_to_job, find_master_resume_with_mac_tags, notify_user_of_failed_applications, notify_user_of_applied_applications
+                from mcp.tools.tracking_tools import handle_track_application
+                os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
+                master_resume_pdf = find_master_resume_with_mac_tags()
+                print(f"Starting automatic submission for {len(selected_jobs)} TargetJobs role(s)...")
+
+                failed_tj_jobs = []
+                applied_tj_jobs = []
+
+                async def _apply_all():
+                    for idx, j in enumerate(selected_jobs, 1):
+                        print(f"\n[{idx}/{len(selected_jobs)}] Auto-submitting application: {j.title} @ {j.company}")
+                        status = "failed"
+                        err_reason = ""
+                        try:
+                            res = await apply_to_job(
+                                url=j.url,
+                                candidate=cand_info,
+                                resume_path=master_resume_pdf,
+                                title=j.title,
+                                company=j.company,
+                                auto_submit=True,
+                                timeout_seconds=args.timeout,
+                                headless_override=args.headless
+                            )
+                            res_status = str(res.get("status", "")).lower() if isinstance(res, dict) else ""
+                            final_res = str(res.get("final_result", "")) if isinstance(res, dict) else str(res)
+
+                            if "submitted" in res_status or "confirmed" in final_res.lower() or "applied" in final_res.lower():
+                                status = "applied"
+                                applied_tj_jobs.append({"url": j.url, "title": j.title, "company": j.company})
+                                print(f"[{idx}/{len(selected_jobs)} Success] Application submitted for: {j.title}")
+                            else:
+                                err_reason = res.get("error") or final_res or "Autofill incomplete / unconfirmed"
+                                failed_tj_jobs.append({"url": j.url, "title": j.title, "company": j.company, "reason": err_reason})
+                                print(f"[{idx}/{len(selected_jobs)} Failed] {err_reason}")
+                        except Exception as app_err:
+                            err_reason = str(app_err)
+                            failed_tj_jobs.append({"url": j.url, "title": j.title, "company": j.company, "reason": err_reason})
+                            print(f"[Warning] Auto-submit failed for {j.title}: {app_err}")
+
+                        # Track application state in database
+                        try:
+                            handle_track_application(
+                                job_url=j.url,
+                                status=status,
+                                job_title=j.title,
+                                company=j.company,
+                                score=0
+                            )
+                        except Exception:
+                            pass
+
+                asyncio.run(_apply_all())
+
+                # Send email alerts for failed and applied jobs
+                try:
+                    if failed_tj_jobs:
+                        notify_user_of_failed_applications(failed_tj_jobs)
+                    if applied_tj_jobs:
+                        notify_user_of_applied_applications(applied_tj_jobs)
+                except Exception as m_err:
+                    print(f"[Email Alert] Note: Could not send notification email: {m_err}")
+            else:
+                print(f"Tip: Run `job-finder targetjobs --auto-submit --limit 3` to auto-apply to these roles!")
+                print(f"Or run `job-finder scan --location London, UK` for full unified scanning & tailoring.\n")
 
 
     elif args.subcommand == "setup":
