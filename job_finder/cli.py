@@ -192,6 +192,23 @@ def main():
     tracker_parser.add_argument("--status", type=str, default="all", help="Filter by status (all, saved, tailored, applied)")
     tracker_parser.add_argument("--limit", type=int, default=20, help="Max entries to list (default: 20)")
 
+    # 10. Company subcommand (Agent-Reach Culture Brief)
+    company_parser = subparsers.add_parser(
+        "company",
+        help="Generate Agent-Reach company culture, WFH vibe, and interview insights brief",
+    )
+    company_parser.add_argument("name", type=str, help="Target company name (e.g. Google, Qualcomm)")
+    company_parser.add_argument("--role", type=str, default="Software Engineer", help="Target role (default: Software Engineer)")
+
+    # 11. Interview subcommand (YouTube transcript & STAR prep)
+    interview_parser = subparsers.add_parser(
+        "interview",
+        help="Generate custom interview prep pack with optional YouTube transcript parsing",
+    )
+    interview_parser.add_argument("company", type=str, help="Target company name")
+    interview_parser.add_argument("--role", type=str, default="Software Engineer", help="Target role")
+    interview_parser.add_argument("--youtube", type=str, default=None, help="Optional YouTube technical interview or system design URL")
+
     args, unknown = parser.parse_known_args()
 
     if not args.subcommand:
@@ -397,6 +414,55 @@ def main():
             dt = str(a.get("updated_at") or a.get("created_at") or "")[:10]
             print(f"{st:<12} {sc:<6} {co:<20} {ro:<25} {dt:<12}")
         print("-" * 78 + "\n")
+
+    elif args.subcommand == "company":
+        from backend.services.agent_reach_service import generate_enhanced_company_brief
+        print(f"⏳ Fetching Agent-Reach community culture brief for '{args.name}'...")
+        res = generate_enhanced_company_brief(args.name, args.role)
+        if res.get("status") == "success":
+            print(f"\n🏢 ========================================================")
+            print(f"    AGENT-REACH COMPANY BRIEF: {args.name.upper()} ({args.role})")
+            print("========================================================\n")
+            print(res.get("brief_markdown", ""))
+        else:
+            print(f"❌ Could not fetch company brief: {res.get('message')}")
+
+    elif args.subcommand == "interview":
+        from backend.services.session_store import get_session_data
+        from backend.services.gemini_client import generate_content_with_fallback
+        from backend.services.agent_reach_service import extract_youtube_transcript
+
+        session = get_session_data("guest")
+        cand_data = session.get("data", {})
+        
+        yt_transcript = ""
+        if args.youtube:
+            print(f"📹 Parsing YouTube interview transcript from: {args.youtube}...")
+            yt_res = extract_youtube_transcript(args.youtube)
+            if yt_res.get("status") == "success":
+                yt_transcript = yt_res.get("transcript", "")
+                print(f"✅ Extracted {len(yt_transcript)} chars of technical interview transcript via {yt_res.get('source')}.")
+
+        prompt = f"""You are a professional Interview Coach.
+Generate a custom Interview Prep Pack for candidate applying to '{args.role}' at '{args.company}'.
+
+CANDIDATE DATA:
+{json.dumps(cand_data, indent=2)}
+
+{"YOUTUBE TECHNICAL INTERVIEW TRANSCRIPT: " + yt_transcript[:2000] if yt_transcript else ""}
+
+Output Markdown with 4 sections:
+1. Behavioral STAR Q&A
+2. Technical Review Checklist
+3. Tough Questions ('Why this company?')
+4. Smart Questions to Ask Interviewers"""
+
+        print(f"🧠 Generating Interview Prep Pack for {args.company}...")
+        prep_md = generate_content_with_fallback(prompt, model_tier="lite")
+        print(f"\n🎯 ========================================================")
+        print(f"    INTERVIEW PREP PACK: {args.company.upper()} ({args.role})")
+        print("========================================================\n")
+        print(prep_md)
 
 
     elif args.subcommand == "setup":
