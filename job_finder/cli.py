@@ -307,6 +307,30 @@ def main():
 
         # Deduplicate preserving order
         urls_to_process = list(dict.fromkeys(urls_to_process))
+
+        # Check against local tracker & Supabase to skip previously applied roles
+        try:
+            from applications_tracker.scheduled_job_scanner import get_existing_tracked_urls, normalize_job_url
+            existing_tracked = get_existing_tracked_urls()
+            unapplied_urls = []
+            skipped_count = 0
+            for u in urls_to_process:
+                norm_u = normalize_job_url(u)
+                if norm_u and norm_u in existing_tracked:
+                    skipped_count += 1
+                else:
+                    unapplied_urls.append(u)
+
+            if skipped_count > 0:
+                print(f"[Tracker] ⏭️ Skipped {skipped_count} URL(s) that were already applied/tracked in database.")
+            urls_to_process = unapplied_urls
+        except Exception as te:
+            print(f"[Tracker] Note: Tracker duplicate check skipped: {te}")
+
+        if not urls_to_process:
+            print(f"[Apply] All URLs in '{target_path}' have already been applied to!")
+            sys.exit(0)
+
         print(f"[Apply] Ready to process {len(urls_to_process)} job application URL(s).")
 
         prof = load_profile_data() or {}
