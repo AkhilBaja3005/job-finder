@@ -279,7 +279,7 @@ async def autofill_job_application(url: str, resume_data: dict, resume_pdf_path:
                             ans = get_answer_from_llm(req_label, req_name, resume_data, custom_api_key)
                             if ans:
                                 await ureq.fill(ans)
-                                await ureq.set_attribute("data-autofilled", "true")
+                                await page.evaluate("el => el.setAttribute('data-autofilled', 'true')", ureq)
                 except Exception as sc_err:
                     print(f"[Autofill Agent] Note: Self-correction pass skipped: {sc_err}")
 
