@@ -53,6 +53,25 @@ DISCOVERY_TOOLS_SPEC = [
             },
             "required": ["url"]
         }
+    },
+    {
+        "name": "company_culture_brief",
+        "description": "Generates a zero-API-fee Company Culture, WFH Vibe, and Interview Insights Brief using Agent-Reach community intelligence & Reddit.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "company": {
+                    "type": "string",
+                    "description": "Target company name (e.g. 'Google', 'Qualcomm', 'Stripe')."
+                },
+                "role": {
+                    "type": "string",
+                    "description": "Target role (e.g. 'Software Engineer', 'Product Manager'). Defaults to 'Software Engineer'.",
+                    "default": "Software Engineer"
+                }
+            },
+            "required": ["company"]
+        }
     }
 ]
 
@@ -172,3 +191,13 @@ async def handle_scrape_job_posting(arguments: Dict[str, Any]) -> Dict[str, Any]
         "recruiter_profile_url": scraped.get("recruiter_profile_url"),
         "url": url
     }
+
+
+async def handle_company_culture_brief(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    company = arguments.get("company", "")
+    if not company:
+        return {"error": "Missing required argument 'company'"}
+    role = arguments.get("role", "Software Engineer")
+
+    from services.agent_reach_service import generate_enhanced_company_brief
+    return await asyncio.to_thread(generate_enhanced_company_brief, company, role)

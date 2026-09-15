@@ -198,6 +198,11 @@ class AnswerQuestionRequest(BaseModel):
     question: str
     company_name: Optional[str] = None
     job_title: Optional[str] = None
+
+
+class CompanyBriefRequest(BaseModel):
+    company: str
+    role: Optional[str] = "Software Engineer"
     job_description: Optional[str] = None
     candidate_profile: Optional[dict] = None
 
@@ -676,6 +681,23 @@ RULES:
         return {"status": "success", "cover_letter": cover_letter.strip()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/company_brief")
+async def get_company_brief(request: CompanyBriefRequest):
+    """Generates enhanced Company Culture Brief using Agent-Reach community insights & Reddit."""
+    from services.agent_reach_service import generate_enhanced_company_brief
+    res = await asyncio.to_thread(generate_enhanced_company_brief, request.company, request.role or "")
+    if res.get("status") == "error":
+        raise HTTPException(status_code=500, detail=res.get("message", "Failed to generate brief."))
+    return res
+
+
+@router.get("/agent_reach/doctor")
+async def get_agent_reach_doctor():
+    """Runs self-healing diagnostics for Agent-Reach zero-API-fee internet router layer."""
+    from services.agent_reach_service import agent_reach_doctor
+    return await asyncio.to_thread(agent_reach_doctor)
 
 
 @router.post("/generate_interview_prep")
