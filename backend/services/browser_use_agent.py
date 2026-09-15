@@ -344,6 +344,9 @@ def build_application_task_prompt(
          * The browser session already has active Google credentials for '{email}'. If a Google account selection popup appears, click '{email}' or '{candidate_name}' to authenticate automatically.
          * If Google OAuth asks to confirm permissions or continue, click 'Confirm' / 'Continue' / 'Allow'.
 {password_action_instruction}
+         * WORKDAY ACCOUNT CREATION & SIGN-IN RULES:
+           - Terms & Conditions Checkbox: On Workday's "Create Account" modal, ALWAYS check the "I have read and agree to the Terms and Conditions" checkbox before clicking "Create Account".
+           - Existing Account Warning: If Workday displays an error "An account with this email address already exists" or "Sign In to your existing account", click "Sign In" instead, enter '{email}' and password '{portals_password}', then submit.
          * Once authenticated or account created, proceed directly with completing the application form.
          * Do NOT stop or fail saying credentials are missing!
     6. Handle Cloudflare Verification / Turnstile / "Verify you are human":
