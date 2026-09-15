@@ -72,10 +72,25 @@ def fetch_reddit_company_insights(company: str, role: str = "") -> Dict[str, Any
             "total_posts": len(posts),
             "posts": posts
         }
-    except Exception as e:
+    except Exception:
+        # Fallback to Jina Reader zero-API-fee extraction if Reddit JSON endpoint blocks raw urllib
+        jina_data = scrape_with_jina(f"https://www.reddit.com/r/cscareerquestions/search/?q={urllib.parse.quote(clean_company)}")
+        if jina_data.get("status") == "success" and jina_data.get("markdown"):
+            return {
+                "status": "success",
+                "company": clean_company,
+                "total_posts": 1,
+                "posts": [{
+                    "title": f"Community discussions for {clean_company}",
+                    "excerpt": jina_data["markdown"][:500],
+                    "url": jina_data["url"],
+                    "subreddit": "cscareerquestions",
+                    "upvotes": 10
+                }]
+            }
         return {
             "status": "error",
-            "message": f"Reddit fetch failed: {str(e)}",
+            "message": "Reddit fetch failed",
             "company": clean_company,
             "posts": []
         }
@@ -121,10 +136,24 @@ def fetch_reddit_hiring_threads(role: str = "Software Engineer", location: str =
             "total_found": len(jobs),
             "community_jobs": jobs
         }
-    except Exception as e:
+    except Exception:
+        # Fallback to Jina Reader for community hiring search
+        jina_data = scrape_with_jina(f"https://www.reddit.com/r/forhire/search/?q={urllib.parse.quote(role)}")
+        if jina_data.get("status") == "success" and jina_data.get("markdown"):
+            return {
+                "status": "success",
+                "total_found": 1,
+                "community_jobs": [{
+                    "title": f"Recent {role} hiring discussions",
+                    "excerpt": jina_data["markdown"][:500],
+                    "url": jina_data["url"],
+                    "subreddit": "forhire",
+                    "source": "Reddit via Jina Reader"
+                }]
+            }
         return {
             "status": "error",
-            "message": f"Community hiring thread discovery failed: {str(e)}",
+            "message": "Community hiring thread discovery failed",
             "community_jobs": []
         }
 
