@@ -121,7 +121,11 @@ TASK: Generate a personalized outreach message with these sections:
 3. "Relevant questions" (2-3 bullet points): Ask thoughtful questions about role/team/company
 4. Email subject line: Professional and compelling
 5. Full email body: Combine all sections into a professional email
-6. LinkedIn message: Format for LinkedIn copy-paste (shorter, more casual)
+6. LinkedIn message: Format for LinkedIn InMail copy-paste (concise, high-converting, strictly UNDER 150 words, maximum 3 short paragraphs).
+
+STRICT WORD LIMIT RULE:
+- The `linkedin_message` MUST be strictly under 300 words (aim for 100-150 words / under 1900 characters) so it fits in a single LinkedIn InMail without truncation.
+- Keep the InMail direct, engaging, and crisp.
 
 Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 {{
@@ -172,14 +176,19 @@ Make the messages personalized, professional, and compelling. Use the ATS analys
                 else:
                     raise ValueError("Could not parse LLM response as JSON")
 
-        # Validate and create OutreachMessage
+        # Enforce strict 300-word budget post-processing on linkedin_message
+        raw_linkedin = str(result.get("linkedin_message", "")).strip()
+        words = raw_linkedin.split()
+        if len(words) > 280:
+            raw_linkedin = " ".join(words[:280]) + "..."
+
         outreach_msg = OutreachMessage(
             why_applying=result.get("why_applying", ""),
             why_fit=result.get("why_fit", ""),
             questions=result.get("questions", []),
             email_subject=result.get("email_subject", ""),
             email_body=result.get("email_body", ""),
-            linkedin_message=result.get("linkedin_message", "")
+            linkedin_message=raw_linkedin
         )
         print(f"[outreach_generator] Created OutreachMessage: {outreach_msg.model_dump()}")
         return outreach_msg

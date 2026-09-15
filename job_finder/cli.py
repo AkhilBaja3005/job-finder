@@ -400,6 +400,18 @@ def main():
 
         asyncio.run(_batch_apply())
 
+        # Trigger email alerts for failed and successful applications
+        try:
+            from applications_tracker.scheduled_job_scanner import notify_user_of_failed_applications, notify_user_of_applied_applications
+            if failed_jobs:
+                formatted_failed = [{"url": f["url"], "title": "Target Role", "company": "Company", "reason": f["reason"]} for f in failed_jobs]
+                notify_user_of_failed_applications(formatted_failed)
+            if successful_jobs:
+                formatted_applied = [{"url": u, "title": "Target Role", "company": "Company"} for u in successful_jobs]
+                notify_user_of_applied_applications(formatted_applied)
+        except Exception as mail_err:
+            print(f"[Email Alert] Note: Could not send summary email alert: {mail_err}")
+
         print(f"\n========================================================")
         print(f"   BATCH APPLICATION SUMMARY")
         print(f"========================================================")
@@ -673,16 +685,22 @@ Output Markdown with 4 sections:
                 print()
 
             if args.auto_apply:
-                from applications_tracker.scheduled_job_scanner import apply_to_job, find_master_resume_with_mac_tags
+                from applications_tracker.scheduled_job_scanner import apply_to_job, find_master_resume_with_mac_tags, notify_user_of_failed_applications, notify_user_of_applied_applications
+                from mcp.tools.tracking_tools import handle_track_application
                 os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
                 master_resume_pdf = find_master_resume_with_mac_tags()
                 print(f"Starting automatic submission for {len(selected_jobs)} TargetJobs role(s)...")
 
+                failed_tj_jobs = []
+                applied_tj_jobs = []
+
                 async def _apply_all():
                     for idx, j in enumerate(selected_jobs, 1):
                         print(f"\n[{idx}/{len(selected_jobs)}] Auto-submitting application: {j.title} @ {j.company}")
+                        status = "failed"
+                        err_reason = ""
                         try:
-                            await apply_to_job(
+                            res = await apply_to_job(
                                 url=j.url,
                                 candidate=cand_info,
                                 resume_path=master_resume_pdf,
@@ -692,10 +710,44 @@ Output Markdown with 4 sections:
                                 timeout_seconds=args.timeout,
                                 headless_override=args.headless
                             )
+                            res_status = str(res.get("status", "")).lower() if isinstance(res, dict) else ""
+                            final_res = str(res.get("final_result", "")) if isinstance(res, dict) else str(res)
+
+                            if "submitted" in res_status or "confirmed" in final_res.lower() or "applied" in final_res.lower():
+                                status = "applied"
+                                applied_tj_jobs.append({"url": j.url, "title": j.title, "company": j.company})
+                                print(f"[{idx}/{len(selected_jobs)} Success] Application submitted for: {j.title}")
+                            else:
+                                err_reason = res.get("error") or final_res or "Autofill incomplete / unconfirmed"
+                                failed_tj_jobs.append({"url": j.url, "title": j.title, "company": j.company, "reason": err_reason})
+                                print(f"[{idx}/{len(selected_jobs)} Failed] {err_reason}")
                         except Exception as app_err:
+                            err_reason = str(app_err)
+                            failed_tj_jobs.append({"url": j.url, "title": j.title, "company": j.company, "reason": err_reason})
                             print(f"[Warning] Auto-submit failed for {j.title}: {app_err}")
 
+                        # Track application state in database
+                        try:
+                            handle_track_application(
+                                job_url=j.url,
+                                status=status,
+                                job_title=j.title,
+                                company=j.company,
+                                score=0
+                            )
+                        except Exception:
+                            pass
+
                 asyncio.run(_apply_all())
+
+                # Send email alerts for failed and applied jobs
+                try:
+                    if failed_tj_jobs:
+                        notify_user_of_failed_applications(failed_tj_jobs)
+                    if applied_tj_jobs:
+                        notify_user_of_applied_applications(applied_tj_jobs)
+                except Exception as m_err:
+                    print(f"[Email Alert] Note: Could not send notification email: {m_err}")
             else:
                 print(f"Tip: Run `job-finder targetjobs --auto-submit --limit 3` to auto-apply to these roles!")
                 print(f"Or run `job-finder scan --location London, UK` for full unified scanning & tailoring.\n")

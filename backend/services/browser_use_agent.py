@@ -261,6 +261,11 @@ def build_application_task_prompt(
 
     task += f"""
     CRITICAL SPEED & EFFICIENCY RULES:
+    - PREVENT REPEATING SIGN-IN LOOPS:
+      * If you enter sign-in credentials and click 'Sign In', but the page does NOT advance and returns to the same Sign In form with pre-filled inputs:
+        1. DO NOT repeatedly re-type the exact same password and click 'Sign In' in a loop!
+        2. Inspect if there is a 'Forgot Password', 'Create Account', or 'Send One-Time Passcode' button, or if the form requires verifying an email link.
+        3. If sign-in is stuck after 2 attempts, proceed directly by navigating back to the main job application page or click 'Apply' / 'Apply Manually' to start fresh.
     - OVERWRITE OUTDATED PRE-FILLED FIELDS WITH CANDIDATE PROFILE DATA:
       * When inspecting form controls (name, email, phone, location, LinkedIn, GitHub, portfolio, work authorization, etc.):
         - If the field is ALREADY pre-filled but our candidate profile has a corresponding value for it, CLEAR the existing text in that field and replace it with our profile value! (Autofilled text on portals/browsers is frequently outdated or stale, so our candidate profile value takes absolute priority even if similar).
