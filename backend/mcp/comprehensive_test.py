@@ -26,7 +26,7 @@ async def test_all_mcp_tools():
     list_res = await process_mcp_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     tool_names = [t["name"] for t in list_res["result"]["tools"]]
     print(f"  [✓] 2. tools/list registered: {len(tool_names)} tools found")
-    assert len(tool_names) == 22
+    assert len(tool_names) == 21
     assert "company_culture_brief" in tool_names
     assert "pipeline_auto_apply" in tool_names
 

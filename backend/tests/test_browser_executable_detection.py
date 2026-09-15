@@ -7,7 +7,10 @@ import os
 import sys
 import pytest
 from unittest.mock import patch
-from backend.services.browser_use_agent import find_browser_executable
+try:
+    from backend.services.browser_use_agent import find_browser_executable
+except ImportError:
+    from services.browser_use_agent import find_browser_executable
 
 
 def test_find_browser_executable_env_override(tmp_path, monkeypatch):
