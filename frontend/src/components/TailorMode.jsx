@@ -19,6 +19,8 @@ const TailorMode = ({
   onGenerateOutreach,
   tailoringIntensity = 'balanced',
   setTailoringIntensity,
+  youtubeUrl = '',
+  setYoutubeUrl,
 }) => {
   const handleJdChange = (text) => {
     setJobDescription(text);
@@ -111,6 +113,13 @@ const TailorMode = ({
           placeholder="Job Title (e.g. Senior Distributed Systems Engineer)"
           value={jobTitle}
           onChange={(e) => setJobTitle(e.target.value)}
+        />
+        <input
+          type="text"
+          placeholder="📹 YouTube Tech Interview URL (optional for transcript prep)"
+          value={youtubeUrl}
+          onChange={(e) => setYoutubeUrl && setYoutubeUrl(e.target.value)}
+          style={{ fontSize: '0.78rem' }}
         />
         <textarea
           placeholder="Paste Job Description (optional if URL provided)"
