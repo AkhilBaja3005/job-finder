@@ -198,6 +198,8 @@ class AnswerQuestionRequest(BaseModel):
     question: str
     company_name: Optional[str] = None
     job_title: Optional[str] = None
+    job_description: Optional[str] = None
+    candidate_profile: Optional[dict] = None
 
 
 class CompanyBriefRequest(BaseModel):

@@ -49,6 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const atsVerdictBadge = document.getElementById("ats-verdict-badge");
   const btnEmailTailor = document.getElementById("btn-email-tailor");
   const btnCoverLetter = document.getElementById("btn-cover-letter");
+  const btnCompanyBrief = document.getElementById("btn-company-brief");
   const btnOutreach = document.getElementById("btn-outreach");
 
   // Quick Outreach Drawer Elements
@@ -1214,6 +1215,45 @@ document.addEventListener("DOMContentLoaded", () => {
           })
           .catch((err) => showToast("❌ Error: " + err.message));
       });
+    });
+  }
+
+  // Generate Company & Culture Brief (Agent-Reach Integration)
+  if (btnCompanyBrief) {
+    btnCompanyBrief.addEventListener("click", () => {
+      if (!currentJobInfo || !currentJobInfo.company) {
+        showToast("⚠️ Open a job page first!");
+        return;
+      }
+      showToast("⏳ Fetching Agent-Reach community culture brief...");
+      fetch(`${API_BASE_URL}/company_brief`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company: currentJobInfo.company,
+          role: currentJobInfo.title || "Software Engineer"
+        })
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.brief_markdown) {
+            activePreviewText = data.brief_markdown;
+            previewTitle.textContent = `🏢 ${currentJobInfo.company} Culture Brief`;
+            previewContent.textContent = data.brief_markdown;
+            previewWrapper.style.display = "block";
+            chrome.storage.local.set({
+              lastPreviewState: {
+                text: data.brief_markdown,
+                title: `🏢 ${currentJobInfo.company} Culture Brief`,
+                url: currentJobInfo.url || ""
+              }
+            });
+            showToast("🏢 Culture brief generated! Preview below.");
+          } else {
+            showToast("⚠️ Brief generation failed.");
+          }
+        })
+        .catch((err) => showToast("❌ Error: " + err.message));
     });
   }
 
