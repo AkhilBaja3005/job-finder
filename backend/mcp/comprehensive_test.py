@@ -27,7 +27,7 @@ async def test_all_mcp_tools():
     tool_names = [t["name"] for t in list_res["result"]["tools"]]
     print(f"  [✓] 2. tools/list registered: {len(tool_names)} tools found")
     assert len(tool_names) == 21
-    assert "apply_to_job_browser" in tool_names
+    assert "company_culture_brief" in tool_names
     assert "pipeline_auto_apply" in tool_names
 
     # 3. calculate_ats_score

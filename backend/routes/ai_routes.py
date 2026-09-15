@@ -150,6 +150,7 @@ class InterviewPrepRequest(BaseModel):
     company: str
     job_url: Optional[str] = None
     job_description: Optional[str] = None
+    youtube_url: Optional[str] = None
 
 
 class CoverLetterHistoryRequest(BaseModel):
@@ -198,6 +199,13 @@ class AnswerQuestionRequest(BaseModel):
     question: str
     company_name: Optional[str] = None
     job_title: Optional[str] = None
+    job_description: Optional[str] = None
+    candidate_profile: Optional[dict] = None
+
+
+class CompanyBriefRequest(BaseModel):
+    company: str
+    role: Optional[str] = "Software Engineer"
     job_description: Optional[str] = None
     candidate_profile: Optional[dict] = None
 
@@ -678,6 +686,23 @@ RULES:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/company_brief")
+async def get_company_brief(request: CompanyBriefRequest):
+    """Generates enhanced Company Culture Brief using Agent-Reach community insights & Reddit."""
+    from services.agent_reach_service import generate_enhanced_company_brief
+    res = await asyncio.to_thread(generate_enhanced_company_brief, request.company, request.role or "")
+    if res.get("status") == "error":
+        raise HTTPException(status_code=500, detail=res.get("message", "Failed to generate brief."))
+    return res
+
+
+@router.get("/agent_reach/doctor")
+async def get_agent_reach_doctor():
+    """Runs self-healing diagnostics for Agent-Reach zero-API-fee internet router layer."""
+    from services.agent_reach_service import agent_reach_doctor
+    return await asyncio.to_thread(agent_reach_doctor)
+
+
 @router.post("/generate_interview_prep")
 async def generate_interview_prep(request: InterviewPrepRequest, authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
@@ -697,6 +722,16 @@ async def generate_interview_prep(request: InterviewPrepRequest, authorization: 
         except Exception:
             pass
 
+    youtube_transcript_text = ""
+    if request.youtube_url:
+        try:
+            from services.agent_reach_service import extract_youtube_transcript
+            yt_res = await asyncio.to_thread(extract_youtube_transcript, request.youtube_url)
+            if yt_res.get("status") == "success":
+                youtube_transcript_text = yt_res.get("transcript", "")
+        except Exception as yt_err:
+            print(f"[Interview Prep] YouTube transcript extraction skipped: {yt_err}")
+
     prompt = f"""You are a professional Interview Coach.
 Help the candidate prepare for an upcoming interview.
 
@@ -707,10 +742,11 @@ TARGET POSITION:
 Role: {request.job_title}
 Company: {request.company}
 Job Description context: {jd_text[:1200] if jd_text else "Not provided"}
+{"YouTube Technical Interview/System Design Transcript Excerpt: " + youtube_transcript_text[:2000] if youtube_transcript_text else ""}
 
 Output a complete Markdown Interview Preparation Pack following these sections:
 1. **Behavioral STAR Q&A:** Formulate 3-4 custom STAR stories mapping candidate's experience to likely questions.
-2. **Technical Review Checklist:** List 5 key topics or tools mentioned in the job context.
+2. **Technical Review Checklist:** List 5 key topics or tools mentioned in the job context or video transcript.
 3. **Common Tough Questions:** Specific answers for 'Why this company?' and how to address gaps.
 4. **Smart Questions to Ask Them:** List 3-4 engaging questions for the interviewer.
 

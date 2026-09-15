@@ -1,4 +1,57 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+
+const SkillsHeatmapWidget = () => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/applications/skills_heatmap')
+      .then(res => res.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '12px' }}>Loading ATS skills heatmap…</div>;
+  if (!data || (!data.top_matched_skills?.length && !data.top_missing_skills?.length)) return null;
+
+  return (
+    <div style={{
+      marginTop: '16px',
+      padding: '12px',
+      background: 'var(--panel-bg-subtle)',
+      border: '1px solid var(--border-color)',
+      borderRadius: '8px'
+    }}>
+      <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'var(--font-mono)', marginBottom: '8px' }}>
+        📊 ATS Keyword Gap & Skill Heatmap
+      </div>
+      {data.top_matched_skills?.length > 0 && (
+        <div style={{ marginBottom: '8px' }}>
+          <div style={{ fontSize: '0.7rem', color: '#34D399', fontWeight: 700, marginBottom: '4px' }}>Top Matched Skills:</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {data.top_matched_skills.map((s, i) => (
+              <span key={i} style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.35)', color: '#34D399', padding: '2px 7px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600 }}>
+                {s.skill} ({s.count})
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {data.top_missing_skills?.length > 0 && (
+        <div>
+          <div style={{ fontSize: '0.7rem', color: '#F87171', fontWeight: 700, marginBottom: '4px' }}>Top Missing Keyword Gaps:</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {data.top_missing_skills.map((s, i) => (
+              <span key={i} style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#F87171', padding: '2px 7px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600 }}>
+                {s.skill} ({s.count})
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const HistoryMode = ({
   historyLoading,
@@ -45,6 +98,9 @@ const HistoryMode = ({
           Launch on-demand modals (Interview Prep, Cover Letter, Outreach InMail) directly from any application record.
         </div>
       </div>
+
+      {/* Interactive ATS Skills Heatmap Widget */}
+      <SkillsHeatmapWidget />
     </>
   );
 };

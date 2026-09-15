@@ -12,14 +12,14 @@ This skill guides agents in performing background research on prospective employ
 ## Workflow
 
 1. **Extract Culture and Technical Architecture**:
-   - Call the `company_culture_brief` MCP tool:
+   - Call the `company_culture_brief` MCP tool (powered by Agent-Reach zero-API-fee community intelligence):
      ```json
      {
        "company": "Anthropic",
-       "job_description": "<jd_text>"
+       "role": "Senior Software Engineer"
      }
      ```
-   - Analyze engineering priorities, system architecture patterns, and team scope.
+   - Analyze engineering priorities, WFH/hybrid culture, recent Reddit community reviews (`cscareerquestions`, `forhire`), system architecture patterns, and team scope.
 
 2. **Benchmark Compensation & Seniority**:
    - Call `extract_seniority_salary` to parse explicit or implicit compensation data.

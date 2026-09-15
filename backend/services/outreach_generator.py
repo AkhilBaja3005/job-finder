@@ -103,6 +103,9 @@ JOB DETAILS:
 - Company: {company_name}
 - Job Description: {job_description[:1500]}
 
+COMMUNITY & TECH BLOG CONTEXT:
+- Mention 1 specific engineering achievement, open-source project, tech stack signal, or recent growth area for {company_name} to make the outreach ultra-personalized.
+
 ATS ANALYSIS:
 - Overall Match Score: {overall_score}/100
 - Matched Skills: {matched_skills_str}
