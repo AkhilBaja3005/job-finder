@@ -417,6 +417,36 @@ async def get_applications(authorization: Optional[str] = Header(None)):
     return {"applications": await asyncio.to_thread(list_applications, token)}
 
 
+@router.get("/applications/skills_heatmap")
+async def get_skills_heatmap(authorization: Optional[str] = Header(None)):
+    """Computes an interactive ATS keyword gap & skill frequency heatmap across user applications."""
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    apps = await asyncio.to_thread(list_applications, token)
+    
+    from collections import Counter
+    matched_counts = Counter()
+    missing_counts = Counter()
+
+    for app in apps:
+        m_skills = app.get("matched_skills") or []
+        if isinstance(m_skills, str):
+            m_skills = [s.strip() for s in m_skills.split(",") if s.strip()]
+        for s in m_skills:
+            matched_counts[s.lower()] += 1
+
+        miss_skills = app.get("missing_skills") or []
+        if isinstance(miss_skills, str):
+            miss_skills = [s.strip() for s in miss_skills.split(",") if s.strip()]
+        for s in miss_skills:
+            missing_counts[s.lower()] += 1
+
+    return {
+        "total_applications_analyzed": len(apps),
+        "top_matched_skills": [{"skill": k, "count": v} for k, v in matched_counts.most_common(15)],
+        "top_missing_skills": [{"skill": k, "count": v} for k, v in missing_counts.most_common(15)]
+    }
+
+
 @router.post("/update_application_status")
 async def update_status_endpoint(request: UpdateStatusRequest, authorization: Optional[str] = Header(None)):
     token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None

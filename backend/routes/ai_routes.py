@@ -150,6 +150,7 @@ class InterviewPrepRequest(BaseModel):
     company: str
     job_url: Optional[str] = None
     job_description: Optional[str] = None
+    youtube_url: Optional[str] = None
 
 
 class CoverLetterHistoryRequest(BaseModel):
@@ -721,6 +722,16 @@ async def generate_interview_prep(request: InterviewPrepRequest, authorization: 
         except Exception:
             pass
 
+    youtube_transcript_text = ""
+    if request.youtube_url:
+        try:
+            from services.agent_reach_service import extract_youtube_transcript
+            yt_res = await asyncio.to_thread(extract_youtube_transcript, request.youtube_url)
+            if yt_res.get("status") == "success":
+                youtube_transcript_text = yt_res.get("transcript", "")
+        except Exception as yt_err:
+            print(f"[Interview Prep] YouTube transcript extraction skipped: {yt_err}")
+
     prompt = f"""You are a professional Interview Coach.
 Help the candidate prepare for an upcoming interview.
 
@@ -731,10 +742,11 @@ TARGET POSITION:
 Role: {request.job_title}
 Company: {request.company}
 Job Description context: {jd_text[:1200] if jd_text else "Not provided"}
+{"YouTube Technical Interview/System Design Transcript Excerpt: " + youtube_transcript_text[:2000] if youtube_transcript_text else ""}
 
 Output a complete Markdown Interview Preparation Pack following these sections:
 1. **Behavioral STAR Q&A:** Formulate 3-4 custom STAR stories mapping candidate's experience to likely questions.
-2. **Technical Review Checklist:** List 5 key topics or tools mentioned in the job context.
+2. **Technical Review Checklist:** List 5 key topics or tools mentioned in the job context or video transcript.
 3. **Common Tough Questions:** Specific answers for 'Why this company?' and how to address gaps.
 4. **Smart Questions to Ask Them:** List 3-4 engaging questions for the interviewer.
 

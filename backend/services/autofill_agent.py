@@ -266,6 +266,23 @@ async def autofill_job_application(url: str, resume_data: dict, resume_pdf_path:
             while not page.is_closed():
                 await fill_visible_fields(page, resume_data, resume_pdf_path, session_filled_questions, custom_api_key)
 
+                # LLM Self-Correction & Form Retry Loop: Detect any missed required fields or validation errors
+                try:
+                    unfilled_required = await page.query_selector_all("input[required]:not([data-autofilled='true']), textarea[required]:not([data-autofilled='true']), select[required]:not([data-autofilled='true'])")
+                    for ureq in unfilled_required:
+                        if await ureq.is_visible():
+                            req_id = await ureq.get_attribute("id") or ""
+                            req_name = await ureq.get_attribute("name") or ""
+                            label_el = await page.query_selector(f"label[for='{req_id}']") if req_id else None
+                            req_label = await label_el.inner_text() if label_el else (req_name or "Required Field")
+                            print(f"[Autofill Agent] 🛠️ Self-correcting unfilled required field: {req_label}")
+                            ans = get_answer_from_llm(req_label, req_name, resume_data, custom_api_key)
+                            if ans:
+                                await ureq.fill(ans)
+                                await ureq.set_attribute("data-autofilled", "true")
+                except Exception as sc_err:
+                    print(f"[Autofill Agent] Note: Self-correction pass skipped: {sc_err}")
+
                 if not interactive_mode:
                     next_btn = await page.query_selector("button:has-text('Next'), button:has-text('Continue'), button:has-text('Review')")
                     if next_btn and await next_btn.is_visible():

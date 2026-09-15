@@ -831,6 +831,26 @@ async def run_pipeline(
                 existing_scored_urls.add(u_norm)
                 merged_count += 1
 
+        # Agent-Reach: Discover unlisted community jobs (Reddit, Hacker News "Who is Hiring")
+        try:
+            from services.agent_reach_service import fetch_reddit_hiring_threads
+            comm_res = fetch_reddit_hiring_threads(role=target_roles[0] if target_roles else "Software Engineer", location=location)
+            for cjob in comm_res.get("community_jobs", []):
+                u_norm = normalize_job_url(cjob.get("url", ""))
+                if u_norm and u_norm not in existing_scored_urls:
+                    jobs.append({
+                        "title": cjob.get("title"),
+                        "company": "Reddit / Hacker News Community",
+                        "url": cjob.get("url"),
+                        "platform": "Reddit / Agent-Reach",
+                        "ats_score": 85,
+                        "description": cjob.get("excerpt", "")
+                    })
+                    existing_scored_urls.add(u_norm)
+                    merged_count += 1
+        except Exception as comm_err:
+            print(f"[Scanner] Note: Community unlisted job search skipped: {comm_err}")
+
     print(f"\n[Scanner] 📊 Total unique postings discovered and queued: {len(jobs)} ({len(jobs) - merged_count} primary scored + {merged_count} from Indeed/EST)")
 
     existing_urls = get_existing_tracked_urls()
