@@ -292,13 +292,20 @@ def build_application_task_prompt(
          * If a pre-filled field is for an unknown or custom question where we have no candidate profile value, leave it as-is.
        - Phone Country Code & Number:
          * Check and ensure the phone number matches '{clean_mobile or phone}' (clear and replace any outdated phone number).
-         * Many ATS portals (Greenhouse, Lever) use an international telephone widget (`.iti__selected-country` button or 'Select country'). If a phone country button/dropdown is present beside or inside the Phone field, click it, search or select 'India' / '+91' / 'United Kingdom' / '+44', before or together with typing the phone number.
-         * Type '{clean_mobile or phone}' into the phone input.
+         * INTERNATIONAL PHONE COUNTRY CODE WIDGET RULE:
+           - Many ATS portals (Greenhouse, Lever, Workday, SmartRecruiters) use a separate phone country selector (e.g. `.iti__selected-country`, `button[aria-label*="Country code"]`, `div[class*="country-select"]`, or a flag/dial-code dropdown beside the phone field).
+           - ALWAYS inspect if a country code selector/flag is present beside the phone input.
+           - If present, click the country code selector, search/type 'United Kingdom' or 'India' (or '+44' / '+91'), and CLICK the matching country item from the dropdown list to ensure the country code is bound!
+           - After binding the country code, type '{clean_mobile or phone}' into the main phone input field.
        - For Dropdowns & Autocomplete Fields:
          * Country / Location (Autocomplete / Select):
-           - In Greenhouse, Ashby, and Lever, typing 'London' or 'United Kingdom' triggers a dynamic suggestion listbox/flyout menu.
-           - Wait for or inspect the dynamic suggestion list to appear, then click the exact matching option (e.g. 'London, England, United Kingdom', 'London, UK', 'London (United Kingdom)', or 'United Kingdom').
-           - Do not leave the input half-typed without selecting the flyout suggestion.
+           - DYNAMIC LOCATION DROPDOWN RULE:
+             1. DO NOT just type 'London, UK' or 'London' into a location field and move away! Typing plain text alone leaves location fields invalid on platforms like Greenhouse, Ashby, Workday, and Lever.
+             2. Type 'London' into the location input.
+             3. WAIT for the dynamic suggestion listbox/flyout menu to appear below the input (or inspect the dropdown list items).
+             4. CLICK the exact matching suggestion item from the flyout menu (e.g., click 'London, Greater London, United Kingdom', 'London, England, United Kingdom', 'London, UK', or 'London, United Kingdom').
+             5. If no dropdown appears immediately after typing 'London', press 'Down Arrow' then 'Enter' to select the first suggestion item, or type 'London, Greater London' to filter further.
+             6. VERIFY the location input has committed the selected option from the dropdown menu before advancing!
          * Work Authorization / Sponsorship: Inspect options and choose '{sponsorship_choice}' (Candidate requires sponsorship: {sponsorship_str}).
          * Notice Period / Earliest Start Date / Availability:
            - If asked 'Notice Period', 'Earliest start date', 'When can you start?', or 'Earliest available date':
