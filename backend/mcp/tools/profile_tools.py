@@ -211,37 +211,28 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
     placeholder_emails = {"jane.doe@example.com", "candidate@example.com", "email@example.com"}
     placeholder_locations = {"ec1a 1bb"}
 
+    # Core identity — parsed resume values always update candidate profile fields
     if resume_dict.get("name"):
-        cur_name = (candidate.get("name") or "").strip().lower()
-        if not candidate.get("name") or cur_name in placeholder_names:
-            candidate["name"] = resume_dict["name"]
+        candidate["name"] = resume_dict["name"]
 
     if resume_dict.get("email"):
-        cur_email = (candidate.get("email") or "").strip().lower()
-        if not candidate.get("email") or cur_email in placeholder_emails:
-            candidate["email"] = resume_dict["email"]
+        candidate["email"] = resume_dict["email"]
 
     if resume_dict.get("phone"):
-        cur_phone = (candidate.get("phone") or "").strip()
-        if not candidate.get("phone") or "+44 7123" in cur_phone:
-            candidate["phone"] = resume_dict["phone"]
+        candidate["phone"] = resume_dict["phone"]
 
-    if resume_dict.get("location") and not candidate.get("location"):
+    if resume_dict.get("location"):
         candidate["location"] = resume_dict["location"]
 
     # Links (LinkedIn, GitHub, Portfolio)
     links = resume_dict.get("links") or []
     for link in links:
         link_str = str(link).strip()
-        cur_linkedin = (candidate.get("linkedin") or "").lower()
-        cur_github = (candidate.get("github") or "").lower()
-        cur_portfolio = (candidate.get("portfolio") or "").lower()
-
-        if "linkedin.com" in link_str and (not candidate.get("linkedin") or "janedoe" in cur_linkedin):
+        if "linkedin.com" in link_str.lower():
             candidate["linkedin"] = link_str
-        elif "github.com" in link_str and (not candidate.get("github") or "janedoe" in cur_github):
+        elif "github.com" in link_str.lower():
             candidate["github"] = link_str
-        elif ("http" in link_str or ".io" in link_str) and (not candidate.get("portfolio") or "janedoe" in cur_portfolio):
+        elif "http" in link_str.lower() or ".io" in link_str.lower():
             candidate["portfolio"] = link_str
 
     # Summary
