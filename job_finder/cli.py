@@ -337,11 +337,19 @@ def main():
         cand = prof.get("candidate", {})
         target_resume = args.resume or find_master_resume_with_mac_tags()
 
+        failed_jobs = []
+        successful_jobs = []
+
         async def _batch_apply():
+            nonlocal failed_jobs, successful_jobs
+            from mcp.tools.tracking_tools import handle_track_application
+
             for idx, url in enumerate(urls_to_process, 1):
                 print(f"\n========================================================")
                 print(f"[{idx}/{len(urls_to_process)}] Processing Application: {url}")
                 print(f"========================================================\n")
+                status = "failed"
+                err_text = ""
                 try:
                     res = await asyncio.wait_for(
                         run_browser_use_autofill(
@@ -355,13 +363,55 @@ def main():
                         ),
                         timeout=args.timeout
                     )
-                    print(f"[{idx}/{len(urls_to_process)} Result] {res}")
+                    res_status = str(res.get("status", "")).lower() if isinstance(res, dict) else ""
+                    final_res = str(res.get("final_result", "")) if isinstance(res, dict) else str(res)
+
+                    if "submitted" in res_status or "confirmed" in final_res.lower() or "applied" in final_res.lower():
+                        status = "applied"
+                        successful_jobs.append(url)
+                        print(f"[{idx}/{len(urls_to_process)} Success] Application completed for: {url}")
+                    else:
+                        status = "failed"
+                        err_text = res.get("error") or final_res or "Autofill incomplete"
+                        failed_jobs.append({"url": url, "reason": err_text})
+                        print(f"[{idx}/{len(urls_to_process)} Failed] {err_text}")
                 except asyncio.TimeoutError:
-                    print(f"[{idx}/{len(urls_to_process)} Error] Application timed out after {int(args.timeout)}s")
+                    err_text = f"Application timed out after {int(args.timeout)}s"
+                    status = "failed"
+                    failed_jobs.append({"url": url, "reason": err_text})
+                    print(f"[{idx}/{len(urls_to_process)} Error] {err_text}")
                 except Exception as ex:
+                    err_text = str(ex)
+                    status = "failed"
+                    failed_jobs.append({"url": url, "reason": err_text})
                     print(f"[{idx}/{len(urls_to_process)} Error] Failed to process {url}: {ex}")
 
+                # Formally record the application state (failed or applied) into the database & CSV tracker
+                try:
+                    handle_track_application(
+                        job_url=url,
+                        status=status,
+                        job_title="Target Role",
+                        company="Company",
+                        score=0
+                    )
+                except Exception as trk_err:
+                    print(f"[Tracker] Note: Could not record application state: {trk_err}")
+
         asyncio.run(_batch_apply())
+
+        print(f"\n========================================================")
+        print(f"   BATCH APPLICATION SUMMARY")
+        print(f"========================================================")
+        print(f"Total Processed: {len(urls_to_process)}")
+        print(f"Successful     : {len(successful_jobs)}")
+        print(f"Failed         : {len(failed_jobs)}")
+        if failed_jobs:
+            print(f"\nFailed Application Details:")
+            for f_item in failed_jobs:
+                print(f"  ❌ {f_item['url']}")
+                print(f"     Reason: {f_item['reason']}")
+        print(f"========================================================\n")
 
     elif args.subcommand == "server":
         os.environ["PORT"] = str(args.port)
