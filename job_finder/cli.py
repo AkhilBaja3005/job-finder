@@ -132,7 +132,7 @@ def main():
         "apply",
         help="Run ad-hoc browser auto-filler on a specific job application URL",
     )
-    apply_parser.add_argument("url", type=str, help="Job posting URL")
+    apply_parser.add_argument("target", type=str, help="Job posting URL, or path to a .txt/.json/.csv file containing job URLs")
     apply_parser.add_argument("--submit", action="store_true", help="Auto-submit the application if safe")
     apply_parser.add_argument("--timeout", type=float, default=300.0, help="Application timeout in seconds (default: 300s)")
     apply_parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps (default: 50)")
@@ -256,24 +256,88 @@ def main():
 
     elif args.subcommand == "apply":
         import asyncio
+        import re
         from applications_tracker.scheduled_job_scanner import run_browser_use_autofill, find_master_resume_with_mac_tags
         from backend.mcp.tools.profile_tools import load_profile_data
+
+        urls_to_process = []
+        target_path = args.target.strip()
+
+        if os.path.exists(target_path) and os.path.isfile(target_path):
+            print(f"[Apply Batch] Reading URLs from file: {target_path}")
+            try:
+                with open(target_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+
+                if target_path.lower().endswith(".json"):
+                    data = json.loads(content)
+                    if isinstance(data, list):
+                        for item in data:
+                            if isinstance(item, str) and item.startswith("http"):
+                                urls_to_process.append(item)
+                            elif isinstance(item, dict):
+                                u = item.get("url") or item.get("job_url") or item.get("link")
+                                if u:
+                                    urls_to_process.append(u)
+                    elif isinstance(data, dict):
+                        u_list = data.get("urls") or data.get("jobs") or []
+                        for item in u_list:
+                            if isinstance(item, str):
+                                urls_to_process.append(item)
+                            elif isinstance(item, dict):
+                                u = item.get("url") or item.get("job_url")
+                                if u:
+                                    urls_to_process.append(u)
+                else:
+                    # Parse .txt or .csv files by extracting HTTP/HTTPS links
+                    found = re.findall(r'https?://[^\s,"]+', content)
+                    urls_to_process = [u.rstrip(")") for u in found]
+            except Exception as fe:
+                print(f"[Error] Failed to parse batch file '{target_path}': {fe}")
+                sys.exit(1)
+        elif target_path.startswith("http://") or target_path.startswith("https://"):
+            urls_to_process = [target_path]
+        else:
+            print(f"[Error] '{target_path}' is neither a valid HTTP/HTTPS URL nor an existing file path.")
+            sys.exit(1)
+
+        if not urls_to_process:
+            print(f"[Warning] No valid HTTP/HTTPS job URLs found in '{target_path}'.")
+            sys.exit(0)
+
+        # Deduplicate preserving order
+        urls_to_process = list(dict.fromkeys(urls_to_process))
+        print(f"[Apply] Ready to process {len(urls_to_process)} job application URL(s).")
+
         prof = load_profile_data() or {}
         cand = prof.get("candidate", {})
         target_resume = args.resume or find_master_resume_with_mac_tags()
-        result = asyncio.run(asyncio.wait_for(
-            run_browser_use_autofill(
-                args.url,
-                resume_data=cand,
-                resume_pdf_path=target_resume,
-                auto_submit=args.submit,
-                model_name=args.model,
-                headless=args.headless,
-                max_steps=args.max_steps
-            ),
-            timeout=args.timeout
-        ))
-        print(f"[Result] {result}")
+
+        async def _batch_apply():
+            for idx, url in enumerate(urls_to_process, 1):
+                print(f"\n========================================================")
+                print(f"[{idx}/{len(urls_to_process)}] Processing Application: {url}")
+                print(f"========================================================\n")
+                try:
+                    res = await asyncio.wait_for(
+                        run_browser_use_autofill(
+                            url,
+                            resume_data=cand,
+                            resume_pdf_path=target_resume,
+                            auto_submit=args.submit,
+                            model_name=args.model,
+                            headless=args.headless,
+                            max_steps=args.max_steps
+                        ),
+                        timeout=args.timeout
+                    )
+                    print(f"[{idx}/{len(urls_to_process)} Result] {res}")
+                except asyncio.TimeoutError:
+                    print(f"[{idx}/{len(urls_to_process)} Error] Application timed out after {int(args.timeout)}s")
+                except Exception as ex:
+                    print(f"[{idx}/{len(urls_to_process)} Error] Failed to process {url}: {ex}")
+
+        asyncio.run(_batch_apply())
 
     elif args.subcommand == "server":
         os.environ["PORT"] = str(args.port)
