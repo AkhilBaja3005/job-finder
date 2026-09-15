@@ -266,6 +266,7 @@ async def test_top_applicant_bypasses_jd_scoring_and_tailoring():
          patch("applications_tracker.scheduled_job_scanner.find_master_resume_with_mac_tags", return_value="/dummy/master_resume.pdf"), \
          patch("applications_tracker.scheduled_job_scanner.get_existing_tracked_urls", return_value=set()), \
          patch("applications_tracker.scheduled_job_scanner.handle_search_jobs", new_callable=AsyncMock) as mock_search, \
+         patch("services.agent_reach_service.fetch_reddit_hiring_threads", return_value={"community_jobs": []}), \
          patch("applications_tracker.scheduled_job_scanner.scrape_job_description", new_callable=AsyncMock) as mock_scrape, \
          patch("applications_tracker.scheduled_job_scanner.compute_ats_score") as mock_ats, \
          patch("applications_tracker.scheduled_job_scanner.build_and_compile_tailored_pdf") as mock_tailor, \
