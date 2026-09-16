@@ -238,6 +238,16 @@ def apply_latex_hotfix(
         preamble = fixed[:doc_start]
         body = fixed[doc_start:]
 
+        # Strip unhandled/undefined control sequences that LLMs commonly hallucinate
+        # e.g., \skills, \project, \experience, \achievement, \summary, \heading, \contact
+        undefined_cmds = [
+            r'\\skills\b', r'\\project\b', r'\\experience\b', r'\\achievement\b',
+            r'\\summary\b', r'\\heading\b', r'\\contact\b', r'\\entry\b', r'\\cvitem\b',
+            r'\\cvheading\b', r'\\cvsection\b', r'\\cvsubsection\b'
+        ]
+        for u_cmd in undefined_cmds:
+            body = re.sub(u_cmd, '', body)
+
         lines = body.split('\n')
         new_lines = []
         for line in lines:

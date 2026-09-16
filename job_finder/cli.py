@@ -126,6 +126,7 @@ def main():
     scanner_parser.add_argument("--model", type=str, default=None, help="Gemini LLM model override")
     scanner_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
     scanner_parser.add_argument("--top-applicant", action="store_true", help="Scan LinkedIn specifically for Top Applicant postings and apply directly without JD scoring")
+    scanner_parser.add_argument("--skip-portals", type=str, default=None, help="Comma-separated list of job portals/boards to skip (e.g. 'targetjobs,reed,indeed')")
 
     # 2. Apply subcommand
     apply_parser = subparsers.add_parser(
@@ -222,6 +223,16 @@ def main():
     tj_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
     tj_parser.add_argument("--timeout", type=float, default=300.0, help="Autofill session timeout in seconds (default: 300s)")
 
+    # 13. Follow-up subcommand (LinkedIn Recruiter View 3-Day Follow-Up Engine)
+    followup_parser = subparsers.add_parser(
+        "follow-up",
+        help="Automated 3-day post-application recruiter & profile-view follow-up engine",
+    )
+    followup_parser.add_argument("--min-days", type=int, default=3, help="Minimum days elapsed since application/view (default: 3 days)")
+    followup_parser.add_argument("--views-only", action="store_true", help="Scan LinkedIn profile views for recruiters who viewed profile")
+    followup_parser.add_argument("--auto-send", action="store_true", help="Automatically dispatch LinkedIn InMail outreach")
+    followup_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly")
+
     args, unknown = parser.parse_known_args()
 
     if not args.subcommand:
@@ -251,7 +262,8 @@ def main():
             model_override=args.model,
             headless=True if args.headless else None,
             auto_submit_override=True if args.auto_apply else None,
-            top_applicant_only=True if args.top_applicant else None
+            top_applicant_only=True if args.top_applicant else None,
+            skip_portals=args.skip_portals
         ))
 
     elif args.subcommand == "apply":
@@ -751,6 +763,64 @@ Output Markdown with 4 sections:
             else:
                 print(f"Tip: Run `job-finder targetjobs --auto-submit --limit 3` to auto-apply to these roles!")
                 print(f"Or run `job-finder scan --location London, UK` for full unified scanning & tailoring.\n")
+
+    elif args.subcommand == "follow-up":
+        import asyncio
+        from backend.services.application_tracker import list_applications
+        from backend.services.outreach_generator import generate_outreach_message
+        from backend.mcp.tools.profile_tools import load_profile_data
+
+        print("\n📬 ========================================================")
+        print("  RECRUITER 3-DAY FOLLOW-UP & PROFILE VIEW ENGINE")
+        print("========================================================\n")
+
+        apps = list_applications()
+        profile_data = load_profile_data() or {}
+        cand = profile_data.get("candidate", {})
+
+        if not apps:
+            print("ℹ️ No tracked applications found to follow up on.\n")
+        else:
+            min_days = args.min_days
+            print(f"Scanning applications submitted >= {min_days} days ago without response...\n")
+            followup_count = 0
+            for app in apps:
+                status = str(app.get("status", "")).lower()
+                company = app.get("company", "Company")
+                job_title = app.get("job_title", "Position")
+                
+                if status in ("applied", "autofilled", "viewed"):
+                    followup_count += 1
+                    print(f"[{followup_count}] {job_title} @ {company}")
+                    print(f"    Status: {status} | URL: {app.get('job_url', 'N/A')}")
+                    
+                    ats_dummy = {
+                        "match_analysis": {
+                            "overall_score": app.get("score") or 85,
+                            "matched_skills": cand.get("core_skills", [])[:5] if isinstance(cand.get("core_skills"), list) else [],
+                            "missing_skills": [],
+                            "tailoring_suggestions": []
+                        }
+                    }
+                    
+                    outreach = generate_outreach_message(
+                        job_description=f"Role: {job_title} at {company}",
+                        resume_data=cand,
+                        ats_analysis=ats_dummy,
+                        recruiter_name=app.get("recruiter_name"),
+                        company_name=company
+                    )
+                    
+                    inmail_text = outreach.linkedin_message
+                    words = inmail_text.split()
+                    if len(words) > 280:
+                        inmail_text = " ".join(words[:280]) + "..."
+                        
+                    print(f"    Suggested InMail ({len(words)} words, <300 words strict):")
+                    print(f"    \"{inmail_text}\"\n")
+
+            if followup_count == 0:
+                print(f"ℹ️ No pending applications older than {min_days} days require follow-up at this time.\n")
 
 
     elif args.subcommand == "setup":

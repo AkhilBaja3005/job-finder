@@ -709,9 +709,9 @@ async def apply_to_job(
 
 async def run_pipeline(
     target_url: Optional[str] = None,
-    timeout: Optional[float] = None,
-    tailor_timeout: Optional[float] = None,
-    max_steps: Optional[int] = None,
+    timeout: float = 300.0,
+    tailor_timeout: float = 90.0,
+    max_steps: int = 50,
     max_apps: Optional[int] = None,
     min_ats: Optional[int] = None,
     role: Optional[str] = None,
@@ -720,7 +720,8 @@ async def run_pipeline(
     model_override: Optional[str] = None,
     headless: Optional[bool] = None,
     auto_submit_override: Optional[bool] = None,
-    top_applicant_only: Optional[bool] = None
+    top_applicant_only: Optional[bool] = None,
+    skip_portals: Optional[str] = None
 ):
     profile = load_profile_data()
     candidate = profile.get("candidate", {})
@@ -813,10 +814,14 @@ async def run_pipeline(
         jobs = top_jobs
     else:
         # Run full multi-source web discovery (Portals + LinkedIn + Indeed + Reed)
+        excluded_list = [p.strip() for p in skip_portals.split(",")] if skip_portals else None
+        if excluded_list:
+            print(f"[Scanner] 🚫 Skipping excluded portal(s): {', '.join(excluded_list)}")
         search_res = await handle_search_jobs({
             "keywords": keywords,
             "location": location,
-            "timeframe": timeframe
+            "timeframe": timeframe,
+            "exclude_portals": excluded_list
         })
 
         jobs = search_res.get("jobs", [])
