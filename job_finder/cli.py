@@ -233,6 +233,16 @@ def main():
     followup_parser.add_argument("--auto-send", action="store_true", help="Automatically dispatch LinkedIn InMail outreach")
     followup_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly")
 
+    # 14. Harvest-slugs subcommand (Exhaustive Ashby, Greenhouse, Lever ATS slug harvester)
+    harvest_parser = subparsers.add_parser(
+        "harvest-slugs",
+        help="Harvest and validate 10,000+ ATS company board slugs (Ashby, Greenhouse, Lever)",
+    )
+    harvest_parser.add_argument("--source", type=str, default="seeds", help="Sourcing strategy: seeds, cdx, yc, or all (default: seeds)")
+    harvest_parser.add_argument("--ats", type=str, default=None, help="Filter by specific ATS platform: ashby, greenhouse, lever")
+    harvest_parser.add_argument("--validate", action="store_true", help="Run live endpoint verification against discovered candidate slugs")
+    harvest_parser.add_argument("--limit", type=int, default=100, help="Max unverified slugs to validate (default: 100)")
+
     args, unknown = parser.parse_known_args()
 
     if not args.subcommand:
@@ -821,6 +831,22 @@ Output Markdown with 4 sections:
 
             if followup_count == 0:
                 print(f"ℹ️ No pending applications older than {min_days} days require follow-up at this time.\n")
+
+    elif args.subcommand == "harvest-slugs":
+        import asyncio
+        from backend.services.company_slug_harvester import harvest_all_company_slugs
+        from backend.services.company_slug_registry import validate_all_unverified_slugs, get_active_slugs
+
+        sources = [s.strip().lower() for s in args.source.split(",")]
+        asyncio.run(harvest_all_company_slugs(sources=sources))
+
+        if args.validate:
+            asyncio.run(validate_all_unverified_slugs(ats_filter=args.ats, limit=args.limit))
+
+        active = get_active_slugs(ats=args.ats)
+        print("\n📊 Active Company Board Registry Summary:")
+        for platform, slugs in active.items():
+            print(f"  • {platform.capitalize():<12}: {len(slugs)} active board slugs")
 
 
     elif args.subcommand == "setup":
