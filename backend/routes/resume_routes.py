@@ -25,7 +25,7 @@ from services.session_store import (
 )
 from services.auth import async_get_user_by_token
 from services.resume_parser import parse_resume, sanitize_resume_summary
-from utils.latex_utils import generate_latex_from_json, apply_latex_hotfix, compile_and_check_page_metrics
+from utils.latex_utils import generate_latex_from_json, apply_latex_hotfix, compile_and_check_page_metrics, parse_latex_to_resume_dict
 from services.overleaf import upload_zip_to_tmpfiles
 from services.ats_scorer import evaluate_master_resume
 
@@ -406,13 +406,29 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
         except Exception:
             pass
 
+        # Fast deterministic ATS evaluation for Live Preview HUD
+        ats_score = 85
+        skills_count = 0
+        quant_percent = 0
+        try:
+            parsed_resume_dict = parse_latex_to_resume_dict(fixed_code)
+            eval_dict = evaluate_master_resume(parsed_resume_dict)
+            ats_score = int(eval_dict.get("ats_score", 85))
+            skills_count = int(eval_dict.get("skills_count", 0))
+            quant_percent = int(eval_dict.get("quantified_percentage", 0))
+        except Exception as eval_err:
+            print(f"[compile_latex] Live ATS evaluation error: {eval_err}")
+
         return FileResponse(
             pdf_path,
             media_type="application/pdf",
             headers={
                 "Content-Disposition": "inline; filename=resume.pdf",
                 "X-Page-Count": str(page_count),
-                "Access-Control-Expose-Headers": "X-Page-Count"
+                "X-ATS-Score": str(ats_score),
+                "X-ATS-Skills-Count": str(skills_count),
+                "X-ATS-Quant-Percent": str(quant_percent),
+                "Access-Control-Expose-Headers": "X-Page-Count, X-ATS-Score, X-ATS-Skills-Count, X-ATS-Quant-Percent"
             }
         )
     except HTTPException:

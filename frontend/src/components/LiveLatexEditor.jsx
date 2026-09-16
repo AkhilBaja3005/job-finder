@@ -25,6 +25,9 @@ export default function LiveLatexEditor({
   const [compiling, setCompiling] = useState(false);
   const [compileError, setCompileError] = useState(null);
   const [pageCount, setPageCount] = useState(1);
+  const [atsScore, setAtsScore] = useState(null);
+  const [atsSkillsCount, setAtsSkillsCount] = useState(null);
+  const [atsQuantPercent, setAtsQuantPercent] = useState(null);
   const [viewMode, setViewMode] = useState('split'); // 'split' | 'code' | 'preview'
   const [copied, setCopied] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
@@ -129,6 +132,20 @@ export default function LiveLatexEditor({
         } catch (_) {
           setPageCount(1);
         }
+      }
+
+      // Extract real-time ATS scoring metrics from headers
+      const rawAts = parseInt(res.headers.get('X-ATS-Score') || res.headers.get('x-ats-score'), 10);
+      if (!isNaN(rawAts)) {
+        setAtsScore(rawAts);
+      }
+      const rawSkills = parseInt(res.headers.get('X-ATS-Skills-Count') || res.headers.get('x-ats-skills-count'), 10);
+      if (!isNaN(rawSkills)) {
+        setAtsSkillsCount(rawSkills);
+      }
+      const rawQuant = parseInt(res.headers.get('X-ATS-Quant-Percent') || res.headers.get('x-ats-quant-percent'), 10);
+      if (!isNaN(rawQuant)) {
+        setAtsQuantPercent(rawQuant);
       }
     } catch (err) {
       setCompileError(err.message || 'Connection error while compiling LaTeX');
@@ -277,6 +294,32 @@ export default function LiveLatexEditor({
               'Ready • 1 Page (Strict Budget ✅)'
             )}
           </span>
+
+          {/* Live ATS Score Badge */}
+          {atsScore !== null && !compileError && (
+            <span
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: '6px',
+                background: atsScore >= 85 ? 'rgba(16, 185, 129, 0.15)' : atsScore >= 70 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                color: atsScore >= 85 ? '#34D399' : atsScore >= 70 ? '#FBBF24' : '#F87171',
+                border: `1px solid ${atsScore >= 85 ? 'rgba(16, 185, 129, 0.35)' : atsScore >= 70 ? 'rgba(245, 158, 11, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+              title={`Live ATS Breakdown: ${atsSkillsCount || 0} Core Skills Detected, ${atsQuantPercent || 0}% Achievements Quantified`}
+            >
+              <span>🎯 ATS: {atsScore}/100</span>
+              {atsQuantPercent !== null && (
+                <span style={{ opacity: 0.8, fontWeight: 400, fontSize: '0.68rem', borderLeft: '1px solid rgba(255,255,255,0.15)', paddingLeft: '5px' }}>
+                  {atsQuantPercent}% Metrics
+                </span>
+              )}
+            </span>
+          )}
         </div>
 
         {/* Center: View Switcher (Split / Code Only / Preview Only) */}
@@ -590,7 +633,12 @@ export default function LiveLatexEditor({
           <span style={{ margin: '0 8px' }}>•</span>
           <span>{code.length} characters</span>
         </div>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {atsScore !== null && (
+            <span style={{ color: atsScore >= 85 ? '#34D399' : '#FBBF24' }}>
+              ATS: {atsScore}/100 ({atsSkillsCount || 0} skills, {atsQuantPercent || 0}% quantified)
+            </span>
+          )}
           <span>Tectonic XeLaTeX Engine (Live Preview)</span>
         </div>
       </div>

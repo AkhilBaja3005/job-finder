@@ -1147,9 +1147,156 @@ def inject_tailored_slots(
             for a in ach_bullets:
                 if a and a.strip():
                     a_clean = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', a.strip())
-                    ach_lines.append(f"    \\item {a_clean}")
-            ach_items = "\n".join(ach_lines)
-            new_ach = f"\\begin{{rSection}}{{Achievements \\& Leadership}}\n\\begin{{itemize}}\n    \\setlength{{\\itemsep}}{{-0.2em}}\n    \\setlength{{\\parsep}}{{0em}}\n{ach_items}\n\\end{{itemize}}\n\\end{{rSection}}"
-            result = result[:ach_m.start(1)] + new_ach + result[ach_m.end(1):]
-
     return result
+
+
+def parse_latex_to_resume_dict(latex_code: str) -> Dict[str, Any]:
+    """
+    Fast, deterministic regex parser that extracts structured resume data from LaTeX code
+    for instant ATS scoring without requiring slow LLM roundtrips.
+    """
+    data: Dict[str, Any] = {
+        "name": "",
+        "email": "",
+        "phone": "",
+        "location": "",
+        "links": [],
+        "summary": "",
+        "skills": {},
+        "experience": [],
+        "education": [],
+        "projects": [],
+        "achievements": []
+    }
+    
+    # 1. Name
+    name_m = re.search(r'\\name\{([^}]+)\}', latex_code)
+    if name_m:
+        data["name"] = name_m.group(1).strip()
+        
+    # 2. Email, Phone, Links
+    email_m = re.search(r'\\href\{mailto:([^}]+)\}', latex_code) or re.search(r'[\w\.-]+@[\w\.-]+\.\w+', latex_code)
+    if email_m:
+        data["email"] = email_m.group(1) if hasattr(email_m, 'group') and email_m.lastindex else email_m.group(0)
+        
+    phone_m = re.search(r'(\+?\d[\d\s-]{8,15}\d)', latex_code)
+    if phone_m:
+        data["phone"] = phone_m.group(1).strip()
+        
+    links = re.findall(r'\\href\{([^}]+)\}', latex_code)
+    data["links"] = [l for l in links if not l.startswith("mailto:")]
+    
+    # 3. Professional Summary
+    summary_m = re.search(r'\\begin\{rSection\}\{Professional\s+Summary\}(.*?)\\end\{rSection\}', latex_code, re.DOTALL | re.IGNORECASE)
+    if summary_m:
+        sum_text = summary_m.group(1).strip()
+        # Strip latex commands
+        sum_clean = re.sub(r'\\[a-zA-Z]+(?:\{[^}]*\})*', lambda m: m.group(0) if not m.group(0).startswith(('\\textbf', '\\textit', '\\em', '\\bf')) else re.sub(r'\\[a-zA-Z]+\{?([^}]*)\}?', r'\1', m.group(0)), sum_text)
+        sum_clean = re.sub(r'[\{\}\\%]', '', sum_clean).strip()
+        data["summary"] = sum_clean
+        
+    # 4. Technical Skills
+    skills_m = re.search(r'\\begin\{rSection\}\{Technical\s+Skills\}(.*?)\\end\{rSection\}', latex_code, re.DOTALL | re.IGNORECASE)
+    if skills_m:
+        skills_sec = skills_m.group(1)
+        skills_dict: Dict[str, List[str]] = {}
+        for line in skills_sec.split("\n"):
+            line = line.strip()
+            cat_m = re.search(r'\\textbf\{([^}]+?):?\}\s*:?\s*(.*)', line)
+            if cat_m:
+                cat_name = cat_m.group(1).replace(":", "").replace(r"\&", "&").replace(r"\%", "%").strip()
+                val_str = cat_m.group(2).replace(r"\\", "").replace(r"\&", "&").replace(r"\%", "%").strip()
+                val_clean = re.sub(r'\\[a-zA-Z]+', '', val_str).replace('{', '').replace('}', '').strip()
+                s_list = [s.strip().rstrip('.') for s in val_clean.split(',') if s.strip()]
+                if s_list:
+                    skills_dict[cat_name] = s_list
+        data["skills"] = skills_dict
+        
+    # 5. Education
+    edu_m = re.search(r'\\begin\{rSection\}\{Education\}(.*?)\\end\{rSection\}', latex_code, re.DOTALL | re.IGNORECASE)
+    if edu_m:
+        edu_sec = edu_m.group(1)
+        # Match {\bf Institution} -- {\em Degree} or {\bf Institution} \hfill {\em Dates}
+        edu_entries = re.findall(r'\{\\bf\s+([^}]+)\}(?:--|\\hfill|\s*)\{\\em\s+([^}]+)\}(.*?)(?=\{\\bf|\Z)', edu_sec, re.DOTALL)
+        if edu_entries:
+            for school, degree, rest in edu_entries:
+                date_loc = re.search(r'\{\\em\s+([^}]+)\}', rest)
+                dl_text = date_loc.group(1) if date_loc else ""
+                dates = dl_text.split('|')[0].strip() if '|' in dl_text else dl_text.strip()
+                loc = dl_text.split('|')[1].strip() if '|' in dl_text else ""
+                data["education"].append({
+                    "institution": school.strip(),
+                    "degree": degree.strip(),
+                    "graduation_date": dates,
+                    "location": loc
+                })
+        else:
+            # Fallback line-by-line parser for education
+            for block in re.split(r'(?=\{\\bf\s+[^}]+\})', edu_sec):
+                block = block.strip()
+                if not block or not block.startswith(r'{\bf'):
+                    continue
+                school_m = re.search(r'\{\\bf\s+([^}]+)\}', block)
+                degree_m = re.search(r'\{\\em\s+([^}]+)\}', block)
+                if school_m:
+                    data["education"].append({
+                        "institution": school_m.group(1).strip(),
+                        "degree": degree_m.group(1).strip() if degree_m else "Degree",
+                        "graduation_date": "2023",
+                        "location": ""
+                    })
+            
+    # 6. Work Experience
+    exp_m = re.search(r'\\begin\{rSection\}\{Work\s+Experience\}(.*?)\\end\{rSection\}', latex_code, re.DOTALL | re.IGNORECASE)
+    if exp_m:
+        exp_sec = exp_m.group(1)
+        rsubs = re.findall(r'\\begin\{rSubsection\}\{([^}]+)\}\{([^}]+)\}\{([^}]+)\}\{([^}]+)\}(.*?)\\end\{rSubsection\}', exp_sec, re.DOTALL)
+        if rsubs:
+            for comp, dates, role, loc, body in rsubs:
+                bullets = []
+                for b in re.findall(r'\\item\s+(.*?)(?=\\item|\Z)', body, re.DOTALL):
+                    cb = b.replace(r'\%', '%').replace(r'\$', '$').replace(r'\&', '&').replace(r'\_', '_').replace(r'\#', '#').replace(r'\pounds', '£')
+                    cb = re.sub(r'\\[a-zA-Z]+', '', cb)
+                    cb = re.sub(r'[\{\}]', '', cb).strip()
+                    if cb:
+                        bullets.append(cb)
+                data["experience"].append({
+                    "company": comp.strip(),
+                    "role": role.strip(),
+                    "start_date": dates.split('--')[0].strip() if '--' in dates else dates.strip(),
+                    "end_date": dates.split('--')[1].strip() if '--' in dates else "Present",
+                    "description": bullets
+                })
+        else:
+            # 2. Parse inline job headers + itemize blocks: e.g. {\bf Company ...} \begin{itemize} ... \end{itemize}
+            job_chunks = re.split(r'(?=\{\\bf\s+[^}]+\})', exp_sec)
+            for chunk in job_chunks:
+                chunk = chunk.strip()
+                if not chunk or not chunk.startswith(r'{\bf'):
+                    continue
+                header_match = re.search(r'\{\\bf\s+([^|}]+)(?:\|\s*\\textnormal\{([^}]+)\})?(?:\|\s*\\em\s+([^}]+))?', chunk)
+                comp = header_match.group(1).strip() if header_match else "Company"
+                role = header_match.group(2).strip() if header_match and header_match.group(2) else "Engineer"
+                dates = header_match.group(3).strip() if header_match and header_match.group(3) else "2023 -- Present"
+                
+                # Extract all items inside itemize
+                bullets = []
+                item_matches = re.findall(r'\\item\s+(.*?)(?=\\item|\\end\{itemize\}|\Z)', chunk, re.DOTALL)
+                for raw_item in item_matches:
+                    clean_item = raw_item.replace(r'\%', '%').replace(r'\$', '$').replace(r'\&', '&').replace(r'\_', '_').replace(r'\#', '#').replace(r'\pounds', '£')
+                    clean_item = re.sub(r'\\[a-zA-Z]+(?:\{[^}]*\})*', lambda m: m.group(0) if not m.group(0).startswith(('\\textbf', '\\textit', '\\em', '\\bf')) else re.sub(r'\\[a-zA-Z]+\{?([^}]*)\}?', r'\1', m.group(0)), clean_item)
+                    clean_item = re.sub(r'\\[a-zA-Z]+', '', clean_item)
+                    clean_item = re.sub(r'[\{\}]', '', clean_item).strip()
+                    if clean_item:
+                        bullets.append(clean_item)
+                
+                if bullets:
+                    data["experience"].append({
+                        "company": comp,
+                        "role": role,
+                        "start_date": dates.split('--')[0].strip() if '--' in dates else dates.strip(),
+                        "end_date": dates.split('--')[1].strip() if '--' in dates else "Present",
+                        "description": bullets
+                    })
+
+    return data
