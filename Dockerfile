@@ -56,12 +56,10 @@ COPY backend/ ./backend/
 COPY extension/ ./extension/
 COPY .git ./.git
 
-# Pre-warm Tectonic's font cache: the first real compile after a cold start
-# downloads fonts from the internet (5-15s on HF's network). Running one
-# dummy compile here bakes the font cache into this image layer instead.
+# Pre-warm Tectonic's font & package cache: bake all packages/fonts into the image layer
 RUN mkdir -p /tmp/tectonic-warmup \
     && cp backend/assets/resume.cls /tmp/tectonic-warmup/ \
-    && printf '\\documentclass{resume}\n\\begin{document}\nWarmup\n\\end{document}\n' > /tmp/tectonic-warmup/warmup.tex \
+    && printf '\\documentclass[11pt]{resume}\n\\usepackage[T1]{fontenc}\n\\usepackage[left=0.35in,top=0.15in,right=0.35in,bottom=0.13in]{geometry}\n\\usepackage{times}\n\\usepackage[hidelinks]{hyperref}\n\\name{Warmup Candidate}\n\\begin{document}\n\\begin{rSection}{Technical Skills}\n\\textbf{Languages:} Python, C++\n\\end{rSection}\n\\begin{rSection}{Experience}\n\\begin{rSubsection}{Warmup Corp}{2024}{Engineer}{Remote}\n\\item Tested system.\n\\end{rSubsection}\n\\end{rSection}\n\\end{document}\n' > /tmp/tectonic-warmup/warmup.tex \
     && tectonic /tmp/tectonic-warmup/warmup.tex --outdir /tmp/tectonic-warmup \
     && rm -rf /tmp/tectonic-warmup
 

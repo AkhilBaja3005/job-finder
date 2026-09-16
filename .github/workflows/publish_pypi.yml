@@ -75,6 +75,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt pytest pytest-asyncio build twine
 
+      - name: Install Tectonic XeLaTeX Engine
+        run: |
+          curl -Lo tectonic.tar.gz https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf tectonic.tar.gz
+          sudo mv tectonic /usr/local/bin/
+          rm tectonic.tar.gz
+          tectonic --version
+
       - name: Run test suite (unit + MCP server & skills integration)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

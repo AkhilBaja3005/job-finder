@@ -9,10 +9,13 @@ Validates:
 5. Hotfix preservation of sectioned structure and font compatibility macros.
 """
 
+import shutil
 import pytest
 from starlette.testclient import TestClient
 from main import app
 from utils.latex_utils import compile_and_check_page_metrics, apply_latex_hotfix
+
+TECTONIC_AVAILABLE = shutil.which("tectonic") is not None
 
 client = TestClient(app)
 
@@ -58,6 +61,7 @@ Senior AI Engineer specializing in LLM systems, context optimization, and high-t
 """
 
 
+@pytest.mark.skipif(not TECTONIC_AVAILABLE, reason="Tectonic XeLaTeX binary is not installed")
 def test_web_live_preview_compile_latex_success():
     """
     Validates that the frontend LiveLatexEditor endpoint (/compile_latex)
@@ -80,6 +84,7 @@ def test_web_live_preview_compile_latex_success():
     assert response.content.startswith(b"%PDF-")
 
 
+@pytest.mark.skipif(not TECTONIC_AVAILABLE, reason="Tectonic XeLaTeX binary is not installed")
 def test_web_live_preview_legacy_font_switches_and_special_chars():
     r"""
     Validates that legacy TeX formatting ({\bf ...}, {\em ...}) and unescaped
@@ -98,6 +103,7 @@ def test_web_live_preview_legacy_font_switches_and_special_chars():
     assert response.content.startswith(b"%PDF-")
 
 
+@pytest.mark.skipif(not TECTONIC_AVAILABLE, reason="Tectonic XeLaTeX binary is not installed")
 def test_web_live_preview_compile_latex_returns_400_on_broken_syntax():
     """
     Validates that genuinely broken LaTeX syntax returns a clean HTTP 400
@@ -113,6 +119,7 @@ def test_web_live_preview_compile_latex_returns_400_on_broken_syntax():
     assert "LaTeX compilation failed" in detail or "Undefined control sequence" in detail
 
 
+@pytest.mark.skipif(not TECTONIC_AVAILABLE, reason="Tectonic XeLaTeX binary is not installed")
 def test_compile_and_check_page_metrics_isolated_execution():
     """
     Validates that the underlying page budget calculator (compile_and_check_page_metrics)

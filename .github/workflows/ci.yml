@@ -52,5 +52,13 @@ jobs:
           fi
           pip install -e . --no-deps
 
+      - name: Install Tectonic XeLaTeX Engine
+        run: |
+          curl -Lo tectonic.tar.gz https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf tectonic.tar.gz
+          sudo mv tectonic /usr/local/bin/
+          rm tectonic.tar.gz
+          tectonic --version
+
       - name: Run verification script
         run: python3 scripts/verify_distribution.py

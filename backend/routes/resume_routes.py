@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from services.session_store import (
     BASE_DIR,
+    STORAGE_ROOT,
     UPLOAD_DIR,
     OUTPUT_DIR,
     _safe_key,
@@ -41,7 +42,17 @@ def _get_guest_state_file(token: Optional[str] = None) -> str:
 
 
 def _build_original_latex(resume_data: dict, master_path: Optional[str] = None) -> str:
-    master_template = os.path.join(BASE_DIR, "assets", "master_resume_template.tex")
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    master_template_candidates = [
+        os.path.join(STORAGE_ROOT, "assets", "master_resume_template.tex"),
+        os.path.join(BASE_DIR, "assets", "master_resume_template.tex"),
+        os.path.join(BASE_DIR, "backend", "assets", "master_resume_template.tex"),
+        os.path.join(os.path.dirname(this_dir), "assets", "master_resume_template.tex"),
+        os.path.join(this_dir, "assets", "master_resume_template.tex"),
+        "/app/backend/assets/master_resume_template.tex",
+        "/app/assets/master_resume_template.tex",
+    ]
+    master_template = next((p for p in master_template_candidates if os.path.exists(p) and os.path.isfile(p)), None)
     master_latex = None
     if master_path and master_path.endswith(".tex") and os.path.exists(master_path):
         try:
@@ -55,7 +66,7 @@ def _build_original_latex(resume_data: dict, master_path: Optional[str] = None) 
     if master_latex and master_latex.strip():
         return apply_latex_hotfix(master_latex, master_latex=master_latex)
 
-    if os.path.exists(master_template):
+    if master_template and os.path.exists(master_template):
         try:
             with open(master_template, "r", encoding="utf-8") as f:
                 master_latex = f.read()
@@ -384,14 +395,20 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
         _ensure_resume_cls(user_out_dir)
         _ensure_resume_cls(OUTPUT_DIR)
 
-        result = await asyncio.to_thread(
-            subprocess.run,
-            ["tectonic", tex_path, "--outdir", user_out_dir],
-            cwd=user_out_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                ["tectonic", tex_path, "--outdir", user_out_dir],
+                cwd=user_out_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=503,
+                detail="Tectonic XeLaTeX engine is not installed on this system. Please install tectonic to compile LaTeX resumes."
+            )
 
         if result.returncode != 0:
             err_msg = result.stderr.strip() if result.stderr else (result.stdout.strip() if result.stdout else "Compilation failed")

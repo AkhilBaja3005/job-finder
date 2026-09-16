@@ -72,14 +72,21 @@ def _ensure_resume_cls(target_dir: str) -> Optional[str]:
     if os.path.exists(dest) and os.path.getsize(dest) > 100:
         return dest
 
+    this_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
         os.path.join(UPLOAD_DIR, "resume.cls"),
         os.path.join(BASE_DIR, "assets", "resume.cls"),
         os.path.join(BASE_DIR, "backend", "assets", "resume.cls"),
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "resume.cls"),
+        os.path.join(os.path.dirname(this_dir), "assets", "resume.cls"),
+        os.path.join(this_dir, "assets", "resume.cls"),
+        os.path.join(os.path.dirname(os.path.dirname(this_dir)), "backend", "assets", "resume.cls"),
+        os.path.join(os.path.dirname(os.path.dirname(this_dir)), "assets", "resume.cls"),
+        "/app/backend/assets/resume.cls",
+        "/app/assets/resume.cls",
         os.path.join(OUTPUT_DIR, "resume.cls"),
         os.path.join(os.getcwd(), "resume.cls"),
         os.path.join(os.getcwd(), "backend", "assets", "resume.cls"),
+        os.path.join(os.getcwd(), "assets", "resume.cls"),
     ]
     for c in candidates:
         if os.path.exists(c) and os.path.isfile(c) and os.path.getsize(c) > 100:
@@ -90,6 +97,35 @@ def _ensure_resume_cls(target_dir: str) -> Optional[str]:
             except Exception:
                 pass
     return None
+
+
+# Bootstrap core assets (resume.cls, master_resume_template.tex) into persistent storage on init
+def _bootstrap_assets():
+    import shutil
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    asset_sources = [
+        os.path.join(os.path.dirname(this_dir), "assets"),
+        os.path.join(this_dir, "assets"),
+        os.path.join(BASE_DIR, "backend", "assets"),
+        os.path.join(BASE_DIR, "assets"),
+        "/app/backend/assets",
+        "/app/assets",
+    ]
+    src_dir = next((d for d in asset_sources if os.path.exists(os.path.join(d, "resume.cls"))), None)
+    if src_dir:
+        for fname in ("resume.cls", "master_resume_template.tex"):
+            src_file = os.path.join(src_dir, fname)
+            if os.path.exists(src_file):
+                for target in (UPLOAD_DIR, OUTPUT_DIR):
+                    try:
+                        os.makedirs(target, exist_ok=True)
+                        dest_file = os.path.join(target, fname)
+                        if not os.path.exists(dest_file) or os.path.getsize(dest_file) < 100:
+                            shutil.copy2(src_file, dest_file)
+                    except Exception:
+                        pass
+
+_bootstrap_assets()
 
 
 def drain_llm_logs() -> list:
