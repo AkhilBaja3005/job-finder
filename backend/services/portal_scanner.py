@@ -27,25 +27,48 @@ class PortalScanner:
         self.config = self._load_config()
 
     def _load_config(self) -> Dict[str, Any]:
+        base_portals = {
+            "greenhouse": [{"company_slug": "anthropic", "name": "Anthropic"}, {"company_slug": "stripe", "name": "Stripe"}],
+            "ashby": [{"company_slug": "cohere", "name": "Cohere"}],
+            "lever": [{"company_slug": "palantir", "name": "Palantir"}]
+        }
+        loaded: Dict[str, Any] = {}
         if os.path.exists(self.config_path):
             try:
                 if yaml is not None:
                     with open(self.config_path, "r", encoding="utf-8") as f:
-                        return yaml.safe_load(f) or {}
+                        loaded = yaml.safe_load(f) or {}
                 else:
                     print(f"[PortalScanner] PyYAML not installed; falling back to default portal targets.")
             except Exception as e:
                 print(f"[PortalScanner] Error loading config {self.config_path}: {e}")
+
+        portals: Dict[str, Any] = loaded.get("portals", base_portals)
+
+        # Merge verified active slugs from SQLite company slug registry
+        try:
+            try:
+                from services.company_slug_registry import get_active_slugs
+            except ImportError:
+                from backend.services.company_slug_registry import get_active_slugs
+
+            active_slugs = get_active_slugs()
+            for ats_name, slug_list in active_slugs.items():
+                if ats_name not in portals:
+                    portals[ats_name] = []
+                existing_slugs = {p.get("company_slug") for p in portals[ats_name]}
+                for s in slug_list:
+                    if s and s not in existing_slugs:
+                        portals[ats_name].append({"company_slug": s, "name": s.capitalize()})
+        except Exception:
+            pass
+
         return {
-            "portals": {
-                "greenhouse": [{"company_slug": "anthropic", "name": "Anthropic"}, {"company_slug": "stripe", "name": "Stripe"}],
-                "ashby": [{"company_slug": "cohere", "name": "Cohere"}],
-                "lever": [{"company_slug": "palantir", "name": "Palantir"}]
-            },
-            "config": {
+            "portals": portals,
+            "config": loaded.get("config", {
                 "min_ats_score_to_notify": 75,
                 "roles_keywords": ["AI", "Machine Learning", "ML", "GenAI", "Software Engineer", "Systems"]
-            }
+            })
         }
 
     def _format_age(self, dt_str: Optional[str], timestamp_ms: Optional[int] = None) -> str:
@@ -153,6 +176,62 @@ class PortalScanner:
             pass
         return jobs
 
+    async def scan_bamboohr_company(self, client: httpx.AsyncClient, company_slug: str, company_name: str) -> List[Dict[str, Any]]:
+        """Fetch active jobs from BambooHR public careers endpoint."""
+        url = f"https://{company_slug}.bamboohr.com/careers/list"
+        jobs = []
+        try:
+            res = await client.get(url, timeout=5.0)
+            if res.status_code == 200:
+                data = res.json()
+                raw_jobs = data.get("result", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+                for rj in raw_jobs:
+                    loc = rj.get("location", {})
+                    loc_str = f"{loc.get('city', '')}, {loc.get('state', '')}".strip(", ") or "Remote/Unspecified"
+                    job_id = rj.get("id", "")
+                    jobs.append({
+                        "id": f"bamboo_{job_id}",
+                        "title": rj.get("jobOpeningName", rj.get("title", "")),
+                        "company": company_name,
+                        "url": f"https://{company_slug}.bamboohr.com/careers/{job_id}",
+                        "location": loc_str,
+                        "description": rj.get("description", ""),
+                        "portal": "bamboohr",
+                        "posted_at": rj.get("dateCreated"),
+                        "age": self._format_age(rj.get("dateCreated"))
+                    })
+        except Exception:
+            pass
+        return jobs
+
+    async def scan_workday_company(self, client: httpx.AsyncClient, company_slug: str, company_name: str) -> List[Dict[str, Any]]:
+        """Fetch active jobs from Workday public Candidate Experience (CXS) endpoint."""
+        url = f"https://{company_slug}.wd1.myworkdayjobs.com/wday/cxs/{company_slug}/External/jobs"
+        jobs = []
+        try:
+            headers = {"Content-Type": "application/json", "Accept": "application/json"}
+            res = await client.post(url, json={"limit": 20, "offset": 0, "searchText": ""}, headers=headers, timeout=5.0)
+            if res.status_code == 200:
+                data = res.json()
+                raw_jobs = data.get("jobPostings", [])
+                for rj in raw_jobs:
+                    ext_path = rj.get("externalPath", "")
+                    job_url = f"https://{company_slug}.wd1.myworkdayjobs.com/en-US/{company_slug}{ext_path}" if ext_path else ""
+                    jobs.append({
+                        "id": f"workday_{rj.get('bulletFields', [ext_path])[0] if rj.get('bulletFields') else ext_path}",
+                        "title": rj.get("title", ""),
+                        "company": company_name,
+                        "url": job_url,
+                        "location": rj.get("locationsText", "Remote/Unspecified"),
+                        "description": rj.get("title", ""),
+                        "portal": "workday",
+                        "posted_at": rj.get("postedOn"),
+                        "age": self._format_age(rj.get("postedOn"))
+                    })
+        except Exception:
+            pass
+        return jobs
+
     def _is_within_timeframe(self, posted_at: Any, timeframe: str) -> bool:
         """Filter jobs based on requested timeframe (24h, 48h, 7d, 14d, 30d, all)."""
         if not posted_at or timeframe in ("all", "any"):
@@ -239,6 +318,12 @@ class PortalScanner:
             # Lever
             for comp in portals_def.get("lever", []):
                 tasks.append(self.scan_lever_company(client, comp["company_slug"], comp["name"]))
+            # BambooHR
+            for comp in portals_def.get("bamboohr", []):
+                tasks.append(self.scan_bamboohr_company(client, comp["company_slug"], comp["name"]))
+            # Workday
+            for comp in portals_def.get("workday", []):
+                tasks.append(self.scan_workday_company(client, comp["company_slug"], comp["name"]))
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for r in results:

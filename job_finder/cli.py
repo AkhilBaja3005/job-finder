@@ -5,6 +5,9 @@ import sys
 import os
 import json
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 def load_workspace_env():
     """Loads .env configuration across all candidate locations prior to command execution."""
@@ -127,6 +130,7 @@ def main():
     scanner_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
     scanner_parser.add_argument("--top-applicant", action="store_true", help="Scan LinkedIn specifically for Top Applicant postings and apply directly without JD scoring")
     scanner_parser.add_argument("--skip-portals", type=str, default=None, help="Comma-separated list of job portals/boards to skip (e.g. 'targetjobs,reed,indeed')")
+    scanner_parser.add_argument("--harvest", action="store_true", help="Harvest and validate fresh ATS company slugs (Ashby, Greenhouse, Lever) before scanning")
 
     # 2. Apply subcommand
     apply_parser = subparsers.add_parser(
@@ -233,6 +237,16 @@ def main():
     followup_parser.add_argument("--auto-send", action="store_true", help="Automatically dispatch LinkedIn InMail outreach")
     followup_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly")
 
+    # 14. Harvest-slugs subcommand (Exhaustive Ashby, Greenhouse, Lever ATS slug harvester)
+    harvest_parser = subparsers.add_parser(
+        "harvest-slugs",
+        help="Harvest and validate 10,000+ ATS company board slugs (Ashby, Greenhouse, Lever)",
+    )
+    harvest_parser.add_argument("--source", type=str, default="seeds", help="Sourcing strategy: seeds, cdx, yc, or all (default: seeds)")
+    harvest_parser.add_argument("--ats", type=str, default=None, help="Filter by specific ATS platform: ashby, greenhouse, lever")
+    harvest_parser.add_argument("--validate", action="store_true", help="Run live endpoint verification against discovered candidate slugs")
+    harvest_parser.add_argument("--limit", type=int, default=100, help="Max unverified slugs to validate (default: 100)")
+
     args, unknown = parser.parse_known_args()
 
     if not args.subcommand:
@@ -249,6 +263,28 @@ def main():
             os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
         import asyncio
         from applications_tracker.scheduled_job_scanner import run_pipeline
+
+        # Check if harvest requested or if registry is older than 24 hours / empty
+        try:
+            try:
+                from backend.services.company_slug_registry import get_active_slugs, validate_all_unverified_slugs, should_run_daily_harvest
+                from backend.services.company_slug_harvester import harvest_all_company_slugs
+            except ImportError:
+                from services.company_slug_registry import get_active_slugs, validate_all_unverified_slugs, should_run_daily_harvest
+                from services.company_slug_harvester import harvest_all_company_slugs
+
+            needs_refresh = getattr(args, "harvest", False) or should_run_daily_harvest(max_age_hours=24.0)
+
+            if needs_refresh:
+                print("[ATS Harvester] Running scheduled daily refresh of verified ATS company boards...")
+                asyncio.run(harvest_all_company_slugs(sources=["seeds"]))
+                asyncio.run(validate_all_unverified_slugs(limit=50))
+                active = get_active_slugs()
+                total_active = sum(len(slugs) for slugs in active.values())
+                print(f"  ✓ Active ATS boards ready: {total_active} companies across Ashby, Greenhouse, Lever\n")
+        except Exception as he:
+            logger.debug(f"Harvester init note: {he}")
+
         asyncio.run(run_pipeline(
             target_url=args.url,
             timeout=args.timeout,
@@ -821,6 +857,22 @@ Output Markdown with 4 sections:
 
             if followup_count == 0:
                 print(f"ℹ️ No pending applications older than {min_days} days require follow-up at this time.\n")
+
+    elif args.subcommand == "harvest-slugs":
+        import asyncio
+        from backend.services.company_slug_harvester import harvest_all_company_slugs
+        from backend.services.company_slug_registry import validate_all_unverified_slugs, get_active_slugs
+
+        sources = [s.strip().lower() for s in args.source.split(",")]
+        asyncio.run(harvest_all_company_slugs(sources=sources))
+
+        if args.validate:
+            asyncio.run(validate_all_unverified_slugs(ats_filter=args.ats, limit=args.limit))
+
+        active = get_active_slugs(ats=args.ats)
+        print("\n📊 Active Company Board Registry Summary:")
+        for platform, slugs in active.items():
+            print(f"  • {platform.capitalize():<12}: {len(slugs)} active board slugs")
 
 
     elif args.subcommand == "setup":

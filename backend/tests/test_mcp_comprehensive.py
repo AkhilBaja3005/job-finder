@@ -10,6 +10,7 @@ from mcp.comprehensive_test import test_all_mcp_tools as _run_all_mcp_tools, tes
 pytestmark = pytest.mark.slow
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_mcp_tools_and_skills_suite():
     """Runs end-to-end integration test suite for all MCP tools and Agent Skills."""
