@@ -109,6 +109,8 @@ async def handle_search_jobs(arguments: Dict[str, Any]) -> Dict[str, Any]:
             "experience": formatted_experience
         }
 
+    exclude_portals = arguments.get("exclude_portals")
+
     jobs = []
     est_jobs = []
     try:
@@ -117,7 +119,8 @@ async def handle_search_jobs(arguments: Dict[str, Any]) -> Dict[str, Any]:
             resume_data=resume_data,
             location=location,
             keywords=keywords,
-            timeframe=timeframe
+            timeframe=timeframe,
+            exclude_portals=exclude_portals
         ):
             if not chunk or not chunk.strip():
                 continue

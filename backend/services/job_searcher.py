@@ -1062,19 +1062,16 @@ async def find_matching_jobs(
     keywords: Optional[str] = None,
     timeframe: str = "48h",
     custom_api_key: Optional[str] = None,
-    browser: Optional[Any] = None
+    browser: Optional[Any] = None,
+    exclude_portals: Optional[List[str]] = None
 ):
     """
     Main aggregator pipeline:
     1. Resolves search queries (either user-entered keywords or auto-generates from resume).
-    2. Fetches LinkedIn & Indeed postings concurrently.
-    3. Ranks by a cheap title heuristic, then fetches the real JD for the top
-       DISCOVERY_JD_FETCH_CAP jobs and scores them with the SAME deterministic
-       engine (compute_ats_score/compute_overall_score) used by Tailor Resume,
-       so discovery's overall score is directly comparable — not a separately
-       invented number. Jobs beyond the cap fall back to a title-only estimate
-       and are tagged estimated=True.
-    4. Filters and returns job matches >= 55%.
+    2. Fetches LinkedIn, Indeed, Reed, TargetJobs & Portals concurrently.
+    3. Respects exclude_portals (e.g. ['targetjobs', 'reed', 'indeed']) to skip specific job sources.
+    4. Ranks by a cheap title heuristic, then fetches the real JD for top jobs and scores them.
+    5. Filters and returns job matches >= 55%.
     """
     if keywords and keywords.strip():
         # User-provided search role overrides
@@ -1151,10 +1148,12 @@ async def find_matching_jobs(
                 log_ist(f"[Job Searcher] Search source error for '{q}': {e}")
                 return default
 
-        li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=18)
-        reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=14)
-        targetjobs_task = _safe_run(search_targetjobs_uk, q, location, timeframe, timeout=15)
-        ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=22)
+        excluded_clean = [p.strip().lower() for p in (exclude_portals or [])]
+
+        li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=18) if not any(x in "linkedin" for x in excluded_clean) else asyncio.sleep(0, result=[])
+        reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=14) if not any(x in "reed" or x in "reed.co.uk" for x in excluded_clean) else asyncio.sleep(0, result=[])
+        targetjobs_task = _safe_run(search_targetjobs_uk, q, location, timeframe, timeout=15) if not any(x in "targetjobs" or x in "targetjobs.co.uk" for x in excluded_clean) else asyncio.sleep(0, result=[])
+        ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=22) if not any(x in "indeed" for x in excluded_clean) else asyncio.sleep(0, result=[])
 
         li_j, reed_j, tj_j, ind_j = await asyncio.gather(li_task, reed_task, targetjobs_task, ind_task)
         return q, li_j, reed_j, tj_j, ind_j
