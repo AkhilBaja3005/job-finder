@@ -27,25 +27,48 @@ class PortalScanner:
         self.config = self._load_config()
 
     def _load_config(self) -> Dict[str, Any]:
+        base_portals = {
+            "greenhouse": [{"company_slug": "anthropic", "name": "Anthropic"}, {"company_slug": "stripe", "name": "Stripe"}],
+            "ashby": [{"company_slug": "cohere", "name": "Cohere"}],
+            "lever": [{"company_slug": "palantir", "name": "Palantir"}]
+        }
+        loaded: Dict[str, Any] = {}
         if os.path.exists(self.config_path):
             try:
                 if yaml is not None:
                     with open(self.config_path, "r", encoding="utf-8") as f:
-                        return yaml.safe_load(f) or {}
+                        loaded = yaml.safe_load(f) or {}
                 else:
                     print(f"[PortalScanner] PyYAML not installed; falling back to default portal targets.")
             except Exception as e:
                 print(f"[PortalScanner] Error loading config {self.config_path}: {e}")
+
+        portals: Dict[str, Any] = loaded.get("portals", base_portals)
+
+        # Merge verified active slugs from SQLite company slug registry
+        try:
+            try:
+                from services.company_slug_registry import get_active_slugs
+            except ImportError:
+                from backend.services.company_slug_registry import get_active_slugs
+
+            active_slugs = get_active_slugs()
+            for ats_name, slug_list in active_slugs.items():
+                if ats_name not in portals:
+                    portals[ats_name] = []
+                existing_slugs = {p.get("company_slug") for p in portals[ats_name]}
+                for s in slug_list:
+                    if s and s not in existing_slugs:
+                        portals[ats_name].append({"company_slug": s, "name": s.capitalize()})
+        except Exception:
+            pass
+
         return {
-            "portals": {
-                "greenhouse": [{"company_slug": "anthropic", "name": "Anthropic"}, {"company_slug": "stripe", "name": "Stripe"}],
-                "ashby": [{"company_slug": "cohere", "name": "Cohere"}],
-                "lever": [{"company_slug": "palantir", "name": "Palantir"}]
-            },
-            "config": {
+            "portals": portals,
+            "config": loaded.get("config", {
                 "min_ats_score_to_notify": 75,
                 "roles_keywords": ["AI", "Machine Learning", "ML", "GenAI", "Software Engineer", "Systems"]
-            }
+            })
         }
 
     def _format_age(self, dt_str: Optional[str], timestamp_ms: Optional[int] = None) -> str:

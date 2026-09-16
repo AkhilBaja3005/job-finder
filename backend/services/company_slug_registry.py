@@ -11,7 +11,10 @@ from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 import httpx
 
-from backend.config.constants import resolve_workspace_root
+try:
+    from backend.config.constants import resolve_workspace_root
+except ImportError:
+    from config.constants import resolve_workspace_root
 
 logger = logging.getLogger(__name__)
 

@@ -11,11 +11,14 @@ import json
 import re
 import asyncio
 import logging
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Optional
 from urllib.parse import urlparse
 import httpx
 
-from backend.services.company_slug_registry import RESERVED_WORDS, save_slugs_to_db
+try:
+    from backend.services.company_slug_registry import RESERVED_WORDS, save_slugs_to_db
+except ImportError:
+    from services.company_slug_registry import RESERVED_WORDS, save_slugs_to_db
 
 logger = logging.getLogger(__name__)
 
