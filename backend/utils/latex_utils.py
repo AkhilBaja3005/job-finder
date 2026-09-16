@@ -249,17 +249,19 @@ def apply_latex_hotfix(
             "namesize", "nameskip", "addressskip", "sectionskip", "sectionlineskip", "addressSep",
             # Standard LaTeX formatting & structural commands
             "begin", "end", "documentclass", "usepackage", "hypersetup", "selectfont",
-            "textbf", "textit", "emph", "textsc", "MakeUppercase", "MakeLowercase",
-            "bf", "em", "rm", "sf", "tt", "sl", "it", "sc", "cal",
-            "item", "labelitemi", "labelitemii", "olditem",
-            "vspace", "hspace", "hfill", "vfill", "addtolength", "setlength",
+            "textbf", "textit", "emph", "textsc", "textnormal", "texttt", "textsf", "textrm", "textsl",
+            "MakeUppercase", "MakeLowercase",
+            "bf", "em", "rm", "sf", "tt", "sl", "it", "sc", "cal", "bfseries", "itshape", "normalfont", "mdseries", "upshape",
+            "item", "itemsep", "parsep", "topsep", "partopsep", "labelitemi", "labelitemii", "olditem",
+            "vspace", "hspace", "hfill", "vfill", "addtolength", "setlength", "newlength", "settowidth",
             "smallskip", "medskip", "bigskip", "leavevmode", "hbox", "vbox", "relax", "strut", "noindent",
-            "large", "Large", "LARGE", "huge", "Huge", "small", "footnotesize", "tiny", "normalsize",
+            "large", "Large", "LARGE", "huge", "Huge", "small", "footnotesize", "tiny", "normalsize", "scriptsize",
             "href", "url", "pounds", "sim", "bullet", "diamond", "mybar",
             "def", "let", "newcommand", "renewcommand", "providecommand", "linespread",
             "ifx", "fi", "else", "ifthenelse", "equal", "AtBeginDocument", "nofiles", "pagestyle",
             "rule", "dp", "strutbox", "baselineskip", "kern", "centering", "centerline", "par",
-            "frenchspacing", "addto", "linewidth", "textheight", "textwidth"
+            "frenchspacing", "addto", "linewidth", "textheight", "textwidth", "tabular", "endtabular",
+            "minipage", "endminipage", "raggedright", "raggedleft"
         }
 
         def _strip_invalid_cmd(match):

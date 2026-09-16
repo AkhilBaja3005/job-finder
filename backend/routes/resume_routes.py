@@ -395,6 +395,7 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
 
         if result.returncode != 0:
             err_msg = result.stderr.strip() if result.stderr else (result.stdout.strip() if result.stdout else "Compilation failed")
+            print(f"[compile_latex] Tectonic error (exit code {result.returncode}): {err_msg}")
             raise HTTPException(status_code=400, detail=f"LaTeX compilation failed: {err_msg}")
 
         page_count = 1

@@ -36,14 +36,20 @@ def upload_zip_to_tmpfiles(latex_code: str, candidate_name: str = "", job_title:
         zip_file.writestr("latexmkrc", latexmkrc_content)
         zip_file.writestr(".latexmkrc", latexmkrc_content)
 
-        cls_path = os.path.join(UPLOAD_DIR, "resume.cls")
-        if not os.path.exists(cls_path):
-            cls_path = os.path.join(BASE_DIR, "assets", "resume.cls")
-
-        if os.path.exists(cls_path):
-            with open(cls_path, "r", encoding="utf-8") as f:
-                cls_content = f.read()
-            zip_file.writestr("resume.cls", cls_content)
+        cls_candidates = [
+            os.path.join(UPLOAD_DIR, "resume.cls"),
+            os.path.join(BASE_DIR, "assets", "resume.cls"),
+            os.path.join(BASE_DIR, "backend", "assets", "resume.cls"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "resume.cls"),
+            os.path.join(os.getcwd(), "assets", "resume.cls"),
+            os.path.join(os.getcwd(), "backend", "assets", "resume.cls"),
+        ]
+        for c in cls_candidates:
+            if os.path.exists(c) and os.path.isfile(c) and os.path.getsize(c) > 100:
+                with open(c, "r", encoding="utf-8") as f:
+                    cls_content = f.read()
+                zip_file.writestr("resume.cls", cls_content)
+                break
 
     zip_buffer.seek(0)
     zip_data = zip_buffer.getvalue()
