@@ -70,7 +70,10 @@ def clean_slug(candidate: str) -> str:
     slug = candidate.strip().lower()
     # Strip URL fragments or query params if present
     slug = slug.split("?")[0].split("#")[0].strip("/")
-    if slug in RESERVED_WORDS or not re.match(r"^[a-z0-9-_]+$", slug):
+    if slug in RESERVED_WORDS:
+        return ""
+    # Allow alphanumeric, dashes, underscores, pipes, colons, periods (e.g. Workday multi-part keys)
+    if not re.match(r"^[a-z0-9\-_|:.]+$", slug):
         return ""
     return slug
 

@@ -206,7 +206,11 @@ class PortalScanner:
 
     async def scan_workday_company(self, client: httpx.AsyncClient, company_slug: str, company_name: str) -> List[Dict[str, Any]]:
         """Fetch active jobs from Workday public Candidate Experience (CXS) endpoint."""
-        url = f"https://{company_slug}.wd1.myworkdayjobs.com/wday/cxs/{company_slug}/External/jobs"
+        parts = company_slug.split("|")
+        tenant = parts[0]
+        instance = parts[1] if len(parts) > 1 else "wd1"
+        site = parts[2] if len(parts) > 2 else "External"
+        url = f"https://{tenant}.{instance}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
         jobs = []
         try:
             headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -216,7 +220,7 @@ class PortalScanner:
                 raw_jobs = data.get("jobPostings", [])
                 for rj in raw_jobs:
                     ext_path = rj.get("externalPath", "")
-                    job_url = f"https://{company_slug}.wd1.myworkdayjobs.com/en-US/{company_slug}{ext_path}" if ext_path else ""
+                    job_url = f"https://{tenant}.{instance}.myworkdayjobs.com/en-US/{tenant}/{site}{ext_path}" if ext_path else ""
                     jobs.append({
                         "id": f"workday_{rj.get('bulletFields', [ext_path])[0] if rj.get('bulletFields') else ext_path}",
                         "title": rj.get("title", ""),

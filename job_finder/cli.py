@@ -105,9 +105,17 @@ def _parse_ver(v_str: str):
 
 
 def main():
+    from job_finder import __version__
     parser = argparse.ArgumentParser(
         prog="job-finder",
         description="Job Finder AI - Autonomous Agentic Career & Application Toolkit",
+    )
+    parser.add_argument(
+        "--version",
+        "-v",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show program's version number and exit"
     )
     subparsers = parser.add_subparsers(dest="subcommand", help="Available subcommands")
 

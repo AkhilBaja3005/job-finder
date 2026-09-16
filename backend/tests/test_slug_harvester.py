@@ -129,11 +129,11 @@ async def test_validate_bamboohr_and_workday_endpoints_mocked():
     assert is_active is True
     assert job_count == 1
 
-    # Mock Workday response
+    # Mock Workday response (uses HTTP POST)
     mock_workday_res = MagicMock()
     mock_workday_res.status_code = 200
     mock_workday_res.json.return_value = {"total": 5, "jobPostings": [{"title": "Software Engineer"}]}
-    mock_client.get.return_value = mock_workday_res
+    mock_client.post.return_value = mock_workday_res
 
     ats, slug, is_active, job_count = await validate_slug_endpoint(mock_client, "workday", "nvidia", sem)
     assert ats == "workday"

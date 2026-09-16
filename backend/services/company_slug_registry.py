@@ -197,13 +197,24 @@ async def validate_slug_endpoint(client: httpx.AsyncClient, ats: str, slug: str,
     if not config:
         return (ats, slug, False, 0)
         
-    url = config["url_template"].format(slug=slug)
     delay = config["rate_limit_delay"]
     
     async with semaphore:
         await asyncio.sleep(delay)
         try:
-            res = await client.get(url, timeout=10.0, follow_redirects=True)
+            if ats == "workday":
+                # Handle multi-part workday identifiers (e.g. 'company|wd1|external_careers' or 'company')
+                parts = slug.split("|")
+                tenant = parts[0]
+                instance = parts[1] if len(parts) > 1 else "wd1"
+                site = parts[2] if len(parts) > 2 else "External"
+                url = f"https://{tenant}.{instance}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
+                headers = {"Content-Type": "application/json", "Accept": "application/json"}
+                res = await client.post(url, json={"limit": 10, "offset": 0, "searchText": ""}, headers=headers, timeout=10.0)
+            else:
+                url = config["url_template"].format(slug=slug)
+                res = await client.get(url, timeout=10.0, follow_redirects=True)
+
             if res.status_code == 200:
                 data = res.json()
                 job_count = 0
@@ -220,7 +231,7 @@ async def validate_slug_endpoint(client: httpx.AsyncClient, ats: str, slug: str,
                     job_count = len(jobs)
                 elif ats == "workday":
                     jobs = data.get("jobPostings", []) if isinstance(data, dict) else []
-                    job_count = data.get("total", len(jobs)) if isinstance(data, dict) else 0
+                    job_count = data.get("total", len(jobs)) if isinstance(data, dict) else len(jobs)
                     
                 return (ats, slug, True, job_count)
         except Exception as e:
