@@ -124,15 +124,37 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                 return el.value && el.value.trim().length > 0;
             }""")
 
-            # 3. Resume PDF upload
+            # 3. Resume PDF upload & wait for completion
             if inp_type == "file":
                 placeholder = await inp.get_attribute("placeholder") or ""
-                if "resume" in inp_name.lower() or "cv" in inp_name.lower() or "resume" in placeholder.lower():
+                inp_accept = await inp.get_attribute("accept") or ""
+                is_resume_input = (
+                    "resume" in inp_name.lower()
+                    or "cv" in inp_name.lower()
+                    or "resume" in placeholder.lower()
+                    or "resume" in field_key.lower()
+                    or "cv" in field_key.lower()
+                    or ".pdf" in inp_accept.lower()
+                    or "file" in inp_name.lower()
+                )
+                if is_resume_input:
                     if resume_pdf_path and os.path.exists(resume_pdf_path):
                         await inp.set_input_files(resume_pdf_path)
                         await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
                         session_filled_questions.add(question_text)
-                        print(f"Uploaded tailored resume PDF: {resume_pdf_path}")
+                        print(f"[autofill] 📤 Uploaded resume PDF: {resume_pdf_path}")
+                        print("[autofill] ⏳ Waiting for resume upload & processing to finish...")
+                        try:
+                            # Wait up to 15s for any active progress bar or spinner to disappear
+                            await page.wait_for_selector(
+                                "[role='progressbar'], .progress-bar, .spinner, [class*='uploading' i], [class*='loading' i], [data-automation-id*='upload-progress']",
+                                state="hidden",
+                                timeout=15000
+                            )
+                        except Exception:
+                            pass
+                        await page.wait_for_timeout(2500)
+                        print("[autofill] ✅ Resume upload completed.")
                         continue
                     elif is_prefilled:
                         # If already has a file and we don't have a new resume path, keep it
@@ -140,6 +162,31 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                         await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
                         session_filled_questions.add(question_text)
                         continue
+
+            # 3b. Checkbox handling for login, account creation, terms, consent, privacy, agreements
+            if inp_type == "checkbox":
+                if is_prefilled:
+                    session_filled_questions.add(question_text)
+                    await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
+                    continue
+
+                cb_context = (field_key + " " + label_text + " " + parent_html[:500]).lower()
+                is_consent_or_login_cb = (
+                    any(k in cb_context for k in [
+                        "term", "condition", "agree", "privacy", "consent", "policy",
+                        "certif", "acknowledg", "accept", "remember", "keep me signed in",
+                        "sign in", "sign up", "create account", "register", "legal", "gdpr",
+                        "declaration", "accurate", "true"
+                    ])
+                    or await inp.get_attribute("required") is not None
+                    or await inp.get_attribute("aria-required") == "true"
+                )
+                if is_consent_or_login_cb:
+                    print(f"[autofill] ✅ Checking login/consent/terms checkbox: '{question_text}'")
+                    await inp.check()
+                    session_filled_questions.add(question_text)
+                    await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
+                    continue
 
             # 4. Resolve candidate profile value for known contact/profile fields
             candidate_value = None
@@ -264,6 +311,84 @@ async def autofill_job_application(url: str, resume_data: dict, resume_pdf_path:
 
         try:
             while not page.is_closed():
+                # 1. Detect and handle "Autofill with Resume" / "Apply with Resume" landing section
+                try:
+                    autofill_btn = await page.query_selector(
+                        "button:has-text('Autofill with Resume'), a:has-text('Autofill with Resume'), "
+                        "button:has-text('Apply with Resume'), a:has-text('Apply with Resume'), "
+                        "button:has-text('Autofill Application'), button:has-text('Upload Resume to Autofill'), "
+                        "[data-automation-id*='autofillWithResume'], [data-automation-id*='applyWithResume']"
+                    )
+                    if autofill_btn and await autofill_btn.is_visible():
+                        btn_txt = (await autofill_btn.inner_text()).strip()
+                        print(f"[autofill] 📄 Detected '{btn_txt}' option. Clicking to start autofill with resume...")
+                        await autofill_btn.click()
+                        await page.wait_for_timeout(1500)
+
+                        # Look for resume file input inside the autofill section/modal
+                        af_file_inp = await page.query_selector("input[type='file']")
+                        if af_file_inp and resume_pdf_path and os.path.exists(resume_pdf_path):
+                            print(f"[autofill] 📤 Uploading resume to Autofill section: {resume_pdf_path}")
+                            await af_file_inp.set_input_files(resume_pdf_path)
+
+                            # Check any terms / consent checkboxes on the autofill modal
+                            modal_cbs = await page.query_selector_all("input[type='checkbox']")
+                            for mcb in modal_cbs:
+                                if await mcb.is_visible() and not await mcb.is_checked():
+                                    try:
+                                        await mcb.check()
+                                        print("[autofill] ✅ Checked terms/consent checkbox on Autofill modal.")
+                                    except Exception:
+                                        pass
+
+                            # Wait for upload progress bar or spinner to finish
+                            print("[autofill] ⏳ Waiting for resume upload and parsing to finish...")
+                            try:
+                                await page.wait_for_selector(
+                                    "[role='progressbar'], .progress-bar, .spinner, [class*='uploading' i], [class*='loading' i]",
+                                    state="hidden",
+                                    timeout=15000
+                                )
+                            except Exception:
+                                pass
+                            await page.wait_for_timeout(3000)
+
+                            # Click Continue / Next to proceed past the Autofill section
+                            cont_btn = await page.query_selector(
+                                "button:has-text('Continue'), button:has-text('Next'), "
+                                "[data-automation-id*='bottom-navigation-next-button'], button[type='submit']"
+                            )
+                            if cont_btn and await cont_btn.is_visible() and await cont_btn.is_enabled():
+                                print("[autofill] ➡️ Proceeding past Autofill with Resume section...")
+                                await cont_btn.click()
+                                await page.wait_for_timeout(2000)
+                except Exception as af_err:
+                    print(f"[autofill] Note on Autofill with Resume check: {af_err}")
+
+                # 2. Check any unhandled checkboxes on login / account creation / terms / agreements
+                try:
+                    all_cbs = await page.query_selector_all("input[type='checkbox']:not([data-autofilled='true'])")
+                    for cb in all_cbs:
+                        if await cb.is_visible() and not await cb.is_checked():
+                            cb_id = await cb.get_attribute("id") or ""
+                            cb_name = await cb.get_attribute("name") or ""
+                            label_el = await page.query_selector(f"label[for='{cb_id}']") if cb_id else None
+                            cb_lbl = (await label_el.inner_text() if label_el else (cb_name or "")).lower()
+                            if (
+                                any(k in cb_lbl for k in [
+                                    "term", "condition", "agree", "privacy", "consent", "policy",
+                                    "certif", "acknowledg", "accept", "remember", "keep me signed in",
+                                    "sign in", "sign up", "create account", "register"
+                                ])
+                                or await cb.get_attribute("required") is not None
+                                or await cb.get_attribute("aria-required") == "true"
+                            ):
+                                await cb.check()
+                                await page.evaluate("el => el.setAttribute('data-autofilled', 'true')", cb)
+                                print(f"[autofill] ✅ Checked mandatory/login agreement checkbox: '{cb_lbl}'")
+                except Exception:
+                    pass
+
                 await fill_visible_fields(page, resume_data, resume_pdf_path, session_filled_questions, custom_api_key)
 
                 # LLM Self-Correction & Form Retry Loop: Detect any missed required fields or validation errors
