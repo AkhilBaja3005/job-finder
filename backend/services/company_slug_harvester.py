@@ -27,6 +27,8 @@ TARGET_ATS_PATTERNS = {
     "ashby": "jobs.ashbyhq.com/*",
     "greenhouse": "boards.greenhouse.io/*",
     "lever": "jobs.lever.co/*",
+    "bamboohr": "*.bamboohr.com/careers/*",
+    "workday": "*.myworkdayjobs.com/*",
 }
 
 # Open source seed dataset URLs
@@ -42,6 +44,14 @@ SEED_REGISTRIES = [
     {
         "ats": "ashby",
         "url": "https://raw.githubusercontent.com/Feashliaa/job-board-aggregator/main/data/ashby_companies.json"
+    },
+    {
+        "ats": "bamboohr",
+        "url": "https://raw.githubusercontent.com/Feashliaa/job-board-aggregator/main/data/bamboohr_companies.json"
+    },
+    {
+        "ats": "workday",
+        "url": "https://raw.githubusercontent.com/Feashliaa/job-board-aggregator/main/data/workday_companies.json"
     },
     {
         "ats": "general",
@@ -67,8 +77,14 @@ def clean_slug(candidate: str) -> str:
 
 async def fetch_open_source_seeds(client: httpx.AsyncClient) -> Dict[str, Set[str]]:
     """Strategy 1: Download & parse pre-aggregated open-source company seed manifests."""
-    print("🌱 Harvesting seeds from open-source registries...")
-    discovered: Dict[str, Set[str]] = {"ashby": set(), "greenhouse": set(), "lever": set()}
+    print("[Harvester] Harvesting seeds from open-source registries...")
+    discovered: Dict[str, Set[str]] = {
+        "ashby": set(),
+        "greenhouse": set(),
+        "lever": set(),
+        "bamboohr": set(),
+        "workday": set()
+    }
     
     for seed in SEED_REGISTRIES:
         url = seed["url"]
@@ -101,7 +117,7 @@ async def fetch_open_source_seeds(client: httpx.AsyncClient) -> Dict[str, Set[st
         except Exception as e:
             logger.debug(f"Failed to fetch seed {url}: {e}")
             
-    print(f"  ✓ Harvested seed candidates: Ashby={len(discovered['ashby'])}, Greenhouse={len(discovered['greenhouse'])}, Lever={len(discovered['lever'])}")
+    print(f"  [Harvester] Discovered seed candidates: Ashby={len(discovered['ashby'])}, Greenhouse={len(discovered['greenhouse'])}, Lever={len(discovered['lever'])}, BambooHR={len(discovered['bamboohr'])}, Workday={len(discovered['workday'])}")
     return discovered
 
 
@@ -112,12 +128,12 @@ async def stream_common_crawl_cdx(client: httpx.AsyncClient, ats: str, pattern: 
         # Fetch latest CDX index snapshot
         info_res = await client.get("https://index.commoncrawl.org/collinfo.json", timeout=15.0)
         if info_res.status_code != 200:
-            print(f"⚠️ Could not fetch Common Crawl index metadata for {ats}")
+            print(f"[Harvester] Could not fetch Common Crawl index metadata for {ats}")
             return slugs
             
         latest_cdx = info_res.json()[0]["id"]
         cdx_url = f"https://index.commoncrawl.org/{latest_cdx}-index?url={pattern}&output=json&fl=url"
-        print(f"📡 Streaming {ats} path URLs from Common Crawl index ({latest_cdx})...")
+        print(f"[Harvester] Streaming {ats} path URLs from Common Crawl index ({latest_cdx})...")
         
         async with client.stream("GET", cdx_url, timeout=90.0) as response:
             count = 0
@@ -127,27 +143,37 @@ async def stream_common_crawl_cdx(client: httpx.AsyncClient, ats: str, pattern: 
                 try:
                     record = json.loads(line)
                     parsed_url = urlparse(record.get("url", ""))
-                    path_parts = [p for p in parsed_url.path.strip("/").split("/") if p]
-                    if path_parts:
-                        candidate = clean_slug(path_parts[0])
-                        if candidate:
-                            slugs.add(candidate)
-                            count += 1
-                            if limit and count >= limit:
-                                break
+                    # Extract subdomain or path component depending on ATS architecture
+                    if ats in ("bamboohr", "workday"):
+                        hostname_parts = parsed_url.netloc.split(".")
+                        candidate = clean_slug(hostname_parts[0]) if hostname_parts else ""
+                    else:
+                        path_parts = [p for p in parsed_url.path.strip("/").split("/") if p]
+                        candidate = clean_slug(path_parts[0]) if path_parts else ""
+                    if candidate:
+                        slugs.add(candidate)
+                        count += 1
+                        if limit and count >= limit:
+                            break
                 except Exception:
                     continue
     except Exception as e:
-        print(f"⚠️ Error streaming Common Crawl CDX for {ats}: {e}")
+        print(f"[Harvester] Note: Common Crawl streaming for {ats}: {e}")
         
-    print(f"  ✓ Common Crawl extracted {len(slugs)} candidate slugs for {ats}")
+    print(f"  [Harvester] Common Crawl extracted {len(slugs)} candidate slugs for {ats}")
     return slugs
 
 
 async def harvest_yc_directory_slugs(client: httpx.AsyncClient, limit: int = 50) -> Dict[str, Set[str]]:
     """Strategy 3: Query Y Combinator public company index and inspect careers embed signatures."""
-    print("🚀 Inspecting Y Combinator startup directory...")
-    discovered: Dict[str, Set[str]] = {"ashby": set(), "greenhouse": set(), "lever": set()}
+    print("[Harvester] Inspecting Y Combinator startup directory...")
+    discovered: Dict[str, Set[str]] = {
+        "ashby": set(),
+        "greenhouse": set(),
+        "lever": set(),
+        "bamboohr": set(),
+        "workday": set()
+    }
     try:
         # Fetch YC directory public listings
         yc_url = "https://backend.ycombinator.com/companies?status=Active"
@@ -157,10 +183,10 @@ async def harvest_yc_directory_slugs(client: httpx.AsyncClient, limit: int = 50)
             for c in companies:
                 slug_name = clean_slug(c.get("slug") or c.get("name"))
                 if slug_name:
-                    # By default startup slugs map to candidate board names
                     discovered["ashby"].add(slug_name)
                     discovered["greenhouse"].add(slug_name)
                     discovered["lever"].add(slug_name)
+                    discovered["bamboohr"].add(slug_name)
     except Exception as e:
         logger.debug(f"YC directory inspection note: {e}")
         
@@ -170,7 +196,13 @@ async def harvest_yc_directory_slugs(client: httpx.AsyncClient, limit: int = 50)
 async def harvest_all_company_slugs(sources: List[str] = ["seeds"], cdx_limit: Optional[int] = 500) -> Dict[str, List[str]]:
     """Orchestrates multi-strategy slug harvesting and saves output to SQLite database."""
     headers = {"User-Agent": "JobSlugHarvester/1.0"}
-    all_discovered: Dict[str, Set[str]] = {"ashby": set(), "greenhouse": set(), "lever": set()}
+    all_discovered: Dict[str, Set[str]] = {
+        "ashby": set(),
+        "greenhouse": set(),
+        "lever": set(),
+        "bamboohr": set(),
+        "workday": set()
+    }
     
     async with httpx.AsyncClient(headers=headers, timeout=20.0, follow_redirects=True) as client:
         if "seeds" in sources or "all" in sources:
@@ -190,5 +222,5 @@ async def harvest_all_company_slugs(sources: List[str] = ["seeds"], cdx_limit: O
                 
     result_map = {ats: sorted(list(slugs)) for ats, slugs in all_discovered.items()}
     total_saved = save_slugs_to_db(result_map)
-    print(f"\n💾 Saved {total_saved} new unique ATS company slugs into SQLite registry database!")
+    print(f"[Harvester] Saved {total_saved} new unique ATS company slugs into registry database.")
     return result_map

@@ -93,10 +93,68 @@ def test_portal_scanner_integrates_active_slugs():
         db_path = os.path.join(tmp_dir, "company_slugs.db")
         init_db(db_path)
         update_slug_status("ashby", "deepmind-partner", is_active=True, job_count=10, db_path=db_path)
+        update_slug_status("bamboohr", "zapier", is_active=True, job_count=8, db_path=db_path)
+        update_slug_status("workday", "nvidia", is_active=True, job_count=25, db_path=db_path)
 
         with patch("services.company_slug_registry.get_db_path", return_value=db_path, create=True):
             with patch("backend.services.company_slug_registry.get_db_path", return_value=db_path, create=True):
                 scanner = PortalScanner()
                 portals = scanner.config.get("portals", {})
                 ashby_slugs = [p["company_slug"] for p in portals.get("ashby", [])]
+                bamboo_slugs = [p["company_slug"] for p in portals.get("bamboohr", [])]
+                workday_slugs = [p["company_slug"] for p in portals.get("workday", [])]
                 assert "deepmind-partner" in ashby_slugs
+                assert "zapier" in bamboo_slugs
+                assert "nvidia" in workday_slugs
+
+
+@pytest.mark.asyncio
+async def test_validate_bamboohr_and_workday_endpoints_mocked():
+    try:
+        from backend.services.company_slug_registry import validate_slug_endpoint
+    except ImportError:
+        from services.company_slug_registry import validate_slug_endpoint
+
+    mock_client = AsyncMock()
+    # Mock BambooHR response
+    mock_bamboo_res = MagicMock()
+    mock_bamboo_res.status_code = 200
+    mock_bamboo_res.json.return_value = {"result": [{"id": "101", "jobOpeningName": "AI Engineer"}]}
+    mock_client.get.return_value = mock_bamboo_res
+
+    sem = asyncio.Semaphore(5)
+    ats, slug, is_active, job_count = await validate_slug_endpoint(mock_client, "bamboohr", "zapier", sem)
+    assert ats == "bamboohr"
+    assert slug == "zapier"
+    assert is_active is True
+    assert job_count == 1
+
+    # Mock Workday response
+    mock_workday_res = MagicMock()
+    mock_workday_res.status_code = 200
+    mock_workday_res.json.return_value = {"total": 5, "jobPostings": [{"title": "Software Engineer"}]}
+    mock_client.get.return_value = mock_workday_res
+
+    ats, slug, is_active, job_count = await validate_slug_endpoint(mock_client, "workday", "nvidia", sem)
+    assert ats == "workday"
+    assert slug == "nvidia"
+    assert is_active is True
+    assert job_count == 5
+
+
+def test_should_run_daily_harvest():
+    try:
+        from backend.services.company_slug_registry import should_run_daily_harvest, update_slug_status, init_db
+    except ImportError:
+        from services.company_slug_registry import should_run_daily_harvest, update_slug_status, init_db
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db_path = os.path.join(tmp_dir, "test_check.db")
+        init_db(db_path)
+        # Empty DB should report True
+        assert should_run_daily_harvest(db_path=db_path) is True
+
+        # After adding verified slug, should report False
+        update_slug_status("ashby", "mistral", is_active=True, job_count=5, db_path=db_path)
+        assert should_run_daily_harvest(db_path=db_path, max_age_hours=24.0) is False
+

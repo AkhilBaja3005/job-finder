@@ -612,3 +612,76 @@ async def find_recruiter_endpoint(
         custom_api_key=custom_api_key
     )
     return res
+
+
+class HarvestSlugsRequest(BaseModel):
+    source: Optional[str] = "seeds"
+    run_validation: Optional[bool] = True
+    validate: Optional[bool] = None  # Backward compatibility alias
+    ats: Optional[str] = None
+    limit: Optional[int] = 100
+
+
+@router.get("/api/slugs/stats")
+async def get_slug_stats():
+    """Returns total registered and active confirmed company board slugs across Ashby, Greenhouse, and Lever."""
+    try:
+        from services.company_slug_registry import get_active_slugs, get_db_path, init_db
+    except ImportError:
+        from backend.services.company_slug_registry import get_active_slugs, get_db_path, init_db
+    import sqlite3
+
+    path = get_db_path()
+    init_db(path)
+    conn = sqlite3.connect(path)
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM company_slugs")
+    total_count = cur.fetchone()[0]
+    cur.execute("SELECT ats, COUNT(*) FROM company_slugs WHERE is_active = 1 GROUP BY ats")
+    active_by_ats = {row[0]: row[1] for row in cur.fetchall()}
+    conn.close()
+
+    total_active = sum(active_by_ats.values())
+    return {
+        "total_slugs": total_count,
+        "active_slugs": total_active,
+        "by_platform": {
+            "ashby": active_by_ats.get("ashby", 0),
+            "greenhouse": active_by_ats.get("greenhouse", 0),
+            "lever": active_by_ats.get("lever", 0),
+            "bamboohr": active_by_ats.get("bamboohr", 0),
+            "workday": active_by_ats.get("workday", 0)
+        }
+    }
+
+
+@router.post("/api/slugs/harvest")
+async def harvest_slugs_endpoint(req: HarvestSlugsRequest):
+    """Triggers asynchronous company board slug harvesting & live validation from seeds/YC/CDX."""
+    try:
+        from services.company_slug_harvester import harvest_all_company_slugs
+        from services.company_slug_registry import validate_all_unverified_slugs, get_active_slugs
+    except ImportError:
+        from backend.services.company_slug_harvester import harvest_all_company_slugs
+        from backend.services.company_slug_registry import validate_all_unverified_slugs, get_active_slugs
+
+    sources = [s.strip().lower() for s in (req.source or "seeds").split(",")]
+    harvested = await harvest_all_company_slugs(sources=sources)
+
+    val_res = {"verified": 0, "active": 0}
+    should_val = req.run_validation if req.validate is None else req.validate
+    if should_val:
+        val_res = await validate_all_unverified_slugs(ats_filter=req.ats, limit=req.limit or 100)
+
+    active_map = get_active_slugs(ats=req.ats)
+    total_active = sum(len(slugs) for slugs in active_map.values())
+
+    return {
+        "status": "success",
+        "harvested": {ats: len(slugs) for ats, slugs in harvested.items()},
+        "validated": val_res.get("verified", 0),
+        "newly_activated": val_res.get("active", 0),
+        "total_active": total_active,
+        "by_platform": {ats: len(slugs) for ats, slugs in active_map.items()}
+    }
+

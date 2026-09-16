@@ -1105,6 +1105,8 @@ async def find_matching_jobs(
         gh_cnt = sum(1 for pj in portal_results if pj.get("portal") == "greenhouse")
         ash_cnt = sum(1 for pj in portal_results if pj.get("portal") == "ashby")
         lev_cnt = sum(1 for pj in portal_results if pj.get("portal") == "lever")
+        bam_cnt = sum(1 for pj in portal_results if pj.get("portal") == "bamboohr")
+        wd_cnt = sum(1 for pj in portal_results if pj.get("portal") == "workday")
         
         for pj in portal_results:
             p_obj = JobSearchResult(
@@ -1118,7 +1120,7 @@ async def find_matching_jobs(
                 full_description=pj.get("description", "")
             )
             portal_jobs_raw.append(p_obj)
-        portal_done_msg = f"✓ Found {gh_cnt} Greenhouse, {ash_cnt} Ashby & {lev_cnt} Lever direct portal postings ({len(portal_jobs_raw)} total)"
+        portal_done_msg = f"✓ Found {gh_cnt} Greenhouse, {ash_cnt} Ashby, {lev_cnt} Lever, {bam_cnt} BambooHR & {wd_cnt} Workday direct portal postings ({len(portal_jobs_raw)} total)"
         log_ist(portal_done_msg)
         yield json.dumps({"type": "log", "message": portal_done_msg}) + " " * 2048 + "\n"
     except Exception as pe:

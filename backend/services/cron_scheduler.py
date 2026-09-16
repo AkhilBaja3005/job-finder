@@ -202,16 +202,38 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
 
 
 async def background_cron_worker():
-    """Background loop that executes scheduled email digests for subscribed users."""
+    """Background loop that executes scheduled email digests and daily ATS board slug harvesting."""
     print("⏰ [Daily Mailer] Background cron worker started.")
+    last_harvest_date: Optional[str] = None
+
     while True:
         try:
+            now_ist = datetime.now(IST_TZ)
+            today_str = now_ist.strftime("%Y-%m-%d")
+
+            # 1. Daily ATS Company Slug Harvesting & Live Validation (runs once every 24 hours at 03:00 UTC / 08:30 IST)
+            if last_harvest_date != today_str:
+                try:
+                    try:
+                        from services.company_slug_harvester import harvest_all_company_slugs
+                        from services.company_slug_registry import validate_all_unverified_slugs, get_active_slugs
+                    except ImportError:
+                        from backend.services.company_slug_harvester import harvest_all_company_slugs
+                        from backend.services.company_slug_registry import validate_all_unverified_slugs, get_active_slugs
+
+                    print("[Daily Cron] Running scheduled 24-hour ATS company board harvest & validation...")
+                    await harvest_all_company_slugs(sources=["seeds"])
+                    await validate_all_unverified_slugs(limit=100)
+                    active_map = get_active_slugs()
+                    total_act = sum(len(v) for v in active_map.values())
+                    print(f"[Daily Cron] ATS registry refreshed: {total_act} active verified company boards.")
+                    last_harvest_date = today_str
+                except Exception as harvest_err:
+                    print(f"[Daily Cron] Note: Slug harvest routine exception: {harvest_err}")
+
+            # 2. Scheduled Job Digest Notifications for Subscribed Users
             res = supabase_request("users?cron_enabled=eq.true", "GET")
             if res and isinstance(res, list):
-                now_ist = datetime.now(IST_TZ)
-                current_hhmm = now_ist.strftime("%H:%M")
-                today_str = now_ist.strftime("%Y-%m-%d")
-
                 for user in res:
                     try:
                         # Check last sent date to avoid multiple sends per day
@@ -220,14 +242,13 @@ async def background_cron_worker():
 
                         # Check scheduled time (defaults to 09:00 IST if unspecified)
                         user_cron_time = (user.get("cron_time") or "09:00").strip()
-                        # If current time is within +/- 15 mins of scheduled time, or scheduled time has passed today
                         user_hh = int(user_cron_time.split(":")[0]) if ":" in user_cron_time else 9
                         user_mm = int(user_cron_time.split(":")[1]) if ":" in user_cron_time else 0
                         user_sched_dt = now_ist.replace(hour=user_hh, minute=user_mm, second=0, microsecond=0)
 
                         # Trigger if current time is past or at scheduled time
                         if now_ist >= user_sched_dt:
-                            print(f"📬 [Daily Mailer] Triggering scheduled digest for {user.get('email')} (scheduled: {user_cron_time} IST)")
+                            print(f"[Daily Mailer] Triggering scheduled digest for {user.get('email')} (scheduled: {user_cron_time} IST)")
                             await process_and_send_user_digest(user, bypass_time_check=False)
                     except Exception as u_err:
                         print(f"[Daily Mailer] Error processing user {user.get('id')}: {u_err}")
