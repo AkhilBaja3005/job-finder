@@ -28,3 +28,4 @@ build/
 backend/static_frontend/
 backend/static_frontend/assets/index-DcforfPb.css
 .pyrefly.toml
+applications_tracker/company_slugs.db

@@ -269,3 +269,60 @@ def test_extension_version_and_asset_integrity():
     assert len(res_zip.content) > 1000
 
 
+def test_tectonic_compilation_and_sanitization():
+    r"""
+    Tests end-to-end tectonic compilation and apply_latex_hotfix sanitization:
+    1. Verifies tectonic binary execution.
+    2. Tests hotfix sanitization of hallucinated invalid macros (\skills, \achievement, \randomMacro).
+    3. Verifies clean tectonic PDF output generation.
+    """
+    import subprocess
+    import shutil
+    import tempfile
+    from utils.latex_utils import apply_latex_hotfix
+
+    tectonic_bin = shutil.which("tectonic")
+    if not tectonic_bin:
+        pytest.skip("tectonic binary not found on system PATH")
+
+    raw_latex = r'''
+\documentclass[11pt]{resume}
+\usepackage[T1]{fontenc}
+\name{Akhil Baja}
+\address{London, UK}
+\begin{document}
+\begin{rSection}{Summary}
+\skills \achievement \randomMacro \customLLMCommand
+\textbf{ATS Score:} 95\% match with \pounds 30M+ impact.
+\end{rSection}
+\end{document}
+'''
+    fixed = apply_latex_hotfix(raw_latex)
+
+    # Assert that all hallucinated commands were stripped by dynamic whitelist
+    assert r"\skills" not in fixed
+    assert r"\achievement" not in fixed
+    assert r"\randomMacro" not in fixed
+    assert r"\customLLMCommand" not in fixed
+
+    # Verify tectonic compiles the sanitized code into a valid PDF
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cls_src = os.path.join(backend_dir, "assets", "resume.cls")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tex_file = os.path.join(tmpdir, "test_tectonic_sanitized.tex")
+        with open(tex_file, "w", encoding="utf-8") as f:
+            f.write(fixed)
+
+        if os.path.exists(cls_src):
+            shutil.copy2(cls_src, os.path.join(tmpdir, "resume.cls"))
+
+        res = subprocess.run([tectonic_bin, tex_file, "--outdir", tmpdir], capture_output=True, text=True)
+        pdf_out = os.path.join(tmpdir, "test_tectonic_sanitized.pdf")
+
+        assert res.returncode == 0, f"Tectonic compilation failed on sanitized LaTeX output:\nStderr: {res.stderr}\nStdout: {res.stdout}"
+        assert os.path.exists(pdf_out), "Tectonic output PDF was not generated"
+        assert os.path.getsize(pdf_out) > 1000, "Generated PDF file is empty or corrupted"
+
+
+

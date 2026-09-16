@@ -400,13 +400,13 @@ def main():
 
                 # Formally record the application state (failed or applied) into the database & CSV tracker
                 try:
-                    handle_track_application(
-                        job_url=url,
-                        status=status,
-                        job_title="Target Role",
-                        company="Company",
-                        score=0
-                    )
+                    await handle_track_application({
+                        "job_url": url,
+                        "status": status,
+                        "job_title": "Target Role",
+                        "company": "Company",
+                        "score": 0
+                    })
                 except Exception as trk_err:
                     print(f"[Tracker] Note: Could not record application state: {trk_err}")
 
@@ -740,13 +740,13 @@ Output Markdown with 4 sections:
 
                         # Track application state in database
                         try:
-                            handle_track_application(
-                                job_url=j.url,
-                                status=status,
-                                job_title=j.title,
-                                company=j.company,
-                                score=0
-                            )
+                            await handle_track_application({
+                                "job_url": j.url,
+                                "status": status,
+                                "job_title": j.title,
+                                "company": j.company,
+                                "score": 0
+                            })
                         except Exception:
                             pass
 
@@ -827,7 +827,7 @@ Output Markdown with 4 sections:
         print("\n🚀 ========================================================")
         print("          JOB FINDER AI - QUICK SETUP WIZARD")
         print("========================================================\n")
-        from config.constants import resolve_workspace_root
+        from backend.config.constants import resolve_workspace_root
         from backend.mcp.tools.profile_tools import get_profile_config_path, get_profile_save_path
 
         ws = resolve_workspace_root()
@@ -859,11 +859,38 @@ Output Markdown with 4 sections:
                 print(f"📄 Initialized .env configuration from template: {env_path}")
             else:
                 with open(env_path, "w", encoding="utf-8") as f:
-                    f.write("# Job Finder AI Environment Configuration\nPORT=8000\nSCRAPER_CONCURRENCY=5\n")
+                    f.write(
+                        "# Job Finder AI Environment Configuration\n"
+                        "PORT=8000\n"
+                        "SCRAPER_CONCURRENCY=5\n"
+                        "BROWSER_USE_HEADLESS=false\n"
+                        "JOB_FINDER_DISABLE_GUARDRAILS=0\n"
+                        "SMTP_USER=\n"
+                        "SMTP_PASSWORD=\n"
+                        "EMAIL_FROM=\n"
+                    )
                 print(f"📄 Created initial .env configuration file: {env_path}")
 
         else:
             print(f"✓ Found existing .env at {env_path}")
+
+        # Ensure baseline keys are present in .env
+        with open(env_path, "r", encoding="utf-8") as ef:
+            existing_env_txt = ef.read()
+
+        missing_defaults = []
+        if "BROWSER_USE_HEADLESS=" not in existing_env_txt:
+            missing_defaults.append("BROWSER_USE_HEADLESS=false\n")
+        if "JOB_FINDER_DISABLE_GUARDRAILS=" not in existing_env_txt:
+            missing_defaults.append("JOB_FINDER_DISABLE_GUARDRAILS=0\n")
+        if "SMTP_USER=" not in existing_env_txt:
+            missing_defaults.append("SMTP_USER=\n")
+            missing_defaults.append("SMTP_PASSWORD=\n")
+            missing_defaults.append("EMAIL_FROM=\n")
+
+        if missing_defaults:
+            with open(env_path, "a", encoding="utf-8") as ef:
+                ef.write("\n" + "".join(missing_defaults))
 
         # Configure GEMINI_API_KEY
         existing_key = os.getenv("GEMINI_API_KEY")

@@ -238,15 +238,37 @@ def apply_latex_hotfix(
         preamble = fixed[:doc_start]
         body = fixed[doc_start:]
 
-        # Strip unhandled/undefined control sequences that LLMs commonly hallucinate
-        # e.g., \skills, \project, \experience, \achievement, \summary, \heading, \contact
-        undefined_cmds = [
-            r'\\skills\b', r'\\project\b', r'\\experience\b', r'\\achievement\b',
-            r'\\summary\b', r'\\heading\b', r'\\contact\b', r'\\entry\b', r'\\cvitem\b',
-            r'\\cvheading\b', r'\\cvsection\b', r'\\cvsubsection\b'
-        ]
-        for u_cmd in undefined_cmds:
-            body = re.sub(u_cmd, '', body)
+        # ── Dynamic Whitelist Sanitizer for 100% Robustness ─────────────────────
+        # Instead of a manual blacklist, whitelist ONLY legitimate TeX & resume.cls commands.
+        # Any hallucinated backslash command not in this set is automatically stripped.
+        VALID_TEX_COMMANDS = {
+            # resume.cls commands
+            "name", "address", "printaddress", "printname", "rSection", "rSubsection",
+            "namesize", "nameskip", "addressskip", "sectionskip", "sectionlineskip", "addressSep",
+            # Standard LaTeX formatting & structural commands
+            "begin", "end", "documentclass", "usepackage", "hypersetup", "selectfont",
+            "textbf", "textit", "emph", "textsc", "MakeUppercase", "MakeLowercase",
+            "item", "labelitemi", "labelitemii", "olditem",
+            "vspace", "hspace", "hfill", "vfill", "addtolength", "setlength",
+            "large", "Large", "LARGE", "huge", "Huge", "small", "footnotesize", "tiny", "normalsize",
+            "href", "url", "pounds", "sim", "bullet", "diamond", "mybar",
+            "def", "let", "newcommand", "renewcommand", "providecommand", "linespread",
+            "ifx", "fi", "else", "ifthenelse", "equal", "AtBeginDocument", "nofiles", "pagestyle",
+            "rule", "dp", "strutbox", "baselineskip", "kern", "centering", "centerline", "par",
+            "frenchspacing", "addto", "linewidth", "textheight", "textwidth"
+        }
+
+        def _strip_invalid_cmd(match):
+            cmd_full = match.group(0)
+            cmd_name = match.group(1)
+            # If command name contains non-alpha or is in whitelist, preserve it
+            if not cmd_name.isalpha() or cmd_name in VALID_TEX_COMMANDS:
+                return cmd_full
+            # Strip invalid/hallucinated command
+            return ""
+
+        # Match any backslash command: \commandname
+        body = re.sub(r'\\([a-zA-Z]+)', _strip_invalid_cmd, body)
 
         lines = body.split('\n')
         new_lines = []

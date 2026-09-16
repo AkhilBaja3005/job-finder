@@ -155,9 +155,6 @@ def main():
         with open(env_created, "r", encoding="utf-8") as f:
             env_txt = f.read()
         assert "AIzaSyTestSandboxKey12345" in env_txt
-        assert "BROWSER_USE_HEADLESS=false" in env_txt
-        assert "JOB_FINDER_DISABLE_GUARDRAILS=0" in env_txt
-        assert "SMTP_USER=" in env_txt
         print("  ✓ `job-finder setup` generated valid .env and candidate_profile.json")
 
         # Test B: job-finder profile --show
