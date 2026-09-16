@@ -72,7 +72,9 @@ def test_web_live_preview_compile_latex_success():
     assert response.headers.get("content-type") == "application/pdf"
     assert response.headers.get("X-Page-Count") == "1"
     assert "X-ATS-Score" in response.headers
-    assert int(response.headers.get("X-ATS-Score")) >= 50
+    ats_score_val = response.headers.get("X-ATS-Score")
+    assert ats_score_val is not None
+    assert int(ats_score_val) >= 50
     assert "X-ATS-Skills-Count" in response.headers
     assert "X-ATS-Quant-Percent" in response.headers
     assert response.content.startswith(b"%PDF-")

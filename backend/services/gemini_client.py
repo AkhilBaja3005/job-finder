@@ -401,11 +401,11 @@ def _execute_nvidia_nim_fallback(prompt: str, response_schema, api_key: str, on_
                     schema_dict = clean_schema(response_schema.model_json_schema())
                     properties = schema_dict.get("properties", {})
                     
-                    example_obj = {}
+                    example_obj: Dict[str, Any] = {}
                     for field, metadata in properties.items():
                         if "properties" in metadata or metadata.get("type") == "object":
                             sub_props = metadata.get("properties", {})
-                            sub_obj = {}
+                            sub_obj: Dict[str, Any] = {}
                             for sub_field, sub_meta in sub_props.items():
                                 if sub_meta.get("type") == "array" or "items" in sub_meta:
                                     sub_obj[sub_field] = ["entry_string_1", "entry_string_2"]

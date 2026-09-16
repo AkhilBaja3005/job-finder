@@ -669,6 +669,7 @@ async def run_browser_use_autofill(
     print(f"[browser-use] ⚡ Starting fast pure-DOM autofill ({mode_str}) for {job_url} [vision=False, fallbacks={len(fallback_llms)}]...")
     agent_fast = agent_cls(
         task=task_prompt,
+        # pyrefly: ignore [bad-argument-type]
         llm=llm,
         fallback_pool=fallback_llms,
         browser_session=browser_session,
@@ -698,6 +699,7 @@ async def run_browser_use_autofill(
         print(f"[browser-use] 👁️ Pure-DOM pass encountered difficulties. Activating Vision + Reasoning (thinking=True) fallback...")
         agent_vision = agent_cls(
             task=task_prompt + "\nNOTE: Retrying with visual sight and deep reasoning enabled. Analyze the visual layout carefully to locate, solve, and fill any inputs, custom dropdowns, or multi-step modals that were missed.",
+            # pyrefly: ignore [bad-argument-type]
             llm=llm,
             fallback_pool=fallback_llms,
             browser_session=browser_session,
@@ -867,6 +869,7 @@ async def extract_jd_with_browser_use(
     try:
         agent = agent_cls(
             task=task_prompt,
+            # pyrefly: ignore [bad-argument-type]
             llm=llm,
             fallback_pool=fallback_llms,
             browser_session=browser_session,

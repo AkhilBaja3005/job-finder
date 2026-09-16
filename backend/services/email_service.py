@@ -1,6 +1,7 @@
 import os
 import asyncio
 import smtplib
+# pyrefly: ignore [untyped-import]
 import requests
 import urllib.parse
 from email.mime.text import MIMEText

@@ -64,6 +64,10 @@ def main():
     # Ensure static_frontend placeholder exists so setuptools package discovery never fails
     os.makedirs(os.path.join(backend_dir, "static_frontend", "assets"), exist_ok=True)
 
+    is_fast_mode = "--fast" in sys.argv or os.getenv("FAST_VERIFY", "0").lower() in ("1", "true", "yes")
+    if is_fast_mode:
+        print("⚡ FAST MODE ENABLED: Running quick regression test suite (skipping long browser and slow integration tests)")
+
     # -------------------------------------------------------------------------
     # STEP 1: Leak & Git Isolation Verification
     # -------------------------------------------------------------------------
@@ -75,13 +79,19 @@ def main():
     print("  ✅ candidate_profile.json and .env are strictly untracked!")
 
     # -------------------------------------------------------------------------
-    # STEP 2: Pytest Full Suite
+    # STEP 2: Pytest Test Suite
     # -------------------------------------------------------------------------
-    step("2. Running Full Pytest Test Suite")
+    step("2. Running Pytest Test Suite" + (" (Fast Mode: excluding -m slow)" if is_fast_mode else ""))
     pytest_bin = os.path.join(backend_dir, "venv", "bin", "pytest")
     if not os.path.exists(pytest_bin):
         pytest_bin = "pytest"
-    res = run_cmd([pytest_bin, "backend/tests/", "-v"], cwd=repo_root)
+    
+    pytest_cmd = [pytest_bin, "backend/tests/", "-v"]
+    if is_fast_mode:
+        # In fast mode, skip slow browser-use and heavy end-to-end integration tests
+        pytest_cmd.extend(["-m", "not slow", "-k", "not (browser_use or test_comprehensive_packaging)"])
+    
+    res = run_cmd(pytest_cmd, cwd=repo_root)
     print(f"  ✅ Pytest Suite Completed Successfully! (100% passed)")
 
     # -------------------------------------------------------------------------
