@@ -194,6 +194,8 @@ def apply_latex_hotfix(
         "\\hypersetup{\n    colorlinks=false,\n    pdfborder={0 0 0}\n}\n"
         "\\renewcommand{\\labelitemi}{$\\bullet$}\n"
         "\\renewcommand{\\labelitemii}{$\\bullet$}\n"
+        "\\providecommand{\\bf}{\\textbf}\n"
+        "\\providecommand{\\em}{\\textit}\n"
         "\\def\\sectionskip{\\vspace{0.08em}}\n"
         "\\def\\sectionlineskip{\\vspace{0.04em}}\n"
         "\\def\\nameskip{\\vspace{0.05em}}\n"
@@ -248,8 +250,10 @@ def apply_latex_hotfix(
             # Standard LaTeX formatting & structural commands
             "begin", "end", "documentclass", "usepackage", "hypersetup", "selectfont",
             "textbf", "textit", "emph", "textsc", "MakeUppercase", "MakeLowercase",
+            "bf", "em", "rm", "sf", "tt", "sl", "it", "sc", "cal",
             "item", "labelitemi", "labelitemii", "olditem",
             "vspace", "hspace", "hfill", "vfill", "addtolength", "setlength",
+            "smallskip", "medskip", "bigskip", "leavevmode", "hbox", "vbox", "relax", "strut", "noindent",
             "large", "Large", "LARGE", "huge", "Huge", "small", "footnotesize", "tiny", "normalsize",
             "href", "url", "pounds", "sim", "bullet", "diamond", "mybar",
             "def", "let", "newcommand", "renewcommand", "providecommand", "linespread",
@@ -963,23 +967,12 @@ def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, 
         with open(temp_tex, "w", encoding="utf-8") as f:
             f.write(fixed_code)
 
-        # Locate resume.cls across installed package, workspace, and assets
-        cls_candidates = [
-            os.path.join(OUTPUT_DIR, "resume.cls"),
-            os.path.join(UPLOAD_DIR, "resume.cls"),
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "resume.cls"),
-            os.path.join(BASE_DIR, "assets", "resume.cls"),
-            os.path.join(BASE_DIR, "backend", "assets", "resume.cls"),
-            os.path.join(os.getcwd(), "resume.cls"),
-            os.path.join(os.getcwd(), "applications_tracker", "tailored_resumes", "resume.cls"),
-        ]
-        found_cls = next((c for c in cls_candidates if os.path.exists(c)), None)
-        if found_cls and found_cls != os.path.join(OUTPUT_DIR, "resume.cls"):
-            shutil.copy2(found_cls, os.path.join(OUTPUT_DIR, "resume.cls"))
-
+        from services.session_store import _ensure_resume_cls
+        _ensure_resume_cls(OUTPUT_DIR)
 
         result = subprocess.run(
             ["tectonic", temp_tex, "--outdir", OUTPUT_DIR],
+            cwd=OUTPUT_DIR,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True

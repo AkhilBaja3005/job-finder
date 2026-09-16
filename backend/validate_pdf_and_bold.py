@@ -169,9 +169,13 @@ AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML a
     with open(tex_path, "w", encoding="utf-8") as f:
         f.write(fixed_code)
 
+    from services.session_store import _ensure_resume_cls
+    _ensure_resume_cls(output_dir)
+
     print("\n3️⃣  Compiling LaTeX PDF via Tectonic...")
     res = subprocess.run(
         ["tectonic", tex_path, "--outdir", output_dir],
+        cwd=output_dir,
         capture_output=True,
         text=True
     )

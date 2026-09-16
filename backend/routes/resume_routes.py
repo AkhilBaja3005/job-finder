@@ -190,6 +190,7 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
                 await asyncio.to_thread(
                     subprocess.run,
                     ["tectonic", path, "--outdir", user_out_dir],
+                    cwd=user_out_dir,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
                 )
         except Exception as baseline_err:
@@ -413,6 +414,8 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
                 "Access-Control-Expose-Headers": "X-Page-Count"
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
@@ -492,18 +495,24 @@ async def compile_master_pdf(request: OriginalOverleafRequest, authorization: Op
         with open(tex_path, "w", encoding="utf-8") as f:
             f.write(final_latex)
 
+        _ensure_resume_cls(user_out_dir)
+        _ensure_resume_cls(OUTPUT_DIR)
+
         comp_res = await asyncio.to_thread(
             subprocess.run,
             ["tectonic", tex_path, "--outdir", user_out_dir],
+            cwd=user_out_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
         )
         if comp_res.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"Tectonic compilation failed: {comp_res.stderr}")
+            raise HTTPException(status_code=400, detail=f"Tectonic compilation failed: {comp_res.stderr}")
 
         download_url = f"/download_application_pdf/{safe_name}/master_resume.pdf"
         return {"status": "success", "pdf_url": download_url, "latex": final_latex}
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
@@ -571,9 +580,13 @@ async def apply_suggestion(request: ApplySuggestionRequest, authorization: Optio
         with open(canonical_tex_path, "w", encoding="utf-8") as f:
             f.write(final_fixed_tex)
 
+        _ensure_resume_cls(user_out_dir)
+        _ensure_resume_cls(OUTPUT_DIR)
+
         await asyncio.to_thread(
             subprocess.run,
             ["tectonic", canonical_tex_path, "--outdir", user_out_dir],
+            cwd=user_out_dir,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
 
@@ -599,6 +612,8 @@ async def apply_suggestion(request: ApplySuggestionRequest, authorization: Optio
             "latex": canonical_tex,
             "after_pdf_url": after_pdf_url
         }
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to apply suggestion: {str(e)}")

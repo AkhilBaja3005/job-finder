@@ -288,8 +288,12 @@ def build_and_compile_tailored_pdf(
         f.write(final_latex)
 
     # Compile with Tectonic
+    from services.session_store import _ensure_resume_cls
+    _ensure_resume_cls(out_dir)
+
     proc = subprocess.run(
         ["tectonic", tex_path, "--outdir", out_dir],
+        cwd=out_dir,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True
