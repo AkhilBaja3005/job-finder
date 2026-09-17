@@ -51,7 +51,7 @@ const DiscoverMode = ({
       const res = await fetch(`${API_BASE}/api/slugs/harvest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: 'seeds', validate: true, limit: 50 })
+        body: JSON.stringify({ source: 'seeds', run_validation: true, limit: 100, background: true })
       });
       if (res.ok) {
         const data = await res.json();

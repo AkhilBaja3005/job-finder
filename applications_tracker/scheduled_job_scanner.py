@@ -742,7 +742,7 @@ async def run_pipeline(
     # Mode A: Direct application to single job URL passed via CLI
     if target_url:
         print(f"[2026-09-10] 🎯 Targeting single job URL: {target_url}")
-        await apply_to_job(
+        res = await apply_to_job(
             url=target_url,
             candidate=candidate,
             resume_path=master_resume_pdf,
@@ -754,6 +754,23 @@ async def run_pipeline(
             model_name=model_override,
             headless_override=headless
         )
+        cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
+        res_status = res.get("status") if isinstance(res, dict) else ""
+        final_res = str(res.get("final_result", "")) if isinstance(res, dict) else ""
+        if disable_guardrails and res_status == "success":
+            notify_user_of_applied_applications([{
+                "title": "Target Role",
+                "company": "Company",
+                "url": target_url,
+                "ats_score": 95
+            }], to_email=cand_email)
+        else:
+            notify_user_of_failed_applications([{
+                "title": "Target Role",
+                "company": "Company",
+                "url": target_url,
+                "reason": final_res or "Guardrails enabled / Unsubmitted preview"
+            }], to_email=cand_email)
         return
 
     # Mode B: Unified Multi-Source Discovery, Selective Tailoring & Application
@@ -1120,6 +1137,12 @@ async def run_pipeline(
                         })
                 else:
                     await update_application_status(url, "Ready to Apply (Reviewed)")
+                    failed_applications.append({
+                        "title": title,
+                        "company": company,
+                        "url": url,
+                        "reason": "Preview Mode (Guardrails Enabled) — Filled form & ready to submit"
+                    })
 
     print(f"\n[Scanner] ✅ Scan complete! Discovered & processed {new_jobs_added} new postings ({direct_applied_count} direct applied, {tailored_count} tailored).")
 
@@ -1129,7 +1152,7 @@ async def run_pipeline(
     if applied_applications:
         notify_user_of_applied_applications(applied_applications, to_email=cand_email)
 
-    # 2. Send summary email alert if any applications failed/need review
+    # 2. Send summary email alert if any applications failed/need review/previewed
     if failed_applications:
         notify_user_of_failed_applications(failed_applications, to_email=cand_email)
 
