@@ -1092,7 +1092,7 @@ async def find_matching_jobs(
     target_country = resolve_location_country(location)
     platform_label = "LinkedIn, Indeed, Reed, Greenhouse, Ashby & Lever"
 
-    # Concurrently scan configured target portals (Greenhouse, Ashby, Lever)
+    # Concurrently scan configured target portals (Greenhouse, Ashby, Lever) with strict 12s overall timeout
     portal_start_msg = "🌐 Scanning target ATS Portals (Greenhouse, Ashby & Lever)..."
     log_ist(portal_start_msg)
     yield json.dumps({"type": "log", "message": portal_start_msg}) + " " * 2048 + "\n"
@@ -1101,7 +1101,10 @@ async def find_matching_jobs(
         # pyrefly: ignore [missing-import]
         from services.portal_scanner import PortalScanner
         scanner = PortalScanner()
-        portal_results = await scanner.scan_all_portals(target_keywords=queries, timeframe=timeframe, location=location)
+        portal_results = await asyncio.wait_for(
+            scanner.scan_all_portals(target_keywords=queries, timeframe=timeframe, location=location),
+            timeout=12.0
+        )
         gh_cnt = sum(1 for pj in portal_results if pj.get("portal") == "greenhouse")
         ash_cnt = sum(1 for pj in portal_results if pj.get("portal") == "ashby")
         lev_cnt = sum(1 for pj in portal_results if pj.get("portal") == "lever")
@@ -1123,6 +1126,10 @@ async def find_matching_jobs(
         portal_done_msg = f"✓ Found {gh_cnt} Greenhouse, {ash_cnt} Ashby, {lev_cnt} Lever, {bam_cnt} BambooHR & {wd_cnt} Workday direct portal postings ({len(portal_jobs_raw)} total)"
         log_ist(portal_done_msg)
         yield json.dumps({"type": "log", "message": portal_done_msg}) + " " * 2048 + "\n"
+    except asyncio.TimeoutError:
+        warn_msg = "[find_matching_jobs] ⚠️ Direct ATS portal scan timed out after 12s, proceeding with live listings."
+        log_ist(warn_msg)
+        print(warn_msg)
     except Exception as pe:
         err_msg = f"[find_matching_jobs] PortalScanner error: {pe}"
         log_ist(err_msg)
@@ -1152,23 +1159,26 @@ async def find_matching_jobs(
 
         excluded_clean = [p.strip().lower() for p in (exclude_portals or [])]
 
-        li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=18) if not any(x in "linkedin" for x in excluded_clean) else asyncio.sleep(0, result=[])
-        reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=14) if not any(x in "reed" or x in "reed.co.uk" for x in excluded_clean) else asyncio.sleep(0, result=[])
-        targetjobs_task = _safe_run(search_targetjobs_uk, q, location, timeframe, timeout=15) if not any(x in "targetjobs" or x in "targetjobs.co.uk" for x in excluded_clean) else asyncio.sleep(0, result=[])
-        ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=22) if not any(x in "indeed" for x in excluded_clean) else asyncio.sleep(0, result=[])
+        li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=8) if not any(x in "linkedin" for x in excluded_clean) else asyncio.sleep(0, result=[])
+        reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=6) if not any(x in "reed" or x in "reed.co.uk" for x in excluded_clean) else asyncio.sleep(0, result=[])
+        targetjobs_task = _safe_run(search_targetjobs_uk, q, location, timeframe, timeout=6) if not any(x in "targetjobs" or x in "targetjobs.co.uk" for x in excluded_clean) else asyncio.sleep(0, result=[])
+        ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=8) if not any(x in "indeed" for x in excluded_clean) else asyncio.sleep(0, result=[])
+        ats_task = _safe_run(search_direct_ats_jobs, q, location, timeframe, timeout=8) if not any(x in "ats" for x in excluded_clean) else asyncio.sleep(0, result=[])
 
-        li_j, reed_j, tj_j, ind_j = await asyncio.gather(li_task, reed_task, targetjobs_task, ind_task)
-        return q, li_j, reed_j, tj_j, ind_j
+        li_j, reed_j, tj_j, ind_j, ats_j = await asyncio.gather(li_task, reed_task, targetjobs_task, ind_task, ats_task)
+        return q, li_j, reed_j, tj_j, ind_j, ats_j
 
     query_tasks = [asyncio.create_task(_fetch_query_cluster(q)) for q in queries]
     for completed_task in asyncio.as_completed(query_tasks):
-        q, li_jobs, reed_jobs, tj_jobs, ind_jobs = await completed_task
+        q, li_jobs, reed_jobs, tj_jobs, ind_jobs, ats_jobs = await completed_task
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(tj_jobs)
         raw_jobs.extend(ind_jobs)
+        raw_jobs.extend(ats_jobs)
         indeed_jobs_for_est.extend(ind_jobs)
-        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed, {len(reed_jobs)} Reed.co.uk & {len(tj_jobs)} TargetJobs postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{q}'"
+        ats_cnt_str = f", {len(ats_jobs)} Direct ATS" if ats_jobs else ""
+        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed, {len(reed_jobs)} Reed.co.uk{ats_cnt_str} & {len(tj_jobs)} TargetJobs postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed{ats_cnt_str} postings for '{q}'"
         log_ist(res_msg)
         yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 
@@ -1256,20 +1266,12 @@ async def find_matching_jobs(
 
             async def _inner_score():
                 if browser is not None:
-                    return await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
-                else:
                     try:
-                        # pyrefly: ignore [missing-import]
-                        from playwright.async_api import async_playwright
-                        async with async_playwright() as p:
-                            b = await p.chromium.launch(headless=True)
-                            try:
-                                return await _score_job_with_real_jd(job, resume_data, b, semaphore, on_log=_ui_logger)
-                            finally:
-                                await b.close()
-                    except Exception as b_err:
-                        print(f"[Job Searcher] Headless browser unavailable for '{job.title}': {b_err}")
-                        return await _score_job_with_real_jd(job, resume_data, None, semaphore, on_log=_ui_logger)
+                        return await _score_job_with_real_jd(job, resume_data, browser, semaphore, on_log=_ui_logger)
+                    except Exception:
+                        pass
+                # Fast HTTP fallback without spinning up heavy Playwright instances
+                return await _score_job_with_real_jd(job, resume_data, None, semaphore, on_log=_ui_logger)
 
             try:
                 return await asyncio.wait_for(_inner_score(), timeout=25.0)
@@ -1284,8 +1286,12 @@ async def find_matching_jobs(
         tasks = [asyncio.create_task(_score_and_stream(job, log_queue_stream)) for job in web_scored_batch]
         for completed_task in asyncio.as_completed(tasks):
             r = await completed_task
-            while log_queue_stream:
-                yield log_queue_stream.pop(0)
+            if log_queue_stream:
+                while log_queue_stream:
+                    yield log_queue_stream.pop(0)
+            else:
+                # Guaranteed heartbeat ping payload (forces proxy buffer flush)
+                yield "{\"type\":\"ping\"}" + " " * 2048 + "\n"
             if r is not None:
                 log_msg = f"✓ Scored match: {r['title']} @ {r['company']} ({r['score']}% Match)"
                 yield json.dumps({"type": "log", "message": log_msg}) + " " * 2048 + "\n"

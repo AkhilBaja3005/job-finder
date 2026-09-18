@@ -6,9 +6,9 @@ import asyncio
 import threading
 import traceback
 from typing import Optional, List, Dict
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse, FileResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import zipfile
 import io
 
@@ -308,10 +308,10 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                     await q.put(None)
 
             async def _keepalive():
-                # Emit immediate ping on connection start
+                # Emit immediate ping on connection start & heartbeat every 3 seconds
                 await q.put("{\"type\":\"ping\"}" + " " * 2048 + "\n")
                 while not search_done:
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(3)
                     if not search_done:
                         await q.put("{\"type\":\"ping\"}" + " " * 2048 + "\n")
 
@@ -617,9 +617,10 @@ async def find_recruiter_endpoint(
 class HarvestSlugsRequest(BaseModel):
     source: Optional[str] = "seeds"
     run_validation: Optional[bool] = True
-    validate: Optional[bool] = None  # Backward compatibility alias
+    legacy_validate: Optional[bool] = Field(default=None, alias="validate")
     ats: Optional[str] = None
     limit: Optional[int] = 100
+    background: Optional[bool] = False
 
 
 @router.get("/api/slugs/stats")
@@ -655,8 +656,20 @@ async def get_slug_stats():
     }
 
 
+async def _run_async_harvest_and_validate(sources: List[str], should_val: bool, ats_filter: Optional[str], limit: Optional[int]):
+    try:
+        from services.company_slug_harvester import harvest_all_company_slugs
+        from services.company_slug_registry import validate_all_unverified_slugs
+    except ImportError:
+        from backend.services.company_slug_harvester import harvest_all_company_slugs
+        from backend.services.company_slug_registry import validate_all_unverified_slugs
+    await harvest_all_company_slugs(sources=sources)
+    if should_val:
+        await validate_all_unverified_slugs(ats_filter=ats_filter, limit=limit or 100)
+
+
 @router.post("/api/slugs/harvest")
-async def harvest_slugs_endpoint(req: HarvestSlugsRequest):
+async def harvest_slugs_endpoint(req: HarvestSlugsRequest, background_tasks: BackgroundTasks):
     """Triggers asynchronous company board slug harvesting & live validation from seeds/YC/CDX."""
     try:
         from services.company_slug_harvester import harvest_all_company_slugs
@@ -666,10 +679,21 @@ async def harvest_slugs_endpoint(req: HarvestSlugsRequest):
         from backend.services.company_slug_registry import validate_all_unverified_slugs, get_active_slugs
 
     sources = [s.strip().lower() for s in (req.source or "seeds").split(",")]
+    should_val = req.run_validation if req.legacy_validate is None else req.legacy_validate
+
+    if req.background:
+        background_tasks.add_task(_run_async_harvest_and_validate, sources, bool(should_val), req.ats, req.limit)
+        active_map = get_active_slugs(ats=req.ats)
+        return {
+            "status": "queued",
+            "message": "Harvesting and validation task dispatched in background.",
+            "total_active": sum(len(slugs) for slugs in active_map.values()),
+            "by_platform": {ats: len(slugs) for ats, slugs in active_map.items()}
+        }
+
     harvested = await harvest_all_company_slugs(sources=sources)
 
     val_res = {"verified": 0, "active": 0}
-    should_val = req.run_validation if req.validate is None else req.validate
     if should_val:
         val_res = await validate_all_unverified_slugs(ats_filter=req.ats, limit=req.limit or 100)
 

@@ -45,7 +45,7 @@ class PortalScanner:
 
         portals: Dict[str, Any] = loaded.get("portals", base_portals)
 
-        # Merge verified active slugs from SQLite company slug registry
+        # Merge verified active slugs from SQLite company slug registry (capped to top 50 active per ATS to prevent network hanging)
         try:
             try:
                 from services.company_slug_registry import get_active_slugs
@@ -57,7 +57,8 @@ class PortalScanner:
                 if ats_name not in portals:
                     portals[ats_name] = []
                 existing_slugs = {p.get("company_slug") for p in portals[ats_name]}
-                for s in slug_list:
+                # Cap dynamic slugs to 50 active companies per portal to ensure fast execution
+                for s in slug_list[:50]:
                     if s and s not in existing_slugs:
                         portals[ats_name].append({"company_slug": s, "name": s.capitalize()})
         except Exception:
@@ -104,7 +105,7 @@ class PortalScanner:
         url = f"https://boards-api.greenhouse.io/v1/boards/{company_slug}/jobs?content=true"
         jobs = []
         try:
-            res = await client.get(url, timeout=5.0)
+            res = await client.get(url, timeout=3.0)
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("jobs", [])
@@ -130,7 +131,7 @@ class PortalScanner:
         url = f"https://api.ashbyhq.com/posting-api/job-board/{company_slug}"
         jobs = []
         try:
-            res = await client.get(url, timeout=5.0)
+            res = await client.get(url, timeout=3.0)
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("jobs", [])
@@ -156,7 +157,7 @@ class PortalScanner:
         url = f"https://api.lever.co/v0/postings/{company_slug}?mode=json"
         jobs = []
         try:
-            res = await client.get(url, timeout=5.0)
+            res = await client.get(url, timeout=3.0)
             if res.status_code == 200:
                 raw_jobs = res.json()
                 for rj in raw_jobs:
@@ -181,7 +182,7 @@ class PortalScanner:
         url = f"https://{company_slug}.bamboohr.com/careers/list"
         jobs = []
         try:
-            res = await client.get(url, timeout=5.0)
+            res = await client.get(url, timeout=3.0)
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("result", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
@@ -214,7 +215,7 @@ class PortalScanner:
         jobs = []
         try:
             headers = {"Content-Type": "application/json", "Accept": "application/json"}
-            res = await client.post(url, json={"limit": 20, "offset": 0, "searchText": ""}, headers=headers, timeout=5.0)
+            res = await client.post(url, json={"limit": 20, "offset": 0, "searchText": ""}, headers=headers, timeout=3.0)
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("jobPostings", [])

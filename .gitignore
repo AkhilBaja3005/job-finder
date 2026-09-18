@@ -31,3 +31,8 @@ backend/static_frontend/assets/index-DcforfPb.css
 *.db
 applications_tracker/company_slugs.db
 
+*.log
+*.json
+/.agents
+/brag-output
+brag-plan.md

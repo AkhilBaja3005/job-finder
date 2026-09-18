@@ -125,7 +125,7 @@ def main():
         help="Run the automated job discovery, filtering, and resume tailoring pipeline",
     )
     scanner_parser.add_argument("url", nargs="?", default=None, help="Target specific job URL to process directly (optional)")
-    scanner_parser.add_argument("--auto-apply", action="store_true", help="Enable automatic browser form submission")
+    scanner_parser.add_argument("--auto-apply", "--auto-submit", dest="auto_apply", action="store_true", help="Enable automatic browser form submission")
     scanner_parser.add_argument("--timeout", type=float, default=300.0, help="Autofill session timeout in seconds (default: 300s)")
     scanner_parser.add_argument("--tailor-timeout", type=float, default=90.0, help="Resume tailoring timeout in seconds (default: 90s)")
     scanner_parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps per application (default: 50)")
