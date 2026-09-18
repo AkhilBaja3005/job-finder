@@ -1163,19 +1163,22 @@ async def find_matching_jobs(
         reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=6) if not any(x in "reed" or x in "reed.co.uk" for x in excluded_clean) else asyncio.sleep(0, result=[])
         targetjobs_task = _safe_run(search_targetjobs_uk, q, location, timeframe, timeout=6) if not any(x in "targetjobs" or x in "targetjobs.co.uk" for x in excluded_clean) else asyncio.sleep(0, result=[])
         ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=8) if not any(x in "indeed" for x in excluded_clean) else asyncio.sleep(0, result=[])
+        ats_task = _safe_run(search_direct_ats_jobs, q, location, timeframe, timeout=8) if not any(x in "ats" for x in excluded_clean) else asyncio.sleep(0, result=[])
 
-        li_j, reed_j, tj_j, ind_j = await asyncio.gather(li_task, reed_task, targetjobs_task, ind_task)
-        return q, li_j, reed_j, tj_j, ind_j
+        li_j, reed_j, tj_j, ind_j, ats_j = await asyncio.gather(li_task, reed_task, targetjobs_task, ind_task, ats_task)
+        return q, li_j, reed_j, tj_j, ind_j, ats_j
 
     query_tasks = [asyncio.create_task(_fetch_query_cluster(q)) for q in queries]
     for completed_task in asyncio.as_completed(query_tasks):
-        q, li_jobs, reed_jobs, tj_jobs, ind_jobs = await completed_task
+        q, li_jobs, reed_jobs, tj_jobs, ind_jobs, ats_jobs = await completed_task
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
         raw_jobs.extend(tj_jobs)
         raw_jobs.extend(ind_jobs)
+        raw_jobs.extend(ats_jobs)
         indeed_jobs_for_est.extend(ind_jobs)
-        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed, {len(reed_jobs)} Reed.co.uk & {len(tj_jobs)} TargetJobs postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn & {len(ind_jobs)} Indeed postings for '{q}'"
+        ats_cnt_str = f", {len(ats_jobs)} Direct ATS" if ats_jobs else ""
+        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed, {len(reed_jobs)} Reed.co.uk{ats_cnt_str} & {len(tj_jobs)} TargetJobs postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed{ats_cnt_str} postings for '{q}'"
         log_ist(res_msg)
         yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 
