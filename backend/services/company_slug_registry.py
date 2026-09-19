@@ -57,15 +57,21 @@ VALIDATION_ENDPOINTS = {
 
 
 def get_db_path() -> str:
-    ws = resolve_workspace_root()
-    db_dir = os.path.join(ws, "applications_tracker")
+    # If explicit /data persistent volume is mounted and writable, prefer it
+    if os.path.exists("/data") and os.access("/data", os.W_OK):
+        db_dir = "/data"
+    else:
+        ws = resolve_workspace_root()
+        db_dir = os.path.join(ws, "applications_tracker")
     os.makedirs(db_dir, exist_ok=True)
     return os.path.join(db_dir, "company_slugs.db")
 
 
 def init_db(db_path: Optional[str] = None, seed_defaults: bool = True) -> None:
     path = db_path or get_db_path()
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     cur = conn.cursor()
     cur.execute("""
         CREATE TABLE IF NOT EXISTS company_slugs (
