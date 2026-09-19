@@ -1103,7 +1103,7 @@ async def find_matching_jobs(
         scanner = PortalScanner()
         portal_results = await asyncio.wait_for(
             scanner.scan_all_portals(target_keywords=queries, timeframe=timeframe, location=location),
-            timeout=12.0
+            timeout=20.0
         )
         gh_cnt = sum(1 for pj in portal_results if pj.get("portal") == "greenhouse")
         ash_cnt = sum(1 for pj in portal_results if pj.get("portal") == "ashby")

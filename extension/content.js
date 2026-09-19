@@ -869,9 +869,52 @@
           val = email;
           isProfileField = true;
         }
-        // Phone
+        // Phone & Country Code Selection
         else if (/phone|mobile|cell|tel|phonenumber|contact\s*number/i.test(key) || type === "tel") {
-          val = phone;
+          const rawPhone = String(phone || "");
+          const phoneDigits = rawPhone.replace(/[^\d+]/g, "");
+          const locLower = (location || "").toLowerCase();
+
+          let targetCountry = "India";
+          let targetDial = "+91";
+          let cleanLocal = phoneDigits.replace("+91", "").replace("+44", "").replace("+1", "").trim();
+
+          if (phoneDigits.includes("+91") || (phoneDigits.startsWith("91") && phoneDigits.length >= 12) || locLower.includes("india")) {
+            targetCountry = "India";
+            targetDial = "+91";
+            cleanLocal = phoneDigits.replace("+91", "").trim();
+            if (cleanLocal.startsWith("91") && cleanLocal.length === 12) cleanLocal = cleanLocal.slice(2);
+          } else if (phoneDigits.includes("+44") || (phoneDigits.startsWith("44") && phoneDigits.length >= 11) || locLower.includes("uk") || locLower.includes("united kingdom") || locLower.includes("london")) {
+            targetCountry = "United Kingdom";
+            targetDial = "+44";
+            cleanLocal = phoneDigits.replace("+44", "").trim();
+            if (cleanLocal.startsWith("44") && cleanLocal.length === 12) cleanLocal = cleanLocal.slice(2);
+          } else if (phoneDigits.includes("+1") || locLower.includes("us") || locLower.includes("united states")) {
+            targetCountry = "United States";
+            targetDial = "+1";
+            cleanLocal = phoneDigits.replace("+1", "").trim();
+          }
+
+          // Inspect container or preceding elements for country code <select> dropdown
+          const countryContainer = el.closest(".fb-single-line-text, .jobs-easy-apply-form-element, [class*='phone'], fieldset, div") || el.parentElement;
+          if (countryContainer) {
+            const countrySelect = countryContainer.querySelector("select");
+            if (countrySelect && !countrySelect.getAttribute("data-jf-filled")) {
+              const opts = Array.from(countrySelect.options);
+              const targetOpt = opts.find((opt) => {
+                const txt = (opt.text || "").toLowerCase();
+                const val = (opt.value || "").toLowerCase();
+                return txt.includes(targetCountry.toLowerCase()) || txt.includes(targetDial) || val.includes(targetDial) || val.includes(targetCountry.toLowerCase());
+              });
+              if (targetOpt) {
+                countrySelect.value = targetOpt.value;
+                countrySelect.dispatchEvent(new Event("change", { bubbles: true }));
+                countrySelect.setAttribute("data-jf-filled", "true");
+              }
+            }
+          }
+
+          val = cleanLocal || phone;
           isProfileField = true;
         }
         // LinkedIn

@@ -199,8 +199,31 @@ def build_application_task_prompt(
 
     # Phone parsing for easy international code selection
     phone_digits = "".join(c for c in phone if c.isdigit() or c == '+')
-    country_code_hint = "India (+91)" if "+91" in phone_digits or "91" in phone_digits[:4] else "United Kingdom (+44)"
-    clean_mobile = phone_digits.replace("+91", "").replace("+44", "").strip()
+    loc_lower = (location or "").lower()
+    if "+91" in phone_digits or (phone_digits.startswith("91") and len(phone_digits) >= 12) or "india" in loc_lower:
+        target_country = "India"
+        target_dial = "+91"
+        country_code_hint = "India (+91)"
+        clean_mobile = phone_digits.replace("+91", "").strip()
+        if clean_mobile.startswith("91") and len(clean_mobile) == 12:
+            clean_mobile = clean_mobile[2:]
+    elif "+44" in phone_digits or (phone_digits.startswith("44") and len(phone_digits) >= 11) or "uk" in loc_lower or "united kingdom" in loc_lower or "london" in loc_lower:
+        target_country = "United Kingdom"
+        target_dial = "+44"
+        country_code_hint = "United Kingdom (+44)"
+        clean_mobile = phone_digits.replace("+44", "").strip()
+        if clean_mobile.startswith("44") and len(clean_mobile) == 12:
+            clean_mobile = clean_mobile[2:]
+    elif "+1" in phone_digits or "us" in loc_lower or "united states" in loc_lower:
+        target_country = "United States"
+        target_dial = "+1"
+        country_code_hint = "United States (+1)"
+        clean_mobile = phone_digits.replace("+1", "").strip()
+    else:
+        target_country = "India" if "+91" in phone_digits else "United Kingdom"
+        target_dial = "+91" if target_country == "India" else "+44"
+        country_code_hint = f"{target_country} ({target_dial})"
+        clean_mobile = phone_digits.replace(target_dial, "").strip()
 
     portals_password = (
         resume_data.get("portals_password")
@@ -285,7 +308,11 @@ def build_application_task_prompt(
         - Always read/inspect the available `<option>` choices on the dropdown first before selecting.
         - Match against the actual options available in the DOM (e.g. for phone country code, check if options use '+91', 'India', 'India (+91)', or 'IN (+91)', then pick the exact matching option string).
         - Never click raw `<select>` elements directly without an option target. Always use `select_dropdown` with the exact option text found in the dropdown.
-    - NEW TAB HANDLING: If clicking 'Apply' or a link opens an external ATS site (Ashby, Greenhouse, Lever, Workday) in a new tab, ALWAYS stay in that new tab and fill the form there. NEVER switch back to the referrer/LinkedIn tab.
+    - NEW TAB & SEPARATE TAB NAVIGATION HANDLING:
+      * When navigating to an external job posting URL or clicking an 'Apply' / external ATS link (Ashby, Greenhouse, Lever, Workday):
+        1. Open the application link using `open_tab` or in a new browser tab so the original companies/directory page stays open in the initial tab!
+        2. Once on the application form page, complete all candidate fields, attach the resume, and report the application status.
+        3. Do NOT close or overwrite the original companies directory tab.
 
     Execution Instructions:
     1. Early Check for Already Applied or Closed Job:
@@ -297,11 +324,13 @@ def build_application_task_prompt(
          * If a pre-filled field is for an unknown or custom question where we have no candidate profile value, leave it as-is.
        - Phone Country Code & Number:
          * Check and ensure the phone number matches '{clean_mobile or phone}' (clear and replace any outdated phone number).
-         * INTERNATIONAL PHONE COUNTRY CODE WIDGET RULE:
-           - Many ATS portals (Greenhouse, Lever, Workday, SmartRecruiters) use a separate phone country selector (e.g. `.iti__selected-country`, `button[aria-label*="Country code"]`, `div[class*="country-select"]`, or a flag/dial-code dropdown beside the phone field).
-           - ALWAYS inspect if a country code selector/flag is present beside the phone input.
-           - If present, click the country code selector, search/type 'United Kingdom' or 'India' (or '+44' / '+91'), and CLICK the matching country item from the dropdown list to ensure the country code is bound!
-           - After binding the country code, type '{clean_mobile or phone}' into the main phone input field.
+         * INTERNATIONAL & LINKEDIN EASY APPLY PHONE COUNTRY CODE WIDGET RULE:
+           - Many ATS portals (LinkedIn Easy Apply, Greenhouse, Lever, Workday, SmartRecruiters) use a country selector dropdown (e.g. `select[id*="phone"]`, `select[name*="country"]`, `.fb-text-selectable__option`, `.iti__selected-country`, `button[aria-label*="Country code"]`, or a flag/dial-code dropdown beside the phone field).
+           - LINKEDIN EASY APPLY MANDATORY ACTION: On LinkedIn Easy Apply form steps, inspect the phone country code selector/dropdown before typing the phone number.
+           - DO NOT leave default '+376' or 'Andorra'! You MUST explicitly select option matching '{country_code_hint}' (e.g. '{target_country}' or '{target_dial}').
+           - If a `<select>` dropdown exists for phone country code, call `select_dropdown` with option '{country_code_hint}' or '{target_country} ({target_dial})'.
+           - If a custom button or popup list is present, click the country selector button, type '{target_country}' or '{target_dial}', and CLICK the matching country item from the dropdown list to ensure the country code is bound!
+           - After setting/binding the country code, type '{clean_mobile or phone}' into the main phone input field.
        - For Dropdowns & Autocomplete Fields:
          * Country / Location (Autocomplete / Select):
            - DYNAMIC LOCATION DROPDOWN RULE:
