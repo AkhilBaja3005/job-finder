@@ -308,7 +308,11 @@ def build_application_task_prompt(
         - Always read/inspect the available `<option>` choices on the dropdown first before selecting.
         - Match against the actual options available in the DOM (e.g. for phone country code, check if options use '+91', 'India', 'India (+91)', or 'IN (+91)', then pick the exact matching option string).
         - Never click raw `<select>` elements directly without an option target. Always use `select_dropdown` with the exact option text found in the dropdown.
-    - NEW TAB HANDLING: If clicking 'Apply' or a link opens an external ATS site (Ashby, Greenhouse, Lever, Workday) in a new tab, ALWAYS stay in that new tab and fill the form there. NEVER switch back to the referrer/LinkedIn tab.
+    - NEW TAB & SEPARATE TAB NAVIGATION HANDLING:
+      * When navigating to an external job posting URL or clicking an 'Apply' / external ATS link (Ashby, Greenhouse, Lever, Workday):
+        1. Open the application link using `open_tab` or in a new browser tab so the original companies/directory page stays open in the initial tab!
+        2. Once on the application form page, complete all candidate fields, attach the resume, and report the application status.
+        3. Do NOT close or overwrite the original companies directory tab.
 
     Execution Instructions:
     1. Early Check for Already Applied or Closed Job:
