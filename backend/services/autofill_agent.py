@@ -141,9 +141,18 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                         session_filled_questions.add(question_text)
                         continue
 
-            # 4. Resolve candidate profile value for known contact/profile fields
+            # 4. Resolve candidate profile value using Laya Decision Router
             candidate_value = None
-            if "first name" in field_key or "firstname" in field_key:
+            try:
+                from services.laya_router import get_laya_router
+            except ImportError:
+                from backend.services.laya_router import get_laya_router
+
+            laya_router = get_laya_router()
+            route_type, reflex_val = laya_router.route_decision(question_text or field_key, resume_data)
+            if route_type == "reflex" and reflex_val is not None:
+                candidate_value = reflex_val
+            elif "first name" in field_key or "firstname" in field_key:
                 name = resume_data.get("name", "")
                 if name:
                     candidate_value = name.split()[0]
@@ -154,8 +163,20 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                     candidate_value = names[-1] if len(names) > 0 else ""
             elif "email" in field_key:
                 candidate_value = resume_data.get("email") or ""
-            elif "phone" in field_key or "mobile" in field_key:
-                candidate_value = resume_data.get("phone") or ""
+            elif "country code" in field_key or "dial code" in field_key or "phone code" in field_key or "dialing code" in field_key:
+                phone_raw = resume_data.get("phone") or ""
+                if "+91" in phone_raw or (phone_raw.startswith("91") and len(phone_raw) >= 12):
+                    candidate_value = "+91"
+                elif "+44" in phone_raw or (phone_raw.startswith("44") and len(phone_raw) >= 11):
+                    candidate_value = "+44"
+                elif "+1" in phone_raw:
+                    candidate_value = "+1"
+                else:
+                    candidate_value = "+44" if "uk" in (resume_data.get("location") or "").lower() else "+91"
+            elif "phone" in field_key or "mobile" in field_key or "telephone" in field_key:
+                phone_raw = resume_data.get("phone") or ""
+                # If there's an explicit country code select nearby, we might only need clean local digits
+                candidate_value = phone_raw
             elif "linkedin" in field_key and len(resume_data.get("links", [])) > 0:
                 candidate_value = next((link for link in resume_data["links"] if "linkedin" in link), "")
             elif "github" in field_key and len(resume_data.get("links", [])) > 0:
@@ -165,8 +186,45 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
             if candidate_value is not None and str(candidate_value).strip() != "":
                 if is_prefilled:
                     print(f"[autofill] 🔄 Replacing outdated pre-filled value for '{question_text}' with candidate profile data: '{candidate_value}'")
-                # Clear and overwrite with authoritative candidate profile data
-                await inp.fill(str(candidate_value).strip())
+                
+                # Check if it is a SELECT element
+                if await inp.evaluate("el => el.tagName") == "SELECT":
+                    options = await inp.query_selector_all("option")
+                    matched = False
+                    for opt in options:
+                        val = await opt.get_attribute("value") or ""
+                        text = await opt.inner_text() or ""
+                        cand_str = str(candidate_value).lower().strip()
+                        if cand_str in val.lower() or cand_str in text.lower() or cand_str.lstrip("+") in val.lower() or cand_str.lstrip("+") in text.lower():
+                            await inp.select_option(value=val)
+                            matched = True
+                            break
+                    if not matched:
+                        await inp.select_option(value=str(candidate_value))
+                else:
+                    # Clear and overwrite with authoritative candidate profile data
+                    await inp.fill(str(candidate_value).strip())
+                    # Check if element is a prompt button/combobox/search field (e.g. Workday prompt button with triple-bar)
+                    is_prompt_or_combobox = await inp.evaluate("""el => {
+                        const ariaHasPopup = el.getAttribute('aria-haspopup');
+                        const role = el.getAttribute('role');
+                        const autoId = el.getAttribute('data-automation-id') || '';
+                        const parent = el.closest('div');
+                        const hasPromptBtn = parent && parent.querySelector('[data-automation-id*="prompt"], [aria-label*="prompt" i], button[aria-haspopup="listbox"]');
+                        return role === 'combobox' || ariaHasPopup === 'listbox' || ariaHasPopup === 'true' || Boolean(hasPromptBtn) || autoId.includes('prompt');
+                    }""")
+                    if is_prompt_or_combobox:
+                        # Press Enter to trigger search/filter in Workday prompt menu
+                        try:
+                            await inp.press("Enter")
+                            await asyncio.sleep(0.5)
+                            # If a filtered listbox item appears matching the answer, click it
+                            if hasattr(page, "query_selector"):
+                                matched_item = await page.query_selector(f"[role='option']:has-text('{candidate_value}'), [data-automation-id*='promptOption']:has-text('{candidate_value}')")
+                                if matched_item and await matched_item.is_visible():
+                                    await matched_item.click()
+                        except Exception:
+                            pass
                 session_filled_questions.add(question_text)
                 await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
                 continue
