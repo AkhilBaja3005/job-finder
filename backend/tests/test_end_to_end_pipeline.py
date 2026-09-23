@@ -166,7 +166,7 @@ class TestEndToEndJobFinderPipeline(unittest.TestCase):
 
             final_url, is_active, reason = preflight_check_job_url("https://jobs.ashbyhq.com/closed/123")
             self.assertFalse(is_active)
-            self.assertIn("no longer available", reason)
+            self.assertIn("no longer available", reason or "")
 
     # ──────────────────────────────────────────────────────────────────────────
     # 4. Multi-Tier Autofill End-to-End Orchestration Tests
