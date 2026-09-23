@@ -75,8 +75,8 @@ def get_output_dir() -> str:
 DEFAULT_FAST_LITE_MODELS: List[str] = [
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
-    "gemini-2.5-flash-lite",
     "gemini-3.5-flash",
+    "gemini-3.0-flash",
 ]
 
 DEFAULT_STRONG_MODELS: List[str] = [

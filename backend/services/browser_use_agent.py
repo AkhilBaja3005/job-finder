@@ -139,8 +139,8 @@ def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[
             except Exception:
                 pass
 
-    # 2. Add alternate Flash models (e.g. gemini-3.1-flash-lite, gemini-3.5-flash) across keys to hedge against per-model quotas
-    alt_models = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-2.5-flash-lite"]
+    # 2. Add alternate Flash models (e.g. gemini-3.1-flash-lite, gemini-3.5-flash, gemini-3.0-flash) across keys to hedge against per-model quotas
+    alt_models = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.0-flash"]
     for alt_m in alt_models:
         if alt_m != target_model:
             for key in all_keys[:3]:
@@ -197,33 +197,78 @@ def build_application_task_prompt(
     today_uk = datetime.date.today().strftime("%d/%m/%Y")
     today_us = datetime.date.today().strftime("%m/%d/%Y")
 
-    # Phone parsing for easy international code selection
-    phone_digits = "".join(c for c in phone if c.isdigit() or c == '+')
+    # Robust international phone and country code parsing
+    phone_clean = phone.strip()
+    phone_digits = "".join(c for c in phone_clean if c.isdigit() or c == '+')
     loc_lower = (location or "").lower()
-    if "+91" in phone_digits or (phone_digits.startswith("91") and len(phone_digits) >= 12) or "india" in loc_lower:
+
+    if phone_digits.startswith("+91") or phone_digits.startswith("0091") or (phone_digits.startswith("91") and len(phone_digits) == 12):
         target_country = "India"
         target_dial = "+91"
         country_code_hint = "India (+91)"
-        clean_mobile = phone_digits.replace("+91", "").strip()
+        dial_code_only = "91"
+        iso2_code = "IN"
+        clean_mobile = phone_digits.replace("+91", "").replace("0091", "").strip()
         if clean_mobile.startswith("91") and len(clean_mobile) == 12:
             clean_mobile = clean_mobile[2:]
-    elif "+44" in phone_digits or (phone_digits.startswith("44") and len(phone_digits) >= 11) or "uk" in loc_lower or "united kingdom" in loc_lower or "london" in loc_lower:
+    elif phone_digits.startswith("+44") or phone_digits.startswith("0044") or (phone_digits.startswith("44") and len(phone_digits) in (11, 12, 13)):
         target_country = "United Kingdom"
         target_dial = "+44"
         country_code_hint = "United Kingdom (+44)"
-        clean_mobile = phone_digits.replace("+44", "").strip()
-        if clean_mobile.startswith("44") and len(clean_mobile) == 12:
+        dial_code_only = "44"
+        iso2_code = "GB"
+        clean_mobile = phone_digits.replace("+44", "").replace("0044", "").strip()
+        if clean_mobile.startswith("44") and len(clean_mobile) in (12, 13):
             clean_mobile = clean_mobile[2:]
-    elif "+1" in phone_digits or "us" in loc_lower or "united states" in loc_lower:
+        if clean_mobile.startswith("0") and len(clean_mobile) == 11:
+            clean_mobile = clean_mobile[1:]
+    elif phone_digits.startswith("+1") or phone_digits.startswith("001") or (phone_digits.startswith("1") and len(phone_digits) == 11):
         target_country = "United States"
         target_dial = "+1"
         country_code_hint = "United States (+1)"
-        clean_mobile = phone_digits.replace("+1", "").strip()
+        dial_code_only = "1"
+        iso2_code = "US"
+        clean_mobile = phone_digits.replace("+1", "").replace("001", "").strip()
+        if clean_mobile.startswith("1") and len(clean_mobile) == 11:
+            clean_mobile = clean_mobile[1:]
+    elif "uk" in loc_lower or "united kingdom" in loc_lower or "london" in loc_lower:
+        target_country = "United Kingdom"
+        target_dial = "+44"
+        country_code_hint = "United Kingdom (+44)"
+        dial_code_only = "44"
+        iso2_code = "GB"
+        clean_mobile = phone_digits.lstrip("+").strip()
+        if clean_mobile.startswith("44"):
+            clean_mobile = clean_mobile[2:]
+        if clean_mobile.startswith("0") and len(clean_mobile) == 11:
+            clean_mobile = clean_mobile[1:]
+    elif "india" in loc_lower or "hyderabad" in loc_lower or "bangalore" in loc_lower or "bengaluru" in loc_lower or "delhi" in loc_lower:
+        target_country = "India"
+        target_dial = "+91"
+        country_code_hint = "India (+91)"
+        dial_code_only = "91"
+        iso2_code = "IN"
+        clean_mobile = phone_digits.lstrip("+").strip()
+        if clean_mobile.startswith("91") and len(clean_mobile) == 12:
+            clean_mobile = clean_mobile[2:]
+    elif "us" in loc_lower or "united states" in loc_lower or "usa" in loc_lower:
+        target_country = "United States"
+        target_dial = "+1"
+        country_code_hint = "United States (+1)"
+        dial_code_only = "1"
+        iso2_code = "US"
+        clean_mobile = phone_digits.lstrip("+").strip()
+        if clean_mobile.startswith("1") and len(clean_mobile) == 11:
+            clean_mobile = clean_mobile[1:]
     else:
-        target_country = "India" if "+91" in phone_digits else "United Kingdom"
-        target_dial = "+91" if target_country == "India" else "+44"
+        target_country = "United Kingdom" if "uk" in loc_lower else "India"
+        target_dial = "+44" if target_country == "United Kingdom" else "+91"
         country_code_hint = f"{target_country} ({target_dial})"
-        clean_mobile = phone_digits.replace(target_dial, "").strip()
+        dial_code_only = "44" if target_country == "United Kingdom" else "91"
+        iso2_code = "GB" if target_country == "United Kingdom" else "IN"
+        clean_mobile = phone_digits.replace(target_dial, "").lstrip("+").strip()
+
+    full_international_phone = f"{target_dial}{clean_mobile}"
 
     portals_password = (
         resume_data.get("portals_password")
@@ -284,11 +329,15 @@ def build_application_task_prompt(
 
     task += f"""
     CRITICAL SPEED & EFFICIENCY RULES:
-    - PREVENT REPEATING SIGN-IN LOOPS:
-      * If you enter sign-in credentials and click 'Sign In', but the page does NOT advance and returns to the same Sign In form with pre-filled inputs:
-        1. DO NOT repeatedly re-type the exact same password and click 'Sign In' in a loop!
-        2. Inspect if there is a 'Forgot Password', 'Create Account', or 'Send One-Time Passcode' button, or if the form requires verifying an email link.
-        3. If sign-in is stuck after 2 attempts, proceed directly by navigating back to the main job application page or click 'Apply' / 'Apply Manually' to start fresh.
+    - WORKDAY ACCOUNT CREATION & SIGN-IN PROCEDURE:
+      * When on Workday:
+        1. Click 'Apply', 'Apply with Resume', 'Autofill with Resume', or 'Apply Manually'.
+        2. If a Sign In / Create Account modal opens:
+           - BATCHED FILLING: In a SINGLE turn, type Email: '{email}', Password: '{portals_password}', and click 'Sign In'.
+           - If creating an account: In a SINGLE turn, type Email: '{email}', Password: '{portals_password}', Verify Password: '{portals_password}', check the 'I acknowledge and agree' checkbox, and click 'Create Account'.
+           - DO NOT repeatedly click 'Sign In' or 'Create Account' without inputs being populated in the same turn!
+        3. If an account is already created, enter credentials and click 'Sign In'.
+        4. Once signed in, immediately attach resume '{resume_pdf_path}' and proceed through candidate information steps.
     - OVERWRITE OUTDATED PRE-FILLED FIELDS WITH CANDIDATE PROFILE DATA:
       * When inspecting form controls (name, email, phone, location, LinkedIn, GitHub, portfolio, work authorization, etc.):
         - If the field is ALREADY pre-filled but our candidate profile has a corresponding value for it, CLEAR the existing text in that field and replace it with our profile value! (Autofilled text on portals/browsers is frequently outdated or stale, so our candidate profile value takes absolute priority even if similar).
@@ -323,14 +372,32 @@ def build_application_task_prompt(
          * If an input already contains a pre-filled value and our candidate profile contains that data (e.g. Name: '{candidate_name}', Email: '{email}', Phone: '{clean_mobile or phone}', Location: '{location}', LinkedIn, GitHub, Website), clear and re-enter our profile value to guarantee the application uses current data.
          * If a pre-filled field is for an unknown or custom question where we have no candidate profile value, leave it as-is.
        - Phone Country Code & Number:
-         * Check and ensure the phone number matches '{clean_mobile or phone}' (clear and replace any outdated phone number).
+         * AUTHORITATIVE PHONE VALUES:
+           - Full international format: '{full_international_phone}' (e.g. '{target_dial}{clean_mobile}')
+           - Local national number: '{clean_mobile}'
+           - Country name: '{target_country}'
+           - Dial code: '{target_dial}' (e.g. '+44' or '+91')
+           - Digits only dial code: '{dial_code_only}' (e.g. '44' or '91')
+           - ISO country code: '{iso2_code}' (e.g. 'GB' or 'IN')
+           - Composite label: '{country_code_hint}'
          * INTERNATIONAL & LINKEDIN EASY APPLY PHONE COUNTRY CODE WIDGET RULE:
-           - Many ATS portals (LinkedIn Easy Apply, Greenhouse, Lever, Workday, SmartRecruiters) use a country selector dropdown (e.g. `select[id*="phone"]`, `select[name*="country"]`, `.fb-text-selectable__option`, `.iti__selected-country`, `button[aria-label*="Country code"]`, or a flag/dial-code dropdown beside the phone field).
-           - LINKEDIN EASY APPLY MANDATORY ACTION: On LinkedIn Easy Apply form steps, inspect the phone country code selector/dropdown before typing the phone number.
-           - DO NOT leave default '+376' or 'Andorra'! You MUST explicitly select option matching '{country_code_hint}' (e.g. '{target_country}' or '{target_dial}').
-           - If a `<select>` dropdown exists for phone country code, call `select_dropdown` with option '{country_code_hint}' or '{target_country} ({target_dial})'.
-           - If a custom button or popup list is present, click the country selector button, type '{target_country}' or '{target_dial}', and CLICK the matching country item from the dropdown list to ensure the country code is bound!
-           - After setting/binding the country code, type '{clean_mobile or phone}' into the main phone input field.
+           - Many ATS portals (LinkedIn Easy Apply, Greenhouse, Lever, Workday, SmartRecruiters, BambooHR, Ashby) feature a separate country selector dropdown or flag widget beside the phone number input (e.g. `select[id*="phone"]`, `select[name*="country"]`, `select[id*="countryCode"]`, `select[id*="country-code"]`, `.fb-text-selectable__option`, `.iti__selected-country`, `button[aria-label*="Country code" i]`, `button[aria-label*="Phone country" i]`, `button[id*="countryCode"]`, or a flag/dial-code dropdown beside the phone field).
+           - LINKEDIN EASY APPLY MANDATORY ACTION:
+             1. On LinkedIn Easy Apply form steps, ALWAYS inspect the phone country code selector/dropdown before or while filling the phone number.
+             2. DO NOT leave default or incorrect values (e.g. '+376', 'Andorra', '+1', etc.)! You MUST explicitly select the option matching '{target_country}' / '{target_dial}' / '{country_code_hint}' / '{iso2_code}'.
+             3. If a standard `<select>` dropdown exists for phone country code:
+                - Inspect available `<option>` values or text.
+                - Call `select_dropdown` with the option that matches '{country_code_hint}', '{target_country} ({target_dial})', '{target_country}', or '{target_dial}'.
+             4. If a custom popup / combobox / button dropdown exists (e.g. intl-tel-input, Material UI, LinkedIn custom picker, or Workday prompt list):
+                - Click the phone country code button/picker.
+                - Type '{target_country}' or '{target_dial}' to filter the list.
+                - CLICK the matching country item from the opened dropdown list to guarantee the selection is committed!
+           - SINGLE VS SPLIT PHONE INPUTS:
+             * If the form has a SEPARATE country code field and a national phone number field:
+               - Ensure the country code is set to '{target_country} ({target_dial})'.
+               - Clear and type '{clean_mobile}' into the national phone number field.
+             * If the form has ONLY ONE unified phone number input (without a separate country code dropdown):
+               - Clear and type '{full_international_phone}' (e.g. '{target_dial} {clean_mobile}' or '{target_dial}{clean_mobile}') into the phone field so the ATS receives the complete international number.
        - For Dropdowns & Autocomplete Fields:
          * Country / Location (Autocomplete / Select):
            - DYNAMIC LOCATION DROPDOWN RULE:
@@ -358,6 +425,10 @@ def build_application_task_prompt(
             - If a field has a triple-bar (hamburger / prompt) button or requires searching options from a prompt list (e.g. source questions like "How did you hear about us?"):
             - Type the search query (e.g. 'LinkedIn') and press 'Enter' so the listbox filters automatically.
             - Click the matching result item (e.g. 'LinkedIn' or 'LinkedIn Corporate Jobs') to firmly bind the option. Do not leave it unselected.
+          * Mandatory Terms, Consent & Acknowledgment Checkboxes (Workday, Greenhouse, Ashby, Lever):
+            - If you see any checkbox for "I have read and agree", "I acknowledge and agree", "Terms of Service", "Privacy Policy", or "Consent to Data Processing" (e.g. on Workday Create Account or Application Submission screens):
+            - You MUST explicitly click / check the checkbox input or its surrounding label/div!
+            - VERIFY the checkbox is in a checked state (e.g. aria-checked="true" or checked=true) BEFORE clicking 'Create Account', 'Next', or 'Submit'.
           * Veteran Status: Inspect options and choose '{veteran_status}'.
           * Disability Status: Inspect options and choose '{disability_status}'.
          - For Resume / CV File Upload:
@@ -689,6 +760,27 @@ async def run_browser_use_autofill(
     available_paths = [os.path.abspath(resolved_resume_path)] if resolved_resume_path and os.path.exists(resolved_resume_path) else []
 
     mode_str = "AUTO-SUBMIT (GUARDRAILS DISABLED)" if effective_auto_submit else "REVIEW ONLY (GUARDRAIL ACTIVE)"
+
+    # --- Tier 1: Laya / Jev Ultrafast System 1 Reflex Engine (<10ms) ---
+    use_fast_tier = os.getenv("USE_JEV_ULTRAFAST", "1").lower() in ("1", "true", "yes")
+    if use_fast_tier:
+        try:
+            from services.jev_ultrafast_agent import run_jev_ultrafast_autofill
+            fast_res = await run_jev_ultrafast_autofill(
+                job_url=target_url,
+                resume_data=resume_data,
+                resume_pdf_path=resolved_resume_path,
+                cdp_url=getattr(browser_session, "cdp_url", None),
+                auto_submit=effective_auto_submit,
+                max_steps=max_steps
+            )
+            if fast_res.get("status") == "completed":
+                print(f"[laya-engine] ✅ Successfully completed application via on-device reflex engine.")
+                return fast_res
+            else:
+                print(f"[laya-engine] ⚡ Laya on-device routing active. Delegating multi-step navigation to browser-use pure-DOM engine.")
+        except Exception as fast_err:
+            print(f"[laya-engine] Fast tier note: {fast_err}. Continuing with browser-use.")
 
     # Prepare multi-key fallback pool across all configured GEMINI_API_KEYS
     fallback_llms = get_browser_use_fallback_llms(primary_llm=llm, model_name=model_name)
