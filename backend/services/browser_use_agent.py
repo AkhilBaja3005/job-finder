@@ -233,6 +233,41 @@ def build_application_task_prompt(
 
     password_profile_line = f"- Account Creation / Portal Password: {portals_password}\n" if portals_password else ""
 
+    # Work Experience, Education, and Skills parsing
+    work_exp_list = resume_data.get("work_experience") or resume_data.get("candidate", {}).get("work_experience") or []
+    work_exp_lines = []
+    for idx, exp in enumerate(work_exp_list, 1):
+        comp = exp.get("company", "")
+        role = exp.get("role", "")
+        timeline = exp.get("timeline", "")
+        location_exp = exp.get("location", "")
+        highlights = exp.get("highlights", [])
+        desc = " ".join(highlights[:3]) if highlights else ""
+        work_exp_lines.append(
+            f"      [Job #{idx}]: Company: '{comp}' | Job Title/Role: '{role}' | Dates/Timeline: '{timeline}' | Location: '{location_exp}'\n"
+            f"        Description/Highlights: {desc[:400]}"
+        )
+    formatted_work_exp = "\n".join(work_exp_lines) if work_exp_lines else "None provided"
+
+    edu_list = resume_data.get("education") or resume_data.get("candidate", {}).get("education") or []
+    edu_lines = []
+    for idx, edu in enumerate(edu_list, 1):
+        inst = edu.get("institution", "")
+        deg = edu.get("degree", "")
+        timeline = edu.get("timeline", "")
+        loc = edu.get("location", "")
+        cpi = edu.get("cpi") or edu.get("gpa", "")
+        edu_lines.append(
+            f"      [Education #{idx}]: School/University: '{inst}' | Degree/Major: '{deg}' | Dates: '{timeline}' | Location: '{loc}' | GPA/CPI: '{cpi}'"
+        )
+    formatted_edu = "\n".join(edu_lines) if edu_lines else "None provided"
+
+    core_skills = resume_data.get("core_skills") or resume_data.get("candidate", {}).get("core_skills") or []
+    if isinstance(core_skills, list):
+        formatted_skills = ", ".join(str(s) for s in core_skills[:35])
+    else:
+        formatted_skills = str(core_skills)
+
     task = f"""
     Navigate to the job application URL: {job_url}
     
@@ -256,7 +291,16 @@ def build_application_task_prompt(
     - Protected Veteran Status: {veteran_status}
     - Disability Status: {disability_status}
     - Professional Background: {summary}
-    {password_profile_line}"""
+    {password_profile_line}
+    - Work Experience ({len(work_exp_list)} Positions to populate):
+{formatted_work_exp}
+
+    - Education ({len(edu_list)} Degrees to populate):
+{formatted_edu}
+
+    - Skills to populate:
+      {formatted_skills}
+    """
 
     if resume_pdf_path and os.path.exists(resume_pdf_path):
         task += f"\n- Resume File to attach: {os.path.abspath(resume_pdf_path)}\n"
@@ -284,18 +328,28 @@ def build_application_task_prompt(
 
     task += f"""
     CRITICAL SPEED & EFFICIENCY RULES:
-    - PREVENT REPEATING SIGN-IN LOOPS:
-      * If you enter sign-in credentials and click 'Sign In', but the page does NOT advance and returns to the same Sign In form with pre-filled inputs:
-        1. DO NOT repeatedly re-type the exact same password and click 'Sign In' in a loop!
-        2. Inspect if there is a 'Forgot Password', 'Create Account', or 'Send One-Time Passcode' button, or if the form requires verifying an email link.
-        3. If sign-in is stuck after 2 attempts, proceed directly by navigating back to the main job application page or click 'Apply' / 'Apply Manually' to start fresh.
+    - MODAL SIGN-IN SUBMISSION & TARGETING RULES (WORKDAY & PORTALS):
+      * WORKDAY SIGN IN BUTTON TARGETING FIX (CLICK OVERLAY / POINTER-EVENTS WRAPPER):
+        - On Workday, every primary submit button (like 'Sign In' or 'Create Account') has a transparent overlay wrapper:
+          `<div role="button" aria-label="Sign In" data-automation-id="click_filter">`
+          which sits directly on top of `<button data-automation-id="signInSubmitButton">` and intercepts pointer events!
+        - If clicking the inner `<button>` directly does not trigger or causes a pointer-events intercept, CLICK THE OUTER WRAPPER ELEMENT:
+          `div[role="button"][data-automation-id="click_filter"][aria-label="Sign In"]` or the container labeled 'Sign In'!
+        - Target the button/wrapper INSIDE the active modal dialog (`aria-label="Sign In"`), NEVER click the background header/navbar "Sign In" link (`data-automation-id="utilityButtonSignIn"`)!
+        - After clicking Sign In, wait 2-3 seconds for authentication to process. If no error message appears, do not repeatedly click background links.
+      * DO NOT PREMATURELY SWITCH TO 'CREATE ACCOUNT': If you entered sign-in credentials for an existing account, DO NOT click 'Create Account' in the next step! Doing so will trigger an error ('An account with this email address already exists'). Wait 2-3 seconds for authentication to process and the modal to close.
     - OVERWRITE OUTDATED PRE-FILLED FIELDS WITH CANDIDATE PROFILE DATA:
       * When inspecting form controls (name, email, phone, location, LinkedIn, GitHub, portfolio, work authorization, etc.):
         - If the field is ALREADY pre-filled but our candidate profile has a corresponding value for it, CLEAR the existing text in that field and replace it with our profile value! (Autofilled text on portals/browsers is frequently outdated or stale, so our candidate profile value takes absolute priority even if similar).
         - If the field is pre-filled and we do NOT have a specific value for it in our candidate profile, leave it as-is without clearing it.
       * For completely empty fields, fill them in directly using the candidate profile details.
-    - DO NOT USE THE WAIT ACTION: The browser environment automatically handles DOM mutations and page loads. Never use `wait: seconds: ...`. Elements are immediately actionable.
+    - DO NOT USE ARBITRARY WAITS (EXCEPT FILE UPLOADS): The browser environment automatically handles DOM mutations and page loads. Never use `wait: seconds: ...` for normal inputs or navigation. Elements are immediately actionable.
+      * MANDATORY WAIT EXCEPTION FOR FILE & RESUME UPLOADS: When uploading a resume or using 'Autofill with Resume', file uploads and portal parsing take several seconds to transfer. You MUST wait for the upload indicator to complete (progress bar at 100%, spinner gone, file card showing uploaded, and Continue/Next button becoming enabled) before clicking Continue or Next. If needed, you may use `wait: seconds: 3` to let the upload and server-side parsing finish.
     - BATCH ALL ACTIONS: Fill out ALL inputs, selects, and checkboxes on the visible screen in a single turn together with the 'Next' or 'Continue' click. Do not submit one field per step!
+    - MANDATORY CHECKBOX COMPLETION RULE (LOGIN, REGISTRATION & APPLICATIONS):
+      * Whenever ANY checkboxes appear on the screen or in modals—especially during login, account creation, registration, terms of service, privacy policy, legal disclosures, user agreements, declarations, 'Keep me signed in', 'Remember me', or applicant consent:
+      * YOU MUST CHECK EVERY APPLICABLE CHECKBOX!
+      * Never leave required agreement, terms, or confirmation checkboxes unchecked, as unchecked boxes prevent account creation or cause submission validation errors.
     - DROPDOWNS & WORKDAY PROMPT BUTTONS (TRIPLE-BAR / 3 DOTS / HAMBURGER MENU) HANDLING:
       * Many ATS platforms (especially Workday, Taleo, SuccessFactors) feature a "Prompt Button" on the right side of the field with a triple-bar (three slashes / hamburger) or 3 dots icon (often with aria-haspopup="listbox" or data-automation-id="promptOption").
       * For these prompt button fields, DO NOT expect raw text typing alone to be accepted without item selection!
@@ -317,7 +371,24 @@ def build_application_task_prompt(
     Execution Instructions:
     1. Early Check for Already Applied or Closed Job:
        - If the page or modal displays 'Job not found', 'This job has closed', 'No longer accepting applications', or 'Applied', immediately call `done` with that reason without wasting extra steps.
-    2. Open Form: Click 'Apply', 'Easy Apply', or 'Apply for this job'.
+    2. Open Form & Handle 'Autofill with Resume':
+       - Click 'Apply', 'Easy Apply', or 'Apply for this job'.
+       - 'AUTOFILL WITH RESUME' / 'APPLY WITH RESUME' DETECTION & UPLOAD RULE:
+         * In many modern and enterprise ATS portals (especially Workday, Taleo, SmartRecruiters, iCIMS, SuccessFactors, Lever, Ashby, Greenhouse), the initial page presents a choice:
+           1. 'Autofill with Resume' (or 'Apply with Resume', 'Upload Resume to Autofill', 'Autofill Application', 'Start with Resume', 'Apply with CV')
+           2. 'Apply Manually'
+           3. 'Use My Last Application'
+         * ALWAYS click 'Autofill with Resume' or 'Apply with Resume' when this choice is present!
+         * When the file dropzone or upload dialog appears:
+           - Use the `upload_file` action to upload the candidate's resume PDF from: '{os.path.abspath(resume_pdf_path) if resume_pdf_path else ""}'.
+         * MANDATORY WAIT FOR RESUME UPLOAD & PARSING TO FINISH BEFORE PROCEEDING:
+           - DO NOT click 'Continue' or 'Next' immediately while the file is still uploading or processing!
+           - Monitor the screen:
+             a. Wait for the upload progress bar (0% -> 100%) or processing spinner to disappear.
+             b. Verify the uploaded file card is displayed with the file name (e.g. '.pdf'), file size, checkmark, or delete/replace icon.
+             c. Verify that the 'Continue', 'Next', or 'Proceed' button is enabled and no longer disabled/grayed out.
+           - If there is any consent or terms checkbox on the resume upload screen (e.g. 'I consent to having my resume parsed', 'Terms of Service', 'Privacy Policy'), CHECK IT.
+           - ONLY AFTER the file upload has completely finished and the button is active, click 'Continue' or 'Next' to advance into the pre-filled application pages.
     3. Fill & Advance: In a single batched step, fill all contact/question inputs on the screen and click 'Next' or 'Continue'.
        - PRE-FILLED FIELDS & OUTDATED DATA OVERWRITE RULE:
          * If an input already contains a pre-filled value and our candidate profile contains that data (e.g. Name: '{candidate_name}', Email: '{email}', Phone: '{clean_mobile or phone}', Location: '{location}', LinkedIn, GitHub, Website), clear and re-enter our profile value to guarantee the application uses current data.
@@ -363,8 +434,45 @@ def build_application_task_prompt(
          - For Resume / CV File Upload:
            * If the application form asks to attach/upload a resume, CV, or file (e.g. 'Upload a file', 'Attach Resume', 'Upload Resume/CV', 'Select file', or file input dropzone):
            * You MUST upload the provided resume file path using `upload_file` action!
+           * WAIT for the upload progress bar or spinner to disappear and the file to be confirmed attached before clicking 'Next' or 'Continue'.
            * Do NOT leave the file upload blank or skip it if a file is requested.
          - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
+        - WORK EXPERIENCE AUDIT & 'ADD ANOTHER' MULTI-JOB RULE:
+          * On pages titled 'My Experience', 'Work Experience', 'Professional Experience', or 'Employment History':
+          * Many portals autofill only ONE job from the resume and often pick wrong start dates or miss past roles.
+          * YOU MUST SYSTEMATICALLY AUDIT AND COMPLETE ALL POSITIONS FROM THE CANDIDATE PROFILE:
+            1. First Job Verification (e.g. Job #1):
+               - Check the Job Title, Company Name, and Start Date / End Date against Job #1 in the Applicant Profile.
+               - If the start date is incorrect or missing (e.g. wrong month/year), CLEAR IT and set the correct start date according to Job #1 (e.g., Start Date: 'May 2025' or Month: 'May', Year: '2025').
+               - If currently working there, check 'I currently work here' / 'Current job' / 'Present'.
+            2. Add Missing Previous Jobs ('Add' / 'Add Another'):
+               - Inspect if Job #2, Job #3, Job #4 from the candidate profile are present on the screen.
+               - For EVERY job in the candidate profile that is NOT yet on the form:
+                 * Click the 'Add' or 'Add Another' button under Work Experience / Professional Experience.
+                 * Populate:
+                   a. Job Title: e.g. Job #2 Role
+                   b. Company Name: e.g. Job #2 Company
+                   c. Location: e.g. Job #2 Location
+                   d. Start Date (Month & Year) and End Date (Month & Year) according to the Dates/Timeline in profile.
+                   e. Role Description / Summary: copy the highlights provided for that job.
+                 * Repeat this until ALL candidate jobs from the profile are added!
+        - EDUCATION AUDIT & 'ADD ANOTHER' RULE:
+          * Under 'Education' or 'Educational History':
+          * Inspect if the education section is empty or missing candidate degrees.
+          * If empty or incomplete:
+            - Click 'Add' or 'Add Another' button in the Education section.
+            - Populate:
+              a. School or University: e.g. School from Education #1 (e.g. 'R V College of Engineering' or search and select from prompt dropdown).
+              b. Degree / Degree Level: e.g. 'Bachelor' / 'B.Tech' / 'B.Tech. in Computer Science and Engineering'.
+              c. Field of Study / Major: 'Computer Science and Engineering' or 'Computer Science'.
+              d. Dates / Graduation Date: Start Year '2019', End/Graduation Year '2023'.
+              e. GPA / CPI: '8.63' or 'CGPA: 8.63' (if GPA field exists).
+        - SKILLS AUDIT & POPULATION RULE:
+          * Under 'Skills' or 'Key Skills':
+          * Inspect the skills container or input tag box.
+          * If empty or missing candidate skills:
+            - Type the candidate's core skills (e.g. 'Python', 'SQL', 'Apache Spark', 'AWS S3', 'Apache Ranger', 'Trino', 'Playwright', 'Selenium') into the skill search/tag input.
+            - When dropdown/autocomplete suggestions appear, click the matching tag or press Enter to add each skill tag into the form.
     4. Handle Email Verification / OTP Codes:
        - If the form asks to enter a verification code / OTP sent to your email (e.g., micro1, Ashby, Workday):
          a. Open a new tab to Gmail: open a new tab with url 'https://mail.google.com'.
@@ -372,15 +480,23 @@ def build_application_task_prompt(
          c. Click or read the email snippet to extract the numeric or alphanumeric OTP code.
          d. Switch back to the application tab (or close the Gmail tab).
          e. Type the verification code into the OTP input field and proceed.
-    5. Handle Sign-in / Sign-up / Account Creation / Password Setup (e.g. Reed.co.uk, Workday, Lever, SmartRecruiters, Job Boards):
+    5. Handle Sign-in / Sign-up / Account Creation / Password Setup (e.g. Reed.co.uk, Workday, Lever, SmartRecruiters, Taleo, iCIMS, SuccessFactors, Job Boards):
        - If the site requires logging in, signing up, or creating an account before allowing you to apply (such as Reed.co.uk or Workday):
+         * MANDATORY CHECKBOX RULE FOR LOGIN, SIGN-UP & ACCOUNT CREATION ON ANY PORTAL:
+           - While logging in, signing up, or creating an account on ANY job portal:
+           - ALWAYS inspect the entire screen or modal for ANY checkboxes!
+           - If ANY checkboxes exist on the login or account creation form (e.g. 'I agree to the Terms and Conditions', 'Terms of Service', 'Privacy Policy', 'Consent to personal data processing', 'I accept', 'Keep me signed in', 'Remember me', 'I certify that I am 18+', 'Acknowledge...', or any required consent checkbox):
+           - YOU MUST CHECK EVERY SINGLE CHECKBOX before clicking 'Create Account', 'Sign Up', 'Register', 'Sign In', or 'Continue'!
+           - If there are multiple checkboxes, check ALL of them. An unchecked checkbox will prevent the account from being created or cause validation errors.
          * First, look for and click 'Sign in with Google', 'Continue with Google', or 'Sign up with Google'.
          * The browser session already has active Google credentials for '{email}'. If a Google account selection popup appears, click '{email}' or '{candidate_name}' to authenticate automatically.
          * If Google OAuth asks to confirm permissions or continue, click 'Confirm' / 'Continue' / 'Allow'.
 {password_action_instruction}
-         * WORKDAY ACCOUNT CREATION & SIGN-IN RULES:
-           - Terms & Conditions Checkbox: On Workday's "Create Account" modal, ALWAYS check the "I have read and agree to the Terms and Conditions" checkbox before clicking "Create Account".
-           - Existing Account Warning: If Workday displays an error "An account with this email address already exists" or "Sign In to your existing account", click "Sign In" instead, enter '{email}' and password '{portals_password}', then submit.
+          * WORKDAY ACCOUNT CREATION & SIGN-IN RULES:
+            - Target Modal Submit Button / Overlay Wrapper: On Workday, buttons have an outer wrapper `div[data-automation-id="click_filter"]` with `aria-label="Sign In"` (or `aria-label="Create Account"`) that intercepts clicks. When clicking "Sign In", click either the modal button or this outer `click_filter` wrapper! NEVER click the background header `utilityButtonSignIn` link.
+            - Terms & Conditions Checkbox: On Workday's "Create Account" modal, ALWAYS check the "I have read and agree to the Terms and Conditions" checkbox before clicking "Create Account".
+            - Give Authentication Time: Server-side login takes 1-3 seconds to verify credentials and redirect. Do NOT assume sign in failed or click 'Create Account' immediately!
+            - Existing Account Warning: If Workday displays an error "An account with this email address already exists" or "Sign In to your existing account", click "Sign In", enter '{email}' and password '{portals_password}', check any "Remember me" checkbox, then submit via the modal's Sign In button or its click_filter wrapper.
          * Once authenticated or account created, proceed directly with completing the application form.
          * Do NOT stop or fail saying credentials are missing!
     6. Handle Cloudflare Verification / Turnstile / "Verify you are human":
@@ -589,9 +705,9 @@ def get_or_create_browser_session(headless: bool = False):
     cdp_url = ensure_persistent_browser(headless=headless)
     return BrowserSession(
         cdp_url=cdp_url,
-        minimum_wait_page_load_time=0.1,             # Cut from 0.25s to 0.1s
-        wait_for_network_idle_page_load_time=0.15,   # Cut from 0.5s to 0.15s (network idle cutoff)
-        wait_between_actions=0.02,                   # Instantaneous action execution
+        minimum_wait_page_load_time=0.4,             # 0.4s to allow initial DOM updates
+        wait_for_network_idle_page_load_time=1.0,   # 1.0s so AJAX auth requests and modal redirects complete
+        wait_between_actions=0.4,                   # 400ms so input change events firmly bind to React state before button clicks
         highlight_elements=False,                    # Disable DOM bounding box calculation overhead
         auto_download_pdfs=False,
     )
@@ -698,7 +814,6 @@ async def run_browser_use_autofill(
     print(f"[browser-use] ⚡ Starting fast pure-DOM autofill ({mode_str}) for {job_url} [vision=False, fallbacks={len(fallback_llms)}]...")
     agent_fast = agent_cls(
         task=task_prompt,
-        # pyrefly: ignore [bad-argument-type]
         llm=llm,
         fallback_pool=fallback_llms,
         browser_session=browser_session,
@@ -728,7 +843,6 @@ async def run_browser_use_autofill(
         print(f"[browser-use] 👁️ Pure-DOM pass encountered difficulties. Activating Vision + Reasoning (thinking=True) fallback...")
         agent_vision = agent_cls(
             task=task_prompt + "\nNOTE: Retrying with visual sight and deep reasoning enabled. Analyze the visual layout carefully to locate, solve, and fill any inputs, custom dropdowns, or multi-step modals that were missed.",
-            # pyrefly: ignore [bad-argument-type]
             llm=llm,
             fallback_pool=fallback_llms,
             browser_session=browser_session,
@@ -898,7 +1012,6 @@ async def extract_jd_with_browser_use(
     try:
         agent = agent_cls(
             task=task_prompt,
-            # pyrefly: ignore [bad-argument-type]
             llm=llm,
             fallback_pool=fallback_llms,
             browser_session=browser_session,
