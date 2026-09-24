@@ -158,21 +158,61 @@ async def scan_linkedin_for_top_applicant_jobs(
                 search_url = f"https://www.linkedin.com/jobs/search/?{urllib.parse.urlencode(query_params)}"
                 
                 try:
-                    await page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
-                    await asyncio.sleep(2.5)  # Allow dynamic job list cards to hydrate
+                    await page.goto(search_url, wait_until="domcontentloaded", timeout=25000)
                 except Exception as ge:
                     print(f"   ⚠️ Navigation error for '{kw}' on page {page_idx + 1}: {ge}")
                     continue
 
-                # Query all rendered job cards across both desktop layouts (authenticated & guest)
-                cards = await page.query_selector_all(
+                # Comprehensive job card selectors covering all LinkedIn desktop/guest layouts
+                card_selector_str = (
                     "ul.jobs-search__results-list > li, "
                     "li.jobs-search-results__list-item, "
                     "div.job-card-container, "
+                    "div.job-card-list__entity-lockup, "
                     "div.base-card, "
+                    "div.base-search-card, "
                     "[data-occludable-job-id], "
-                    ".scaffold-layout__list-container li"
+                    "[data-job-id], "
+                    ".scaffold-layout__list-container li, "
+                    "li.scaffold-layout__list-item, "
+                    "li.jobs-search-two-pane__job-card-container, "
+                    ".jobs-search-results-list__list-item"
                 )
+
+                # Wait for job listing container/cards to hydrate in DOM
+                try:
+                    await page.wait_for_selector(card_selector_str, timeout=8000)
+                except Exception:
+                    pass
+
+                # Scroll the results pane down to hydrate virtualized/lazy-loaded job cards
+                try:
+                    await page.evaluate("""() => {
+                        const container = document.querySelector('.jobs-search-results-list, .scaffold-layout__list, .jobs-search__results-list');
+                        if (container) {
+                            container.scrollTop = 600;
+                        } else {
+                            window.scrollBy(0, 600);
+                        }
+                    }""")
+                    await asyncio.sleep(1.5)
+                except Exception:
+                    pass
+
+                cards = await page.query_selector_all(card_selector_str)
+
+                # Secondary retry if cards took slightly longer to hydrate
+                if not cards:
+                    await asyncio.sleep(2.5)
+                    try:
+                        await page.evaluate("""() => {
+                            window.scrollBy(0, 1000);
+                            const container = document.querySelector('.jobs-search-results-list, .scaffold-layout__list');
+                            if (container) container.scrollTop = 1200;
+                        }""")
+                    except Exception:
+                        pass
+                    cards = await page.query_selector_all(card_selector_str)
 
                 if not cards:
                     print(f"   📄 Page {page_idx + 1}: No cards rendered on this page.")
@@ -187,19 +227,24 @@ async def scan_linkedin_for_top_applicant_jobs(
                         # Check badge in card text snippet
                         has_badge = is_top_applicant_badge(card_text)
 
-                        # Extract Job Link & ID
-                        link_elem = await card.query_selector("a[href*='/jobs/view/']")
-                        if not link_elem:
-                            continue
-                        href = await link_elem.get_attribute("href") or ""
-                        if not href:
+                        # Extract Job ID directly from data attributes if present
+                        data_job_id = (await card.get_attribute("data-job-id")) or (await card.get_attribute("data-occludable-job-id")) or ""
+                        job_id = ""
+                        if data_job_id and data_job_id.isdigit():
+                            job_id = data_job_id
+
+                        # Extract Job Link if not found in data attribute
+                        if not job_id:
+                            link_elem = await card.query_selector("a[href*='/jobs/view/'], a.job-card-container__link, a.job-card-list__title--link, a.base-card__full-link")
+                            if link_elem:
+                                href = await link_elem.get_attribute("href") or ""
+                                id_match = re.search(r"/jobs/view/(?:[^\/]+-)?(\d+)", href) or re.search(r"currentJobId=(\d+)", href)
+                                if id_match:
+                                    job_id = id_match.group(1)
+
+                        if not job_id:
                             continue
 
-                        # Extract pure numeric ID
-                        id_match = re.search(r"/jobs/view/(?:[^\/]+-)?(\d+)", href)
-                        if not id_match:
-                            continue
-                        job_id = id_match.group(1)
                         if job_id in seen_job_ids:
                             continue
                         seen_job_ids.add(job_id)
@@ -228,11 +273,7 @@ async def scan_linkedin_for_top_applicant_jobs(
                                 "posted_time": format_posted_date_time("Recent"),
                                 "platform": "LinkedIn"
                             })
-                        else:
-                            # Check detailed view if ambiguous
-                            # Click or inspect header insights
-                            pass
-                    except Exception as ce:
+                    except Exception:
                         continue
 
         await page.close()
