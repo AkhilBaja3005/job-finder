@@ -676,7 +676,8 @@ async def run_browser_use_autofill(
     model_name: Optional[str] = None,
     custom_api_key: Optional[str] = None,
     auto_submit: bool = False,
-    max_steps: int = 50
+    max_steps: int = 50,
+    new_tab: bool = True
 ) -> Dict[str, Any]:
     """
     Runs an autonomous application filling session using browser-use and Gemini.
@@ -754,8 +755,8 @@ async def run_browser_use_autofill(
 
     browser_session = get_or_create_browser_session(headless=headless)
 
-    # Configure initial navigation action so browser-use explicitly opens target_url
-    nav_actions = [{"navigate": {"url": target_url, "new_tab": False}}]
+    # Configure initial navigation action so browser-use explicitly opens target_url in a new tab
+    nav_actions = [{"navigate": {"url": target_url, "new_tab": new_tab}}]
 
     available_paths = [os.path.abspath(resolved_resume_path)] if resolved_resume_path and os.path.exists(resolved_resume_path) else []
 
@@ -824,7 +825,7 @@ async def run_browser_use_autofill(
             llm=llm,
             fallback_pool=fallback_llms,
             browser_session=browser_session,
-            initial_actions=nav_actions,
+            initial_actions=None,  # Keep active tab already opened in DOM pass
             available_file_paths=available_paths,
             use_vision=True,
             vision_detail_level="low",

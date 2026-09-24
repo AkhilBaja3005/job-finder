@@ -316,3 +316,44 @@ def test_cli_top_applicant_flag_parsing():
         assert call_kwargs.get("headless") is True
 
 
+@pytest.mark.asyncio
+async def test_browser_use_new_tab_action_configuration():
+    """Validates that run_browser_use_autofill configures nav_actions with new_tab=True by default."""
+    from unittest.mock import AsyncMock, patch, MagicMock
+    from backend.services.browser_use_agent import run_browser_use_autofill
+
+    captured_agent_kwargs = []
+
+    class DummyAgent:
+        def __init__(self, **kwargs):
+            captured_agent_kwargs.append(kwargs)
+        async def run(self, max_steps=50):
+            mock_hist = MagicMock()
+            mock_hist.is_done.return_value = True
+            mock_hist.final_result.return_value = "SUBMISSION_CONFIRMED: Application submitted."
+            mock_hist.history = [1, 2]
+            return mock_hist
+
+    mock_llm = MagicMock()
+    mock_llm.model = "gemini-3.5-flash-lite"
+
+    with patch("backend.services.browser_use_agent.preflight_check_job_url", return_value=("https://example.com/job/1", True, None)), \
+         patch("backend.services.browser_use_agent.get_browser_use_llm", return_value=mock_llm), \
+         patch("backend.services.browser_use_agent.get_or_create_browser_session", return_value=MagicMock()), \
+         patch("backend.services.browser_use_agent.MultiFallbackAgent", DummyAgent), \
+         patch("backend.services.browser_use_agent.Agent", DummyAgent):
+
+        res = await run_browser_use_autofill(
+            job_url="https://example.com/job/1",
+            resume_data={"name": "Test User", "email": "test@example.com"},
+            auto_submit=True
+        )
+
+        assert res["status"] == "success"
+        assert len(captured_agent_kwargs) >= 1
+        initial_actions = captured_agent_kwargs[0].get("initial_actions")
+        assert initial_actions is not None
+        assert initial_actions[0]["navigate"]["new_tab"] is True
+
+
+
