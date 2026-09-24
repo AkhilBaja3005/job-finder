@@ -199,82 +199,115 @@ async def scan_linkedin_for_top_applicant_jobs(
                 except Exception:
                     pass
 
+                # 1. First attempt: Standard selector extraction
                 cards = await page.query_selector_all(card_selector_str)
 
-                # Secondary retry if cards took slightly longer to hydrate
-                if not cards:
-                    await asyncio.sleep(2.5)
-                    try:
-                        await page.evaluate("""() => {
-                            window.scrollBy(0, 1000);
-                            const container = document.querySelector('.jobs-search-results-list, .scaffold-layout__list');
-                            if (container) container.scrollTop = 1200;
-                        }""")
-                    except Exception:
-                        pass
-                    cards = await page.query_selector_all(card_selector_str)
+                # 2. Enhanced In-Page Discovery (handles both obfuscated AI search layout & classic layout)
+                extracted_page_jobs = await page.evaluate("""async () => {
+                    const results = [];
+                    const seenIds = new Set();
+                    
+                    const allElements = Array.from(document.querySelectorAll('*'));
+                    const candidates = allElements.filter(el => {
+                        const txt = el.innerText || '';
+                        return (txt.includes('Posted ') || txt.includes(' ago')) &&
+                               el.children.length >= 2 && el.children.length <= 15 &&
+                               txt.length > 35 && txt.length < 450 &&
+                               !txt.includes('How promoted jobs are ranked');
+                    });
+                    
+                    const uniqueCards = [];
+                    for (const c of candidates) {
+                        if (!uniqueCards.some(existing => existing.contains(c))) {
+                            uniqueCards.push(c);
+                        }
+                    }
+                    
+                    for (let i = 0; i < uniqueCards.length; i++) {
+                        const card = uniqueCards[i];
+                        const text = card.innerText.trim();
+                        const isTop = /top\\s+applicant|in\\s+the\\s+top|stand\\s+out|competitive\\s+applicant/i.test(text);
+                        
+                        const lines = text.split('\\n').map(s => s.trim()).filter(Boolean);
+                        let title = lines[0].replace(/^Selected,\\s*/i, '');
+                        if (title.includes(' | ')) title = title.split(' | ')[0];
+                        let company = lines.length > 1 ? lines[1] : 'Company';
+                        if (company.includes('Verified job')) {
+                            company = lines.length > 2 ? lines[2] : 'Company';
+                        }
+                        
+                        let jobId = null;
+                        const link = card.querySelector('a[href*="/jobs/view/"], a[href*="currentJobId="]');
+                        if (link) {
+                            const href = link.href;
+                            const m1 = href.match(/\\/jobs\\/view\\/(?:[^\\/]+-)?(\\d+)/);
+                            if (m1) jobId = m1[1];
+                            const m2 = href.match(/currentJobId=(\\d+)/);
+                            if (m2) jobId = m2[1];
+                        }
+                        
+                        if (!jobId) {
+                            const dataId = card.getAttribute('data-job-id') || card.getAttribute('data-occludable-job-id');
+                            if (dataId && /\\d+/.test(dataId)) jobId = dataId;
+                        }
+                        
+                        if (!jobId) {
+                            try {
+                                card.click();
+                                await new Promise(r => setTimeout(r, 350));
+                                const m = window.location.href.match(/currentJobId=(\\d+)/);
+                                if (m) jobId = m[1];
+                            } catch (e) {}
+                        }
+                        
+                        if (jobId && !seenIds.has(jobId)) {
+                            seenIds.add(jobId);
+                            results.push({
+                                id: jobId,
+                                title: title,
+                                company: company,
+                                isTopApplicant: isTop,
+                                textSnippet: text.replace(/\\n+/g, ' | ')
+                            });
+                        }
+                    }
+                    return results;
+                }""")
 
-                if not cards:
+                if not extracted_page_jobs and not cards:
                     print(f"   📄 Page {page_idx + 1}: No cards rendered on this page.")
                     continue
 
-                print(f"   📄 Page {page_idx + 1}: Found {len(cards)} job listing cards.")
+                print(f"   📄 Page {page_idx + 1}: Found {len(extracted_page_jobs)} job listing cards.")
 
-                for card in cards:
-                    try:
-                        card_text = (await card.inner_text()) or ""
-                        
-                        # Check badge in card text snippet
-                        has_badge = is_top_applicant_badge(card_text)
-
-                        # Extract Job ID directly from data attributes if present
-                        data_job_id = (await card.get_attribute("data-job-id")) or (await card.get_attribute("data-occludable-job-id")) or ""
-                        job_id = ""
-                        if data_job_id and data_job_id.isdigit():
-                            job_id = data_job_id
-
-                        # Extract Job Link if not found in data attribute
-                        if not job_id:
-                            link_elem = await card.query_selector("a[href*='/jobs/view/'], a.job-card-container__link, a.job-card-list__title--link, a.base-card__full-link")
-                            if link_elem:
-                                href = await link_elem.get_attribute("href") or ""
-                                id_match = re.search(r"/jobs/view/(?:[^\/]+-)?(\d+)", href) or re.search(r"currentJobId=(\d+)", href)
-                                if id_match:
-                                    job_id = id_match.group(1)
-
-                        if not job_id:
-                            continue
-
-                        if job_id in seen_job_ids:
-                            continue
-                        seen_job_ids.add(job_id)
-
-                        canonical_url = f"https://www.linkedin.com/jobs/view/{job_id}/"
-                        norm_url = canonical_url.strip().split("?")[0].rstrip("/").lower()
-
-                        if norm_url in existing_urls:
-                            continue
-
-                        # Extract title and company if present in card
-                        lines = [line.strip() for line in card_text.split("\n") if line.strip()]
-                        title = lines[0] if lines else f"Role #{job_id}"
-                        company = lines[1] if len(lines) > 1 else "Company"
-
-                        # If card snippet already showed badge, record it immediately!
-                        if has_badge:
-                            print(f"   🌟 Top Applicant Match found on search card: {title} @ {company} (ID: {job_id})")
-                            found_jobs.append({
-                                "id": job_id,
-                                "url": canonical_url,
-                                "title": title,
-                                "company": company,
-                                "badge_source": "card_snippet",
-                                "badge_text": "Top Applicant Badge",
-                                "posted_time": format_posted_date_time("Recent"),
-                                "platform": "LinkedIn"
-                            })
-                    except Exception:
+                for j_item in extracted_page_jobs:
+                    job_id = j_item.get("id")
+                    if not job_id or job_id in seen_job_ids:
                         continue
+                    seen_job_ids.add(job_id)
+
+                    canonical_url = f"https://www.linkedin.com/jobs/view/{job_id}/"
+                    norm_url = canonical_url.strip().split("?")[0].rstrip("/").lower()
+
+                    if norm_url in existing_urls:
+                        continue
+
+                    title = j_item.get("title") or f"Role #{job_id}"
+                    company = j_item.get("company") or "Company"
+                    has_badge = j_item.get("isTopApplicant", False)
+
+                    if has_badge:
+                        print(f"   🌟 Top Applicant Match found: {title} @ {company} (ID: {job_id})")
+                        found_jobs.append({
+                            "id": job_id,
+                            "url": canonical_url,
+                            "title": title,
+                            "company": company,
+                            "badge_source": "card_snippet",
+                            "badge_text": "Top Applicant Badge",
+                            "posted_time": format_posted_date_time("Recent"),
+                            "platform": "LinkedIn"
+                        })
 
         await page.close()
 
