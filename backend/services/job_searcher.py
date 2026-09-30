@@ -563,9 +563,9 @@ async def search_targetjobs_uk(keyword: str, location: str = "Remote", timeframe
             ]
         },
         "sort": [{"field": "last_published", "value": "desc"}],
-        "limit": 30,
+        "limit": 10,
         "offset": 0,
-        "includePromoted": True
+        "includePromoted": False
     }
 
     headers = {
@@ -597,6 +597,10 @@ async def search_targetjobs_uk(keyword: str, location: str = "Remote", timeframe
                 continue
             seen_nids.add(nid)
 
+            # Skip explicitly closed status
+            if doc.get("expired") is True or doc.get("status") == 0 or doc.get("status") is False or doc.get("is_closed") is True:
+                continue
+
             title = doc.get("title", "").strip() or "Graduate IT Role"
             org_info = doc.get("organisation", {}) if isinstance(doc.get("organisation"), dict) else {}
             company = doc.get("parent_organisation_title") or org_info.get("title") or "TargetJobs Verified Employer"
@@ -605,11 +609,11 @@ async def search_targetjobs_uk(keyword: str, location: str = "Remote", timeframe
             full_url = f"https://targetjobs.co.uk{path}" if path.startswith("/") else path
             raw_body = doc.get("body") or ""
 
-            # Check application deadline date if provided
-            deadline_str = doc.get("application_deadline_date")
-            if deadline_str:
+            # Check all possible application deadline/closing dates
+            deadline_val = doc.get("application_deadline_date") or doc.get("closing_date") or doc.get("unpublish_on") or doc.get("deadline")
+            if deadline_val:
                 try:
-                    clean_d = str(deadline_str).replace("Z", "+00:00")[:10]
+                    clean_d = str(deadline_val).replace("Z", "+00:00")[:10]
                     deadline_dt = datetime.strptime(clean_d, "%Y-%m-%d").date()
                     if deadline_dt < now_date:
                         log_ist(f"[Job Searcher] ⏳ Skipping expired TargetJobs listing '{title}' (Deadline was {clean_d})")
@@ -626,9 +630,11 @@ async def search_targetjobs_uk(keyword: str, location: str = "Remote", timeframe
             # Check if description or title indicates closed application
             combined_text = (clean_jd + " " + title).lower()
             if any(kw in combined_text for kw in [
-                "application closed", "applications closed", "applications are now closed",
-                "no longer accepting applications", "deadline passed", "this role has expired",
-                "position closed", "vacancy closed"
+                "application closed", "applications closed", "applications are now closed", "applications have now closed",
+                "applications are closed", "no longer accepting applications", "no longer accepting submissions",
+                "no longer taking applications", "deadline passed", "deadline has passed", "closing date has passed",
+                "this role has expired", "this opportunity has closed", "this vacancy has closed", "this posting is closed",
+                "position closed", "vacancy closed", "role closed"
             ]):
                 log_ist(f"[Job Searcher] 🚫 Skipping closed TargetJobs listing '{title}'")
                 continue
@@ -644,7 +650,11 @@ async def search_targetjobs_uk(keyword: str, location: str = "Remote", timeframe
                 full_description=clean_jd
             ))
 
-        log_ist(f"[Job Searcher] ✓ TargetJobs API returned {len(results)} graduate tech jobs for '{keyword}'")
+            # Limit per query search stream to max 5 items
+            if len(results) >= 5:
+                break
+
+        log_ist(f"[Job Searcher] ✓ TargetJobs API returned {len(results)} active graduate tech jobs for '{keyword}'")
     except Exception as te:
         log_ist(f"[Job Searcher] TargetJobs search error for '{keyword}': {te}")
 
@@ -1236,7 +1246,20 @@ async def find_matching_jobs(
 
     # Separate instant API jobs (TargetJobs, Reed, Greenhouse, Ashby, Lever, Workday, Direct ATS) from web-scraped jobs (LinkedIn/Indeed)
     fast_platforms = ("targetjobs", "reed", "greenhouse", "ashby", "lever", "workday", "direct ats")
-    api_fast_jobs = [j for j in deduped_jobs if j.platform.lower() in fast_platforms]
+    
+    # Cap TargetJobs at maximum 7 to ensure LinkedIn and Direct ATS have high visibility
+    tj_count = 0
+    MAX_TARGETJOBS_CAP = 7
+    api_fast_jobs = []
+    for j in deduped_jobs:
+        plat = j.platform.lower()
+        if plat in fast_platforms:
+            if "targetjobs" in plat:
+                if tj_count >= MAX_TARGETJOBS_CAP:
+                    continue
+                tj_count += 1
+            api_fast_jobs.append(j)
+
     scraped_jobs = [j for j in deduped_jobs if j.platform.lower() not in fast_platforms]
     
     scraped_jobs.sort(key=lambda j: _title_heuristic_score(j, resume_data), reverse=True)

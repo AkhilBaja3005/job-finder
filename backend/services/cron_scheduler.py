@@ -121,8 +121,20 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
         except Exception:
             pass
 
-    # Build dynamic cards and text digest (include up to top 20 highest-matching roles)
-    top_jobs = matching_jobs[:20] if matching_jobs else []
+    # Build dynamic cards and text digest (cap TargetJobs to max 7 so LinkedIn and Direct ATS have high visibility)
+    targetjobs_email_count = 0
+    MAX_TARGETJOBS_EMAIL_CAP = 7
+    top_jobs = []
+    if matching_jobs:
+        for j in matching_jobs:
+            plat = str(j.get("platform") or j.get("source") or "").lower()
+            if "targetjobs" in plat:
+                if targetjobs_email_count >= MAX_TARGETJOBS_EMAIL_CAP:
+                    continue
+                targetjobs_email_count += 1
+            top_jobs.append(j)
+            if len(top_jobs) >= 20:
+                break
 
     text_digest_lines = [f"Hi {candidate_name},\n", "Here are your top daily matching roles:\n"]
     if top_jobs:
