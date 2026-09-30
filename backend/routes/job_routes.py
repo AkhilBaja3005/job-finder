@@ -268,7 +268,11 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
     else:
         effective_exclude = ["targetjobs"]
         if user and user.get("skip_portals") is not None:
-            effective_exclude = [str(p).strip().lower() for p in user.get("skip_portals") if str(p).strip()]
+            user_skip = user.get("skip_portals")
+            if isinstance(user_skip, list):
+                effective_exclude = [str(p).strip().lower() for p in user_skip if str(p).strip()]
+            elif isinstance(user_skip, str):
+                effective_exclude = [p.strip().lower() for p in user_skip.split(",") if p.strip()]
         elif not user:
             try:
                 from mcp.tools.profile_tools import load_profile_data
