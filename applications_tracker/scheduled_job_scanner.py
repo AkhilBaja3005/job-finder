@@ -829,9 +829,21 @@ async def run_pipeline(
             tj["ats_score"] = 95
             tj["source"] = "LinkedIn (Top Applicant)"
         jobs = top_jobs
-    else:
         # Run full multi-source web discovery (Portals + LinkedIn + Indeed + Reed)
-        excluded_list = [p.strip() for p in skip_portals.split(",")] if skip_portals else None
+        excluded_list = []
+        if skip_portals:
+            excluded_list.extend([p.strip().lower() for p in skip_portals.split(",") if p.strip()])
+        else:
+            p_skip = prefs.get("skip_portals") or prefs.get("exclude_portals")
+            if isinstance(p_skip, list):
+                excluded_list.extend([str(p).strip().lower() for p in p_skip if str(p).strip()])
+            elif isinstance(p_skip, str):
+                excluded_list.extend([p.strip().lower() for p in p_skip.split(",") if p.strip()])
+            env_skip = os.getenv("SKIP_PORTALS") or os.getenv("EXCLUDE_PORTALS")
+            if env_skip:
+                excluded_list.extend([p.strip().lower() for p in env_skip.split(",") if p.strip()])
+
+        excluded_list = list(dict.fromkeys(excluded_list)) if excluded_list else None
         if excluded_list:
             print(f"[Scanner] 🚫 Skipping excluded portal(s): {', '.join(excluded_list)}")
         search_res = await handle_search_jobs({

@@ -49,6 +49,33 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
     cron_role = user.get("cron_role") or ""
     cron_location = user.get("cron_location") or "Remote"
 
+    # Resolve excluded portals (e.g., targetjobs, reed, indeed)
+    excluded_portals = []
+    user_sp = user.get("skip_portals") or user.get("exclude_portals")
+    if user_sp:
+        if isinstance(user_sp, str):
+            excluded_portals.extend([p.strip().lower() for p in user_sp.split(",") if p.strip()])
+        elif isinstance(user_sp, list):
+            excluded_portals.extend([str(p).strip().lower() for p in user_sp if str(p).strip()])
+
+    try:
+        from mcp.tools.profile_tools import load_profile_data
+        prof = load_profile_data() or {}
+        p_prefs = prof.get("search_preferences", {})
+        p_skip = p_prefs.get("skip_portals") or p_prefs.get("exclude_portals")
+        if isinstance(p_skip, list):
+            excluded_portals.extend([str(p).strip().lower() for p in p_skip if str(p).strip()])
+        elif isinstance(p_skip, str):
+            excluded_portals.extend([p.strip().lower() for p in p_skip.split(",") if p.strip()])
+    except Exception:
+        pass
+
+    env_skip = os.getenv("SKIP_PORTALS") or os.getenv("EXCLUDE_PORTALS")
+    if env_skip:
+        excluded_portals.extend([p.strip().lower() for p in env_skip.split(",") if p.strip()])
+
+    excluded_portals = list(dict.fromkeys(excluded_portals))
+
     # Fetch real matching jobs dynamically
     matching_jobs = []
     try:
@@ -58,7 +85,8 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
             resume_data=rdata,
             location=cron_location,
             keywords=cron_role or None,
-            timeframe="24h"
+            timeframe="24h",
+            exclude_portals=excluded_portals if excluded_portals else None
         ):
             try:
                 parsed = json.loads(chunk.strip())
@@ -78,7 +106,8 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
                 resume_data=rdata,
                 location=cron_location,
                 keywords=cron_role or None,
-                timeframe="48h"
+                timeframe="48h",
+                exclude_portals=excluded_portals if excluded_portals else None
             ):
                 try:
                     parsed = json.loads(chunk.strip())

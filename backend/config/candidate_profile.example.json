@@ -88,6 +88,9 @@
       "LinkedIn",
       "Indeed"
     ],
+    "skip_portals": [
+      "targetjobs"
+    ],
     "min_ats_score_threshold": 70
   },
   "networking_and_references": {
