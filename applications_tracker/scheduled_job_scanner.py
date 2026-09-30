@@ -829,6 +829,7 @@ async def run_pipeline(
             tj["ats_score"] = 95
             tj["source"] = "LinkedIn (Top Applicant)"
         jobs = top_jobs
+    else:
         # Run full multi-source web discovery (Portals + LinkedIn + Indeed + Reed)
         excluded_list = []
         if skip_portals:
