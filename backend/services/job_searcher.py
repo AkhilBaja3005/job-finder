@@ -6,6 +6,7 @@ import re
 import asyncio
 import hashlib
 import inspect
+from datetime import datetime, timezone
 # pyrefly: ignore [missing-import]
 from bs4 import BeautifulSoup
 from typing import List, Optional, Dict, Any
@@ -589,6 +590,7 @@ async def search_targetjobs_uk(keyword: str, location: str = "Remote", timeframe
         all_items = docs + promoted
 
         seen_nids = set()
+        now_date = datetime.now(timezone.utc).date()
         for doc in all_items:
             nid = str(doc.get("nid", "") or doc.get("uuid", ""))
             if not nid or nid in seen_nids:
@@ -603,11 +605,33 @@ async def search_targetjobs_uk(keyword: str, location: str = "Remote", timeframe
             full_url = f"https://targetjobs.co.uk{path}" if path.startswith("/") else path
             raw_body = doc.get("body") or ""
 
+            # Check application deadline date if provided
+            deadline_str = doc.get("application_deadline_date")
+            if deadline_str:
+                try:
+                    clean_d = str(deadline_str).replace("Z", "+00:00")[:10]
+                    deadline_dt = datetime.strptime(clean_d, "%Y-%m-%d").date()
+                    if deadline_dt < now_date:
+                        log_ist(f"[Job Searcher] ⏳ Skipping expired TargetJobs listing '{title}' (Deadline was {clean_d})")
+                        continue
+                except Exception:
+                    pass
+
             # Extract clean description from HTML body
             clean_jd = ""
             if raw_body:
                 soup = BeautifulSoup(raw_body, "html.parser")
                 clean_jd = soup.get_text(separator="\n", strip=True)
+
+            # Check if description or title indicates closed application
+            combined_text = (clean_jd + " " + title).lower()
+            if any(kw in combined_text for kw in [
+                "application closed", "applications closed", "applications are now closed",
+                "no longer accepting applications", "deadline passed", "this role has expired",
+                "position closed", "vacancy closed"
+            ]):
+                log_ist(f"[Job Searcher] 🚫 Skipping closed TargetJobs listing '{title}'")
+                continue
 
             results.append(JobSearchResult(
                 title=title,
@@ -1069,10 +1093,13 @@ async def find_matching_jobs(
     Main aggregator pipeline:
     1. Resolves search queries (either user-entered keywords or auto-generates from resume).
     2. Fetches LinkedIn, Indeed, Reed, TargetJobs & Portals concurrently.
-    3. Respects exclude_portals (e.g. ['targetjobs', 'reed', 'indeed']) to skip specific job sources.
+    3. Respects exclude_portals (defaults to ['targetjobs'] to skip graduate portal unless explicitly opted in).
     4. Ranks by a cheap title heuristic, then fetches the real JD for top jobs and scores them.
     5. Filters and returns job matches >= 55%.
     """
+    if exclude_portals is None:
+        exclude_portals = ["targetjobs"]
+
     if keywords and keywords.strip():
         # User-provided search role overrides
         queries = [q.strip() for q in keywords.split(",") if q.strip()]
