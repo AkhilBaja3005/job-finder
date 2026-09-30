@@ -229,6 +229,130 @@ SKILLS TO CATEGORIZE:
     res_cats = {k: v for k, v in result_categories.items() if v}
     return res_cats if res_cats else {"Technical Skills": skill_items}
 
+def _deterministic_offline_resume_parser(raw_text: str, ext: str) -> Dict[str, Any]:
+    """
+    High-accuracy deterministic regex/structural parser used when LLM calls are unavailable,
+    offline, rate-limited, or encountering DNS/network connection drops.
+    """
+    parsed: Dict[str, Any] = {
+        "name": "Candidate",
+        "email": "",
+        "phone": "",
+        "location": "",
+        "links": [],
+        "summary": "",
+        "skills": {},
+        "experience": [],
+        "education": [],
+        "projects": [],
+        "achievements": []
+    }
+
+    # 1. Candidate Name Extraction
+    if ext == '.tex':
+        name_m = re.search(r"\\name\{([^}]+)\}", raw_text)
+        if not name_m:
+            name_m = re.search(r"\\textbf\{\\LARGE\s+([^}]+)\}", raw_text)
+        if not name_m:
+            name_m = re.search(r"\\Huge\\scshape\s+([^\\]+)", raw_text)
+        if name_m:
+            parsed["name"] = name_m.group(1).replace(r"\bf", "").strip()
+    else:
+        # First non-empty lines
+        for line in raw_text.split("\n")[:5]:
+            l = line.strip()
+            if l and not re.search(r"[@\+\d\(\)]", l) and len(l) < 50:
+                # Clean kerning anomalies like P A L L A V I -> PALLAVI
+                if re.match(r"^([A-Z]\s+){2,}[A-Z]$", l):
+                    l = re.sub(r"\s+", "", l)
+                parsed["name"] = l
+                break
+
+    # 2. Email Extraction
+    email_m = re.findall(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", raw_text)
+    if email_m:
+        parsed["email"] = email_m[0].strip()
+
+    # 3. Phone Extraction
+    phone_m = re.findall(r"(?:(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,5}\)?[-.\s]?\d{3,5}[-.\s]?\d{3,5})", raw_text)
+    for p in phone_m:
+        p_clean = p.strip()
+        if len(re.sub(r"\D", "", p_clean)) >= 9:
+            parsed["phone"] = p_clean
+            break
+
+    # 4. Links Extraction (LinkedIn, GitHub, Portfolios)
+    links_m = re.findall(r"(?:https?://[^\s)\]\"'>]+|(?:linkedin\.com/in/[^\s)\]\"'>]+)|(?:github\.com/[^\s)\]\"'>]+))", raw_text, re.IGNORECASE)
+    clean_links = []
+    for lk in links_m:
+        lk_clean = lk.strip()
+        if not lk_clean.startswith("http"):
+            lk_clean = "https://" + lk_clean
+        if lk_clean not in clean_links:
+            clean_links.append(lk_clean)
+    parsed["links"] = clean_links
+
+    # 5. Location Extraction
+    loc_m = re.search(r"([A-Z][a-zA-Z\s]+,\s*(?:UK|United Kingdom|USA|US|India|London|England|Scotland|Wales|Canada|Germany|France|Singapore))", raw_text)
+    if loc_m:
+        parsed["location"] = loc_m.group(1).strip()
+
+    # 6. Education Extraction (.tex and text)
+    if ext == '.tex':
+        edu_sec = re.search(r"\\begin\{rSection\}\{Education\}(.*?)\\end\{rSection\}", raw_text, re.DOTALL | re.IGNORECASE)
+        if edu_sec:
+            subsections = re.findall(r"\\begin\{rSubsection\}\{([^}]+)\}\{([^}]+)\}\{([^}]+)\}\{([^}]*)\}(.*?)\\end\{rSubsection\}", edu_sec.group(1), re.DOTALL)
+            for inst, dates, deg, loc, body in subsections:
+                bullets = [re.sub(r"^\s*\\item\s*", "", b).strip() for b in body.split("\n") if r"\item" in b]
+                parsed["education"].append({
+                    "institution": inst.strip(),
+                    "degree": deg.strip(),
+                    "field_of_study": "",
+                    "start_date": "",
+                    "graduation_date": dates.strip(),
+                    "location": loc.strip(),
+                    "gpa": None,
+                    "highlights": bullets
+                })
+
+        # Experience Extraction (.tex)
+        exp_sec = re.search(r"\\begin\{rSection\}\{(?:Experience|Work Experience|Employment History)\}(.*?)\\end\{rSection\}", raw_text, re.DOTALL | re.IGNORECASE)
+        if exp_sec:
+            subsections = re.findall(r"\\begin\{rSubsection\}\{([^}]+)\}\{([^}]+)\}\{([^}]+)\}\{([^}]*)\}(.*?)\\end\{rSubsection\}", exp_sec.group(1), re.DOTALL)
+            for comp, dates, role, loc, body in subsections:
+                bullets = [re.sub(r"^\s*\\item\s*", "", b).strip() for b in body.split("\n") if r"\item" in b]
+                parsed["experience"].append({
+                    "company": comp.strip(),
+                    "role": role.strip(),
+                    "start_date": "",
+                    "end_date": dates.strip(),
+                    "technologies": "",
+                    "description": bullets
+                })
+
+        # Projects Extraction (.tex)
+        proj_sec = re.search(r"\\begin\{rSection\}\{(?:Projects|Technical Projects|Personal Projects)\}(.*?)\\end\{rSection\}", raw_text, re.DOTALL | re.IGNORECASE)
+        if proj_sec:
+            subsections = re.findall(r"\\begin\{rSubsection\}\{([^}]+)\}\{([^}]*)\}\{([^}]*)\}\{([^}]*)\}(.*?)\\end\{rSubsection\}", proj_sec.group(1), re.DOTALL)
+            for title, dates, tech, link, body in subsections:
+                bullets = [re.sub(r"^\s*\\item\s*", "", b).strip() for b in body.split("\n") if r"\item" in b]
+                tech_list = [t.strip() for t in tech.replace(r"\&", "&").split(",") if t.strip()] if tech else []
+                parsed["projects"].append({
+                    "title": title.strip(),
+                    "technologies": tech_list,
+                    "url": link.strip(),
+                    "description": bullets
+                })
+
+        # Achievements Extraction (.tex)
+        ach_sec = re.search(r"\\begin\{rSection\}\{(?:Achievements|Leadership|Honors|Awards)[^}]*\}(.*?)\\end\{rSection\}", raw_text, re.DOTALL | re.IGNORECASE)
+        if ach_sec:
+            bullets = [re.sub(r"^\s*\\item\s*", "", b).strip() for b in ach_sec.group(1).split("\n") if r"\item" in b]
+            parsed["achievements"] = [b for b in bullets if b]
+
+    return parsed
+
+
 def parse_resume(file_path: str) -> StructuredResume:
     ext = os.path.splitext(file_path)[1].lower()
     if ext == '.pdf':
@@ -275,8 +399,12 @@ def parse_resume(file_path: str) -> StructuredResume:
     ---
     """
 
-    response_text = generate_content_with_fallback(prompt, StructuredResume)
-    parsed_data = json.loads(response_text)
+    try:
+        response_text = generate_content_with_fallback(prompt, StructuredResume)
+        parsed_data = json.loads(response_text)
+    except Exception as exc:
+        print(f"[parse_resume] LLM extraction unavailable ({exc}). Falling back to deterministic parser.")
+        parsed_data = _deterministic_offline_resume_parser(raw_text, ext)
 
     # Validate that we got required fields
     if not parsed_data.get("name"):
