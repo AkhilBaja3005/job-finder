@@ -189,6 +189,8 @@ class SearchJobsRequest(BaseModel):
     timeframe: Optional[str] = "48h"          # "24h", "48h", "7d"
     keywords: Optional[str] = None
     target_platforms: Optional[List[str]] = ["ashby", "greenhouse", "lever", "linkedin", "workday"]
+    exclude_portals: Optional[List[str]] = None
+    skip_portals: Optional[List[str]] = None
 
 
 class ExtensionParseJobRequest(BaseModel):
@@ -247,6 +249,7 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
         raise HTTPException(status_code=400, detail="Please upload a resume first.")
 
     db_api_key = None
+    user = None
     if token:
         user = await async_get_user_by_token(token)
         if user:
@@ -257,7 +260,35 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
     effective_location = request.location or "Remote"
     effective_timeframe = request.timeframe or "48h"
 
-    cache_key = (effective_keywords, effective_location, effective_timeframe)
+    # Resolve excluded portals (default: 'targetjobs' skipped unless explicitly included)
+    effective_exclude = []
+    req_exclude = request.exclude_portals or request.skip_portals
+    if req_exclude is not None:
+        effective_exclude = [p.strip().lower() for p in req_exclude if p.strip()]
+    else:
+        effective_exclude = ["targetjobs"]
+        if user and user.get("skip_portals") is not None:
+            effective_exclude = [str(p).strip().lower() for p in user.get("skip_portals") if str(p).strip()]
+        elif not user:
+            try:
+                from mcp.tools.profile_tools import load_profile_data
+                prof = load_profile_data() or {}
+                p_prefs = prof.get("search_preferences", {})
+                if "skip_portals" in p_prefs or "exclude_portals" in p_prefs:
+                    p_skip = p_prefs.get("skip_portals") if "skip_portals" in p_prefs else p_prefs.get("exclude_portals")
+                    if isinstance(p_skip, list):
+                        effective_exclude = [str(p).strip().lower() for p in p_skip if str(p).strip()]
+                    elif isinstance(p_skip, str):
+                        effective_exclude = [p.strip().lower() for p in p_skip.split(",") if p.strip()]
+            except Exception:
+                pass
+
+    env_skip = os.getenv("SKIP_PORTALS") or os.getenv("EXCLUDE_PORTALS")
+    if env_skip:
+        effective_exclude.extend([p.strip().lower() for p in env_skip.split(",") if p.strip()])
+    effective_exclude = list(dict.fromkeys(effective_exclude))
+
+    cache_key = (effective_keywords, effective_location, effective_timeframe, tuple(sorted(effective_exclude)))
     cached_jobs = _job_search_cache.get(cache_key)
     if cached_jobs is not None:
         async def cached_job_stream():
@@ -290,7 +321,8 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                         keywords=effective_keywords,
                         timeframe=effective_timeframe,
                         custom_api_key=active_api_key,
-                        browser=getattr(http_request.app.state, "browser", None)
+                        browser=getattr(http_request.app.state, "browser", None),
+                        exclude_portals=effective_exclude if effective_exclude else None
                     ):
                         try:
                             parsed = json.loads(chunk.strip())

@@ -171,6 +171,7 @@ function App() {
   const [searchKeywords, setSearchKeywords] = useState(() => sessionStorage.getItem('search_keywords') || '');
   const [searchTimeframe, setSearchTimeframe] = useState(() => sessionStorage.getItem('search_timeframe') || '48h'); // '24h' | '48h' | '1w' | '1m'
   const [targetPlatform, setTargetPlatform] = useState(() => sessionStorage.getItem('target_platform') || 'all');
+  const [includeTargetJobs, setIncludeTargetJobs] = useState(() => sessionStorage.getItem('include_targetjobs') === 'true'); // false by default
   const [isDiscoveryView, setIsDiscoveryView] = useState(() => sessionStorage.getItem('is_discovery_view') === 'true');
   const [dashboardMode, setDashboardMode] = useState(() => {
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/docs')) {
@@ -533,6 +534,11 @@ function App() {
           if (data.cron_time) {
             setCronTime(data.cron_time.slice(0, 5)); // format HH:MM
           }
+          if (data.skip_portals) {
+            const hasTargetJobs = Array.isArray(data.skip_portals) && data.skip_portals.some(p => p.toLowerCase().includes('targetjobs'));
+            setIncludeTargetJobs(!hasTargetJobs);
+            sessionStorage.setItem('include_targetjobs', String(!hasTargetJobs));
+          }
         } else {
           handleLogout();
         }
@@ -542,6 +548,33 @@ function App() {
     };
     fetchUser();
   }, [authToken]);
+
+  const handleToggleIncludeTargetJobs = async (checked) => {
+    setIncludeTargetJobs(checked);
+    sessionStorage.setItem('include_targetjobs', String(checked));
+    if (authToken && user) {
+      try {
+        const nextSkip = checked ? [] : ['targetjobs'];
+        await fetch(`${API_BASE}/user/subscription`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            cron_enabled: cronEnabled,
+            cron_role: cronRole,
+            cron_location: cronLocation,
+            cron_time: cronTime ? `${cronTime}:00` : "18:00:00",
+            send_tailored_email: sendTailoredEmail,
+            skip_portals: nextSkip
+          })
+        });
+      } catch (err) {
+        console.error('Failed to sync skip_portals preference', err);
+      }
+    }
+  };
 
   // Deep-linking / URL Parameter pre-fill from Extension
   useEffect(() => {
@@ -1297,6 +1330,7 @@ function App() {
       headers['Authorization'] = `Bearer ${getAuthHeader()}`;
 
       const targetPlatforms = targetPlatform && targetPlatform !== 'all' ? [targetPlatform] : null;
+      const excludePortals = includeTargetJobs ? [] : ['targetjobs'];
       const response = await fetch(`${API_BASE}/search_matching_jobs`, {
         method: 'POST',
         headers: headers,
@@ -1305,7 +1339,8 @@ function App() {
           location: searchLocation,
           keywords: searchKeywords || null,
           timeframe: searchTimeframe,
-          target_platforms: targetPlatforms
+          target_platforms: targetPlatforms,
+          exclude_portals: excludePortals
         }),
       });
 
@@ -3869,6 +3904,8 @@ function App() {
                   setSearchTimeframe={setSearchTimeframe}
                   targetPlatform={targetPlatform}
                   setTargetPlatform={setTargetPlatform}
+                  includeTargetJobs={includeTargetJobs}
+                  setIncludeTargetJobs={handleToggleIncludeTargetJobs}
                   primaryRole={resumeData?.experience?.[0]?.role || ''}
                   discovering={discovering}
                   loading={loading}

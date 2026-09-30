@@ -49,26 +49,29 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
     cron_role = user.get("cron_role") or ""
     cron_location = user.get("cron_location") or "Remote"
 
-    # Resolve excluded portals (e.g., targetjobs, reed, indeed)
+    # Resolve excluded portals (default: 'targetjobs' skipped unless explicitly opted in)
     excluded_portals = []
-    user_sp = user.get("skip_portals") or user.get("exclude_portals")
-    if user_sp:
+    user_sp = user.get("skip_portals") if "skip_portals" in user else user.get("exclude_portals")
+    if user_sp is not None:
         if isinstance(user_sp, str):
             excluded_portals.extend([p.strip().lower() for p in user_sp.split(",") if p.strip()])
         elif isinstance(user_sp, list):
             excluded_portals.extend([str(p).strip().lower() for p in user_sp if str(p).strip()])
-
-    try:
-        from mcp.tools.profile_tools import load_profile_data
-        prof = load_profile_data() or {}
-        p_prefs = prof.get("search_preferences", {})
-        p_skip = p_prefs.get("skip_portals") or p_prefs.get("exclude_portals")
-        if isinstance(p_skip, list):
-            excluded_portals.extend([str(p).strip().lower() for p in p_skip if str(p).strip()])
-        elif isinstance(p_skip, str):
-            excluded_portals.extend([p.strip().lower() for p in p_skip.split(",") if p.strip()])
-    except Exception:
-        pass
+    else:
+        # Fallback to candidate profile or default targetjobs exclusion
+        excluded_portals = ["targetjobs"]
+        try:
+            from mcp.tools.profile_tools import load_profile_data
+            prof = load_profile_data() or {}
+            p_prefs = prof.get("search_preferences", {})
+            if "skip_portals" in p_prefs or "exclude_portals" in p_prefs:
+                p_skip = p_prefs.get("skip_portals") if "skip_portals" in p_prefs else p_prefs.get("exclude_portals")
+                if isinstance(p_skip, list):
+                    excluded_portals = [str(p).strip().lower() for p in p_skip if str(p).strip()]
+                elif isinstance(p_skip, str):
+                    excluded_portals = [p.strip().lower() for p in p_skip.split(",") if p.strip()]
+        except Exception:
+            pass
 
     env_skip = os.getenv("SKIP_PORTALS") or os.getenv("EXCLUDE_PORTALS")
     if env_skip:

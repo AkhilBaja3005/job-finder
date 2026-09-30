@@ -29,6 +29,7 @@ class SubscriptionRequest(BaseModel):
     cron_location: Optional[str] = "Remote"
     cron_time: Optional[str] = "18:00:00"
     send_tailored_email: Optional[bool] = True
+    skip_portals: Optional[List[str]] = None
 
 
 class SettingsRequest(BaseModel):
@@ -49,6 +50,7 @@ class ProfileUpdateRequest(BaseModel):
     sponsorship: Optional[str] = None
     skills: Optional[Any] = None
     summary: Optional[str] = None
+    skip_portals: Optional[List[str]] = None
     raw_resume_data: Optional[dict] = None
 
 
@@ -127,6 +129,9 @@ async def user_me(authorization: Optional[str] = Header(None)):
                     user["resume_name"] = sess["data"].get("name")
         except Exception:
             pass
+
+    if user.get("skip_portals") is None:
+        user["skip_portals"] = ["targetjobs"]
 
     return user
 
@@ -231,6 +236,10 @@ async def update_user_profile(request: ProfileUpdateRequest, authorization: Opti
                 supabase_request(f"user_resumes?user_id=eq.{user_id}", "PATCH", payload)
             else:
                 supabase_request("user_resumes", "POST", payload)
+
+            if request.skip_portals is not None:
+                supabase_request(f"users?id=eq.{user_id}", "PATCH", {"skip_portals": request.skip_portals})
+
             if token:
                 invalidate_token_cache(token)
         except Exception as e:
@@ -256,6 +265,8 @@ async def user_subscription(request: SubscriptionRequest, authorization: Optiona
     }
     if request.send_tailored_email is not None:
         payload["send_tailored_email"] = request.send_tailored_email
+    if request.skip_portals is not None:
+        payload["skip_portals"] = request.skip_portals
 
     supabase_request(f"users?id=eq.{user['id']}", "PATCH", payload)
     invalidate_token_cache(token)

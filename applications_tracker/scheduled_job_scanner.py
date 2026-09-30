@@ -833,13 +833,20 @@ async def run_pipeline(
         # Run full multi-source web discovery (Portals + LinkedIn + Indeed + Reed)
         excluded_list = []
         if skip_portals:
-            excluded_list.extend([p.strip().lower() for p in skip_portals.split(",") if p.strip()])
+            if skip_portals.strip().lower() in ("none", "false", "0"):
+                excluded_list = []
+            else:
+                excluded_list.extend([p.strip().lower() for p in skip_portals.split(",") if p.strip()])
         else:
-            p_skip = prefs.get("skip_portals") or prefs.get("exclude_portals")
+            p_skip = prefs.get("skip_portals") if "skip_portals" in prefs else prefs.get("exclude_portals")
             if isinstance(p_skip, list):
                 excluded_list.extend([str(p).strip().lower() for p in p_skip if str(p).strip()])
             elif isinstance(p_skip, str):
                 excluded_list.extend([p.strip().lower() for p in p_skip.split(",") if p.strip()])
+            elif p_skip is None:
+                # Default exclusion: targetjobs is skipped by default
+                excluded_list.append("targetjobs")
+
             env_skip = os.getenv("SKIP_PORTALS") or os.getenv("EXCLUDE_PORTALS")
             if env_skip:
                 excluded_list.extend([p.strip().lower() for p in env_skip.split(",") if p.strip()])
