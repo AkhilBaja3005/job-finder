@@ -61,25 +61,49 @@ async def lifespan(app: FastAPI):
     # Launch Playwright browser instance if available
     browser = None
     playwright = None
-    try:
-        from playwright.async_api import async_playwright
-        playwright = await async_playwright().start()
-        browser = await playwright.chromium.launch(
-            headless=True,
-            args=[
+    if os.getenv("DISABLE_STARTUP_BROWSER") not in ("1", "true", "True"):
+        try:
+            from playwright.async_api import async_playwright
+            playwright = await async_playwright().start()
+            launch_args = [
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-gpu"
             ]
-        )
-        app.state.browser = browser
-        app.state.playwright = playwright
-        print("🟢 Headless browser pool initialized successfully.")
-    except Exception as e:
-        print(f"⚠️ Playwright initialization skipped/failed: {e}")
-        app.state.browser = None
-        app.state.playwright = None
+            try:
+                browser = await playwright.chromium.launch(
+                    headless=True,
+                    args=launch_args
+                )
+            except Exception:
+                try:
+                    browser = await playwright.chromium.launch(
+                        channel="chrome",
+                        headless=True,
+                        args=launch_args
+                    )
+                except Exception:
+                    browser = None
+
+            if browser:
+                app.state.browser = browser
+                app.state.playwright = playwright
+                print("🟢 Headless browser pool initialized successfully.")
+            else:
+                app.state.browser = None
+                app.state.playwright = None
+                if playwright:
+                    try:
+                        await playwright.stop()
+                    except Exception:
+                        pass
+                    playwright = None
+                print("ℹ️ Playwright browser pool skipped (using high-speed direct API discovery).")
+        except Exception as e:
+            print(f"ℹ️ Playwright background pool skipped: {e}")
+            app.state.browser = None
+            app.state.playwright = None
 
     # Start background cron worker
     cron_task = asyncio.create_task(background_cron_worker())
