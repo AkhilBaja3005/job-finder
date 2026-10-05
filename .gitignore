@@ -36,3 +36,5 @@ applications_tracker/company_slugs.db
 /.agents
 /brag-output
 brag-plan.md
+data/
+
