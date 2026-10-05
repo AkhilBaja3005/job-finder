@@ -11,10 +11,17 @@ import asyncio
 import subprocess
 from typing import Dict, Any, Optional, List
 
-# pyrefly: ignore [missing-import]
-from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "backend", ".env"))
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
+from config.constants import resolve_workspace_root
+try:
+    from dotenv import load_dotenv
+    ws_env = os.path.join(resolve_workspace_root(), ".env")
+    if os.path.exists(ws_env):
+        load_dotenv(ws_env)
+    elif "JOB_FINDER_ROOT" not in os.environ:
+        load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "backend", ".env"))
+        load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
+except Exception:
+    pass
 # pyrefly: ignore [missing-import]
 from mcp.tools.profile_tools import load_profile_data
 # pyrefly: ignore [missing-import]

@@ -68,10 +68,14 @@ if os.path.isdir(BACKEND_DIR):
 sys.path.insert(0, TRACKER_DIR)
 
 # pyrefly: ignore [missing-import]
-from dotenv import load_dotenv
-load_dotenv()
-if os.path.exists(".env"):
-    load_dotenv(".env")
+try:
+    if not os.environ.get("JOB_FINDER_ROOT"):
+        from dotenv import load_dotenv
+        load_dotenv()
+        if os.path.exists(".env"):
+            load_dotenv(".env")
+except ImportError:
+    pass
 
 
 from mcp.tools.profile_tools import load_profile_data

@@ -14,9 +14,13 @@ from typing import Optional, Callable, Dict, Any, List
 from utils.ssl_utils import SSL_CONTEXT as _SSL_CONTEXT
 
 # pyrefly: ignore [missing-import]
-from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
+try:
+    if not os.environ.get("JOB_FINDER_ROOT"):
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+        load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
+except ImportError:
+    pass
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Global Configurations & Provider Layout Models

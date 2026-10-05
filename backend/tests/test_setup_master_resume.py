@@ -10,15 +10,26 @@ try:
     import pytest
 except ImportError:
     class PytestMock:
-        def fixture(self, func):
-            return func
-    pytest = PytestMock()
+        def fixture(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            if args and callable(args[0]):
+                return args[0]
+            return decorator
+    pytest = PytestMock()  # type: ignore
 repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from job_finder.cli import main
+
+
+@pytest.fixture(autouse=True)
+def mock_external_calls():
+    """Globally mocks external LLM generation in setup tests to ensure fast offline execution."""
+    with patch("backend.services.gemini_client.generate_content_with_fallback", return_value="Optimized executive summary"):
+        yield
 
 
 @pytest.fixture
@@ -63,9 +74,18 @@ def test_setup_prompts_and_persists_master_resume(fake_workspace, monkeypatch):
 
     with patch("sys.stdin.isatty", return_value=True):
         with patch("builtins.input", return_value=resume_file):
-            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", return_value={"success": True, "skills_count": 8, "experience_count": 3, "education_count": 1}) as mock_sync:
-                with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaTestKey"]):
-                    main()
+            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 8, "experience_count": 3, "education_count": 1}) as mock_sync:
+                with patch("backend.services.gemini_client.generate_content_with_fallback", return_value="Optimized executive summary"):
+                    with patch("backend.services.browser_use_agent.ensure_persistent_browser", return_value="http://127.0.0.1:9222"):
+                        with patch("urllib.request.urlopen") as mock_urlopen:
+                            from unittest.mock import MagicMock
+                            mock_resp = MagicMock()
+                            mock_resp.read.return_value = json.dumps({"id": "TAB_123"}).encode("utf-8")
+                            mock_resp.__enter__.return_value = mock_resp
+                            mock_urlopen.return_value = mock_resp
+
+                            with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaTestKey"]):
+                                main()
 
     # 1. Verify MASTER_RESUME_PATH was written to .env
     env_content = fake_workspace["env_path"].read_text(encoding="utf-8")
@@ -86,9 +106,10 @@ def test_setup_with_resume_cli_argument(fake_workspace, monkeypatch):
     monkeypatch.setenv("JOB_FINDER_ROOT", str(ws))
     monkeypatch.delenv("MASTER_RESUME_PATH", raising=False)
 
-    with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}) as mock_sync:
-        with patch.object(sys, "argv", ["job-finder", "setup", "--resume", resume_file, "--api-key", "AIzaTestKey"]):
-            main()
+    with patch("sys.stdin.isatty", return_value=False):
+        with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}) as mock_sync:
+            with patch.object(sys, "argv", ["job-finder", "setup", "--resume", resume_file, "--api-key", "AIzaTestKey"]):
+                main()
 
     env_content = fake_workspace["env_path"].read_text(encoding="utf-8")
     assert f"MASTER_RESUME_PATH={resume_file}" in env_content
@@ -105,12 +126,21 @@ def test_setup_interactive_accepts_detected_default(fake_workspace, monkeypatch)
     monkeypatch.delenv("MASTER_RESUME_PATH", raising=False)
 
     with patch("applications_tracker.scheduled_job_scanner.find_master_resume_with_mac_tags", return_value=resume_file):
-        with patch("sys.stdin.isatty", return_value=True):
-            # User presses Enter without typing (empty string input)
-            with patch("builtins.input", return_value=""):
-                with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", return_value={"success": True, "skills_count": 4, "experience_count": 1, "education_count": 1}) as mock_sync:
-                    with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaTestKey"]):
-                        main()
+        with patch("backend.services.ats_scorer.evaluate_master_resume", return_value={"ats_score": 85, "skills_count": 9, "quantified_percentage": 100, "candidate_years": 5.8, "suggestions": []}):
+            with patch("sys.stdin.isatty", return_value=True):
+                # User presses Enter without typing (empty string input)
+                with patch("builtins.input", return_value=""):
+                    with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 4, "experience_count": 1, "education_count": 1}) as mock_sync:
+                        with patch("backend.services.browser_use_agent.ensure_persistent_browser", return_value="http://127.0.0.1:9222"):
+                            with patch("urllib.request.urlopen") as mock_urlopen:
+                                from unittest.mock import MagicMock
+                                mock_resp = MagicMock()
+                                mock_resp.read.return_value = json.dumps({"id": "TAB_123"}).encode("utf-8")
+                                mock_resp.__enter__.return_value = mock_resp
+                                mock_urlopen.return_value = mock_resp
+
+                                with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaTestKey"]):
+                                    main()
 
     env_content = fake_workspace["env_path"].read_text(encoding="utf-8")
     assert f"MASTER_RESUME_PATH={resume_file}" in env_content
@@ -125,8 +155,9 @@ def test_setup_warns_on_nonexistent_resume(fake_workspace, monkeypatch, capsys):
     monkeypatch.setenv("JOB_FINDER_ROOT", str(ws))
     monkeypatch.delenv("MASTER_RESUME_PATH", raising=False)
 
-    with patch.object(sys, "argv", ["job-finder", "setup", "--resume", bogus_path, "--api-key", "AIzaTestKey"]):
-        main()
+    with patch("sys.stdin.isatty", return_value=False):
+        with patch.object(sys, "argv", ["job-finder", "setup", "--resume", bogus_path, "--api-key", "AIzaTestKey"]):
+            main()
 
     captured = capsys.readouterr()
     assert "Provided resume file does not exist" in captured.out
@@ -157,28 +188,24 @@ def test_setup_prompts_and_launches_automation_browser(fake_workspace, monkeypat
             return "n"
         return ""
 
-
-
-
     with patch("sys.stdin.isatty", return_value=True):
         with patch("builtins.input", side_effect=mock_input):
-            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
-                with patch("backend.services.browser_use_agent.ensure_persistent_browser", return_value="http://127.0.0.1:9222") as mock_ensure:
-                    with patch("urllib.request.urlopen") as mock_urlopen:
-                        # Return dummy JSON response for CDP /json/new calls
-                        from unittest.mock import MagicMock
-                        mock_resp = MagicMock()
-                        mock_resp.read.return_value = json.dumps({"id": "TAB_123"}).encode("utf-8")
-                        mock_resp.__enter__.return_value = mock_resp
-                        mock_urlopen.return_value = mock_resp
+            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
+                with patch("backend.services.gemini_client.generate_content_with_fallback", return_value="Optimized executive summary"):
+                    with patch("backend.services.browser_use_agent.ensure_persistent_browser", return_value="http://127.0.0.1:9222") as mock_ensure:
+                        with patch("urllib.request.urlopen") as mock_urlopen:
+                            # Return dummy JSON response for CDP /json/new calls
+                            from unittest.mock import MagicMock
+                            mock_resp = MagicMock()
+                            mock_resp.read.return_value = json.dumps({"id": "TAB_123"}).encode("utf-8")
+                            mock_resp.__enter__.return_value = mock_resp
+                            mock_urlopen.return_value = mock_resp
 
-                        with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaTestKey"]):
-                            main()
+                            with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaTestKey"]):
+                                main()
 
     mock_ensure.assert_called_once_with(headless=False)
     assert mock_urlopen.call_count >= 3
-
-
 
 
 def test_setup_browser_prompt_skipped(fake_workspace, monkeypatch):
@@ -193,18 +220,17 @@ def test_setup_browser_prompt_skipped(fake_workspace, monkeypatch):
         p_lower = prompt.lower()
         if "master resume path" in p_lower:
             return resume_file
-        if "optimize your summary" in p_lower:
-            return "n"
         if "automation browser" in p_lower:
             return "n"
-        return ""
+        return "n"
 
     with patch("sys.stdin.isatty", return_value=True):
         with patch("builtins.input", side_effect=mock_input):
-            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
-                with patch("backend.services.browser_use_agent.ensure_persistent_browser") as mock_ensure:
-                    with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaTestKey"]):
-                        main()
+            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
+                with patch("backend.services.gemini_client.generate_content_with_fallback", return_value="Optimized executive summary"):
+                    with patch("backend.services.browser_use_agent.ensure_persistent_browser") as mock_ensure:
+                        with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaTestKey"]):
+                            main()
 
     mock_ensure.assert_not_called()
 

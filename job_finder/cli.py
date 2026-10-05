@@ -10,9 +10,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 def load_workspace_env():
-    """Loads .env configuration across all candidate locations prior to command execution."""
+    """Loads .env configuration across candidate locations prior to command execution."""
     try:
         from dotenv import load_dotenv
+        custom_root = os.environ.get("JOB_FINDER_ROOT")
+        if custom_root:
+            ws_env = os.path.join(custom_root, ".env")
+            if os.path.exists(ws_env):
+                load_dotenv(ws_env, override=True)
+            return
+
         env_candidates = [
             os.path.join(os.getcwd(), ".env"),
             os.path.expanduser("~/.config/job-finder/.env"),
@@ -1262,7 +1269,10 @@ Output Markdown with 4 sections:
                         # Bring Chrome to the front
                         if sys.platform == "darwin":
                             import subprocess
-                            subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to activate'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            try:
+                                subprocess.run(["osascript", "-e", 'tell application "Google Chrome" to activate'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+                            except Exception:
+                                pass
 
                         print("\n✅ Dedicated Automation Browser window opened!")
                         print("   👉 Look for the Google Chrome window that opened LinkedIn, Indeed, and Gmail.")

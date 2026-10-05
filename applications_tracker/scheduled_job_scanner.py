@@ -122,10 +122,11 @@ def normalize_job_url(u: Optional[str]) -> str:
 
 # pyrefly: ignore [missing-import]
 try:
-    from dotenv import load_dotenv  # type: ignore
-    load_dotenv()
-    if os.path.exists(".env"):
-        load_dotenv(".env")
+    if not os.environ.get("JOB_FINDER_ROOT"):
+        from dotenv import load_dotenv  # type: ignore
+        load_dotenv()
+        if os.path.exists(".env"):
+            load_dotenv(".env")
 except ImportError:
     pass
 
@@ -209,8 +210,8 @@ def find_master_resume_with_mac_tags() -> str:
 
     # Check each candidate folder
     for folder in search_folders:
-        if os.path.exists(folder):
-            try:
+        try:
+            if os.path.exists(folder):
                 for fname in sorted(os.listdir(folder)):
                     if fname.lower().endswith(".pdf"):
                         full_p = os.path.join(folder, fname)
@@ -219,13 +220,13 @@ def find_master_resume_with_mac_tags() -> str:
                         if "red" in out.lower():
                             print(f"[Master Resume] 🏷️ Found Red-tagged master resume: {full_p}")
                             return full_p
-            except Exception as e:
-                print(f"[Master Resume] Note: macOS tag inspection in '{folder}' skipped: {e}")
 
-            # Check for any PDF in candidate folder
-            for fname in sorted(os.listdir(folder)):
-                if fname.lower().endswith(".pdf"):
-                    return os.path.join(folder, fname)
+                # Check for any PDF in candidate folder
+                for fname in sorted(os.listdir(folder)):
+                    if fname.lower().endswith(".pdf"):
+                        return os.path.join(folder, fname)
+        except Exception as e:
+            print(f"[Master Resume] Note: Folder inspection in '{folder}' skipped: {e}")
 
     # Secondary fallback to repository master resume or local output
     repo_fallback = _get_default_resume_path()
