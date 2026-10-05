@@ -110,14 +110,15 @@ class LayaDecisionRouter:
             phone = cand.get("phone", "")
             return "reflex", phone
         if field_type == "phone_country_code":
-            phone = cand.get("phone", "")
-            if "+44" in phone:
+            phone = str(cand.get("phone", "")).strip()
+            loc = str(cand.get("location", "")).lower()
+            if "+44" in phone or phone.startswith("0044") or (phone.startswith("44") and len(phone) >= 11) or "uk" in loc or "london" in loc or "united kingdom" in loc:
                 return "reflex", "+44"
-            if "+91" in phone:
+            if "+91" in phone or phone.startswith("0091") or (phone.startswith("91") and len(phone) >= 12) or "india" in loc:
                 return "reflex", "+91"
-            if "+1" in phone:
+            if "+1" in phone or phone.startswith("001") or "united states" in loc or "usa" in loc:
                 return "reflex", "+1"
-            return "reflex", "+44" if "uk" in str(cand.get("location", "")).lower() else "+91"
+            return "reflex", "+44" if "uk" in loc else "+91"
         if field_type == "linkedin":
             return "reflex", cand.get("linkedin", "")
         if field_type == "github":

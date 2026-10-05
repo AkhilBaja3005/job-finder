@@ -384,18 +384,18 @@ def build_application_task_prompt(
            - Many ATS portals (LinkedIn Easy Apply, Greenhouse, Lever, Workday, SmartRecruiters, BambooHR, Ashby) feature a separate country selector dropdown or flag widget beside the phone number input (e.g. `select[id*="phone"]`, `select[name*="country"]`, `select[id*="countryCode"]`, `select[id*="country-code"]`, `.fb-text-selectable__option`, `.iti__selected-country`, `button[aria-label*="Country code" i]`, `button[aria-label*="Phone country" i]`, `button[id*="countryCode"]`, or a flag/dial-code dropdown beside the phone field).
            - LINKEDIN EASY APPLY MANDATORY ACTION:
              1. On LinkedIn Easy Apply form steps, ALWAYS inspect the phone country code selector/dropdown before or while filling the phone number.
-             2. DO NOT leave default or incorrect values (e.g. '+376', 'Andorra', '+1', etc.)! You MUST explicitly select the option matching '{target_country}' / '{target_dial}' / '{country_code_hint}' / '{iso2_code}'.
+             2. OVERWRITE PRE-POPULATED ACCOUNT DEFAULT COUNTRY: LinkedIn often pre-populates country codes from the user's registration account (e.g. '+91' or '+1'). If our candidate profile specifies '{target_country}' ('{target_dial}'), you MUST explicitly change and overwrite it to '{target_country} ({target_dial})'.
              3. If a standard `<select>` dropdown exists for phone country code:
-                - Inspect available `<option>` values or text.
-                - Call `select_dropdown` with the option that matches '{country_code_hint}', '{target_country} ({target_dial})', '{target_country}', or '{target_dial}'.
-             4. If a custom popup / combobox / button dropdown exists (e.g. intl-tel-input, Material UI, LinkedIn custom picker, or Workday prompt list):
-                - Click the phone country code button/picker.
-                - Type '{target_country}' or '{target_dial}' to filter the list.
-                - CLICK the matching country item from the opened dropdown list to guarantee the selection is committed!
-           - SINGLE VS SPLIT PHONE INPUTS:
+                - LinkedIn uses option values like 'urn:li:country:{iso2_code.lower()}' (e.g. 'urn:li:country:gb' for UK, 'urn:li:country:in' for India) or visible text '{country_code_hint}'.
+                - Call `select_dropdown` with the option that matches '{country_code_hint}', '{target_country} ({target_dial})', '{target_country}', or value 'urn:li:country:{iso2_code.lower()}'.
+             4. If a custom popup / typeahead combobox / button dropdown exists (e.g. LinkedIn accessible typeahead combobox, intl-tel-input, Material UI, or Workday prompt list):
+                - Click the phone country code input/button.
+                - TYPE the full country name '{target_country}' (e.g. 'United Kingdom') — DO NOT type only '{target_dial}' or an abbreviation like 'UK' as LinkedIn's typeahead index filters strictly on the full country name prefix.
+                - CLICK the matching country item (e.g. '{country_code_hint}') from the opened dropdown list or press 'Down Arrow' then 'Enter' to commit the selection.
+           - SINGLE VS SPLIT PHONE INPUTS & UK ZERO-STRIPPING:
              * If the form has a SEPARATE country code field and a national phone number field:
                - Ensure the country code is set to '{target_country} ({target_dial})'.
-               - Clear and type '{clean_mobile}' into the national phone number field.
+               - Clear and type '{clean_mobile}' (WITHOUT any leading '0' for UK numbers, e.g. '7459...' not '07459...') into the national phone number field to prevent LinkedIn regex validation errors.
              * If the form has ONLY ONE unified phone number input (without a separate country code dropdown):
                - Clear and type '{full_international_phone}' (e.g. '{target_dial} {clean_mobile}' or '{target_dial}{clean_mobile}') into the phone field so the ATS receives the complete international number.
        - For Dropdowns & Autocomplete Fields:

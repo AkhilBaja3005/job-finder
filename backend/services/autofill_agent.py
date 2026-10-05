@@ -165,18 +165,27 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                 candidate_value = resume_data.get("email") or ""
             elif "country code" in field_key or "dial code" in field_key or "phone code" in field_key or "dialing code" in field_key:
                 phone_raw = resume_data.get("phone") or ""
-                if "+91" in phone_raw or (phone_raw.startswith("91") and len(phone_raw) >= 12):
-                    candidate_value = "+91"
-                elif "+44" in phone_raw or (phone_raw.startswith("44") and len(phone_raw) >= 11):
-                    candidate_value = "+44"
-                elif "+1" in phone_raw:
-                    candidate_value = "+1"
+                loc = (resume_data.get("location") or "").lower()
+                if "+44" in phone_raw or phone_raw.startswith("0044") or (phone_raw.startswith("44") and len(phone_raw) >= 11) or "uk" in loc or "london" in loc or "united kingdom" in loc:
+                    candidate_value = "United Kingdom (+44)"
+                elif "+91" in phone_raw or phone_raw.startswith("0091") or (phone_raw.startswith("91") and len(phone_raw) >= 12) or "india" in loc:
+                    candidate_value = "India (+91)"
+                elif "+1" in phone_raw or phone_raw.startswith("001") or "united states" in loc or "usa" in loc:
+                    candidate_value = "United States (+1)"
                 else:
-                    candidate_value = "+44" if "uk" in (resume_data.get("location") or "").lower() else "+91"
+                    candidate_value = "United Kingdom (+44)" if "uk" in loc else "India (+91)"
             elif "phone" in field_key or "mobile" in field_key or "telephone" in field_key:
                 phone_raw = resume_data.get("phone") or ""
-                # If there's an explicit country code select nearby, we might only need clean local digits
-                candidate_value = phone_raw
+                # Strip dial code and leading zero for clean local national phone entry
+                digits = "".join(c for c in phone_raw if c.isdigit() or c == '+')
+                clean_phone = digits
+                for prefix in ["+44", "0044", "+91", "0091", "+1", "001"]:
+                    if clean_phone.startswith(prefix):
+                        clean_phone = clean_phone[len(prefix):]
+                        break
+                if clean_phone.startswith("0") and len(clean_phone) == 11:
+                    clean_phone = clean_phone[1:]
+                candidate_value = clean_phone or phone_raw
             elif "linkedin" in field_key and len(resume_data.get("links", [])) > 0:
                 candidate_value = next((link for link in resume_data["links"] if "linkedin" in link), "")
             elif "github" in field_key and len(resume_data.get("links", [])) > 0:
@@ -191,20 +200,41 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                 if await inp.evaluate("el => el.tagName") == "SELECT":
                     options = await inp.query_selector_all("option")
                     matched = False
+                    cand_str = str(candidate_value).lower().strip()
+                    
+                    # Define alias search terms for country codes (especially LinkedIn URNs & abbreviations)
+                    aliases = [cand_str, cand_str.lstrip("+")]
+                    if "united kingdom" in cand_str or "+44" in cand_str or "44" in cand_str:
+                        aliases.extend(["urn:li:country:gb", "gb", "uk", "united kingdom", "+44", "44", "gbr"])
+                    elif "india" in cand_str or "+91" in cand_str or "91" in cand_str:
+                        aliases.extend(["urn:li:country:in", "in", "ind", "india", "+91", "91"])
+                    elif "united states" in cand_str or "+1" in cand_str or "usa" in cand_str:
+                        aliases.extend(["urn:li:country:us", "us", "usa", "united states", "+1", "1"])
+
                     for opt in options:
-                        val = await opt.get_attribute("value") or ""
-                        text = await opt.inner_text() or ""
-                        cand_str = str(candidate_value).lower().strip()
-                        if cand_str in val.lower() or cand_str in text.lower() or cand_str.lstrip("+") in val.lower() or cand_str.lstrip("+") in text.lower():
-                            await inp.select_option(value=val)
+                        val = (await opt.get_attribute("value") or "").lower().strip()
+                        text = (await opt.inner_text() or "").lower().strip()
+                        if any(alias in val or alias in text for alias in aliases):
+                            raw_val = await opt.get_attribute("value")
+                            await inp.select_option(value=raw_val)
                             matched = True
                             break
                     if not matched:
-                        await inp.select_option(value=str(candidate_value))
+                        try:
+                            await inp.select_option(value=str(candidate_value))
+                        except Exception:
+                            pass
                 else:
                     # Clear and overwrite with authoritative candidate profile data
-                    await inp.fill(str(candidate_value).strip())
-                    # Check if element is a prompt button/combobox/search field (e.g. Workday prompt button with triple-bar)
+                    type_val = str(candidate_value).strip()
+                    # For country code comboboxes, type the country name for robust typeahead matching
+                    if ("country code" in field_key or "dial code" in field_key) and "united kingdom" in type_val.lower():
+                        type_val = "United Kingdom"
+                    elif ("country code" in field_key or "dial code" in field_key) and "india" in type_val.lower():
+                        type_val = "India"
+                    
+                    await inp.fill(type_val)
+                    # Check if element is a prompt button/combobox/search field (e.g. Workday prompt button with triple-bar or LinkedIn combobox)
                     is_prompt_or_combobox = await inp.evaluate("""el => {
                         const ariaHasPopup = el.getAttribute('aria-haspopup');
                         const role = el.getAttribute('role');
@@ -214,13 +244,14 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                         return role === 'combobox' || ariaHasPopup === 'listbox' || ariaHasPopup === 'true' || Boolean(hasPromptBtn) || autoId.includes('prompt');
                     }""")
                     if is_prompt_or_combobox:
-                        # Press Enter to trigger search/filter in Workday prompt menu
+                        # Press Enter / wait and click matched option
                         try:
                             await inp.press("Enter")
                             await asyncio.sleep(0.5)
                             # If a filtered listbox item appears matching the answer, click it
                             if hasattr(page, "query_selector"):
-                                matched_item = await page.query_selector(f"[role='option']:has-text('{candidate_value}'), [data-automation-id*='promptOption']:has-text('{candidate_value}')")
+                                search_target = "United Kingdom" if "united kingdom" in str(candidate_value).lower() else str(candidate_value)
+                                matched_item = await page.query_selector(f"[role='option']:has-text('{search_target}'), [data-automation-id*='promptOption']:has-text('{search_target}'), li:has-text('{search_target}')")
                                 if matched_item and await matched_item.is_visible():
                                     await matched_item.click()
                         except Exception:
