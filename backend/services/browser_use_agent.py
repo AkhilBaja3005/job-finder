@@ -587,7 +587,21 @@ def ensure_persistent_browser(headless: bool = False) -> str:
         launch_args.append("--headless=new")
 
     print(f"[browser-use] Launching persistent Chrome instance ({chrome_path}) on port {CDP_PORT}...")
-    _chrome_process = subprocess.Popen(launch_args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    popen_kwargs: Dict[str, Any] = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = (
+            subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+        )
+    else:
+        # Detach into independent process session on macOS/Linux so terminal Ctrl+C (SIGINT) does not kill Chrome
+        popen_kwargs["start_new_session"] = True
+
+    _chrome_process = subprocess.Popen(launch_args, **popen_kwargs)
     
     # Wait for CDP endpoint to be ready
     import time
