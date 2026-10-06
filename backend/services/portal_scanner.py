@@ -85,7 +85,7 @@ class PortalScanner:
         
         filter_lower = [p.lower().strip() for p in (target_portals or []) if p.strip()]
         is_single_targeted = len(filter_lower) == 1 and "all" not in filter_lower
-        max_boards = 500 if is_single_targeted else 150
+        max_boards = 800 if is_single_targeted else 250
 
         base = self.config.get("portals", {})
         for ats_k, comp_list in base.items():
