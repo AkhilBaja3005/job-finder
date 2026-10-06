@@ -212,14 +212,19 @@ def find_master_resume_with_mac_tags() -> str:
     for folder in search_folders:
         try:
             if os.path.exists(folder):
-                for fname in sorted(os.listdir(folder)):
-                    if fname.lower().endswith(".pdf"):
-                        full_p = os.path.join(folder, fname)
-                        res = subprocess.run(["mdls", "-name", "kMDItemUserTags", full_p], capture_output=True, text=True)
-                        out = res.stdout or ""
-                        if "red" in out.lower():
-                            print(f"[Master Resume] 🏷️ Found Red-tagged master resume: {full_p}")
-                            return full_p
+                # Check for Red-tagged files on macOS if mdls tool is available
+                if sys.platform == "darwin":
+                    for fname in sorted(os.listdir(folder)):
+                        if fname.lower().endswith(".pdf"):
+                            full_p = os.path.join(folder, fname)
+                            try:
+                                res = subprocess.run(["mdls", "-name", "kMDItemUserTags", full_p], capture_output=True, text=True)
+                                out = res.stdout or ""
+                                if "red" in out.lower():
+                                    print(f"[Master Resume] 🏷️ Found Red-tagged master resume: {full_p}")
+                                    return full_p
+                            except Exception:
+                                pass
 
                 # Check for any PDF in candidate folder
                 for fname in sorted(os.listdir(folder)):
