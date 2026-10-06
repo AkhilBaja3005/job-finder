@@ -144,14 +144,32 @@ job-finder tracker
 job-finder tracker --status applied --limit 10
 ```
 
-### 7. Local Web Server & Dashboard (`job-finder server`)
+### 7. Jobserve Tech & Contract Search (`job-finder jobserve`)
+Search Jobserve for active tech, AI, software engineering, and contract/permanent roles:
+
+```bash
+# Search top Jobserve roles (UK, 48h):
+job-finder jobserve "AI Engineer" --location UK --timeframe 48h
+
+# Auto-apply to discovered Jobserve listings:
+job-finder jobserve "Senior Backend Engineer" --auto-apply --limit 5
+```
+
+### 8. TargetJobs UK Graduate Search (`job-finder targetjobs`)
+Search TargetJobs.co.uk graduate and early career tech vacancies:
+
+```bash
+job-finder targetjobs "Software Engineer" --location London --timeframe 48h
+```
+
+### 9. Local Web Server & Dashboard (`job-finder server`)
 Launch the backend server locally on port 8000:
 
 ```bash
 job-finder server --port 8000
 ```
 
-### 8. Model Context Protocol Server (`job-finder mcp`)
+### 10. Model Context Protocol Server (`job-finder mcp`)
 Launch the stdio MCP server for integration with **Cursor IDE**, **Claude Code**, **Claude Desktop**, and **Antigravity**:
 
 ```bash

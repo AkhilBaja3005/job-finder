@@ -172,6 +172,7 @@ function App() {
   const [searchTimeframe, setSearchTimeframe] = useState(() => sessionStorage.getItem('search_timeframe') || '48h'); // '24h' | '48h' | '1w' | '1m'
   const [targetPlatform, setTargetPlatform] = useState(() => sessionStorage.getItem('target_platform') || 'all');
   const [includeTargetJobs, setIncludeTargetJobs] = useState(() => sessionStorage.getItem('include_targetjobs') === 'true'); // false by default
+  const [includeJobserve, setIncludeJobserve] = useState(() => sessionStorage.getItem('include_jobserve') !== 'false'); // true by default
   const [isDiscoveryView, setIsDiscoveryView] = useState(() => sessionStorage.getItem('is_discovery_view') === 'true');
   const [dashboardMode, setDashboardMode] = useState(() => {
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/docs')) {
@@ -538,6 +539,10 @@ function App() {
             const hasTargetJobs = Array.isArray(data.skip_portals) && data.skip_portals.some(p => p.toLowerCase().includes('targetjobs'));
             setIncludeTargetJobs(!hasTargetJobs);
             sessionStorage.setItem('include_targetjobs', String(!hasTargetJobs));
+
+            const hasJobserve = Array.isArray(data.skip_portals) && data.skip_portals.some(p => p.toLowerCase().includes('jobserve'));
+            setIncludeJobserve(!hasJobserve);
+            sessionStorage.setItem('include_jobserve', String(!hasJobserve));
           }
         } else {
           handleLogout();
@@ -549,12 +554,12 @@ function App() {
     fetchUser();
   }, [authToken]);
 
-  const handleToggleIncludeTargetJobs = async (checked) => {
-    setIncludeTargetJobs(checked);
-    sessionStorage.setItem('include_targetjobs', String(checked));
+  const _syncSkipPortals = async (incTj, incJs) => {
     if (authToken && user) {
       try {
-        const nextSkip = checked ? [] : ['targetjobs'];
+        const nextSkip = [];
+        if (!incTj) nextSkip.push('targetjobs');
+        if (!incJs) nextSkip.push('jobserve');
         await fetch(`${API_BASE}/user/subscription`, {
           method: 'POST',
           headers: {
@@ -574,6 +579,18 @@ function App() {
         console.error('Failed to sync skip_portals preference', err);
       }
     }
+  };
+
+  const handleToggleIncludeTargetJobs = (checked) => {
+    setIncludeTargetJobs(checked);
+    sessionStorage.setItem('include_targetjobs', String(checked));
+    _syncSkipPortals(checked, includeJobserve);
+  };
+
+  const handleToggleIncludeJobserve = (checked) => {
+    setIncludeJobserve(checked);
+    sessionStorage.setItem('include_jobserve', String(checked));
+    _syncSkipPortals(includeTargetJobs, checked);
   };
 
   // Deep-linking / URL Parameter pre-fill from Extension
@@ -1330,7 +1347,9 @@ function App() {
       headers['Authorization'] = `Bearer ${getAuthHeader()}`;
 
       const targetPlatforms = targetPlatform && targetPlatform !== 'all' ? [targetPlatform] : null;
-      const excludePortals = includeTargetJobs ? [] : ['targetjobs'];
+      const excludePortals = [];
+      if (!includeTargetJobs) excludePortals.push('targetjobs');
+      if (!includeJobserve) excludePortals.push('jobserve');
       const response = await fetch(`${API_BASE}/search_matching_jobs`, {
         method: 'POST',
         headers: headers,
@@ -3906,6 +3925,8 @@ function App() {
                   setTargetPlatform={setTargetPlatform}
                   includeTargetJobs={includeTargetJobs}
                   setIncludeTargetJobs={handleToggleIncludeTargetJobs}
+                  includeJobserve={includeJobserve}
+                  setIncludeJobserve={handleToggleIncludeJobserve}
                   primaryRole={resumeData?.experience?.[0]?.role || ''}
                   discovering={discovering}
                   loading={loading}

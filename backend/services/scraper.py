@@ -230,10 +230,13 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
         # pyrefly: ignore [missing-import]
         from services.jd_cache import cache_get, cache_set
         cached_res = cache_get(url)
-        if cached_res and cached_res.get("description") and len(cached_res.get("description", "")) > 50:
-            if on_log:
-                on_log(f"[Scraper] ⚡ Instantly retrieved from persistent JD cache: {url[:60]}")
-            return cached_res
+        if cached_res and cached_res.get("description"):
+            desc = cached_res.get("description", "").strip()
+            title = cached_res.get("title", "").strip()
+            if len(desc) >= 150 and desc != title:
+                if on_log:
+                    on_log(f"[Scraper] ⚡ Instantly retrieved from persistent JD cache: {url[:60]}")
+                return cached_res
     except Exception as _ce:
         pass
 
@@ -267,10 +270,239 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                                 "url": url,
                                 "html": raw_html_desc
                             }
-                except Exception as reed_err:
-                    # pyrefly: ignore [missing-import]
-                    from services.log_queue import log_ist
-                    log_ist(f"[Scraper] Reed Details API fallback to Playwright browser ({reed_err})")
+                except Exception:
+                    pass
+
+    # Fast path for Workday URLs ({tenant}.{instance}.myworkdayjobs.com/...)
+    if "myworkdayjobs.com" in url:
+        try:
+            import httpx
+            m_wd = re.search(r'https?://([^.]+)\.([^.]+)\.myworkdayjobs\.com/(?:[a-zA-Z]{2}-[a-zA-Z]{2}/)?(?:([^/]+)/)?([^/]+)(/job/.+)', url)
+            if m_wd:
+                tenant, instance, possible_tenant, site, ext_path = m_wd.group(1), m_wd.group(2), m_wd.group(3), m_wd.group(4), m_wd.group(5)
+                if not possible_tenant or possible_tenant == tenant:
+                    actual_site = site
+                else:
+                    actual_site = possible_tenant
+                    ext_path = '/' + site + ext_path
+                
+                cxs_url = f"https://{tenant}.{instance}.myworkdayjobs.com/wday/cxs/{tenant}/{actual_site}{ext_path}"
+                canonical_web_url = f"https://{tenant}.{instance}.myworkdayjobs.com/en-US/{actual_site}{ext_path}"
+                async with httpx.AsyncClient(timeout=6.0) as client:
+                    resp = await client.get(cxs_url)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        job_info = data.get("jobPostingInfo", {})
+                        title = job_info.get("title", "Job Posting")
+                        raw_desc = job_info.get("jobDescription", "")
+                        clean_text = BeautifulSoup(raw_desc, "html.parser").get_text(separator="\n").strip()
+                        if clean_text and len(clean_text) > 50:
+                            res = {
+                                "title": title,
+                                "company": tenant.capitalize(),
+                                "description": clean_text,
+                                "markdown": clean_text,
+                                "url": canonical_web_url,
+                                "html": raw_desc
+                            }
+                            try:
+                                cache_set(url, res)
+                                cache_set(canonical_web_url, res)
+                            except Exception:
+                                pass
+                            return res
+        except Exception:
+            pass
+
+    # Fast path for Greenhouse URLs (boards.greenhouse.io/{company}/jobs/{id} or ?gh_jid={id})
+    if "greenhouse.io" in url or "gh_jid=" in url:
+        try:
+            import httpx
+            slug, jid = None, None
+            m1 = re.search(r'greenhouse\.io/(?:embed/job_board/)?(?:boards/)?([^/?#]+)/jobs/(\d+)', url)
+            m2 = re.search(r'(?:for=|board=)([^&#]+).*?(?:token=|gh_jid=|id=)(\d+)', url)
+            if m1:
+                slug, jid = m1.group(1), m1.group(2)
+            elif m2:
+                slug, jid = m2.group(1), m2.group(2)
+            elif "gh_jid=" in url:
+                m_jid = re.search(r'gh_jid=(\d+)', url)
+                if m_jid:
+                    jid = m_jid.group(1)
+                    m_comp = re.search(r'https?://(?:jobs\.|careers\.)?([^.]+)\.', url)
+                    if m_comp:
+                        slug = m_comp.group(1)
+
+            if slug and jid:
+                api_url = f"https://api.greenhouse.io/v1/boards/{slug}/jobs/{jid}"
+                async with httpx.AsyncClient(timeout=6.0) as client:
+                    resp = await client.get(api_url)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        raw_html = data.get("content", "")
+                        clean_text = BeautifulSoup(raw_html, "html.parser").get_text(separator="\n").strip()
+                        if clean_text and len(clean_text) > 50:
+                            res = {
+                                "title": data.get("title", "Job Posting"),
+                                "company": slug.capitalize(),
+                                "description": clean_text,
+                                "markdown": clean_text,
+                                "url": url,
+                                "html": raw_html
+                            }
+                            try:
+                                cache_set(url, res)
+                            except Exception:
+                                pass
+                            return res
+        except Exception:
+            pass
+
+    # Fast path for BambooHR URLs ({company}.bamboohr.com/careers/{id})
+    if "bamboohr.com" in url:
+        try:
+            import httpx
+            m_bam = re.search(r'https?://([^.]+)\.bamboohr\.com/careers/(\d+)', url)
+            if m_bam:
+                slug, jid = m_bam.group(1), m_bam.group(2)
+                api_url = f"https://{slug}.bamboohr.com/careers/{jid}/detail"
+                async with httpx.AsyncClient(timeout=6.0) as client:
+                    resp = await client.get(api_url)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        res_body = data.get("result", {})
+                        opening = res_body.get("jobOpening", {})
+                        raw_desc = opening.get("description", "")
+                        clean_text = BeautifulSoup(raw_desc, "html.parser").get_text(separator="\n").strip()
+                        if clean_text and len(clean_text) > 50:
+                            res = {
+                                "title": opening.get("jobOpeningName", "Job Posting"),
+                                "company": slug.capitalize(),
+                                "description": clean_text,
+                                "markdown": clean_text,
+                                "url": url,
+                                "html": raw_desc
+                            }
+                            try:
+                                cache_set(url, res)
+                            except Exception:
+                                pass
+                            return res
+        except Exception:
+            pass
+
+    # Fast path for Lever URLs (jobs.lever.co/{company}/{job_id})
+    if "lever.co" in url:
+        try:
+            import httpx
+            m = re.search(r'lever\.co/(?:v0/postings/)?([^/]+)/([a-f0-9\-]+)', url)
+            if m:
+                comp_slug, jid = m.group(1), m.group(2)
+                api_url = f"https://api.lever.co/v0/postings/{comp_slug}/{jid}"
+                async with httpx.AsyncClient(timeout=6.0) as client:
+                    resp = await client.get(api_url)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        title = data.get("text") or "Job Posting"
+                        
+                        full_parts = []
+                        if data.get("descriptionPlain"):
+                            full_parts.append(data["descriptionPlain"].strip())
+                        elif data.get("description"):
+                            full_parts.append(BeautifulSoup(data["description"], "html.parser").get_text(separator="\n").strip())
+
+                        for l in data.get("lists", []):
+                            header = l.get("text", "")
+                            content_html = l.get("content", "")
+                            clean_content = BeautifulSoup(content_html, "html.parser").get_text(separator="\n").strip()
+                            if header and clean_content:
+                                full_parts.append(f"\n{header}\n{clean_content}")
+                            elif clean_content:
+                                full_parts.append(clean_content)
+
+                        if data.get("additionalPlain"):
+                            full_parts.append(data["additionalPlain"].strip())
+
+                        full_desc = "\n\n".join([p for p in full_parts if p.strip()])
+                        if len(full_desc) > 50:
+                            res = {
+                                "title": title,
+                                "company": comp_slug.capitalize(),
+                                "description": full_desc,
+                                "markdown": full_desc,
+                                "url": url
+                            }
+                            try:
+                                cache_set(url, res)
+                            except Exception:
+                                pass
+                            return res
+        except Exception:
+            pass
+
+    # Fast path for Jobserve URLs: direct job ID resolution or keyword query
+    if "jobserve.com" in url:
+        try:
+            import urllib.parse
+            import httpx
+            # Check for direct Job ID in URL (e.g. /mob/job/{id}, iid={id}, or /job/{id})
+            jid_match = re.search(r'(?:/mob/job/|iid=|/job/)([A-Fa-f0-9]{16,32})', url)
+            if jid_match:
+                jid = jid_match.group(1)
+                async with httpx.AsyncClient(headers={"User-Agent": "Mozilla/5.0"}, timeout=6.0) as client:
+                    resp = await client.get(f"https://www.jobserve.com/gb/en/mob/job/{jid}", follow_redirects=True)
+                    if resp.status_code == 200:
+                        s = BeautifulSoup(resp.text, "html.parser")
+                        art = s.find("article") or s
+                        raw = art.get_text(separator="\n", strip=True)
+
+                        title_tag = s.title.text if s.title else "Job Posting"
+                        title = title_tag.split(" - ")[0].strip() if title_tag else "Job Posting"
+
+                        comp = "Hiring Agency / Client"
+                        rec_m = re.search(r'Posted\s+by\s*\n*\s*([^\n\r]+)', raw, re.IGNORECASE)
+                        if rec_m:
+                            comp = rec_m.group(1).strip()
+
+                        jd_body = raw
+                        if "Applicants must be eligible to work in the specified location" in jd_body:
+                            jd_body = jd_body.split("Applicants must be eligible to work in the specified location", 1)[-1].strip()
+                        elif "Apply Now" in jd_body:
+                            jd_body = jd_body.split("Apply Now", 1)[-1].strip()
+
+                        for footer_tag in ["Permalink", "Job Reference", "Contact"]:
+                            if footer_tag in jd_body:
+                                pos = jd_body.rfind(footer_tag)
+                                if pos > len(jd_body) * 0.7:
+                                    jd_body = jd_body[:pos].strip()
+
+                        if len(jd_body) > 100:
+                            return {
+                                "title": title,
+                                "company": comp,
+                                "description": jd_body,
+                                "markdown": jd_body,
+                                "url": url
+                            }
+
+            parsed_q = urllib.parse.urlparse(url)
+            q_params = urllib.parse.parse_qs(parsed_q.query)
+            kw = q_params.get("kw", [""])[0]
+            loc = q_params.get("loc", ["UK"])[0]
+            if kw:
+                from services.job_searcher import search_jobserve_jobs
+                res = await search_jobserve_jobs(kw, loc, timeframe="48h")
+                for item in res:
+                    if hasattr(item, "full_description") and item.full_description and len(item.full_description) > 50:
+                        return {
+                            "title": item.title,
+                            "company": item.company,
+                            "description": item.full_description,
+                            "markdown": item.full_description,
+                            "url": url
+                        }
+        except Exception as js_err:
+            pass
 
     # ── Normalise Indeed viewjob URLs ─────────────────────────────────────
     # URLs like /viewjob?jk=1c9eeb8368294ebf trigger Cloudflare's Turnstile
@@ -619,6 +851,17 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                         soup.select_one("[itemprop='description']") or
                         soup.select_one(".job-description") or
                         soup.select_one("span[itemprop='description']")
+                    )
+                    if jd_elem:
+                        body_text = jd_elem.get_text(separator="\n")
+
+                # Jobserve specific selector matches
+                elif "jobserve." in url:
+                    jd_elem = (
+                        soup.select_one("#JobDetails") or
+                        soup.select_one(".job-details") or
+                        soup.select_one("#td_job_details") or
+                        soup.select_one(".jobItem")
                     )
                     if jd_elem:
                         body_text = jd_elem.get_text(separator="\n")

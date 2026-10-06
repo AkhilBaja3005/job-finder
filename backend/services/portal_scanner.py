@@ -6,6 +6,8 @@ and auto-scores matches deterministically against the candidate's profile.
 """
 
 import os
+import re
+import json
 try:
     # pyrefly: ignore [untyped-import]
     import yaml  # type: ignore
@@ -43,34 +45,58 @@ class PortalScanner:
             except Exception as e:
                 print(f"[PortalScanner] Error loading config {self.config_path}: {e}")
 
-        portals: Dict[str, Any] = loaded.get("portals", base_portals)
+        return {
+            "portals": loaded.get("portals", base_portals),
+            "config": loaded.get("config", {
+                "min_ats_score_to_notify": 75,
+                "roles_keywords": ["AI", "Machine Learning", "ML", "GenAI", "Software Engineer", "Systems"]
+            })
+        }
 
-        # Merge verified active slugs from SQLite company slug registry (capped to top 50 active per ATS to prevent network hanging)
+    def _get_active_portals_for_scan(self, target_portals: Optional[List[str]] = None) -> Dict[str, List[Dict[str, str]]]:
+        """Dynamically fetch all confirmed active slugs from SQLite for the requested portals."""
+        active_portals: Dict[str, List[Dict[str, str]]] = {
+            "greenhouse": [],
+            "ashby": [],
+            "lever": [],
+            "bamboohr": [],
+            "workday": []
+        }
+        
+        # 1. Add baseline config portals
+        base = self.config.get("portals", {})
+        for ats_k, comp_list in base.items():
+            if ats_k in active_portals:
+                for c in comp_list:
+                    if isinstance(c, dict) and c.get("company_slug"):
+                        active_portals[ats_k].append(c)
+
+        # 2. Query all verified active slugs from SQLite
         try:
             try:
                 from services.company_slug_registry import get_active_slugs
             except ImportError:
                 from backend.services.company_slug_registry import get_active_slugs
 
-            active_slugs = get_active_slugs()
-            for ats_name, slug_list in active_slugs.items():
-                if ats_name not in portals:
-                    portals[ats_name] = []
-                existing_slugs = {p.get("company_slug") for p in portals[ats_name]}
-                # Cap dynamic slugs to 50 active companies per portal to ensure fast execution
-                for s in slug_list[:50]:
-                    if s and s not in existing_slugs:
-                        portals[ats_name].append({"company_slug": s, "name": s.capitalize()})
-        except Exception:
-            pass
+            db_slugs = get_active_slugs()
+            filter_lower = [p.lower().strip() for p in (target_portals or []) if p.strip()]
+            is_single_targeted = len(filter_lower) == 1 and "all" not in filter_lower
 
-        return {
-            "portals": portals,
-            "config": loaded.get("config", {
-                "min_ats_score_to_notify": 75,
-                "roles_keywords": ["AI", "Machine Learning", "ML", "GenAI", "Software Engineer", "Systems"]
-            })
-        }
+            for ats_name, slug_list in db_slugs.items():
+                if ats_name not in active_portals:
+                    active_portals[ats_name] = []
+                
+                # Expand scan pool: 800 active boards for single ATS filter, 250 per ATS for multi-platform sweeps
+                max_boards = 800 if is_single_targeted else 250
+                existing = {p["company_slug"] for p in active_portals[ats_name]}
+                
+                for s in slug_list[:max_boards]:
+                    if s and s not in existing:
+                        active_portals[ats_name].append({"company_slug": s, "name": s.capitalize()})
+        except Exception as e:
+            print(f"[PortalScanner] Error loading dynamic active slugs: {e}")
+
+        return active_portals
 
     def _format_age(self, dt_str: Optional[str], timestamp_ms: Optional[int] = None) -> str:
         """Helper to convert API date strings or timestamps into a human-friendly age (e.g. '2d ago', 'Today')."""
@@ -101,23 +127,26 @@ class PortalScanner:
             return "Active"
 
     async def scan_greenhouse_company(self, client: httpx.AsyncClient, company_slug: str, company_name: str) -> List[Dict[str, Any]]:
-        """Fetch active jobs from Greenhouse public Board API."""
-        url = f"https://boards-api.greenhouse.io/v1/boards/{company_slug}/jobs?content=true"
+        """Fetch active jobs with full descriptions from Greenhouse public Board API."""
+        url = f"https://api.greenhouse.io/v1/boards/{company_slug}/jobs?content=true"
         jobs = []
         try:
-            res = await client.get(url, timeout=1.5)
+            res = await client.get(url, timeout=6.0)
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("jobs", [])
+                from bs4 import BeautifulSoup
                 for rj in raw_jobs:
                     updated_at = rj.get("updated_at")
+                    raw_content = rj.get("content", "")
+                    clean_desc = BeautifulSoup(raw_content, "html.parser").get_text(separator="\n").strip() if raw_content else rj.get("title", "")
                     jobs.append({
                         "id": f"gh_{rj.get('id')}",
                         "title": rj.get("title", ""),
                         "company": company_name,
-                        "url": rj.get("absolute_url", ""),
+                        "url": rj.get("absolute_url", f"https://boards.greenhouse.io/{company_slug}/jobs/{rj.get('id')}"),
                         "location": rj.get("location", {}).get("name", "Remote/Unspecified"),
-                        "description": rj.get("content", ""),
+                        "description": clean_desc,
                         "portal": "greenhouse",
                         "posted_at": updated_at,
                         "age": self._format_age(updated_at)
@@ -131,7 +160,7 @@ class PortalScanner:
         url = f"https://api.ashbyhq.com/posting-api/job-board/{company_slug}"
         jobs = []
         try:
-            res = await client.get(url, timeout=1.5)
+            res = await client.get(url, timeout=6.0)
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("jobs", [])
@@ -157,18 +186,40 @@ class PortalScanner:
         url = f"https://api.lever.co/v0/postings/{company_slug}?mode=json"
         jobs = []
         try:
-            res = await client.get(url, timeout=1.5)
+            res = await client.get(url, timeout=6.0)
             if res.status_code == 200:
                 raw_jobs = res.json()
+                from bs4 import BeautifulSoup
                 for rj in raw_jobs:
                     created_at_ms = rj.get("createdAt")
+                    
+                    full_parts = []
+                    if rj.get("descriptionPlain"):
+                        full_parts.append(rj["descriptionPlain"].strip())
+                    elif rj.get("description"):
+                        full_parts.append(BeautifulSoup(rj["description"], "html.parser").get_text(separator="\n").strip())
+
+                    for l in rj.get("lists", []):
+                        header = l.get("text", "")
+                        content_html = l.get("content", "")
+                        clean_content = BeautifulSoup(content_html, "html.parser").get_text(separator="\n").strip()
+                        if header and clean_content:
+                            full_parts.append(f"\n{header}\n{clean_content}")
+                        elif clean_content:
+                            full_parts.append(clean_content)
+
+                    if rj.get("additionalPlain"):
+                        full_parts.append(rj["additionalPlain"].strip())
+
+                    full_desc = "\n\n".join([p for p in full_parts if p.strip()]) or rj.get("text", "")
+
                     jobs.append({
                         "id": f"lever_{rj.get('id')}",
                         "title": rj.get("text", ""),
                         "company": company_name,
                         "url": rj.get("hostedUrl", ""),
                         "location": rj.get("categories", {}).get("location", "Remote/Unspecified"),
-                        "description": rj.get("descriptionPlain", "") or rj.get("description", ""),
+                        "description": full_desc,
                         "portal": "lever",
                         "posted_at": created_at_ms,
                         "age": self._format_age(None, timestamp_ms=created_at_ms)
@@ -182,7 +233,7 @@ class PortalScanner:
         url = f"https://{company_slug}.bamboohr.com/careers/list"
         jobs = []
         try:
-            res = await client.get(url, timeout=1.5)
+            res = await client.get(url, timeout=6.0)
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("result", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
@@ -215,13 +266,14 @@ class PortalScanner:
         jobs = []
         try:
             headers = {"Content-Type": "application/json", "Accept": "application/json"}
-            res = await client.post(url, json={"limit": 20, "offset": 0, "searchText": ""}, headers=headers, timeout=1.5)
+            res = await client.post(url, json={"limit": 20, "offset": 0, "searchText": ""}, headers=headers, timeout=6.0)
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("jobPostings", [])
                 for rj in raw_jobs:
                     ext_path = rj.get("externalPath", "")
-                    job_url = f"https://{tenant}.{instance}.myworkdayjobs.com/en-US/{tenant}/{site}{ext_path}" if ext_path else ""
+                    # Canonical URL is https://{tenant}.{instance}.myworkdayjobs.com/en-US/{site}{ext_path}
+                    job_url = f"https://{tenant}.{instance}.myworkdayjobs.com/en-US/{site}{ext_path}" if ext_path else ""
                     jobs.append({
                         "id": f"workday_{rj.get('bulletFields', [ext_path])[0] if rj.get('bulletFields') else ext_path}",
                         "title": rj.get("title", ""),
@@ -302,33 +354,51 @@ class PortalScanner:
         self,
         target_keywords: Optional[List[str]] = None,
         timeframe: str = "48h",
-        location: Optional[str] = None
+        location: Optional[str] = None,
+        target_portals: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """Scans all configured target portals concurrently with keyword, timeframe & location filtering."""
-        portals_def = self.config.get("portals", {})
+        """Scans configured target portals concurrently with keyword, timeframe & location filtering."""
+        portals_def = self._get_active_portals_for_scan(target_portals)
         keywords = target_keywords or self.config.get("config", {}).get("roles_keywords", [])
         keywords_lower = [k.lower() for k in keywords]
 
+        filter_portals = [p.strip().lower() for p in (target_portals or []) if p.strip()]
+        is_targeted = len(filter_portals) > 0 and "all" not in filter_portals
+
         all_jobs: List[Dict[str, Any]] = []
         tasks = []
-        limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
-        ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        async with httpx.AsyncClient(headers={"User-Agent": ua}, limits=limits, timeout=5.0) as client:
+        sem = asyncio.Semaphore(100)
+        limits = httpx.Limits(max_keepalive_connections=150, max_connections=300)
+        ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        
+        async with httpx.AsyncClient(headers={"User-Agent": ua}, limits=limits, timeout=3.5) as client:
+            async def _safe_scan(scanner_func, comp_slug, comp_name):
+                try:
+                    async with sem:
+                        return await asyncio.wait_for(scanner_func(client, comp_slug, comp_name), timeout=3.5)
+                except Exception:
+                    return []
+
             # Greenhouse
-            for comp in portals_def.get("greenhouse", []):
-                tasks.append(self.scan_greenhouse_company(client, comp["company_slug"], comp["name"]))
+            if not is_targeted or "greenhouse" in filter_portals:
+                for comp in portals_def.get("greenhouse", []):
+                    tasks.append(_safe_scan(self.scan_greenhouse_company, comp["company_slug"], comp["name"]))
             # Ashby
-            for comp in portals_def.get("ashby", []):
-                tasks.append(self.scan_ashby_company(client, comp["company_slug"], comp["name"]))
+            if not is_targeted or "ashby" in filter_portals:
+                for comp in portals_def.get("ashby", []):
+                    tasks.append(_safe_scan(self.scan_ashby_company, comp["company_slug"], comp["name"]))
             # Lever
-            for comp in portals_def.get("lever", []):
-                tasks.append(self.scan_lever_company(client, comp["company_slug"], comp["name"]))
+            if not is_targeted or "lever" in filter_portals:
+                for comp in portals_def.get("lever", []):
+                    tasks.append(_safe_scan(self.scan_lever_company, comp["company_slug"], comp["name"]))
             # BambooHR
-            for comp in portals_def.get("bamboohr", []):
-                tasks.append(self.scan_bamboohr_company(client, comp["company_slug"], comp["name"]))
+            if not is_targeted or "bamboohr" in filter_portals or "bamboo" in filter_portals:
+                for comp in portals_def.get("bamboohr", []):
+                    tasks.append(_safe_scan(self.scan_bamboohr_company, comp["company_slug"], comp["name"]))
             # Workday
-            for comp in portals_def.get("workday", []):
-                tasks.append(self.scan_workday_company(client, comp["company_slug"], comp["name"]))
+            if not is_targeted or "workday" in filter_portals:
+                for comp in portals_def.get("workday", []):
+                    tasks.append(_safe_scan(self.scan_workday_company, comp["company_slug"], comp["name"]))
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for r in results:
@@ -345,17 +415,23 @@ class PortalScanner:
 
         # Apply Keyword Filter
         if keywords_lower:
-            # Flatten sub-terms if queries contain commas (e.g. ['AI Engineer', 'Machine Learning'])
-            terms = set()
+            # Build regex patterns for exact tokens and phrases
+            patterns = []
             for kw in keywords_lower:
                 for sub in kw.split(","):
                     sub_clean = sub.strip()
                     if sub_clean:
-                        terms.add(sub_clean)
+                        # Full phrase with word boundaries
+                        patterns.append(re.compile(r'\b' + re.escape(sub_clean) + r'\b', re.IGNORECASE))
+                        # Individual significant words
+                        for word in sub_clean.split():
+                            w_clean = word.strip().strip(".,/-()[]{}'\"")
+                            if len(w_clean) >= 2 and w_clean.lower() not in ("and", "or", "the", "in", "of", "for", "with", "to", "at", "on", "by", "as", "is", "an", "a"):
+                                patterns.append(re.compile(r'\b' + re.escape(w_clean) + r'\b', re.IGNORECASE))
 
             filtered = [
                 j for j in all_jobs
-                if any(t in j["title"].lower() or t in j.get("description", "").lower() for t in terms)
+                if any(p.search(j["title"]) or p.search(j.get("description", "")) for p in patterns)
             ]
             return filtered
         return all_jobs

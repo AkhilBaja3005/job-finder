@@ -292,7 +292,8 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
         effective_exclude.extend([p.strip().lower() for p in env_skip.split(",") if p.strip()])
     effective_exclude = list(dict.fromkeys(effective_exclude))
 
-    cache_key = (effective_keywords, effective_location, effective_timeframe, tuple(sorted(effective_exclude)))
+    target_plats = [p.strip().lower() for p in (request.target_platforms or []) if p.strip()]
+    cache_key = (effective_keywords, effective_location, effective_timeframe, tuple(sorted(effective_exclude)), tuple(sorted(target_plats)))
     cached_jobs = _job_search_cache.get(cache_key)
     if cached_jobs is not None:
         async def cached_job_stream():
@@ -326,7 +327,8 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                         timeframe=effective_timeframe,
                         custom_api_key=active_api_key,
                         browser=getattr(http_request.app.state, "browser", None),
-                        exclude_portals=effective_exclude if effective_exclude else None
+                        exclude_portals=effective_exclude if effective_exclude else None,
+                        target_platforms=request.target_platforms
                     ):
                         try:
                             parsed = json.loads(chunk.strip())

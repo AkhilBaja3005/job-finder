@@ -145,7 +145,14 @@ def cache_get(url: str) -> Optional[dict]:
         else:
             json_str = raw_blob if isinstance(raw_blob, str) else raw_blob.decode("utf-8")
             
-        return json.loads(json_str)
+        res_data = json.loads(json_str)
+        if isinstance(res_data, dict):
+            desc = str(res_data.get("description", "")).strip()
+            title = str(res_data.get("title", "")).strip()
+            # Stale or degraded fallback entry: ignore and let fresh scrape occur
+            if len(desc) < 150 or (len(desc) < 300 and desc == title):
+                return None
+        return res_data
     except Exception as e:
         print(f"[jd_cache] get error: {e}")
         return None

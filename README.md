@@ -25,11 +25,12 @@ pinned: false
 
 </div>
 
-An AI-powered job search, resume tailoring, and application assistant. Upload a resume once (in `.pdf`, `.docx`, or `.tex`), then let it discover matching job postings, score your ATS fit against job descriptions, tailor a pixel-perfect one-page LaTeX resume and cover letter for specific roles, generate personalized recruiter outreach messages, and auto-fill applications directly on the web.
+An AI-powered job search, resume tailoring, and application assistant. Upload a resume once (in `.pdf`, `.docx`, or `.tex`), then let it discover matching job postings across **23,000+ verified direct ATS company boards** (Ashby, Greenhouse, Lever, BambooHR, Workday), **Jobserve**, **LinkedIn**, **Indeed**, and **Reed**, score your ATS fit against job descriptions, tailor a pixel-perfect one-page LaTeX resume and cover letter for specific roles, generate personalized recruiter outreach messages, and auto-fill applications directly on the web.
 
 The project includes:
-1. **Full-Stack Web App** — Modular FastAPI backend + React 19 (Vite) dashboard.
-2. **Chrome Extension (`Job Finder ATS Tailor`)** — Persistent Chrome Side Panel to score jobs, tailor resumes, auto-fill forms with multimodal intelligence, and dispatch delivery packages on LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday, and custom career sites.
+1. **Full-Stack Web App** — Modular FastAPI backend + React 19 (Vite) dashboard with live streaming ATS discovery and portal exclusion controls.
+2. **Autonomous CLI & Scanner** — Unified terminal dispatcher (`job-finder scan`, `job-finder jobserve`, `job-finder targetjobs`, `job-finder apply`).
+3. **Chrome Extension (`Job Finder ATS Tailor`)** — Persistent Chrome Side Panel to score jobs, tailor resumes, auto-fill forms with multimodal intelligence, and dispatch delivery packages on LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday, and custom career sites.
 
 ---
 
@@ -398,6 +399,35 @@ python applications_tracker/adhoc_auto_filler.py \
 ```
 
 ---
+
+## 💼 Jobserve.com Tech & Contract CLI (`job-finder jobserve`)
+
+Dedicated search and auto-apply command for **Jobserve.com**, extracting clean technical job specifications, real recruiters/agencies, and rates with zero banner bleed:
+
+```bash
+# 1. Search top 15 Jobserve roles in UK (48h window):
+job-finder jobserve "AI Engineer" --location UK --timeframe 48h
+
+# 2. Search and automatically autofill & submit applications:
+job-finder jobserve "Senior Backend Engineer" --auto-apply --limit 5
+
+# 3. Search contract roles with custom timeout:
+job-finder jobserve "Machine Learning Contractor" --location London --timeout 180
+```
+
+---
+
+## 🎓 TargetJobs UK Early Career CLI (`job-finder targetjobs`)
+
+Dedicated search for **TargetJobs.co.uk** graduate and early-career IT vacancies:
+
+```bash
+# 1. Search top graduate IT opportunities in London:
+job-finder targetjobs "Software Engineer" --location London --timeframe 48h
+
+# 2. Search and auto-submit:
+job-finder targetjobs --auto-submit --limit 5
+```
 
 ## 🌟 LinkedIn 'Top Applicant' Scanner & Auto-Apply (`linkedin_top_applicant_scanner.py` & `job-finder scan --top-applicant`)
 

@@ -660,8 +660,256 @@ async def search_targetjobs_uk(keyword: str, location: str = "Remote", timeframe
 
     return results
 
+# ─── Jobserve.com Tech & IT Scraper ───────────────────────────────────────
 
-# ─── Indeed Scraper ───────────────────────────────────────────────────────
+async def search_jobserve_jobs(keyword: str, location: str = "London", timeframe: str = "48h", browser: Optional[Any] = None) -> List[JobSearchResult]:
+    """
+    Search Jobserve (jobserve.com) for tech, AI, software engineering, and contract/permanent roles.
+    Uses Playwright browser automation to execute the ASP.NET AJAX search form and extract rendered job cards.
+    """
+    country_code = resolve_location_country(location)
+    if country_code not in ("GB", "US", "DE", "FR", "NL", "IE", "CA", "AU") and str(location).lower() not in ("remote", "london", "uk"):
+        return []
+
+    tf_norm = normalize_timeframe(timeframe)
+    age_val = "1" if tf_norm == "24h" else ("2" if tf_norm == "48h" else ("7" if tf_norm == "1w" else "30"))
+
+    # If location is 'Remote' or generic UK, use 'UK' or 'London' for Jobserve form
+    loc_clean = (location or "London").strip()
+    if loc_clean.lower() in ("remote", "uk", "united kingdom", "any", "all"):
+        loc_for_search = "UK"
+    else:
+        loc_for_search = loc_clean
+
+    log_ist(f"[Job Searcher] Fetching Jobserve listings ({timeframe}) for '{keyword}' in '{loc_for_search}'...")
+
+    results: List[JobSearchResult] = []
+    local_playwright = None
+    local_browser = None
+    target_browser = browser
+
+    if target_browser is None:
+        try:
+            from services.scraper import ensure_shared_browser_alive
+            target_browser = await ensure_shared_browser_alive()
+        except Exception:
+            target_browser = None
+
+    if target_browser is None:
+        try:
+            from playwright.async_api import async_playwright
+            local_playwright = await async_playwright().start()
+            local_browser = await local_playwright.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+            )
+            target_browser = local_browser
+        except Exception as be:
+            log_ist(f"[Job Searcher] Playwright launch error for Jobserve: {be}")
+            return []
+
+    context = None
+    page = None
+    try:
+        context = await target_browser.new_context(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 900}
+        )
+        page = await context.new_page()
+
+        await page.goto("https://www.jobserve.com/gb/en/Job-Search/", wait_until="domcontentloaded", timeout=12000)
+
+        # Dismiss cookie banner if present
+        try:
+            cookie_btn = page.locator("a:has-text('Accept All'), button:has-text('Accept'), #onetrust-accept-btn-handler, #btnAccept").first
+            if await cookie_btn.count() > 0:
+                await cookie_btn.click()
+                await page.wait_for_timeout(150)
+        except Exception:
+            pass
+
+        # Fill search inputs
+        kw_input = page.locator("#txtKey, input[name*='txtKey']").first
+        if await kw_input.count() > 0:
+            await kw_input.fill(keyword.strip())
+
+        loc_input = page.locator("#txtLoc, input[name*='txtLoc']").first
+        if await loc_input.count() > 0:
+            await loc_input.fill(loc_for_search)
+
+        try:
+            age_select = page.locator("#selAge, select[name*='selAge']").first
+            if await age_select.count() > 0:
+                await age_select.select_option(value=age_val)
+        except Exception:
+            pass
+
+        search_btn = page.locator("#btnSearch, input[value='Search'], button:has-text('Search')").first
+        if await search_btn.count() > 0:
+            await search_btn.click()
+        else:
+            await page.keyboard.press("Enter")
+
+        try:
+            await page.wait_for_selector(".jobItem, tr[id^='job_'], div[id^='job_'], #JobResults", timeout=7000)
+            await page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+        cards = await page.evaluate('''() => {
+            const items = [];
+            const divs = document.querySelectorAll(".jobItem, div[id^='job_'], tr[id^='job_']");
+            const activeJdEl = document.querySelector("#JobDetails, #td_jobdetails, #md_skills, .jobdetails, #RightSide");
+            const activeJdText = activeJdEl ? activeJdEl.innerText.trim() : "";
+
+            divs.forEach((div, idx) => {
+                const id = div.id || `js_card_${idx}`;
+                const titleEl = div.querySelector(".jobResultsTitle, h3, .jobtitle, .positiontitle, a");
+                const title = titleEl ? titleEl.innerText.trim() : "";
+                
+                const salaryEl = div.querySelector(".jobResultsSalary, .salary, .rate");
+                const salary = salaryEl ? salaryEl.innerText.trim() : "";
+
+                const locEl = div.querySelector(".jobResultsLoc, .location, .job_location");
+                const loc = locEl ? locEl.innerText.trim() : "UK";
+
+                const typeEl = div.querySelector(".jobResultsType, .jobtype, .perm_contract");
+                const jobType = typeEl ? typeEl.innerText.trim() : "Permanent/Contract";
+
+                const ageEl = div.querySelector(".when, .posted, .date");
+                const age = ageEl ? ageEl.innerText.trim() : "Recent";
+
+                const compEl = div.querySelector(".recruiter, .posted_by, .company, .agency_name");
+                const comp = compEl ? compEl.innerText.trim() : "Hiring Agency / Client";
+
+                const linkEl = div.querySelector("a[href*='/job/'], a[href*='/Job/'], a[id*='positionlink'], h3 a");
+                const href = linkEl ? linkEl.getAttribute('href') : "";
+                
+                // If this is the active/first selected card and activeJdText is rich, use it
+                let fullText = "";
+                if (idx === 0 && activeJdText && activeJdText.length > 200) {
+                    fullText = activeJdText;
+                } else {
+                    fullText = `Role: ${title}\nCompensation: ${salary}\nLocation: ${loc}\nType: ${jobType}\nPosted: ${age}\n\nKey details: High-priority technical opportunity posted directly via Jobserve.`;
+                }
+
+                if (title && title.length > 2) {
+                    items.push({ id, title, comp, loc, href, desc: fullText, salary, age, jobType });
+                }
+            });
+            return items;
+        }''')
+
+        seen_div_ids = set()
+        seen_canonical = set()
+        candidate_items = []
+
+        for c in cards:
+            div_id = c.get("id", "")
+            if div_id and div_id in seen_div_ids:
+                continue
+            if div_id:
+                seen_div_ids.add(div_id)
+
+            t = c.get("title", "")
+            if not t or any(skip in t.lower() for skip in ["cookie", "privacy", "help", "login", "register"]):
+                continue
+
+            # Clean salary/day-rate suffix from title (e.g. 'Senior QA Engineer, £300 per day inside IR35' -> 'Senior QA Engineer')
+            clean_title = re.sub(r',?\s*£\d+.*$', '', t).strip()
+            if not clean_title:
+                clean_title = t.strip()
+
+            # Tier 1 Canonical Key: Normalized alphanumeric title
+            c_key = re.sub(r'[^a-zA-Z0-9]', '', clean_title.lower())
+            if c_key in seen_canonical:
+                continue
+            seen_canonical.add(c_key)
+
+            c["clean_title"] = clean_title
+            candidate_items.append(c)
+
+        # Concurrently enrich top Jobserve candidates with real company and complete JD
+        import httpx
+        async def _enrich_jobserve_item(c_item: dict) -> JobSearchResult:
+            jid = c_item.get("id", "")
+            clean_t = c_item.get("clean_title") or c_item.get("title", "")
+            comp = c_item.get("comp", "Hiring Agency / Client")
+            loc = c_item.get("loc", loc_for_search)
+            salary = c_item.get("salary", "")
+            desc = c_item.get("desc", "")
+
+            direct_url = f"https://www.jobserve.com/gb/en/mob/job/{jid}" if jid and not jid.startswith("js_card_") else f"https://www.jobserve.com/gb/en/JobSearch.aspx?kw={urllib.parse.quote(clean_t)}&loc={urllib.parse.quote(loc_for_search)}"
+
+            if jid and not jid.startswith("js_card_"):
+                try:
+                    async with httpx.AsyncClient(headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}, timeout=6.0) as client:
+                        resp = await client.get(f"https://www.jobserve.com/gb/en/mob/job/{jid}", follow_redirects=True)
+                        if resp.status_code == 200:
+                            s = BeautifulSoup(resp.text, "html.parser")
+                            art = s.find("article") or s
+                            raw = art.get_text(separator="\n", strip=True)
+
+                            # Extract Recruiter / Company
+                            rec_m = re.search(r'Posted\s+by\s*\n*\s*([^\n\r]+)', raw, re.IGNORECASE)
+                            if rec_m:
+                                comp = rec_m.group(1).strip()
+
+                            # Extract JD Body
+                            jd_body = raw
+                            if "Applicants must be eligible to work in the specified location" in jd_body:
+                                jd_body = jd_body.split("Applicants must be eligible to work in the specified location", 1)[-1].strip()
+                            elif "Apply Now" in jd_body:
+                                jd_body = jd_body.split("Apply Now", 1)[-1].strip()
+
+                            # Trim trailing footer/metadata
+                            for footer_tag in ["Permalink", "Job Reference", "Contact"]:
+                                if footer_tag in jd_body:
+                                    pos = jd_body.rfind(footer_tag)
+                                    if pos > len(jd_body) * 0.7:
+                                        jd_body = jd_body[:pos].strip()
+
+                            if len(jd_body) > 100:
+                                desc = jd_body
+                except Exception:
+                    pass
+
+            if not desc or len(desc) < 50:
+                desc = f"Role: {clean_t}\nCompensation: {salary}\nLocation: {loc}\nType: {c_item.get('jobType', 'Permanent/Contract')}\nPosted: {c_item.get('age', 'Recent')}\n\nTechnical specification available via Jobserve direct listing."
+
+            return JobSearchResult(
+                title=clean_t,
+                company=comp,
+                location=loc,
+                url=direct_url,
+                platform="Jobserve",
+                post_date_raw=f"Last {timeframe}",
+                job_id=jid or hashlib.md5(f"{clean_t}_{direct_url}".encode()).hexdigest()[:10],
+                full_description=desc
+            )
+
+        enriched_results = await asyncio.gather(*[_enrich_jobserve_item(item) for item in candidate_items[:25]])
+        results = [r for r in enriched_results if r is not None]
+
+        log_ist(f"[Job Searcher] ✓ Jobserve returned {len(results)} active tech listings for '{keyword}'")
+    except Exception as e:
+        log_ist(f"[Job Searcher] Jobserve Playwright search error for '{keyword}': {e}")
+    finally:
+        if page:
+            try: await page.close()
+            except Exception: pass
+        if context:
+            try: await context.close()
+            except Exception: pass
+        if local_browser:
+            try: await local_browser.close()
+            except Exception: pass
+        if local_playwright:
+            try: await local_playwright.stop()
+            except Exception: pass
+
+    return results
+
 
 # ─── Indeed Scraper (Playwright Stealth Browser) ───────────────────────────
 
@@ -930,8 +1178,14 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
     url_cache_key = f"jd_scrape_{hashlib.md5(job.url.encode('utf-8')).hexdigest()}"
     cached_scraped = _job_search_cache.get(url_cache_key)
 
-    if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 50:
+    if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 20:
         scraped = {"description": job.full_description, "title": job.title, "company": job.company}
+        _job_search_cache.set(url_cache_key, scraped)
+        try:
+            from services.jd_cache import cache_set
+            cache_set(job.url, scraped)
+        except Exception:
+            pass
     elif cached_scraped:
         scraped = cached_scraped
     else:
@@ -952,7 +1206,7 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
 
     jd_text = scraped.get("description", "")
     raw_text = scraped.get("raw_text", "")
-    if not jd_text or len(jd_text.strip()) < 100:
+    if not jd_text or len(jd_text.strip()) < 20:
         return None
 
     # Filter out paid courses / fee-based training schemes disguised as jobs inside BOTH cleaned JD and raw scraped HTML text
@@ -1097,18 +1351,23 @@ async def find_matching_jobs(
     timeframe: str = "48h",
     custom_api_key: Optional[str] = None,
     browser: Optional[Any] = None,
-    exclude_portals: Optional[List[str]] = None
+    exclude_portals: Optional[List[str]] = None,
+    target_platforms: Optional[List[str]] = None
 ):
     """
     Main aggregator pipeline:
     1. Resolves search queries (either user-entered keywords or auto-generates from resume).
-    2. Fetches LinkedIn, Indeed, Reed, TargetJobs & Portals concurrently.
-    3. Respects exclude_portals (defaults to ['targetjobs'] to skip graduate portal unless explicitly opted in).
-    4. Ranks by a cheap title heuristic, then fetches the real JD for top jobs and scores them.
-    5. Filters and returns job matches >= 55%.
+    2. Fetches LinkedIn, Indeed, Reed, TargetJobs, Jobserve & ATS Portals concurrently.
+    3. Respects target_platforms filter (Ashby, Greenhouse, Lever, BambooHR, Workday, LinkedIn, Jobserve, Indeed, Reed).
+    4. Respects exclude_portals (defaults to ['targetjobs'] to skip graduate portal unless explicitly opted in).
+    5. Ranks by a cheap title heuristic, then fetches the real JD for top jobs and scores them.
+    6. Filters and returns job matches >= 55%.
     """
     if exclude_portals is None:
         exclude_portals = ["targetjobs"]
+
+    target_plats = [p.strip().lower() for p in (target_platforms or []) if p.strip()]
+    platform_filter_active = len(target_plats) > 0 and "all" not in target_plats
 
     if keywords and keywords.strip():
         # User-provided search role overrides
@@ -1127,50 +1386,60 @@ async def find_matching_jobs(
 
     # Determine target country for clean user status logs
     target_country = resolve_location_country(location)
-    platform_label = "LinkedIn, Indeed, Reed, Greenhouse, Ashby & Lever"
+    platform_label = "LinkedIn, Indeed, Reed, Jobserve, Greenhouse, Ashby & Lever"
 
-    # Concurrently scan configured target portals (Greenhouse, Ashby, Lever) with strict 12s overall timeout
-    portal_start_msg = "🌐 Scanning target ATS Portals (Greenhouse, Ashby & Lever)..."
-    log_ist(portal_start_msg)
-    yield json.dumps({"type": "log", "message": portal_start_msg}) + " " * 2048 + "\n"
+    # Concurrently scan configured target portals (Greenhouse, Ashby, Lever, BambooHR, Workday)
     portal_jobs_raw = []
-    try:
-        # pyrefly: ignore [missing-import]
-        from services.portal_scanner import PortalScanner
-        scanner = PortalScanner()
-        portal_results = await asyncio.wait_for(
-            scanner.scan_all_portals(target_keywords=queries, timeframe=timeframe, location=location),
-            timeout=20.0
-        )
-        gh_cnt = sum(1 for pj in portal_results if pj.get("portal") == "greenhouse")
-        ash_cnt = sum(1 for pj in portal_results if pj.get("portal") == "ashby")
-        lev_cnt = sum(1 for pj in portal_results if pj.get("portal") == "lever")
-        bam_cnt = sum(1 for pj in portal_results if pj.get("portal") == "bamboohr")
-        wd_cnt = sum(1 for pj in portal_results if pj.get("portal") == "workday")
-        
-        for pj in portal_results:
-            p_obj = JobSearchResult(
-                title=pj.get("title", ""),
-                company=pj.get("company", ""),
-                location=pj.get("location", "Remote/Unspecified"),
-                url=pj.get("url", ""),
-                platform=pj.get("portal", "Portal").title(),
-                post_date_raw=pj.get("age", "Active"),
-                job_id=pj.get("id", hashlib.md5(pj.get("url", "").encode()).hexdigest()[:10]),
-                full_description=pj.get("description", "")
+    ats_portal_names = {"ashby", "greenhouse", "lever", "bamboohr", "workday", "ats"}
+    should_scan_portals = (not platform_filter_active) or any(p in target_plats for p in ats_portal_names)
+
+    if should_scan_portals:
+        portal_start_msg = "🌐 Scanning target ATS Portals (Greenhouse, Ashby, Lever, BambooHR, Workday)..."
+        log_ist(portal_start_msg)
+        yield json.dumps({"type": "log", "message": portal_start_msg}) + " " * 2048 + "\n"
+        try:
+            # pyrefly: ignore [missing-import]
+            from services.portal_scanner import PortalScanner
+            scanner = PortalScanner()
+            portal_results = await asyncio.wait_for(
+                scanner.scan_all_portals(
+                    target_keywords=queries,
+                    timeframe=timeframe,
+                    location=location,
+                    target_portals=target_plats if platform_filter_active else None
+                ),
+                timeout=35.0
             )
-            portal_jobs_raw.append(p_obj)
-        portal_done_msg = f"✓ Found {gh_cnt} Greenhouse, {ash_cnt} Ashby, {lev_cnt} Lever, {bam_cnt} BambooHR & {wd_cnt} Workday direct portal postings ({len(portal_jobs_raw)} total)"
-        log_ist(portal_done_msg)
-        yield json.dumps({"type": "log", "message": portal_done_msg}) + " " * 2048 + "\n"
-    except asyncio.TimeoutError:
-        warn_msg = "[find_matching_jobs] ⚠️ Direct ATS portal scan timed out after 12s, proceeding with live listings."
-        log_ist(warn_msg)
-        print(warn_msg)
-    except Exception as pe:
-        err_msg = f"[find_matching_jobs] PortalScanner error: {pe}"
-        log_ist(err_msg)
-        print(err_msg)
+            gh_cnt = sum(1 for pj in portal_results if pj.get("portal") == "greenhouse")
+            ash_cnt = sum(1 for pj in portal_results if pj.get("portal") == "ashby")
+            lev_cnt = sum(1 for pj in portal_results if pj.get("portal") == "lever")
+            bam_cnt = sum(1 for pj in portal_results if pj.get("portal") == "bamboohr")
+            wd_cnt = sum(1 for pj in portal_results if pj.get("portal") == "workday")
+            
+            for pj in portal_results:
+                p_obj = JobSearchResult(
+                    title=pj.get("title", ""),
+                    company=pj.get("company", ""),
+                    location=pj.get("location", "Remote/Unspecified"),
+                    url=pj.get("url", ""),
+                    platform=pj.get("portal", "Portal").title(),
+                    post_date_raw=pj.get("age", "Active"),
+                    job_id=pj.get("id", hashlib.md5(pj.get("url", "").encode()).hexdigest()[:10]),
+                    full_description=pj.get("description", "")
+                )
+                if not platform_filter_active or any(tp in p_obj.platform.lower() for tp in target_plats):
+                    portal_jobs_raw.append(p_obj)
+            portal_done_msg = f"✓ Found {gh_cnt} Greenhouse, {ash_cnt} Ashby, {lev_cnt} Lever, {bam_cnt} BambooHR & {wd_cnt} Workday direct portal postings ({len(portal_jobs_raw)} total)"
+            log_ist(portal_done_msg)
+            yield json.dumps({"type": "log", "message": portal_done_msg}) + " " * 2048 + "\n"
+        except asyncio.TimeoutError:
+            warn_msg = "[find_matching_jobs] ⚠️ Direct ATS portal scan timed out after 35s, proceeding with live listings."
+            log_ist(warn_msg)
+            print(warn_msg)
+        except Exception as pe:
+            err_msg = f"[find_matching_jobs] PortalScanner error: {pe}"
+            log_ist(err_msg)
+            print(err_msg)
 
     # Parallelize multi-query search across all queries and platforms concurrently
     raw_jobs = list(portal_jobs_raw)
@@ -1196,56 +1465,85 @@ async def find_matching_jobs(
 
         excluded_clean = [p.strip().lower() for p in (exclude_portals or [])]
 
-        li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=8) if not any(x in "linkedin" for x in excluded_clean) else asyncio.sleep(0, result=[])
-        reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=6) if not any(x in "reed" or x in "reed.co.uk" for x in excluded_clean) else asyncio.sleep(0, result=[])
-        targetjobs_task = _safe_run(search_targetjobs_uk, q, location, timeframe, timeout=6) if not any(x in "targetjobs" or x in "targetjobs.co.uk" for x in excluded_clean) else asyncio.sleep(0, result=[])
-        ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=8) if not any(x in "indeed" for x in excluded_clean) else asyncio.sleep(0, result=[])
-        ats_task = _safe_run(search_direct_ats_jobs, q, location, timeframe, timeout=8) if not any(x in "ats" for x in excluded_clean) else asyncio.sleep(0, result=[])
+        should_li = (not platform_filter_active or "linkedin" in target_plats) and not any(x in "linkedin" for x in excluded_clean)
+        should_reed = (not platform_filter_active or "reed" in target_plats) and not any(x in "reed" or x in "reed.co.uk" for x in excluded_clean)
+        should_js = (not platform_filter_active or "jobserve" in target_plats) and not any(x in "jobserve" for x in excluded_clean)
+        should_tj = (not platform_filter_active or "targetjobs" in target_plats) and not any(x in "targetjobs" or x in "targetjobs.co.uk" for x in excluded_clean)
+        should_ind = (not platform_filter_active or "indeed" in target_plats) and not any(x in "indeed" for x in excluded_clean)
+        should_ats = (not platform_filter_active or "direct ats" in target_plats) and not any(x in "ats" for x in excluded_clean)
 
-        li_j, reed_j, tj_j, ind_j, ats_j = await asyncio.gather(li_task, reed_task, targetjobs_task, ind_task, ats_task)
-        return q, li_j, reed_j, tj_j, ind_j, ats_j
+        li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=8) if should_li else asyncio.sleep(0, result=[])
+        reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=6) if should_reed else asyncio.sleep(0, result=[])
+        jobserve_task = _safe_run(search_jobserve_jobs, q, location, timeframe, browser, timeout=12) if should_js else asyncio.sleep(0, result=[])
+        targetjobs_task = _safe_run(search_targetjobs_uk, q, location, timeframe, timeout=6) if should_tj else asyncio.sleep(0, result=[])
+        ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=8) if should_ind else asyncio.sleep(0, result=[])
+        ats_task = _safe_run(search_direct_ats_jobs, q, location, timeframe, timeout=8) if should_ats else asyncio.sleep(0, result=[])
+
+        li_j, reed_j, js_j, tj_j, ind_j, ats_j = await asyncio.gather(li_task, reed_task, jobserve_task, targetjobs_task, ind_task, ats_task)
+        return q, li_j, reed_j, js_j, tj_j, ind_j, ats_j
 
     query_tasks = [asyncio.create_task(_fetch_query_cluster(q)) for q in queries]
     for completed_task in asyncio.as_completed(query_tasks):
-        q, li_jobs, reed_jobs, tj_jobs, ind_jobs, ats_jobs = await completed_task
+        q, li_jobs, reed_jobs, js_jobs, tj_jobs, ind_jobs, ats_jobs = await completed_task
         raw_jobs.extend(li_jobs)
         raw_jobs.extend(reed_jobs)
+        raw_jobs.extend(js_jobs)
         raw_jobs.extend(tj_jobs)
         raw_jobs.extend(ind_jobs)
         raw_jobs.extend(ats_jobs)
         indeed_jobs_for_est.extend(ind_jobs)
         ats_cnt_str = f", {len(ats_jobs)} Direct ATS" if ats_jobs else ""
-        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed, {len(reed_jobs)} Reed.co.uk{ats_cnt_str} & {len(tj_jobs)} TargetJobs postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed{ats_cnt_str} postings for '{q}'"
+        js_cnt_str = f", {len(js_jobs)} Jobserve" if js_jobs else ""
+        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed, {len(reed_jobs)} Reed.co.uk{js_cnt_str}{ats_cnt_str} & {len(tj_jobs)} TargetJobs postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed{js_cnt_str}{ats_cnt_str} postings for '{q}'"
         log_ist(res_msg)
         yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 
-    # Deduplicate by job URL / ID
+    # If specific platform filter was active, retain only matches matching target platforms
+    if platform_filter_active:
+        raw_jobs = [
+            j for j in raw_jobs
+            if any(tp in (j.platform or '').lower() or tp in (j.url or '').lower() for tp in target_plats)
+        ]
+
+    # Deduplicate by job URL / ID and Canonical Title Key
+    import re
     seen_ids = set()
     seen_urls = set()
+    seen_canonical = set()
     deduped_jobs = []
     for job in raw_jobs:
-        # For query-based URLs (like /viewjob?jk=...), preserve the unique job key rather than stripping all queries
+        # Canonical key: title + company (or title only for generic hiring agency)
+        clean_t = re.sub(r'[^a-zA-Z0-9]', '', (job.title or "").lower())
+        clean_c = re.sub(r'[^a-zA-Z0-9]', '', (job.company or "").lower())
+        if not clean_c or any(g in clean_c for g in ("hiringagency", "client", "confidential", "recruiter", "agency")):
+            canon_key = clean_t
+        else:
+            canon_key = f"{clean_t}_{clean_c}"
+
+        # For query-based URLs (like /viewjob?jk=... or JobSearch.aspx?kw=...), preserve the unique job key rather than stripping all queries
         raw_u = job.url.strip().rstrip("/").lower()
         if "jk=" in raw_u:
-            import re
             m_jk = re.search(r'jk=([a-f0-9]{16})', raw_u)
             u_norm = f"indeed_{m_jk.group(1)}" if m_jk else raw_u
         elif "currentjobid=" in raw_u:
-            import re
             m_cj = re.search(r'currentjobid=(\d+)', raw_u)
             u_norm = f"linkedin_{m_cj.group(1)}" if m_cj else raw_u
+        elif "jobsearch.aspx" in raw_u or "jobserve" in (job.platform or "").lower():
+            u_norm = f"jobserve_{job.job_id}_{clean_t}"
         else:
             u_norm = raw_u.split("?")[0].rstrip("/").lower()
 
-        if job.job_id not in seen_ids and u_norm not in seen_urls:
+        if job.job_id not in seen_ids and u_norm not in seen_urls and (not canon_key or canon_key not in seen_canonical):
             seen_ids.add(job.job_id)
             seen_urls.add(u_norm)
+            if canon_key:
+                seen_canonical.add(canon_key)
             deduped_jobs.append(job)
 
     yield json.dumps({"type": "log", "message": f"📊 Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + " " * 2048 + "\n"
 
-    # Separate instant API jobs (TargetJobs, Reed, Greenhouse, Ashby, Lever, Workday, Direct ATS) from web-scraped jobs (LinkedIn/Indeed)
-    fast_platforms = ("targetjobs", "reed", "greenhouse", "ashby", "lever", "workday", "direct ats")
+    # Separate instant API jobs (TargetJobs, Reed, Jobserve, Greenhouse, Ashby, Lever, Workday, Direct ATS) from web-scraped jobs (LinkedIn/Indeed)
+    fast_platforms = ("targetjobs", "reed", "jobserve", "greenhouse", "ashby", "lever", "workday", "direct ats")
     
     # Cap TargetJobs at maximum 7 to ensure LinkedIn and Direct ATS have high visibility
     tj_count = 0
@@ -1271,7 +1569,7 @@ async def find_matching_jobs(
         yield json.dumps({"type": "log", "message": f"⚡ Instantly computing ATS match scores for {len(api_fast_jobs)} direct ATS portal & TargetJobs openings..."}) + " " * 2048 + "\n"
         for job in api_fast_jobs:
             try:
-                if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 50:
+                if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 20:
                     r = await _score_job_with_real_jd(job, resume_data, None, asyncio.Semaphore(50))
                     if r:
                         scored_jobs.append(r)

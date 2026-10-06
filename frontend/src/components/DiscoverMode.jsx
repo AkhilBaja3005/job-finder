@@ -17,6 +17,8 @@ const DiscoverMode = ({
   setTargetPlatform,
   includeTargetJobs = false,
   setIncludeTargetJobs,
+  includeJobserve = true,
+  setIncludeJobserve,
   discovering,
   loading,
   handleSearchJobs,
@@ -94,6 +96,9 @@ const DiscoverMode = ({
     { id: 'bamboohr', label: 'BambooHR' },
     { id: 'workday', label: 'Workday' },
     { id: 'linkedin', label: 'LinkedIn' },
+    { id: 'jobserve', label: 'Jobserve' },
+    { id: 'indeed', label: 'Indeed' },
+    { id: 'reed', label: 'Reed' },
   ];
 
   return (
@@ -234,34 +239,61 @@ const DiscoverMode = ({
         </div>
 
         {/* Portal Inclusions / Exclusions */}
-        <div style={{ marginTop: '2px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        <div style={{ marginTop: '2px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
             <span style={{ fontSize: '0.68rem', color: '#94A3B8', fontWeight: 700, letterSpacing: '0.06em', fontFamily: 'var(--font-mono)' }}>PORTAL EXCLUSIONS</span>
           </div>
-          <label style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontSize: '0.74rem',
-            color: includeTargetJobs ? '#38BDF8' : '#94A3B8',
-            cursor: 'pointer',
-            padding: '6px 10px',
-            background: includeTargetJobs ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.02)',
-            border: `1px solid ${includeTargetJobs ? 'rgba(56, 189, 248, 0.4)' : 'var(--border-color)'}`,
-            borderRadius: '6px',
-            transition: 'all 0.15s ease'
-          }}>
-            <input
-              type="checkbox"
-              checked={includeTargetJobs}
-              onChange={(e) => setIncludeTargetJobs && setIncludeTargetJobs(e.target.checked)}
-              style={{ cursor: 'pointer', accentColor: '#38BDF8' }}
-            />
-            <span style={{ fontWeight: 600 }}>Include TargetJobs.co.uk</span>
-            <span style={{ fontSize: '0.68rem', color: '#64748B', marginLeft: 'auto' }}>
-              {includeTargetJobs ? 'Included' : 'Skipped by default'}
-            </span>
-          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '0.74rem',
+              color: includeTargetJobs ? '#38BDF8' : '#94A3B8',
+              cursor: 'pointer',
+              padding: '6px 10px',
+              background: includeTargetJobs ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+              border: `1px solid ${includeTargetJobs ? 'rgba(56, 189, 248, 0.4)' : 'var(--border-color)'}`,
+              borderRadius: '6px',
+              transition: 'all 0.15s ease'
+            }}>
+              <input
+                type="checkbox"
+                checked={includeTargetJobs}
+                onChange={(e) => setIncludeTargetJobs && setIncludeTargetJobs(e.target.checked)}
+                style={{ cursor: 'pointer', accentColor: '#38BDF8' }}
+              />
+              <span style={{ fontWeight: 600 }}>Include TargetJobs.co.uk</span>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', marginLeft: 'auto' }}>
+                {includeTargetJobs ? 'Included' : 'Skipped by default'}
+              </span>
+            </label>
+
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '0.74rem',
+              color: includeJobserve ? '#38BDF8' : '#94A3B8',
+              cursor: 'pointer',
+              padding: '6px 10px',
+              background: includeJobserve ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+              border: `1px solid ${includeJobserve ? 'rgba(56, 189, 248, 0.4)' : 'var(--border-color)'}`,
+              borderRadius: '6px',
+              transition: 'all 0.15s ease'
+            }}>
+              <input
+                type="checkbox"
+                checked={includeJobserve}
+                onChange={(e) => setIncludeJobserve && setIncludeJobserve(e.target.checked)}
+                style={{ cursor: 'pointer', accentColor: '#38BDF8' }}
+              />
+              <span style={{ fontWeight: 600 }}>Include Jobserve (jobserve.com)</span>
+              <span style={{ fontSize: '0.68rem', color: '#64748B', marginLeft: 'auto' }}>
+                {includeJobserve ? 'Included by default' : 'Skipped'}
+              </span>
+            </label>
+          </div>
         </div>
 
         {/* ATS Registry HUD */}
