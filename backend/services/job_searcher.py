@@ -1408,7 +1408,7 @@ async def find_matching_jobs(
                     location=location,
                     target_portals=target_plats if platform_filter_active else None
                 ),
-                timeout=35.0
+                timeout=60.0
             )
             gh_cnt = sum(1 for pj in portal_results if pj.get("portal") == "greenhouse")
             ash_cnt = sum(1 for pj in portal_results if pj.get("portal") == "ashby")
@@ -1433,7 +1433,7 @@ async def find_matching_jobs(
             log_ist(portal_done_msg)
             yield json.dumps({"type": "log", "message": portal_done_msg}) + " " * 2048 + "\n"
         except asyncio.TimeoutError:
-            warn_msg = "[find_matching_jobs] ⚠️ Direct ATS portal scan timed out after 35s, proceeding with live listings."
+            warn_msg = "[find_matching_jobs] ⚠️ Direct ATS portal scan timed out after 60s, proceeding with live listings."
             log_ist(warn_msg)
             print(warn_msg)
         except Exception as pe:

@@ -85,7 +85,7 @@ class PortalScanner:
         
         filter_lower = [p.lower().strip() for p in (target_portals or []) if p.strip()]
         is_single_targeted = len(filter_lower) == 1 and "all" not in filter_lower
-        max_boards = 800 if is_single_targeted else 250
+        max_boards = 500 if is_single_targeted else 150
 
         base = self.config.get("portals", {})
         for ats_k, comp_list in base.items():
@@ -395,15 +395,15 @@ class PortalScanner:
 
         all_jobs: List[Dict[str, Any]] = []
         tasks = []
-        sem = asyncio.Semaphore(100)
-        limits = httpx.Limits(max_keepalive_connections=150, max_connections=300)
+        sem = asyncio.Semaphore(120)
+        limits = httpx.Limits(max_keepalive_connections=200, max_connections=400)
         ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         
-        async with httpx.AsyncClient(headers={"User-Agent": ua}, limits=limits, timeout=3.5) as client:
+        async with httpx.AsyncClient(headers={"User-Agent": ua}, limits=limits, timeout=2.5) as client:
             async def _safe_scan(scanner_func, comp_slug, comp_name):
                 try:
                     async with sem:
-                        return await asyncio.wait_for(scanner_func(client, comp_slug, comp_name), timeout=3.5)
+                        return await asyncio.wait_for(scanner_func(client, comp_slug, comp_name), timeout=2.5)
                 except Exception:
                     return []
 
