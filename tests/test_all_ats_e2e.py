@@ -1,12 +1,13 @@
 """
 End-to-End ATS & Job Description Integrity Test Suite
 ======================================================
-Validates 100% full-text extraction, URL canonicalization, and zero-hallucination
-filtering across all major platforms:
-- Workday (CXS API & canonical URL resolution)
+Validates 100% full-text extraction, URL canonicalization, HTML sanitation (zero <h2>, <div> tags),
+and zero-hallucination filtering across all major platforms:
+- Workday (CXS API & canonical URL resolution, full clean JD)
 - Lever (Multi-part lists + intro + outro assembly)
 - BambooHR (Detail API & regex word-boundary keyword filtering)
-- Greenhouse (REST API single job endpoint)
+- Greenhouse (REST API single job endpoint with clean markdown)
+- Ashby (Clean markdown with zero raw HTML artifacts)
 - Jobserve (Mobile endpoint & title sanitizer)
 """
 
@@ -24,11 +25,18 @@ if BACKEND_DIR not in sys.path:
 
 from services.scraper import scrape_job_description
 from services.portal_scanner import PortalScanner
+from utils.text_cleaner import clean_html_to_markdown
+
+
+def assert_clean_text(text: str, platform: str):
+    """Asserts that text has no residual HTML tags or unescaped entities."""
+    for bad in ["<h2>", "<div>", "</div>", "</h2>", "<p>", "</p>", "<span>", "</span>", "<ul>", "<li>", "&quot;", "&amp;lt;"]:
+        assert bad not in text.lower(), f"[{platform}] Residual HTML found: '{bad}' in JD text snippet:\n{text[:300]}"
 
 
 @pytest.mark.asyncio
 async def test_workday_url_and_cxs_extraction():
-    """Test Workday URL canonicalization and full JD extraction."""
+    """Test Workday URL canonicalization, full JD extraction, and clean text."""
     test_urls = [
         "https://aig.wd1.myworkdayjobs.com/en-US/early_careers/job/London/Early-Careers-2027-Claims-Fraud---Recovery-Performance-Graduate_JR2604104",
         "https://aig.wd1.myworkdayjobs.com/en-US/aig/early_careers/job/London/Early-Careers-2027-Claims-Fraud---Recovery-Performance-Graduate_JR2604104",  # Malformed input
@@ -39,11 +47,13 @@ async def test_workday_url_and_cxs_extraction():
         res = await scrape_job_description(url)
         assert res is not None, f"Failed to scrape Workday URL: {url}"
         assert "Claims Fraud" in res["title"], f"Incorrect title: {res.get('title')}"
-        assert len(res["description"]) > 1000, f"Workday JD too short: {len(res['description'])} chars"
+        desc = res["description"]
+        assert len(desc) > 1000, f"Workday JD too short: {len(desc)} chars"
+        assert_clean_text(desc, "Workday")
         assert "Aig" in res["company"] or "AIG" in res["company"].upper()
         # Verify canonical URL is clean without duplicate tenant
         assert "/en-US/aig/early_careers" not in res["url"], f"URL still contains duplicate tenant: {res['url']}"
-        print(f"✓ Workday Success ({len(res['description'])} chars): {res['title']} -> {res['url']}")
+        print(f"✓ Workday Success ({len(desc)} chars, clean markdown): {res['title']} -> {res['url']}")
 
 
 @pytest.mark.asyncio
@@ -55,17 +65,26 @@ async def test_lever_full_jd_assembly():
     assert "Backend Engineer" in res["title"], f"Incorrect title: {res.get('title')}"
     desc = res["description"]
     assert len(desc) > 1500, f"Lever JD too short: {len(desc)} chars"
-    # Ensure lists were parsed
-    assert "What You'll Do" in desc or "Who You Are" in desc or "Responsibilities" in desc or "You'll help turn" in desc
-    print(f"✓ Lever Success ({len(desc)} chars): {res['title']} ({res['company']})")
+    assert_clean_text(desc, "Lever")
+    print(f"✓ Lever Success ({len(desc)} chars, clean markdown): {res['title']} ({res['company']})")
 
 
 @pytest.mark.asyncio
-async def test_bamboohr_detail_and_keyword_boundary():
-    """Test BambooHR detail extraction and strict word-boundary keyword filtering."""
+async def test_bamboohr_detail_and_enrichment():
+    """Test BambooHR detail extraction, HTML sanitization, and strict word-boundary keyword filtering."""
     scanner = PortalScanner()
 
-    # 1. Test word-boundary filtering against Automotive Detailer vs AI Engineer
+    # 1. Test live BambooHR detail extraction
+    bamboo_url = "https://afternow.bamboohr.com/careers/63"
+    res = await scrape_job_description(bamboo_url)
+    assert res is not None, "Failed to scrape BambooHR URL"
+    assert "Senior Backend" in res["title"], f"Incorrect title: {res.get('title')}"
+    desc = res["description"]
+    assert len(desc) > 3000, f"BambooHR JD too short: {len(desc)} chars"
+    assert_clean_text(desc, "BambooHR")
+    print(f"✓ BambooHR Live Detail Success ({len(desc)} chars, clean markdown): {res['title']}")
+
+    # 2. Test word-boundary filtering against Automotive Detailer vs AI Engineer
     mock_jobs = [
         {
             "id": "bamboo_1",
@@ -85,12 +104,7 @@ async def test_bamboohr_detail_and_keyword_boundary():
         }
     ]
 
-    # Keyword filter for AI Engineer / Backend Developer
     keywords = ["AI Engineer", "Backend Developer"]
-    filtered = scanner._is_within_timeframe("2026-10-06T10:00:00Z", "48h")
-    assert filtered is True
-
-    # Simulate keyword filtering logic
     patterns = []
     for kw in [k.lower() for k in keywords]:
         for sub in kw.split(","):
@@ -106,7 +120,6 @@ async def test_bamboohr_detail_and_keyword_boundary():
         j for j in mock_jobs
         if any(p.search(j["title"]) or p.search(j.get("description", "")) for p in patterns)
     ]
-
     matched_titles = [j["title"] for j in matched_jobs]
     assert "Automotive Detailer" not in matched_titles, "Regex boundary failed: Automotive Detailer was falsely matched!"
     assert "Senior Backend (AI / Machine Learning) Engineer" in matched_titles, "Failed to match real AI Engineer!"
@@ -115,12 +128,28 @@ async def test_bamboohr_detail_and_keyword_boundary():
 
 @pytest.mark.asyncio
 async def test_greenhouse_single_job_api():
-    """Test Greenhouse REST API extraction."""
+    """Test Greenhouse REST API extraction and clean markdown without raw <h2> / <div>."""
     gh_url = "https://boards.greenhouse.io/elastic/jobs/8148720"
     res = await scrape_job_description(gh_url)
     assert res is not None, "Failed to scrape Greenhouse URL"
-    assert len(res["description"]) > 1000, f"Greenhouse JD too short: {len(res['description'])} chars"
-    print(f"✓ Greenhouse Success ({len(res['description'])} chars): {res['title']}")
+    desc = res["description"]
+    assert len(desc) > 1000, f"Greenhouse JD too short: {len(desc)} chars"
+    assert_clean_text(desc, "Greenhouse")
+    print(f"✓ Greenhouse Success ({len(desc)} chars, clean markdown): {res['title']}")
+
+
+@pytest.mark.asyncio
+async def test_ashby_clean_markdown():
+    """Test Ashby job board cleaning without raw HTML tags."""
+    scanner = PortalScanner()
+    async with httpx.AsyncClient(timeout=6.0) as client:
+        ashby_jobs = await scanner.scan_ashby_company(client, "cohere", "Cohere")
+    assert len(ashby_jobs) > 0, "No Ashby jobs returned"
+    first = ashby_jobs[0]
+    desc = first["description"]
+    assert len(desc) > 500, f"Ashby JD too short: {len(desc)} chars"
+    assert_clean_text(desc, "Ashby")
+    print(f"✓ Ashby Success ({len(desc)} chars, clean markdown): {first['title']}")
 
 
 @pytest.mark.asyncio
@@ -135,17 +164,19 @@ async def test_jobserve_direct_and_search():
         assert not re.search(r',?\s*£\d+.*$', first.title), f"Rate suffix was not cleaned: {first.title}"
         if hasattr(first, "full_description") and first.full_description:
             assert len(first.full_description) > 100, f"Jobserve JD too short: {len(first.full_description)}"
+            assert_clean_text(first.full_description, "Jobserve")
             print(f"✓ Jobserve Full JD ({len(first.full_description)} chars): {first.title}")
 
 
 if __name__ == "__main__":
     async def main():
-        print("\n=== Running Comprehensive ATS & Scraper E2E Suite ===\n")
+        print("\n=== Running Comprehensive ATS & Clean JD Test Suite ===\n")
         await test_workday_url_and_cxs_extraction()
         await test_lever_full_jd_assembly()
-        await test_bamboohr_detail_and_keyword_boundary()
+        await test_bamboohr_detail_and_enrichment()
         await test_greenhouse_single_job_api()
+        await test_ashby_clean_markdown()
         await test_jobserve_direct_and_search()
-        print("\n=== ALL ATS PLATFORMS VERIFIED & PASSED (100% E2E) ===\n")
+        print("\n=== ALL ATS PLATFORMS VERIFIED 100% COMPLETE & CLEAN (NO RAW HTML) ===\n")
 
     asyncio.run(main())

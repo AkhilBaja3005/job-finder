@@ -19,6 +19,7 @@ import httpx
 from typing import List, Dict, Any, Optional
 # pyrefly: ignore [missing-import]
 from services.ats_scorer import compute_ats_score, estimate_role_fit_score
+from utils.text_cleaner import clean_html_to_markdown
 
 DEFAULT_PORTALS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "portals.yml")
 
@@ -45,8 +46,27 @@ class PortalScanner:
             except Exception as e:
                 print(f"[PortalScanner] Error loading config {self.config_path}: {e}")
 
+        portals_dict = loaded.get("portals", base_portals)
+        try:
+            try:
+                from services.company_slug_registry import get_active_slugs
+            except ImportError:
+                from backend.services.company_slug_registry import get_active_slugs
+
+            db_slugs = get_active_slugs()
+            for ats_name, slug_list in db_slugs.items():
+                if ats_name not in portals_dict:
+                    portals_dict[ats_name] = []
+                existing = {p["company_slug"] for p in portals_dict[ats_name] if isinstance(p, dict) and p.get("company_slug")}
+                for s in slug_list:
+                    if s and s not in existing:
+                        disp_name = s.split("|")[0].replace("-", " ").replace("_", " ").title() if "|" in s else s.replace("-", " ").replace("_", " ").title()
+                        portals_dict[ats_name].append({"company_slug": s, "name": disp_name})
+        except Exception as e:
+            print(f"[PortalScanner] Note: Could not load DB active slugs in _load_config: {e}")
+
         return {
-            "portals": loaded.get("portals", base_portals),
+            "portals": portals_dict,
             "config": loaded.get("config", {
                 "min_ats_score_to_notify": 75,
                 "roles_keywords": ["AI", "Machine Learning", "ML", "GenAI", "Software Engineer", "Systems"]
@@ -54,7 +74,7 @@ class PortalScanner:
         }
 
     def _get_active_portals_for_scan(self, target_portals: Optional[List[str]] = None) -> Dict[str, List[Dict[str, str]]]:
-        """Dynamically fetch all confirmed active slugs from SQLite for the requested portals."""
+        """Dynamically fetch confirmed active slugs for the requested portals."""
         active_portals: Dict[str, List[Dict[str, str]]] = {
             "greenhouse": [],
             "ashby": [],
@@ -63,38 +83,17 @@ class PortalScanner:
             "workday": []
         }
         
-        # 1. Add baseline config portals
+        filter_lower = [p.lower().strip() for p in (target_portals or []) if p.strip()]
+        is_single_targeted = len(filter_lower) == 1 and "all" not in filter_lower
+        max_boards = 800 if is_single_targeted else 250
+
         base = self.config.get("portals", {})
         for ats_k, comp_list in base.items():
-            if ats_k in active_portals:
-                for c in comp_list:
-                    if isinstance(c, dict) and c.get("company_slug"):
-                        active_portals[ats_k].append(c)
-
-        # 2. Query all verified active slugs from SQLite
-        try:
-            try:
-                from services.company_slug_registry import get_active_slugs
-            except ImportError:
-                from backend.services.company_slug_registry import get_active_slugs
-
-            db_slugs = get_active_slugs()
-            filter_lower = [p.lower().strip() for p in (target_portals or []) if p.strip()]
-            is_single_targeted = len(filter_lower) == 1 and "all" not in filter_lower
-
-            for ats_name, slug_list in db_slugs.items():
-                if ats_name not in active_portals:
-                    active_portals[ats_name] = []
-                
-                # Expand scan pool: 800 active boards for single ATS filter, 250 per ATS for multi-platform sweeps
-                max_boards = 800 if is_single_targeted else 250
-                existing = {p["company_slug"] for p in active_portals[ats_name]}
-                
-                for s in slug_list[:max_boards]:
-                    if s and s not in existing:
-                        active_portals[ats_name].append({"company_slug": s, "name": s.capitalize()})
-        except Exception as e:
-            print(f"[PortalScanner] Error loading dynamic active slugs: {e}")
+            if ats_k not in active_portals:
+                active_portals[ats_k] = []
+            for c in comp_list[:max_boards]:
+                if isinstance(c, dict) and c.get("company_slug"):
+                    active_portals[ats_k].append(c)
 
         return active_portals
 
@@ -135,11 +134,10 @@ class PortalScanner:
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("jobs", [])
-                from bs4 import BeautifulSoup
                 for rj in raw_jobs:
                     updated_at = rj.get("updated_at")
                     raw_content = rj.get("content", "")
-                    clean_desc = BeautifulSoup(raw_content, "html.parser").get_text(separator="\n").strip() if raw_content else rj.get("title", "")
+                    clean_desc = clean_html_to_markdown(raw_content) if raw_content else rj.get("title", "")
                     jobs.append({
                         "id": f"gh_{rj.get('id')}",
                         "title": rj.get("title", ""),
@@ -166,13 +164,15 @@ class PortalScanner:
                 raw_jobs = data.get("jobs", [])
                 for rj in raw_jobs:
                     pub_at = rj.get("publishedAt")
+                    raw_d = rj.get("descriptionHtml") or rj.get("descriptionPlain", "")
+                    clean_desc = clean_html_to_markdown(raw_d) if raw_d else rj.get("title", "")
                     jobs.append({
                         "id": f"ashby_{rj.get('id')}",
                         "title": rj.get("title", ""),
                         "company": company_name,
                         "url": rj.get("jobUrl", f"https://jobs.ashbyhq.com/{company_slug}/{rj.get('id')}"),
                         "location": rj.get("location", "Remote/Unspecified"),
-                        "description": rj.get("descriptionHtml", rj.get("descriptionPlain", "")),
+                        "description": clean_desc,
                         "portal": "ashby",
                         "posted_at": pub_at,
                         "age": self._format_age(pub_at)
@@ -189,7 +189,6 @@ class PortalScanner:
             res = await client.get(url, timeout=6.0)
             if res.status_code == 200:
                 raw_jobs = res.json()
-                from bs4 import BeautifulSoup
                 for rj in raw_jobs:
                     created_at_ms = rj.get("createdAt")
                     
@@ -197,12 +196,12 @@ class PortalScanner:
                     if rj.get("descriptionPlain"):
                         full_parts.append(rj["descriptionPlain"].strip())
                     elif rj.get("description"):
-                        full_parts.append(BeautifulSoup(rj["description"], "html.parser").get_text(separator="\n").strip())
+                        full_parts.append(clean_html_to_markdown(rj["description"]))
 
                     for l in rj.get("lists", []):
                         header = l.get("text", "")
                         content_html = l.get("content", "")
-                        clean_content = BeautifulSoup(content_html, "html.parser").get_text(separator="\n").strip()
+                        clean_content = clean_html_to_markdown(content_html)
                         if header and clean_content:
                             full_parts.append(f"\n{header}\n{clean_content}")
                         elif clean_content:
@@ -211,7 +210,7 @@ class PortalScanner:
                     if rj.get("additionalPlain"):
                         full_parts.append(rj["additionalPlain"].strip())
 
-                    full_desc = "\n\n".join([p for p in full_parts if p.strip()]) or rj.get("text", "")
+                    full_desc = clean_html_to_markdown("\n\n".join([p for p in full_parts if p.strip()])) or rj.get("text", "")
 
                     jobs.append({
                         "id": f"lever_{rj.get('id')}",
@@ -240,14 +239,18 @@ class PortalScanner:
                 for rj in raw_jobs:
                     loc = rj.get("location", {})
                     loc_str = f"{loc.get('city', '')}, {loc.get('state', '')}".strip(", ") or "Remote/Unspecified"
-                    job_id = rj.get("id", "")
+                    job_id = str(rj.get("id", ""))
+                    raw_d = rj.get("description", "")
+                    clean_d = clean_html_to_markdown(raw_d) if raw_d else ""
                     jobs.append({
                         "id": f"bamboo_{job_id}",
+                        "job_id": job_id,
+                        "company_slug": company_slug,
                         "title": rj.get("jobOpeningName", rj.get("title", "")),
                         "company": company_name,
                         "url": f"https://{company_slug}.bamboohr.com/careers/{job_id}",
                         "location": loc_str,
-                        "description": rj.get("description", ""),
+                        "description": clean_d or rj.get("jobOpeningName", ""),
                         "portal": "bamboohr",
                         "posted_at": rj.get("dateCreated"),
                         "age": self._format_age(rj.get("dateCreated"))
@@ -270,14 +273,18 @@ class PortalScanner:
             if res.status_code == 200:
                 data = res.json()
                 raw_jobs = data.get("jobPostings", [])
+                disp_company = company_name.split("|")[0].replace("-", " ").replace("_", " ").title() if "|" in company_name else company_name
                 for rj in raw_jobs:
                     ext_path = rj.get("externalPath", "")
-                    # Canonical URL is https://{tenant}.{instance}.myworkdayjobs.com/en-US/{site}{ext_path}
                     job_url = f"https://{tenant}.{instance}.myworkdayjobs.com/en-US/{site}{ext_path}" if ext_path else ""
                     jobs.append({
                         "id": f"workday_{rj.get('bulletFields', [ext_path])[0] if rj.get('bulletFields') else ext_path}",
+                        "tenant": tenant,
+                        "instance": instance,
+                        "site": site,
+                        "ext_path": ext_path,
                         "title": rj.get("title", ""),
-                        "company": company_name,
+                        "company": disp_company,
                         "url": job_url,
                         "location": rj.get("locationsText", "Remote/Unspecified"),
                         "description": rj.get("title", ""),
@@ -294,31 +301,52 @@ class PortalScanner:
         if not posted_at or timeframe in ("all", "any"):
             return True
         try:
-            from datetime import datetime, timezone, timedelta
+            from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
             
-            # Resolve cutoff timedelta
-            tf_map = {
-                "24h": timedelta(hours=24),
-                "48h": timedelta(hours=48),
-                "7d": timedelta(days=7),
-                "14d": timedelta(days=14),
-                "30d": timedelta(days=30),
-            }
-            cutoff_delta = tf_map.get(timeframe, timedelta(hours=48))
-            cutoff_dt = now - cutoff_delta
+            tf_hours = {
+                "24h": 24,
+                "48h": 48,
+                "7d": 7 * 24,
+                "14d": 14 * 24,
+                "30d": 30 * 24,
+            }.get(timeframe, 48)
 
             if isinstance(posted_at, (int, float)):
                 dt = datetime.fromtimestamp(posted_at / 1000.0, timezone.utc)
-            elif isinstance(posted_at, str):
+                return (now - dt).total_seconds() / 3600.0 <= tf_hours
+
+            if isinstance(posted_at, str):
+                p_str = posted_at.strip().lower()
+                if "today" in p_str or "just now" in p_str:
+                    return True
+                if "yesterday" in p_str:
+                    return tf_hours >= 24
+
+                # Match 'posted X days ago', 'posted X+ days ago', 'Xd ago'
+                m_days = re.search(r'(\d+)\+?\s*(?:days?|d)\s*ago', p_str)
+                if m_days:
+                    days = int(m_days.group(1))
+                    return (days * 24) <= tf_hours
+
+                # Match 'Xh ago', 'X hours ago'
+                m_hours = re.search(r'(\d+)\s*(?:hours?|h)\s*ago', p_str)
+                if m_hours:
+                    hours = int(m_hours.group(1))
+                    return hours <= tf_hours
+
+                # Reject months/years ago for short timeframes
+                if "month" in p_str or "year" in p_str or "mo ago" in p_str:
+                    return False
+
+                # Try standard ISO parse
                 clean_dt = posted_at.replace("Z", "+00:00")
                 dt = datetime.fromisoformat(clean_dt)
-            else:
-                return True
+                return (now - dt).total_seconds() / 3600.0 <= tf_hours
 
-            return dt >= cutoff_dt
+            return False
         except Exception:
-            return True
+            return False
 
     def _matches_location(self, job_loc: str, target_loc: Optional[str]) -> bool:
         """Helper to match job location against target user location."""
@@ -433,8 +461,47 @@ class PortalScanner:
                 j for j in all_jobs
                 if any(p.search(j["title"]) or p.search(j.get("description", "")) for p in patterns)
             ]
-            return filtered
-        return all_jobs
+        else:
+            filtered = all_jobs
+
+        # Concurrently enrich surviving BambooHR & Workday jobs with full descriptions
+        enrich_targets = [
+            j for j in filtered
+            if (j.get("portal") in ("bamboohr", "workday") and len(j.get("description", "")) < 200)
+        ]
+        if enrich_targets:
+            async with httpx.AsyncClient(timeout=4.0) as enrich_client:
+                async def _enrich_one(job_item):
+                    try:
+                        p = job_item.get("portal")
+                        if p == "bamboohr":
+                            c_slug = job_item.get("company_slug")
+                            jid = job_item.get("job_id")
+                            if c_slug and jid:
+                                detail_url = f"https://{c_slug}.bamboohr.com/careers/{jid}/detail"
+                                r = await enrich_client.get(detail_url)
+                                if r.status_code == 200:
+                                    raw_d = r.json().get("result", {}).get("jobOpening", {}).get("description", "")
+                                    if raw_d:
+                                        job_item["description"] = clean_html_to_markdown(raw_d)
+                        elif p == "workday":
+                            tenant = job_item.get("tenant")
+                            instance = job_item.get("instance", "wd1")
+                            site = job_item.get("site", "External")
+                            ext_path = job_item.get("ext_path")
+                            if tenant and ext_path:
+                                cxs_url = f"https://{tenant}.{instance}.myworkdayjobs.com/wday/cxs/{tenant}/{site}{ext_path}"
+                                r = await enrich_client.get(cxs_url)
+                                if r.status_code == 200:
+                                    raw_d = r.json().get("jobPostingInfo", {}).get("jobDescription", "")
+                                    if raw_d:
+                                        job_item["description"] = clean_html_to_markdown(raw_d)
+                    except Exception:
+                        pass
+
+                await asyncio.gather(*[_enrich_one(j) for j in enrich_targets], return_exceptions=True)
+
+        return filtered
 
     def score_portal_jobs_for_candidate(
         self,

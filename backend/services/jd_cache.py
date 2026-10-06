@@ -152,6 +152,14 @@ def cache_get(url: str) -> Optional[dict]:
             # Stale or degraded fallback entry: ignore and let fresh scrape occur
             if len(desc) < 150 or (len(desc) < 300 and desc == title):
                 return None
+            if "<" in desc and (">" in desc or "&lt;" in desc):
+                try:
+                    from utils.text_cleaner import clean_html_to_markdown
+                    res_data["description"] = clean_html_to_markdown(desc)
+                    if res_data.get("markdown"):
+                        res_data["markdown"] = clean_html_to_markdown(res_data["markdown"])
+                except Exception:
+                    pass
         return res_data
     except Exception as e:
         print(f"[jd_cache] get error: {e}")

@@ -223,6 +223,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     from bs4 import BeautifulSoup
     # pyrefly: ignore [missing-import]
     from utils.ssl_utils import SSL_CONTEXT
+    from utils.text_cleaner import clean_html_to_markdown
     # pyrefly: ignore [missing-import]
     from services.log_queue import log_ist
 
@@ -295,11 +296,11 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                         job_info = data.get("jobPostingInfo", {})
                         title = job_info.get("title", "Job Posting")
                         raw_desc = job_info.get("jobDescription", "")
-                        clean_text = BeautifulSoup(raw_desc, "html.parser").get_text(separator="\n").strip()
+                        clean_text = clean_html_to_markdown(raw_desc)
                         if clean_text and len(clean_text) > 50:
                             res = {
                                 "title": title,
-                                "company": tenant.capitalize(),
+                                "company": tenant.replace("-", " ").replace("_", " ").title(),
                                 "description": clean_text,
                                 "markdown": clean_text,
                                 "url": canonical_web_url,
@@ -340,7 +341,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                     if resp.status_code == 200:
                         data = resp.json()
                         raw_html = data.get("content", "")
-                        clean_text = BeautifulSoup(raw_html, "html.parser").get_text(separator="\n").strip()
+                        clean_text = clean_html_to_markdown(raw_html)
                         if clean_text and len(clean_text) > 50:
                             res = {
                                 "title": data.get("title", "Job Posting"),
@@ -373,7 +374,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                         res_body = data.get("result", {})
                         opening = res_body.get("jobOpening", {})
                         raw_desc = opening.get("description", "")
-                        clean_text = BeautifulSoup(raw_desc, "html.parser").get_text(separator="\n").strip()
+                        clean_text = clean_html_to_markdown(raw_desc)
                         if clean_text and len(clean_text) > 50:
                             res = {
                                 "title": opening.get("jobOpeningName", "Job Posting"),
@@ -409,12 +410,12 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                         if data.get("descriptionPlain"):
                             full_parts.append(data["descriptionPlain"].strip())
                         elif data.get("description"):
-                            full_parts.append(BeautifulSoup(data["description"], "html.parser").get_text(separator="\n").strip())
+                            full_parts.append(clean_html_to_markdown(data["description"]))
 
                         for l in data.get("lists", []):
                             header = l.get("text", "")
                             content_html = l.get("content", "")
-                            clean_content = BeautifulSoup(content_html, "html.parser").get_text(separator="\n").strip()
+                            clean_content = clean_html_to_markdown(content_html)
                             if header and clean_content:
                                 full_parts.append(f"\n{header}\n{clean_content}")
                             elif clean_content:
@@ -423,7 +424,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                         if data.get("additionalPlain"):
                             full_parts.append(data["additionalPlain"].strip())
 
-                        full_desc = "\n\n".join([p for p in full_parts if p.strip()])
+                        full_desc = clean_html_to_markdown("\n\n".join([p for p in full_parts if p.strip()]))
                         if len(full_desc) > 50:
                             res = {
                                 "title": title,
