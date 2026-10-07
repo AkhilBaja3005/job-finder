@@ -73,7 +73,11 @@ class PortalScanner:
             })
         }
 
-    def _get_active_portals_for_scan(self, target_portals: Optional[List[str]] = None) -> Dict[str, List[Dict[str, str]]]:
+    def _get_active_portals_for_scan(
+        self,
+        target_portals: Optional[List[str]] = None,
+        exclude_portals: Optional[List[str]] = None
+    ) -> Dict[str, List[Dict[str, str]]]:
         """Dynamically fetch confirmed active slugs for the requested portals."""
         active_portals: Dict[str, List[Dict[str, str]]] = {
             "greenhouse": [],
@@ -84,11 +88,14 @@ class PortalScanner:
         }
         
         filter_lower = [p.lower().strip() for p in (target_portals or []) if p.strip()]
+        exclude_lower = {p.lower().strip() for p in (exclude_portals or []) if p.strip()}
         is_single_targeted = len(filter_lower) == 1 and "all" not in filter_lower
         max_boards = 800 if is_single_targeted else 250
 
         base = self.config.get("portals", {})
         for ats_k, comp_list in base.items():
+            if ats_k in exclude_lower or (ats_k == "bamboohr" and "bamboo" in exclude_lower):
+                continue
             if ats_k not in active_portals:
                 active_portals[ats_k] = []
             for c in comp_list[:max_boards]:
@@ -383,14 +390,16 @@ class PortalScanner:
         target_keywords: Optional[List[str]] = None,
         timeframe: str = "48h",
         location: Optional[str] = None,
-        target_portals: Optional[List[str]] = None
+        target_portals: Optional[List[str]] = None,
+        exclude_portals: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """Scans configured target portals concurrently with keyword, timeframe & location filtering."""
-        portals_def = self._get_active_portals_for_scan(target_portals)
+        portals_def = self._get_active_portals_for_scan(target_portals, exclude_portals=exclude_portals)
         keywords = target_keywords or self.config.get("config", {}).get("roles_keywords", [])
         keywords_lower = [k.lower() for k in keywords]
 
         filter_portals = [p.strip().lower() for p in (target_portals or []) if p.strip()]
+        exclude_portals_set = {p.strip().lower() for p in (exclude_portals or []) if p.strip()}
         is_targeted = len(filter_portals) > 0 and "all" not in filter_portals
 
         all_jobs: List[Dict[str, Any]] = []
@@ -408,23 +417,23 @@ class PortalScanner:
                     return []
 
             # Greenhouse
-            if not is_targeted or "greenhouse" in filter_portals:
+            if "greenhouse" not in exclude_portals_set and (not is_targeted or "greenhouse" in filter_portals):
                 for comp in portals_def.get("greenhouse", []):
                     tasks.append(_safe_scan(self.scan_greenhouse_company, comp["company_slug"], comp["name"]))
             # Ashby
-            if not is_targeted or "ashby" in filter_portals:
+            if "ashby" not in exclude_portals_set and (not is_targeted or "ashby" in filter_portals):
                 for comp in portals_def.get("ashby", []):
                     tasks.append(_safe_scan(self.scan_ashby_company, comp["company_slug"], comp["name"]))
             # Lever
-            if not is_targeted or "lever" in filter_portals:
+            if "lever" not in exclude_portals_set and (not is_targeted or "lever" in filter_portals):
                 for comp in portals_def.get("lever", []):
                     tasks.append(_safe_scan(self.scan_lever_company, comp["company_slug"], comp["name"]))
             # BambooHR
-            if not is_targeted or "bamboohr" in filter_portals or "bamboo" in filter_portals:
+            if "bamboohr" not in exclude_portals_set and "bamboo" not in exclude_portals_set and (not is_targeted or "bamboohr" in filter_portals or "bamboo" in filter_portals):
                 for comp in portals_def.get("bamboohr", []):
                     tasks.append(_safe_scan(self.scan_bamboohr_company, comp["company_slug"], comp["name"]))
             # Workday
-            if not is_targeted or "workday" in filter_portals:
+            if "workday" not in exclude_portals_set and (not is_targeted or "workday" in filter_portals):
                 for comp in portals_def.get("workday", []):
                     tasks.append(_safe_scan(self.scan_workday_company, comp["company_slug"], comp["name"]))
 
