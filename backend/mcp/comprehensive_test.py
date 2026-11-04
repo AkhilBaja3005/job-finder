@@ -203,7 +203,13 @@ async def test_all_mcp_tools():
                 f.write(real_profile_backup)
 
     # 18. parse_and_convert_to_latex
-    sample_tex_path = "backend/assets/master_resume_template.tex" if os.path.exists("backend/assets/master_resume_template.tex") else "backend/output/tailored_resume.tex"
+    pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidate_paths = [
+        os.path.join(pkg_dir, "assets", "master_resume_template.tex"),
+        os.path.join(pkg_dir, "output", "tailored_resume.tex"),
+        "backend/assets/master_resume_template.tex"
+    ]
+    sample_tex_path = next((p for p in candidate_paths if os.path.exists(p)), candidate_paths[0])
     parse_res = await process_mcp_request({
         "jsonrpc": "2.0", "id": 18, "method": "tools/call",
         "params": {"name": "parse_and_convert_to_latex", "arguments": {

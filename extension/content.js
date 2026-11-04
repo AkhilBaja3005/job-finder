@@ -1163,6 +1163,136 @@
     }
   } catch (e) {}
 
+  // ── UK Visa Sponsor Checker & In-Page Badging Engine ──────────────────
+  function showSponsorNoticeModal(companyName, notice) {
+    // Remove existing modal if any
+    const oldModal = document.getElementById("jf-sponsor-modal-root");
+    if (oldModal) oldModal.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "jf-sponsor-modal-root";
+    overlay.className = "jf-sponsor-modal-overlay";
+
+    const title = notice?.title || "Company Could Not Be Found in Sponsor Database";
+    const desc = notice?.description || `${companyName} is not currently registered as a visa sponsor with the UK government.`;
+    const advice = notice?.advice || "This doesn't necessarily mean they can't sponsor - they may be able to apply for a sponsor license. Consider reaching out directly to ask about their sponsorship policy or future plans.";
+
+    overlay.innerHTML = `
+      <div class="jf-sponsor-modal" role="dialog" aria-modal="true">
+        <div class="jf-sponsor-modal-header">
+          <span class="jf-sponsor-modal-icon">⚠️</span>
+          <div>
+            <h3 class="jf-sponsor-modal-title">${escapeHtml(title)}</h3>
+            <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">UK Home Office Register of Licensed Sponsors</div>
+          </div>
+        </div>
+        <div class="jf-sponsor-modal-body">
+          ${escapeHtml(desc)}
+        </div>
+        <div class="jf-sponsor-modal-advice">
+          <strong>💡 Guidance:</strong><br/>
+          ${escapeHtml(advice)}
+        </div>
+        <div class="jf-sponsor-modal-footer">
+          <button type="button" class="jf-sponsor-btn jf-sponsor-btn-close" id="jf-close-sponsor-modal">Got it / Close</button>
+          <a href="https://www.gov.uk/government/publications/register-of-licensed-sponsors-workers" target="_blank" rel="noopener noreferrer" class="jf-sponsor-btn jf-sponsor-btn-gov">Check Live GOV.UK Register ↗</a>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const closeBtn = document.getElementById("jf-close-sponsor-modal");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => overlay.remove());
+    }
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+  }
+
+  function injectSponsorBadges() {
+    if (!isRuntimeValid() || !chrome.runtime || !chrome.runtime.sendMessage) return;
+
+    // 1. LinkedIn Card Selectors (search results & job collections)
+    const linkedInCardSelectors = [
+      ".job-card-container__company-name",
+      ".jobs-search-results-list__list-item .artdeco-entity-lockup__subtitle",
+      ".job-card-list__company-name",
+      ".job-details-jobs-unified-top-card__company-name",
+      ".jobs-unified-top-card__company-name",
+      ".jobs-unified-top-card__subtitle-primary-grouping a"
+    ];
+
+    linkedInCardSelectors.forEach((sel) => {
+      const elements = document.querySelectorAll(sel);
+      elements.forEach((el) => {
+        if (el.getAttribute("data-jf-sponsor-checked") === "true") return;
+        const rawCompany = (el.innerText || "").trim().split("\n")[0].trim();
+        if (!rawCompany || rawCompany.length < 2) return;
+
+        el.setAttribute("data-jf-sponsor-checked", "true");
+
+        chrome.runtime.sendMessage({ action: "CHECK_SPONSOR", company: rawCompany }, (res) => {
+          if (chrome.runtime.lastError || !res) return;
+
+          // Check if badge already present in parent
+          const parent = el.closest(".artdeco-entity-lockup__subtitle, .job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name, .job-card-container__company-name") || el;
+          if (parent.querySelector(".jf-sponsor-badge")) return;
+
+          const badge = document.createElement("span");
+          badge.className = `jf-sponsor-badge ${res.is_sponsor ? "sponsor-yes" : "sponsor-no"}`;
+          badge.textContent = res.is_sponsor ? "✓ UK Visa Sponsor" : "✗ Not on sponsor";
+          badge.title = res.is_sponsor
+            ? `Verified UK Sponsor: ${res.matched_name || rawCompany}`
+            : "Click to view UK visa sponsorship guidance notice";
+
+          badge.addEventListener("click", (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (!res.is_sponsor) {
+              showSponsorNoticeModal(rawCompany, res.notice);
+            } else {
+              showToast(`🟢 ${rawCompany} is a verified UK Visa Sponsor!`);
+            }
+          });
+
+          el.appendChild(badge);
+        });
+      });
+    });
+
+    // 2. Indeed company headers
+    if (window.location.hostname.includes("indeed.com")) {
+      const indeedCompEls = document.querySelectorAll("[data-company-name='true'], [data-testid='inlineHeader-companyName']");
+      indeedCompEls.forEach((el) => {
+        if (el.getAttribute("data-jf-sponsor-checked") === "true") return;
+        const rawCompany = (el.innerText || "").trim();
+        if (!rawCompany || rawCompany.length < 2) return;
+        el.setAttribute("data-jf-sponsor-checked", "true");
+
+        chrome.runtime.sendMessage({ action: "CHECK_SPONSOR", company: rawCompany }, (res) => {
+          if (chrome.runtime.lastError || !res) return;
+          if (el.querySelector(".jf-sponsor-badge")) return;
+
+          const badge = document.createElement("span");
+          badge.className = `jf-sponsor-badge ${res.is_sponsor ? "sponsor-yes" : "sponsor-no"}`;
+          badge.textContent = res.is_sponsor ? "✓ UK Visa Sponsor" : "✗ Not on sponsor";
+          badge.addEventListener("click", (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (!res.is_sponsor) showSponsorNoticeModal(rawCompany, res.notice);
+          });
+          el.appendChild(badge);
+        });
+      });
+    }
+  }
+
+  // Periodic invocation for sponsor badges on dynamic DOM loads
+  setTimeout(injectSponsorBadges, 1200);
+  setInterval(injectSponsorBadges, 3000);
+
   // Relay 1-Click Sync Key from web application window to extension storage
   window.addEventListener("message", (event) => {
     try {

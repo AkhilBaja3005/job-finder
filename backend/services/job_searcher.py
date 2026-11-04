@@ -1321,6 +1321,14 @@ def _score_job_with_title_heuristic(job: JobSearchResult, resume_data: dict) -> 
 
     meta_info = _extract_salary_and_seniority(getattr(job, "full_description", "") or "", job.title)
 
+    # Attach UK visa sponsorship status and advice notice
+    sponsor_info = None
+    try:
+        from services.uk_sponsor_service import check_uk_sponsor
+        sponsor_info = check_uk_sponsor(job.company)
+    except Exception:
+        pass
+
     return {
         "title": job.title,
         "company": job.company,
@@ -1340,6 +1348,8 @@ def _score_job_with_title_heuristic(job: JobSearchResult, resume_data: dict) -> 
         "description": getattr(job, "full_description", None) or f"Role: {job.title} at {job.company} ({job.location}). Direct listing from {job.platform}. Open link to view complete requirements.",
         "seniority": meta_info.get("seniority"),
         "salary": meta_info.get("salary"),
+        "sponsor_info": sponsor_info,
+        "is_uk_sponsor": bool(sponsor_info.get("is_sponsor")) if sponsor_info else None,
     }
 
 

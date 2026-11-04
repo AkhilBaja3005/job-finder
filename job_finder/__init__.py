@@ -2,14 +2,19 @@
 job_finder — Autonomous career agent, ATS resume tailor & job search copilot.
 """
 
+# Fixed release version for standalone execution & wheel builds
+__version__ = "1.3.2"
+
 try:
     from importlib.metadata import version, PackageNotFoundError
     try:
-        __version__ = version("job-finder-ai")
+        pkg_ver = version("job-finder-ai")
+        if pkg_ver:
+            __version__ = pkg_ver
     except PackageNotFoundError:
-        __version__ = "1.3.1"
+        pass
 except ImportError:
-    __version__ = "1.3.1"
+    pass
 
 __author__ = "Akhil Baja"
 __contributors__ = ["Bhavesh Nivas"]

@@ -727,6 +727,7 @@ async def run_pipeline(
     headless: Optional[bool] = None,
     auto_submit_override: Optional[bool] = None,
     top_applicant_only: Optional[bool] = None,
+    sponsor_only: Optional[bool] = None,
     skip_portals: Optional[str] = None
 ):
     profile = load_profile_data()
@@ -803,6 +804,8 @@ async def run_pipeline(
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🚀 Starting scheduled unified scan...")
     print(f"Target roles: {keywords}")
     print(f"Location: {location} | Timeframe: {timeframe}")
+    if sponsor_only:
+        print(f"Filter: 🇬🇧 Strict Sponsor-Only Mode Active (Only verified Home Office licensed employers)")
     print(f"Rule: LinkedIn Top Applicant Match -> Direct apply (Master Resume, Zero JD scoring/tailoring)")
     print(f"Rule: >= {DIRECT_APPLY_ATS_THRESHOLD}% ATS -> Direct apply (Master Resume)")
     print(f"Rule: {min_ats_score}% - {DIRECT_APPLY_ATS_THRESHOLD - 1}% ATS -> Tailor 1-page LaTeX & PDF, then apply")
@@ -933,6 +936,25 @@ async def run_pipeline(
             print(f"[{idx}/{len(jobs)}] Skipping existing: {title} @ {company} ({score}% ATS)")
             continue
 
+        # Check UK visa sponsorship status from official Home Office register
+        sponsor_badge_log = ""
+        is_uk_sponsor = False
+        try:
+            from services.uk_sponsor_service import check_uk_sponsor
+            sp_check = check_uk_sponsor(company)
+            is_uk_sponsor = bool(sp_check.get("is_sponsor"))
+            if is_uk_sponsor:
+                sponsor_badge_log = " [🇬🇧 UK Visa Sponsor]"
+            else:
+                sponsor_badge_log = " [⚠️ Not on UK Sponsor Register]"
+        except Exception:
+            pass
+
+        # If --sponsor-only flag is set, strictly skip companies not found in the sponsor database
+        if sponsor_only and not is_uk_sponsor:
+            print(f"[{idx}/{len(jobs)}] ⏭️ Skipping non-sponsor role (--sponsor-only active): {title} @ {company}")
+            continue
+
         # Decide Application & Tailoring Strategy
         pdf_to_submit = master_resume_pdf
         tex_path = ""
@@ -1041,13 +1063,13 @@ async def run_pipeline(
             if score >= DIRECT_APPLY_ATS_THRESHOLD:
                 # 🎯 DIRECT APPLY (>= 80% ATS match)
                 status = "Ready to Apply"
-                print(f"\n[{idx}/{len(jobs)}] 🌟 EXCELLENT MATCH ({score}% >= {DIRECT_APPLY_ATS_THRESHOLD}%): {title} @ {company}")
+                print(f"\n[{idx}/{len(jobs)}] 🌟 EXCELLENT MATCH ({score}% >= {DIRECT_APPLY_ATS_THRESHOLD}%): {title} @ {company}{sponsor_badge_log}")
                 print(f"   ⚡ Direct Apply mode: Using master resume (no tailoring needed)")
                 direct_applied_count += 1
             elif score >= min_ats_score:
                 # 🛠️ TAILOR & APPLY (65% - 79% ATS match)
                 status = "Tailored & Ready"
-                print(f"\n[{idx}/{len(jobs)}] 🎯 QUALIFIED MATCH ({score}% ATS): {title} @ {company}")
+                print(f"\n[{idx}/{len(jobs)}] 🎯 QUALIFIED MATCH ({score}% ATS): {title} @ {company}{sponsor_badge_log}")
                 print(f"   📝 Tailoring 1-page LaTeX resume for keyword & skills alignment...")
                 if jd_text:
                     try:

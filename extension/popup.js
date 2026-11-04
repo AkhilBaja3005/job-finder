@@ -531,6 +531,33 @@ document.addEventListener("DOMContentLoaded", () => {
     if (activeRoleTitle) activeRoleTitle.textContent = details.title || "Detected Job Posting";
     if (activeCompanyName) activeCompanyName.textContent = details.company || "Hiring Company";
 
+    // UK Visa Sponsor verification for the active job's company
+    const activeSponsorBadge = document.getElementById("active-sponsor-badge");
+    const activeSponsorNotice = document.getElementById("active-sponsor-notice");
+    const activeSponsorDesc = document.getElementById("active-sponsor-desc");
+
+    if (details.company && details.company.trim()) {
+      chrome.runtime.sendMessage({ action: "CHECK_SPONSOR", company: details.company.trim() }, (res) => {
+        if (!chrome.runtime.lastError && res && activeSponsorBadge) {
+          activeSponsorBadge.style.display = "inline-flex";
+          activeSponsorBadge.className = `jf-sponsor-badge ${res.is_sponsor ? "sponsor-yes" : "sponsor-no"}`;
+          activeSponsorBadge.textContent = res.is_sponsor ? "✓ UK Visa Sponsor" : "✗ Not on sponsor";
+
+          if (!res.is_sponsor && activeSponsorNotice) {
+            activeSponsorNotice.style.display = "block";
+            if (activeSponsorDesc) {
+              activeSponsorDesc.textContent = `${details.company} is not currently registered as a visa sponsor with the UK government.`;
+            }
+          } else if (activeSponsorNotice) {
+            activeSponsorNotice.style.display = "none";
+          }
+        }
+      });
+    } else {
+      if (activeSponsorBadge) activeSponsorBadge.style.display = "none";
+      if (activeSponsorNotice) activeSponsorNotice.style.display = "none";
+    }
+
     if (customJdTitle) customJdTitle.value = details.title || "";
     if (customJdCompany) customJdCompany.value = details.company || "";
     if (customJdText) customJdText.value = details.description || "";
@@ -1543,6 +1570,48 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
   }
+
+  // ----------------------------------------------------
+  // UK Visa Sponsor Register UI & Manual Sync Handler
+  // ----------------------------------------------------
+  const sponsorCacheCount = document.getElementById("sponsor-cache-count");
+  const sponsorCacheDate = document.getElementById("sponsor-cache-date");
+  const btnSyncSponsors = document.getElementById("btn-sync-sponsors");
+
+  function refreshSponsorStatsUI() {
+    chrome.runtime.sendMessage({ action: "GET_SPONSOR_STATS" }, (res) => {
+      if (!chrome.runtime.lastError && res) {
+        if (sponsorCacheCount) {
+          sponsorCacheCount.textContent = res.total_sponsors
+            ? `✓ ${res.total_sponsors.toLocaleString()} organisations indexed`
+            : "0 sponsors cached";
+        }
+        if (sponsorCacheDate) {
+          sponsorCacheDate.textContent = `Last updated: ${res.last_sync || "Never"}`;
+        }
+      }
+    });
+  }
+
+  if (btnSyncSponsors) {
+    btnSyncSponsors.addEventListener("click", () => {
+      btnSyncSponsors.textContent = "⏳ Syncing...";
+      btnSyncSponsors.disabled = true;
+      showToast("⏳ Downloading latest Home Office register...");
+      chrome.runtime.sendMessage({ action: "REFRESH_SPONSORS" }, (res) => {
+        btnSyncSponsors.textContent = "🔄 Refresh";
+        btnSyncSponsors.disabled = false;
+        if (!chrome.runtime.lastError && res && res.status === "success") {
+          showToast(`✅ Updated! ${res.count?.toLocaleString()} UK sponsors ready.`);
+          refreshSponsorStatsUI();
+        } else {
+          showToast("⚠️ Sync completed (reused cached register).");
+          refreshSponsorStatsUI();
+        }
+      });
+    });
+  }
+  refreshSponsorStatsUI();
 
   // ----------------------------------------------------
   // Live Active Tab Listeners for Persistent Side Panel
