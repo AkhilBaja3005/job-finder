@@ -184,6 +184,7 @@ function App() {
   const [searchPage, setSearchPage] = useState(1);
   const [discoverySearchQuery, setDiscoverySearchQuery] = useState('');
   const [discoveryQuickFilter, setDiscoveryQuickFilter] = useState('all'); // 'all' | 'unapplied' | 'applied' | 'saved'
+  const [sponsorFilter, setSponsorFilter] = useState('all'); // 'all' | 'sponsored' | 'not_sponsored'
 
   const [applicationHistory, setApplicationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1448,6 +1449,13 @@ function App() {
       }
     }
 
+    // 1d. UK Visa Sponsorship filter (all, sponsored, not_sponsored)
+    if (sponsorFilter === 'sponsored') {
+      filtered = filtered.filter((j) => j.is_uk_sponsor === true);
+    } else if (sponsorFilter === 'not_sponsored') {
+      filtered = filtered.filter((j) => j.is_uk_sponsor === false);
+    }
+
     // 2. Sort copy of jobs array. Accurate (JD-scored) jobs always sort
     // before estimated (title-only) ones, since an estimated job's score
     // isn't directly comparable to a real ATS-scored one — within each
@@ -1479,7 +1487,7 @@ function App() {
     const paginated = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     return { sorted, paginated, totalPages, currentPage };
-  }, [discoveredJobs, searchSortMode, searchPage, targetPlatform, discoverySearchQuery, discoveryQuickFilter, applicationHistory]);
+  }, [discoveredJobs, searchSortMode, searchPage, targetPlatform, discoverySearchQuery, discoveryQuickFilter, sponsorFilter, applicationHistory]);
 
   const formatJobDescription = (text) => {
     if (!text) return null;
@@ -5375,6 +5383,51 @@ function App() {
                             {tab.label}
                           </button>
                         ))}
+                      </div>
+
+                      {/* UK Visa Sponsorship Filter Pills */}
+                      <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        {[
+                          { id: 'all', label: 'All Sponsors' },
+                          { id: 'sponsored', label: '✓ Sponsor' },
+                          { id: 'not_sponsored', label: '✗ Not on sponsor' },
+                        ].map(tab => {
+                          const isActive = sponsorFilter === tab.id;
+                          let activeBg = 'rgba(56,189,248,0.2)';
+                          let activeColor = '#38bdf8';
+                          if (tab.id === 'sponsored') {
+                            activeBg = 'rgba(16,185,129,0.22)';
+                            activeColor = '#34d399';
+                          } else if (tab.id === 'not_sponsored') {
+                            activeBg = 'rgba(239,68,68,0.22)';
+                            activeColor = '#f87171';
+                          }
+                          return (
+                            <button
+                              key={tab.id}
+                              onClick={() => {
+                                setSponsorFilter(tab.id);
+                                setSearchPage(1);
+                              }}
+                              style={{
+                                padding: '4px 9px',
+                                borderRadius: '6px',
+                                border: 'none',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                background: isActive ? activeBg : 'transparent',
+                                color: isActive ? activeColor : '#94a3b8',
+                                transition: 'all 0.15s ease',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                            >
+                              {tab.label}
+                            </button>
+                          );
+                        })}
                       </div>
 
                       {/* Right: Sort & Count */}

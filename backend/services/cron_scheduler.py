@@ -246,9 +246,10 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
 
 
 async def background_cron_worker():
-    """Background loop that executes scheduled email digests and daily ATS board slug harvesting."""
+    """Background loop that executes scheduled email digests, daily ATS board slug harvesting, and daily UK visa sponsor updates."""
     print("⏰ [Daily Mailer] Background cron worker started.")
     last_harvest_date: Optional[str] = None
+    last_sponsor_sync_date: Optional[str] = None
 
     while True:
         try:
@@ -274,6 +275,21 @@ async def background_cron_worker():
                     last_harvest_date = today_str
                 except Exception as harvest_err:
                     print(f"[Daily Cron] Note: Slug harvest routine exception: {harvest_err}")
+
+            # 2. Daily UK Visa Sponsor Registry Sync (runs once per day, persists directly into /data/uk_sponsors.db)
+            if last_sponsor_sync_date != today_str:
+                try:
+                    try:
+                        from services.uk_sponsor_service import sync_uk_sponsors
+                    except ImportError:
+                        from backend.services.uk_sponsor_service import sync_uk_sponsors
+
+                    print("[Daily Cron] Checking and syncing official UK Home Office visa sponsor register...")
+                    res = await asyncio.to_thread(sync_uk_sponsors, force=False)
+                    print(f"[Daily Cron] UK Visa Sponsor sync complete: status={res.get('status')} total={res.get('total_sponsors', 0)}")
+                    last_sponsor_sync_date = today_str
+                except Exception as sponsor_err:
+                    print(f"[Daily Cron] Note: UK sponsor sync exception: {sponsor_err}")
 
             # 2. Scheduled Job Digest Notifications for Subscribed Users
             res = supabase_request("users?cron_enabled=eq.true", "GET")
