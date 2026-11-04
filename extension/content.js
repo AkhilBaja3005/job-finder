@@ -1214,14 +1214,20 @@
   function injectSponsorBadges() {
     if (!isRuntimeValid() || !chrome.runtime || !chrome.runtime.sendMessage) return;
 
-    // 1. LinkedIn Card Selectors (search results & job collections)
+    // 1. LinkedIn Card & Details Top Card Selectors (search results, job collections, single job pages)
     const linkedInCardSelectors = [
+      ".job-details-jobs-unified-top-card__company-name a",
+      ".job-details-jobs-unified-top-card__company-name",
+      ".jobs-unified-top-card__company-name a",
+      ".jobs-unified-top-card__company-name",
+      ".jobs-unified-top-card__subtitle-primary-grouping a",
+      ".job-details-jobs-unified-top-card__primary-description a",
+      ".topcard__org-name-link",
+      ".top-card-layout__first-sub-line a",
+      "a[data-tracking-control-name='public_jobs_topcard-org-name']",
       ".job-card-container__company-name",
       ".jobs-search-results-list__list-item .artdeco-entity-lockup__subtitle",
-      ".job-card-list__company-name",
-      ".job-details-jobs-unified-top-card__company-name",
-      ".jobs-unified-top-card__company-name",
-      ".jobs-unified-top-card__subtitle-primary-grouping a"
+      ".job-card-list__company-name"
     ];
 
     linkedInCardSelectors.forEach((sel) => {
