@@ -144,6 +144,7 @@ def main():
     scanner_parser.add_argument("--model", type=str, default=None, help="Gemini LLM model override")
     scanner_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
     scanner_parser.add_argument("--top-applicant", action="store_true", help="Scan LinkedIn specifically for Top Applicant postings and apply directly without JD scoring")
+    scanner_parser.add_argument("--sponsor-only", "--sponsored", dest="sponsor_only", action="store_true", help="Filter and only apply/tailor for verified UK Visa Sponsor employers")
     scanner_parser.add_argument("--skip-portals", type=str, default=None, help="Comma-separated list of job portals/boards to skip (e.g. 'targetjobs,reed,indeed')")
     scanner_parser.add_argument("--harvest", action="store_true", help="Harvest and validate fresh ATS company slugs (Ashby, Greenhouse, Lever) before scanning")
 
@@ -275,6 +276,15 @@ def main():
     harvest_parser.add_argument("--validate", action="store_true", help="Run live endpoint verification against discovered candidate slugs")
     harvest_parser.add_argument("--limit", type=int, default=100, help="Max unverified slugs to validate (default: 100)")
 
+    # 15. Sponsor subcommand (UK Visa Sponsor Register Checker)
+    sponsor_parser = subparsers.add_parser(
+        "sponsor",
+        help="Check UK visa sponsorship status against official Home Office register",
+    )
+    sponsor_parser.add_argument("company", nargs="?", default=None, help="Company name to check (e.g. Google, Insight)")
+    sponsor_parser.add_argument("--sync", action="store_true", help="Download and sync latest Home Office sponsor register CSV")
+    sponsor_parser.add_argument("--stats", action="store_true", help="Display local sponsor database statistics and last sync date")
+
     args, unknown = parser.parse_known_args()
 
     if not args.subcommand:
@@ -327,6 +337,7 @@ def main():
             headless=True if args.headless else None,
             auto_submit_override=True if args.auto_apply else None,
             top_applicant_only=True if args.top_applicant else None,
+            sponsor_only=True if args.sponsor_only else None,
             skip_portals=args.skip_portals
         ))
 
@@ -1013,6 +1024,58 @@ Output Markdown with 4 sections:
         print("\n📊 Active Company Board Registry Summary:")
         for platform, slugs in active.items():
             print(f"  • {platform.capitalize():<12}: {len(slugs)} active board slugs")
+
+    elif args.subcommand == "sponsor":
+        from services.uk_sponsor_service import (
+            check_uk_sponsor,
+            get_sponsor_stats,
+            sync_uk_sponsors
+        )
+
+        if args.sync:
+            print("\n⏳ Downloading latest Home Office Register of Licensed Sponsors CSV from GOV.UK...")
+            res = sync_uk_sponsors(force=True)
+            if res.get("status") == "success":
+                print(f"✅ Successfully synced {res.get('total_sponsors'):,} UK sponsors!")
+                print(f"   Updated: {res.get('last_updated')}\n")
+            else:
+                print(f"⚠️ Sync note: {res.get('message', 'Completed')}\n")
+
+        if args.stats or (not args.company and not args.sync):
+            stats = get_sponsor_stats()
+            print("\n🇬🇧 ========================================================")
+            print("      UK VISA SPONSOR REGISTER (HOME OFFICE)")
+            print("========================================================\n")
+            print(f"  Total Licensed UK Sponsors : {stats.get('total_sponsors', 0):,}")
+            print(f"  Last Sync Date (UTC)       : {stats.get('last_sync', 'Never')}")
+            print("\nUsage:")
+            print("  job-finder sponsor \"Google\"       Check specific company sponsor status")
+            print("  job-finder sponsor --sync         Force refresh from GOV.UK\n")
+
+        if args.company:
+            comp_name = args.company.strip()
+            print(f"\n🔍 Verifying UK visa sponsorship for: '{comp_name}'...")
+            res = check_uk_sponsor(comp_name)
+            is_sponsor = res.get("is_sponsor")
+            print("\n--------------------------------------------------------")
+            if is_sponsor:
+                matched = res.get("matched_name") or comp_name
+                dt = res.get("details") or {}
+                print(f"🟢 {res.get('badge', '✓ UK Visa Sponsor')}")
+                print(f"   Registered Entity : {matched}")
+                if dt.get("city"):
+                    print(f"   Location          : {dt.get('city')}")
+                if dt.get("route"):
+                    print(f"   Visa Route        : {dt.get('route')}")
+                print("--------------------------------------------------------\n")
+            else:
+                notice = res.get("notice") or {}
+                print(f"🔴 {res.get('badge', '✗ Not on sponsor')}")
+                print(f"\n⚠️  {notice.get('title', 'Company Could Not Be Found in Sponsor Database')}")
+                print(f"   {notice.get('description', f'{comp_name} is not currently registered as a visa sponsor with the UK government.')}\n")
+                print(f"💡 Guidance:")
+                print(f"   {notice.get('advice', 'Consider reaching out directly to ask about their sponsorship policy or future plans.')}")
+                print("--------------------------------------------------------\n")
 
 
     elif args.subcommand == "setup":

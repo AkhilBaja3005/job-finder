@@ -5517,6 +5517,50 @@ function App() {
                                           {job.company ? job.company.charAt(0).toUpperCase() : 'C'}
                                         </div>
                                         <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#FFFFFF' }}>{job.company}</span>
+                                        {/* UK Visa Sponsorship Badge */}
+                                        {job.is_uk_sponsor === true && (
+                                          <span
+                                            style={{
+                                              fontSize: '0.68rem',
+                                              padding: '2px 7px',
+                                              borderRadius: '5px',
+                                              fontWeight: 700,
+                                              background: 'rgba(16,185,129,0.18)',
+                                              color: '#34d399',
+                                              border: '1px solid rgba(16,185,129,0.35)',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '3px'
+                                            }}
+                                            title="Employer is confirmed on the official UK Home Office Register of Licensed Sponsors"
+                                          >
+                                            ✓ UK Visa Sponsor
+                                          </span>
+                                        )}
+                                        {job.is_uk_sponsor === false && (
+                                          <span
+                                            style={{
+                                              fontSize: '0.68rem',
+                                              padding: '2px 7px',
+                                              borderRadius: '5px',
+                                              fontWeight: 700,
+                                              background: 'rgba(239,68,68,0.15)',
+                                              color: '#f87171',
+                                              border: '1px solid rgba(239,68,68,0.35)',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '3px',
+                                              cursor: 'pointer'
+                                            }}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleCard(idx);
+                                            }}
+                                            title="Click to view UK sponsorship guidance advice"
+                                          >
+                                            ✗ Not on sponsor
+                                          </span>
+                                        )}
                                         <span style={{
                                           fontSize: '0.68rem', padding: '2px 7px', borderRadius: '5px', fontWeight: 700,
                                           background: job.platform === 'LinkedIn' ? 'rgba(10,102,194,0.2)'
@@ -5817,6 +5861,47 @@ function App() {
                                 {/* Expanded Description & Deep ATS Breakdown */}
                                 {isExpanded && (
                                   <div style={{ marginTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px', animation: 'fadeIn 0.2s ease both' }}>
+                                    {/* UK Visa Sponsorship Notice Box when employer is not on sponsor register */}
+                                    {job.is_uk_sponsor === false && (
+                                      <div style={{
+                                        background: 'rgba(239, 68, 68, 0.08)',
+                                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                                        borderRadius: '8px',
+                                        padding: '12px 14px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '6px'
+                                      }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                                          <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#fca5a5', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            ⚠️ Company Could Not Be Found in Sponsor Database
+                                          </span>
+                                          <a
+                                            href="https://www.gov.uk/government/publications/register-of-licensed-sponsors-workers"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            style={{ fontSize: '0.72rem', color: '#38bdf8', textDecoration: 'none', fontWeight: 700 }}
+                                          >
+                                            Check Live Register ↗
+                                          </a>
+                                        </div>
+                                        <div style={{ fontSize: '0.78rem', color: '#cbd5e1', lineHeight: 1.45 }}>
+                                          <strong>{job.company}</strong> is not currently registered as a visa sponsor with the UK government.
+                                        </div>
+                                        <div style={{
+                                          fontSize: '0.74rem',
+                                          color: '#94a3b8',
+                                          lineHeight: 1.45,
+                                          background: 'rgba(0, 0, 0, 0.25)',
+                                          padding: '8px 10px',
+                                          borderRadius: '6px',
+                                          borderLeft: '3px solid #f59e0b'
+                                        }}>
+                                          This doesn't necessarily mean they can't sponsor - they may be able to apply for a sponsor license. Consider reaching out directly to ask about their sponsorship policy or future plans.
+                                        </div>
+                                      </div>
+                                    )}
+
                                     <div style={{
                                       display: 'grid', gridTemplateColumns: compactMode ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: '8px',
                                       background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.05)',

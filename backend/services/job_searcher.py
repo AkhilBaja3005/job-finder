@@ -1321,6 +1321,14 @@ def _score_job_with_title_heuristic(job: JobSearchResult, resume_data: dict) -> 
 
     meta_info = _extract_salary_and_seniority(getattr(job, "full_description", "") or "", job.title)
 
+    # Attach UK visa sponsorship status and advice notice
+    sponsor_info = None
+    try:
+        from services.uk_sponsor_service import check_uk_sponsor
+        sponsor_info = check_uk_sponsor(job.company)
+    except Exception:
+        pass
+
     return {
         "title": job.title,
         "company": job.company,
@@ -1340,6 +1348,8 @@ def _score_job_with_title_heuristic(job: JobSearchResult, resume_data: dict) -> 
         "description": getattr(job, "full_description", None) or f"Role: {job.title} at {job.company} ({job.location}). Direct listing from {job.platform}. Open link to view complete requirements.",
         "seniority": meta_info.get("seniority"),
         "salary": meta_info.get("salary"),
+        "sponsor_info": sponsor_info,
+        "is_uk_sponsor": bool(sponsor_info.get("is_sponsor")) if sponsor_info else None,
     }
 
 
@@ -1390,11 +1400,15 @@ async def find_matching_jobs(
 
     # Concurrently scan configured target portals (Greenhouse, Ashby, Lever, BambooHR, Workday)
     portal_jobs_raw = []
-    ats_portal_names = {"ashby", "greenhouse", "lever", "bamboohr", "workday", "ats"}
-    should_scan_portals = (not platform_filter_active) or any(p in target_plats for p in ats_portal_names)
+    excluded_clean = [p.strip().lower() for p in (exclude_portals or []) if p.strip()]
+    active_ats_scanned = [
+        p for p in ["Greenhouse", "Ashby", "Lever", "BambooHR", "Workday"]
+        if p.lower() not in excluded_clean and (not platform_filter_active or p.lower() in target_plats or "ats" in target_plats)
+    ]
+    should_scan_portals = len(active_ats_scanned) > 0
 
     if should_scan_portals:
-        portal_start_msg = "🌐 Scanning target ATS Portals (Greenhouse, Ashby, Lever, BambooHR, Workday)..."
+        portal_start_msg = f"🌐 Scanning target ATS Portals ({', '.join(active_ats_scanned)})..."
         log_ist(portal_start_msg)
         yield json.dumps({"type": "log", "message": portal_start_msg}) + " " * 2048 + "\n"
         try:
@@ -1406,7 +1420,8 @@ async def find_matching_jobs(
                     target_keywords=queries,
                     timeframe=timeframe,
                     location=location,
-                    target_portals=target_plats if platform_filter_active else None
+                    target_portals=target_plats if platform_filter_active else None,
+                    exclude_portals=excluded_clean
                 ),
                 timeout=60.0
             )

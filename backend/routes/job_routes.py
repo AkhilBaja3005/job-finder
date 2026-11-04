@@ -747,3 +747,51 @@ async def harvest_slugs_endpoint(req: HarvestSlugsRequest, background_tasks: Bac
         "by_platform": {ats: len(slugs) for ats, slugs in active_map.items()}
     }
 
+
+# ── UK Visa Sponsor Endpoints ──────────────────────────────────────────────
+@router.get("/api/sponsor/check")
+async def check_sponsor_endpoint(company: str = ""):
+    """Verifies whether a company is registered as a licensed UK visa sponsor."""
+    try:
+        try:
+            from services.uk_sponsor_service import check_uk_sponsor
+        except ImportError:
+            from backend.services.uk_sponsor_service import check_uk_sponsor
+        return check_uk_sponsor(company)
+    except Exception as e:
+        return {
+            "is_sponsor": False,
+            "company_name": company,
+            "matched_name": None,
+            "details": None,
+            "error": str(e)
+        }
+
+
+@router.get("/api/sponsor/stats")
+async def sponsor_stats_endpoint():
+    """Returns total registered UK sponsor count and last synced date."""
+    try:
+        try:
+            from services.uk_sponsor_service import get_sponsor_stats
+        except ImportError:
+            from backend.services.uk_sponsor_service import get_sponsor_stats
+        return get_sponsor_stats()
+    except Exception as e:
+        return {"total_sponsors": 0, "last_sync": "Error", "error": str(e)}
+
+
+@router.post("/api/sponsor/sync")
+async def sync_sponsor_endpoint(background_tasks: BackgroundTasks, force: bool = False):
+    """Triggers an update of the Home Office register CSV into local SQLite/HF."""
+    try:
+        try:
+            from services.uk_sponsor_service import sync_uk_sponsors
+        except ImportError:
+            from backend.services.uk_sponsor_service import sync_uk_sponsors
+        res = sync_uk_sponsors(force=force)
+        return res
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+

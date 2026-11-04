@@ -45,7 +45,15 @@
         </div>
       </div>
       <div id="active-role-title" style="font-size: 12.5px; font-weight: 700; color: #fff; line-height: 1.35;">Detecting job page...</div>
-      <div id="active-company-name" style="font-size: 10.5px; color: #94a3b8; margin-top: 2px; font-weight: 500;">Open LinkedIn, Indeed, Greenhouse, or Lever</div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 3px;">
+        <div id="active-company-name" style="font-size: 10.5px; color: #94a3b8; font-weight: 500;">Open LinkedIn, Indeed, Greenhouse, or Lever</div>
+        <div id="active-sponsor-badge" style="display: none;"></div>
+      </div>
+      <div id="active-sponsor-notice" style="display: none; margin-top: 8px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 6px 8px; font-size: 9.5px; line-height: 1.4;">
+        <div style="color: #fca5a5; font-weight: 700; margin-bottom: 2px;">⚠️ Company Could Not Be Found in Sponsor Database</div>
+        <div id="active-sponsor-desc" style="color: #cbd5e1;">Not currently registered as a visa sponsor with the UK government.</div>
+        <div style="color: #94a3b8; font-style: italic; margin-top: 3px;">This doesn't necessarily mean they can't sponsor - they may be able to apply for a sponsor license. Consider reaching out directly.</div>
+      </div>
     </div>
 
     <!-- Alert prompt when JD is short or missing -->
@@ -313,6 +321,19 @@
     <div class="card">
       <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px;">🌐 Server Endpoint Base URL:</div>
       <input type="text" id="backend-url-input" class="form-control" placeholder="http://127.0.0.1:8000 or https://www.job-finder.space">
+    </div>
+
+    <!-- UK Visa Sponsor Register Status & Manual Refresh Card -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase;">🇬🇧 UK Sponsor Register Cache:</span>
+        <button id="btn-sync-sponsors" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 4px; padding: 2px 7px; font-size: 9.5px; font-weight: 700; cursor: pointer;">🔄 Refresh</button>
+      </div>
+      <div style="font-size: 10px; color: #f8fafc; font-weight: 600;">
+        <span id="sponsor-cache-count">Checking register...</span>
+      </div>
+      <div id="sponsor-cache-date" style="font-size: 9px; color: #94a3b8; margin-top: 2px;">Last updated: Never</div>
+      <div style="font-size: 8.5px; color: #64748b; margin-top: 4px; line-height: 1.35;">Auto-syncs daily with official GOV.UK Home Office register (~140k licensed sponsors).</div>
     </div>
 
     <button id="btn-save-settings" class="btn btn-primary">💾 Save Settings & Test Connection</button>
