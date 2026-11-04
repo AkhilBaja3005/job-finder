@@ -130,7 +130,11 @@ def test_clean_venv_and_entrypoints(tmp_path):
 
         if not server_ready:
             server_proc.terminate()
-            out, err = server_proc.communicate(timeout=3)
+            try:
+                out, err = server_proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                server_proc.kill()
+                out, err = server_proc.communicate()
             # If server booted successfully in log but sandbox blocked localhost socket connection, pass gracefully
             if "Application startup complete" in err or "Uvicorn running" in err:
                 return

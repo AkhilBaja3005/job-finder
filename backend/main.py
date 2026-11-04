@@ -58,6 +58,17 @@ async def lifespan(app: FastAPI):
     # Startup: Ensure directory structure and baseline assets
     _sync_fallback_resume_cls()
 
+    # Ensure UK sponsor database is initialized/synced in background without blocking startup
+    async def _auto_sync_sponsors():
+        try:
+            from services.uk_sponsor_service import sync_uk_sponsors
+            # Run in worker thread to prevent blocking event loop
+            await asyncio.to_thread(sync_uk_sponsors, force=False)
+        except Exception as e:
+            print(f"ℹ️ Background sponsor sync skipped: {e}")
+
+    asyncio.create_task(_auto_sync_sponsors())
+
     # Launch Playwright browser instance if available
     browser = None
     playwright = None

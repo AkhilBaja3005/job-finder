@@ -16,7 +16,23 @@ from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "uk_sponsors.db")
+def _resolve_sponsor_db_path() -> str:
+    # 1. HF Spaces persistent storage mount (/data)
+    if os.path.exists("/data") and os.access("/data", os.W_OK):
+        return "/data/uk_sponsors.db"
+    # 2. Local fallback
+    try:
+        from config.constants import resolve_workspace_root
+        ws_root = resolve_workspace_root()
+    except Exception:
+        try:
+            from backend.config.constants import resolve_workspace_root
+            ws_root = resolve_workspace_root()
+        except Exception:
+            ws_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(ws_root, "data", "uk_sponsors.db")
+
+DB_PATH = _resolve_sponsor_db_path()
 METADATA_TABLE = "uk_sponsors_meta"
 SPONSORS_TABLE = "uk_sponsors"
 
