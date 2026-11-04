@@ -1,4 +1,4 @@
-// content.js - Job Finder ATS Tailor & Multimodal AI AutoFill Content Script (v3.4.0)
+// content.js - Job Finder ATS Tailor & Multimodal AI AutoFill Content Script (v3.5.0)
 
 (function () {
   function isRuntimeValid() {
@@ -129,15 +129,22 @@
       )?.innerText?.trim() || "";
 
       company = (
+        document.querySelector("a[href*='/company/'][class*='org-name']") ||
+        document.querySelector(".topcard__org-name-link") ||
+        document.querySelector(".top-card-layout__first-sub-line a") ||
+        document.querySelector("a[data-tracking-control-name='public_jobs_topcard-org-name']") ||
         document.querySelector(".job-details-jobs-unified-top-card__company-name a") ||
         document.querySelector(".job-details-jobs-unified-top-card__company-name") ||
+        document.querySelector(".jobs-unified-top-card__company-name a") ||
         document.querySelector(".jobs-unified-top-card__company-name") ||
         document.querySelector(".jobs-unified-top-card__subtitle-primary-grouping a") ||
         document.querySelector(".job-details-jobs-unified-top-card__primary-description a") ||
         document.querySelector(".jobs-search__job-details--container .job-details-jobs-unified-top-card__company-name") ||
         document.querySelector(".jobs-details__main-content a[href*='/company/']") ||
         document.querySelector(".job-details-jobs-unified-top-card a[href*='/company/']") ||
-        document.querySelector(".jobs-unified-top-card a[href*='/company/']")
+        document.querySelector(".jobs-unified-top-card a[href*='/company/']") ||
+        document.querySelector("a[href*='linkedin.com/company/']") ||
+        document.querySelector("a[href*='/company/']")
       )?.innerText?.trim() || "";
     } else if (url.includes("indeed.com")) {
       title = (
@@ -341,7 +348,6 @@
     }
   }
 
-  // ── Extract Exact Question Prompt Text for Any Form Element ────────────
   // ── Extract Exact Question Prompt Text for Any Form Element ────────────
   function getQuestionTextForElement(el) {
     if (!el) return "";
@@ -1214,14 +1220,20 @@
   function injectSponsorBadges() {
     if (!isRuntimeValid() || !chrome.runtime || !chrome.runtime.sendMessage) return;
 
-    // 1. LinkedIn Card Selectors (search results & job collections)
+    // 1. LinkedIn Card & Details Top Card Selectors (search results, job collections, single job pages)
     const linkedInCardSelectors = [
+      ".job-details-jobs-unified-top-card__company-name a",
+      ".job-details-jobs-unified-top-card__company-name",
+      ".jobs-unified-top-card__company-name a",
+      ".jobs-unified-top-card__company-name",
+      ".jobs-unified-top-card__subtitle-primary-grouping a",
+      ".job-details-jobs-unified-top-card__primary-description a",
+      ".topcard__org-name-link",
+      ".top-card-layout__first-sub-line a",
+      "a[data-tracking-control-name='public_jobs_topcard-org-name']",
       ".job-card-container__company-name",
       ".jobs-search-results-list__list-item .artdeco-entity-lockup__subtitle",
-      ".job-card-list__company-name",
-      ".job-details-jobs-unified-top-card__company-name",
-      ".jobs-unified-top-card__company-name",
-      ".jobs-unified-top-card__subtitle-primary-grouping a"
+      ".job-card-list__company-name"
     ];
 
     linkedInCardSelectors.forEach((sel) => {
