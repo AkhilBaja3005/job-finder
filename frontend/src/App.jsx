@@ -1195,7 +1195,7 @@ function App() {
     setLoading(true);
     setRejectionWarning(null);
     setStatusMessage('Tailoring resume LaTeX and running recruiter loop...');
-    setStatusLogs((prev) => [...prev, { message: '🤖 Requesting LaTeX tailoring and page-metric checks...', ts: nowTs() }]);
+    setStatusLogs((prev) => [...prev, { message: 'Document tailoring and layout verification initialized...', ts: nowTs() }]);
     consoleUserScrolled.current = false;
 
     try {
@@ -1572,7 +1572,7 @@ function App() {
   const generateTailoredPdf = async (data) => {
     setLoading(true);
     setStatusMessage('Compiling tailored PDF resume using backend compiler...');
-    setStatusLogs((prev) => [...prev, { message: '🤖 Starting LaTeX PDF compilation...', ts: nowTs() }]);
+    setStatusLogs((prev) => [...prev, { message: 'Compiling publication-ready PDF document...', ts: nowTs() }]);
     try {
       const response = await fetch(`${API_BASE}/generate_tailored_resume`, {
         method: 'POST',
@@ -2379,10 +2379,10 @@ function App() {
           </div>
           <div>
             <h1 className="title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 700, letterSpacing: '-0.02em' }}>
-              JobFinder <span style={{ color: '#38BDF8', fontWeight: 500, fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}>Pro v{APP_VERSION}</span>
+              JobFinder <span style={{ color: 'var(--text-dim)', fontWeight: 500, fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>v{APP_VERSION}</span>
             </h1>
             <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-              Autonomous ATS Tailoring Engine
+              Precision ATS & Career Infrastructure
             </div>
           </div>
         </div>
@@ -3449,88 +3449,67 @@ function App() {
                 </div>
               ) : (
                 <div style={{
-                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(56, 189, 248, 0.08) 100%)',
-                  padding: '32px 28px',
-                  borderRadius: '16px',
-                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  background: 'rgba(16, 185, 129, 0.05)',
+                  padding: '28px 24px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
                   marginTop: '12px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '28px'
+                  gap: '24px'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <div style={{
-                      width: '62px', height: '62px', borderRadius: '50%',
-                      background: 'rgba(16, 185, 129, 0.22)', border: '2px solid #10B981',
+                      width: '44px', height: '44px', borderRadius: '8px',
+                      background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '2rem', flexShrink: 0, boxShadow: '0 0 24px rgba(16, 185, 129, 0.25)'
+                      color: '#10B981', flexShrink: 0
                     }}>
-                      🏆
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                      </svg>
                     </div>
                     <div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#34D399', letterSpacing: '-0.01em' }}>
-                        Master Playbook Optimization Complete!
+                      <div style={{ fontSize: '1rem', fontWeight: 700, color: '#F1F5F9', letterSpacing: '-0.01em' }}>
+                        Profile Standards Verified
                       </div>
-                      <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.55 }}>
-                        Your baseline profile satisfies all elite ATS score criteria, metric density guidelines, and skill taxonomy rules.
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.5 }}>
+                        Baseline document meets enterprise ATS parsing standards, metric quantification density, and taxonomy taxonomy alignment.
                       </div>
                     </div>
                   </div>
 
                   {/* Circular Achievement Trophy Badges */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
                     <div style={{
-                      background: 'rgba(0,0,0,0.35)', padding: '26px 14px', borderRadius: '14px',
-                      border: '1px solid rgba(16, 185, 129, 0.3)', textAlign: 'center',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+                      background: 'rgba(0,0,0,0.3)', padding: '20px 14px', borderRadius: '8px',
+                      border: '1px solid var(--border-color)', textAlign: 'center',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'
                     }}>
-                      <div style={{
-                        width: '54px', height: '54px', borderRadius: '50%',
-                        background: 'rgba(16, 185, 129, 0.2)', border: '2px solid #10B981',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
-                      }}>
-                        🎯
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ATS Rating</div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#34D399', marginTop: '4px' }}>{resumeEvaluation.ats_score}% Elite</div>
-                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>ATS Compatibility</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#10B981', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation.ats_score}%</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>Top Tier Benchmark</div>
                     </div>
 
                     <div style={{
-                      background: 'rgba(0,0,0,0.35)', padding: '26px 14px', borderRadius: '14px',
-                      border: '1px solid rgba(56, 189, 248, 0.3)', textAlign: 'center',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+                      background: 'rgba(0,0,0,0.3)', padding: '20px 14px', borderRadius: '8px',
+                      border: '1px solid var(--border-color)', textAlign: 'center',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'
                     }}>
-                      <div style={{
-                        width: '54px', height: '54px', borderRadius: '50%',
-                        background: 'rgba(56, 189, 248, 0.2)', border: '2px solid var(--accent-secondary)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
-                      }}>
-                        ⚡
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Core Skills</div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-secondary)', marginTop: '4px' }}>{resumeEvaluation.skills_count} Verified</div>
-                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Extracted Skills</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation.skills_count}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>Verified Taxonomy</div>
                     </div>
 
                     <div style={{
-                      background: 'rgba(0,0,0,0.35)', padding: '26px 14px', borderRadius: '14px',
-                      border: '1px solid rgba(6, 182, 212, 0.3)', textAlign: 'center',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+                      background: 'rgba(0,0,0,0.3)', padding: '20px 14px', borderRadius: '8px',
+                      border: '1px solid var(--border-color)', textAlign: 'center',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'
                     }}>
-                      <div style={{
-                        width: '54px', height: '54px', borderRadius: '50%',
-                        background: 'rgba(6, 182, 212, 0.2)', border: '2px solid var(--accent-cyan)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
-                      }}>
-                        📊
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Metrics Density</div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-cyan)', marginTop: '4px' }}>{resumeEvaluation.quantified_percentage}% ({resumeEvaluation.quantified_bullets}/{resumeEvaluation.total_bullets})</div>
-                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Quantified Impact</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation.quantified_percentage}%</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{resumeEvaluation.quantified_bullets} of {resumeEvaluation.total_bullets} bullets</div>
                     </div>
                   </div>
                 </div>
@@ -5529,24 +5508,23 @@ function App() {
                                 {/* Top Row: Match Gauge + Job Info + Freshness */}
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
                                   
-                                  {/* Large Circular Match Score Ring matching Mockup */}
+                                  {/* Metric Score Indicator */}
                                   <div style={{
                                     position: 'relative',
-                                    width: '68px',
-                                    height: '68px',
-                                    borderRadius: '50%',
+                                    width: '58px',
+                                    height: '58px',
+                                    borderRadius: '8px',
                                     flexShrink: 0,
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    background: 'rgba(16, 185, 129, 0.08)',
-                                    border: `2.5px solid ${scoreColor}`,
-                                    boxShadow: `0 0 16px ${scoreColor}44`,
-                                    transition: 'all 0.3s ease'
+                                    background: 'rgba(255, 255, 255, 0.02)',
+                                    border: `1px solid ${scoreColor}`,
+                                    transition: 'all 0.2s ease'
                                   }}>
-                                    <span style={{ fontSize: '1.05rem', fontWeight: 900, color: '#FFFFFF', lineHeight: 1 }}>{score}%</span>
-                                    <span style={{ fontSize: '0.52rem', fontWeight: 800, color: scoreColor, letterSpacing: '0.05em', marginTop: '1px' }}>MATCH</span>
+                                    <span style={{ fontSize: '1.05rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1, fontFamily: 'var(--font-mono)' }}>{score}%</span>
+                                    <span style={{ fontSize: '0.5rem', fontWeight: 700, color: scoreColor, letterSpacing: '0.06em', marginTop: '3px' }}>MATCH</span>
                                   </div>
 
                                   {/* Job Header & Metadata */}
@@ -5555,39 +5533,39 @@ function App() {
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                         {/* Company logo badge placeholder */}
                                         <div style={{
-                                          width: '24px',
-                                          height: '24px',
-                                          borderRadius: '6px',
-                                          background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%)',
+                                          width: '22px',
+                                          height: '22px',
+                                          borderRadius: '4px',
+                                          background: 'rgba(255,255,255,0.06)',
                                           border: '1px solid rgba(255,255,255,0.1)',
                                           display: 'flex',
                                           alignItems: 'center',
                                           justifyContent: 'center',
-                                          fontWeight: 800,
-                                          fontSize: '0.72rem',
+                                          fontWeight: 700,
+                                          fontSize: '0.7rem',
                                           color: '#FFFFFF'
                                         }}>
                                           {job.company ? job.company.charAt(0).toUpperCase() : 'C'}
                                         </div>
-                                        <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#FFFFFF' }}>{job.company}</span>
+                                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#FFFFFF' }}>{job.company}</span>
                                         {/* UK Visa Sponsorship Badge */}
                                         {job.is_uk_sponsor === true && (
                                           <span
                                             style={{
                                               fontSize: '0.68rem',
                                               padding: '2px 7px',
-                                              borderRadius: '5px',
-                                              fontWeight: 700,
-                                              background: 'rgba(16,185,129,0.18)',
-                                              color: '#34d399',
-                                              border: '1px solid rgba(16,185,129,0.35)',
+                                              borderRadius: '4px',
+                                              fontWeight: 600,
+                                              background: 'rgba(16,185,129,0.12)',
+                                              color: '#10B981',
+                                              border: '1px solid rgba(16,185,129,0.3)',
                                               display: 'inline-flex',
                                               alignItems: 'center',
                                               gap: '3px'
                                             }}
                                             title="Employer is confirmed on the official UK Home Office Register of Licensed Sponsors"
                                           >
-                                            ✓ UK Visa Sponsor
+                                            ✓ Licensed Sponsor
                                           </span>
                                         )}
                                         {job.is_uk_sponsor === false && (
@@ -5595,11 +5573,11 @@ function App() {
                                             style={{
                                               fontSize: '0.68rem',
                                               padding: '2px 7px',
-                                              borderRadius: '5px',
-                                              fontWeight: 700,
-                                              background: 'rgba(239,68,68,0.15)',
-                                              color: '#f87171',
-                                              border: '1px solid rgba(239,68,68,0.35)',
+                                              borderRadius: '4px',
+                                              fontWeight: 600,
+                                              background: 'rgba(239,68,68,0.1)',
+                                              color: '#F87171',
+                                              border: '1px solid rgba(239,68,68,0.25)',
                                               display: 'inline-flex',
                                               alignItems: 'center',
                                               gap: '3px',
@@ -5607,11 +5585,12 @@ function App() {
                                             }}
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              toggleCard(idx);
+                                              setSelectedJobForModal(job);
+                                              setShowSponsorNoticeModal(true);
                                             }}
                                             title="Click to view UK sponsorship guidance advice"
                                           >
-                                            ✗ Not on sponsor
+                                            ✗ Unlisted Sponsor
                                           </span>
                                         )}
                                         <span style={{
