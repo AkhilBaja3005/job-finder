@@ -184,3 +184,61 @@ def compile_encrypted_latex(
 
         return pdf_bytes, page_count
 
+
+def migrate_storage_directory_to_encrypted(base_user_data_dir: str) -> int:
+    """
+    Scans persistent user storage (such as Hugging Face Spaces persistent /data/user_data volume)
+    and transparently migrates all existing unencrypted PDF, TeX, and JSON files to AES-256-GCM (.enc).
+    Immediately unlinks plaintext files after verifying encrypted ciphertext write.
+    Preserves shared assets like resume.cls.
+    Returns the count of files migrated.
+    """
+    if not os.path.exists(base_user_data_dir):
+        return 0
+
+    migrated_count = 0
+    # Walk token directories: user_data/<token>/uploads and user_data/<token>/output
+    try:
+        for entry in os.listdir(base_user_data_dir):
+            token_dir = os.path.join(base_user_data_dir, entry)
+            if not os.path.isdir(token_dir) or entry.startswith(".") or entry in ("browser_use_chrome_session", "top_applicant_playwright_profile", "top_applicant_scanner_profile"):
+                continue
+
+            user_token = entry  # directory name is the user_token or user_id
+
+            for subfolder in ("uploads", "output"):
+                target_dir = os.path.join(token_dir, subfolder)
+                if not os.path.exists(target_dir):
+                    continue
+
+                for fname in os.listdir(target_dir):
+                    if fname == "resume.cls" or fname.endswith(".enc") or fname.startswith("."):
+                        continue
+
+                    full_path = os.path.join(target_dir, fname)
+                    if not os.path.isfile(full_path):
+                        continue
+
+                    # Target extensions for cryptographic zero-knowledge migration
+                    if fname.endswith((".pdf", ".tex", ".json")):
+                        try:
+                            with open(full_path, "rb") as f:
+                                raw_bytes = f.read()
+
+                            enc_path = f"{full_path}.enc"
+                            write_encrypted_file(enc_path, raw_bytes, user_token)
+
+                            # Verify encrypted file exists and has valid payload before deleting plaintext
+                            if os.path.exists(enc_path) and os.path.getsize(enc_path) > len(raw_bytes):
+                                os.remove(full_path)
+                                migrated_count += 1
+                        except Exception as file_err:
+                            print(f"[StorageEncryption] Migration error for {full_path}: {file_err}")
+    except Exception as e:
+        print(f"[StorageEncryption] Error scanning storage directory {base_user_data_dir}: {e}")
+
+    if migrated_count > 0:
+        print(f"[StorageEncryption] ✓ Successfully migrated {migrated_count} legacy plaintext files to AES-256-GCM zero-knowledge ciphertext.")
+
+    return migrated_count
+
