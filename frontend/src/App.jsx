@@ -8,6 +8,7 @@ const HistoryMode = lazy(() => import('./components/HistoryMode'));
 const SkeletonLoader = lazy(() => import('./components/SkeletonLoader').then(m => ({ default: m.SkeletonLoader })));
 const OutreachModal = lazy(() => import('./components/OutreachModal'));
 const DocsGuide = lazy(() => import('./components/DocsGuide'));
+const LandingPage = lazy(() => import('./components/LandingPage'));
 import LatexCodeViewer from './components/LatexCodeViewer';
 import LiveLatexEditor from './components/LiveLatexEditor';
 import { APP_VERSION, CREATOR_SIGNATURE } from './config/constants';
@@ -175,10 +176,20 @@ function App() {
   const [includeJobserve, setIncludeJobserve] = useState(() => sessionStorage.getItem('include_jobserve') !== 'false'); // true by default
   const [isDiscoveryView, setIsDiscoveryView] = useState(() => sessionStorage.getItem('is_discovery_view') === 'true');
   const [dashboardMode, setDashboardMode] = useState(() => {
-    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/docs')) {
-      return 'docs';
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      if (path.startsWith('/docs') || path.startsWith('/guide')) {
+        return 'docs';
+      }
+      if (path.startsWith('/platform')) {
+        return sessionStorage.getItem('dashboard_mode') || 'tailor';
+      }
+      // Root / or /intro always defaults to 'intro'
+      if (path === '/' || path.startsWith('/intro')) {
+        return 'intro';
+      }
     }
-    return sessionStorage.getItem('dashboard_mode') || 'tailor';
+    return 'intro';
   });
   const [searchSortMode, setSearchSortMode] = useState('overall'); // 'overall' | 'role_fit' | 'time'
   const [searchPage, setSearchPage] = useState(1);
@@ -189,11 +200,19 @@ function App() {
   const [applicationHistory, setApplicationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Sync /docs path with dashboardMode
+  // Sync route changes with dashboardMode:
+  // - '/' or '/intro' => 'intro'
+  // - '/platform' => 'tailor' (or user active mode)
+  // - '/docs' => 'docs'
   useEffect(() => {
     const handleLocation = () => {
-      if (window.location.pathname.startsWith('/docs')) {
+      const path = window.location.pathname;
+      if (path.startsWith('/docs') || path.startsWith('/guide')) {
         setDashboardMode('docs');
+      } else if (path.startsWith('/platform')) {
+        setDashboardMode(prev => (prev === 'intro' || prev === 'docs') ? 'tailor' : prev);
+      } else if (path === '/' || path.startsWith('/intro')) {
+        setDashboardMode('intro');
       }
     };
     handleLocation();
@@ -242,6 +261,11 @@ function App() {
   const [showExtensionGuide, setShowExtensionGuide] = useState(false);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
   const [configStepActive, setConfigStepActive] = useState(false);
 
   // Optimization #1: Progressive Disclosure - compact mode for mobile
@@ -841,6 +865,62 @@ function App() {
     }
   };
 
+  const handleRequestOtp = async (e) => {
+    if (e) e.preventDefault();
+    if (!loginEmail || !loginEmail.includes('@') || !loginEmail.includes('.')) {
+      setOtpError('Please enter a valid work or personal email.');
+      return;
+    }
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/request-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to dispatch verification code.');
+      setOtpSent(true);
+      showToast('Verification code dispatched to your email!', 'success');
+    } catch (err) {
+      setOtpError(err.message);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    if (e) e.preventDefault();
+    if (!otpCode || otpCode.trim().length < 6) {
+      setOtpError('Please enter the 6-digit code sent to your inbox.');
+      return;
+    }
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail, code: otpCode.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Invalid or expired verification code.');
+
+      localStorage.setItem('auth_token', data.token);
+      setAuthToken(data.token);
+      if (data.user) setUser(data.user);
+      showToast(`Welcome back, ${data.user?.name || 'Candidate'}!`, 'success');
+      setStatusMessage('Session authenticated successfully.');
+      setOtpSent(false);
+      setOtpCode('');
+    } catch (err) {
+      setOtpError(err.message);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   const saveApiKeyToCloud = async () => {
     if (!authToken) return;
     setLoading(true);
@@ -1195,7 +1275,7 @@ function App() {
     setLoading(true);
     setRejectionWarning(null);
     setStatusMessage('Tailoring resume LaTeX and running recruiter loop...');
-    setStatusLogs((prev) => [...prev, { message: '🤖 Requesting LaTeX tailoring and page-metric checks...', ts: nowTs() }]);
+    setStatusLogs((prev) => [...prev, { message: 'Document tailoring and layout verification initialized...', ts: nowTs() }]);
     consoleUserScrolled.current = false;
 
     try {
@@ -1572,7 +1652,7 @@ function App() {
   const generateTailoredPdf = async (data) => {
     setLoading(true);
     setStatusMessage('Compiling tailored PDF resume using backend compiler...');
-    setStatusLogs((prev) => [...prev, { message: '🤖 Starting LaTeX PDF compilation...', ts: nowTs() }]);
+    setStatusLogs((prev) => [...prev, { message: 'Compiling publication-ready PDF document...', ts: nowTs() }]);
     try {
       const response = await fetch(`${API_BASE}/generate_tailored_resume`, {
         method: 'POST',
@@ -2379,10 +2459,10 @@ function App() {
           </div>
           <div>
             <h1 className="title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 700, letterSpacing: '-0.02em' }}>
-              JobFinder <span style={{ color: '#38BDF8', fontWeight: 500, fontSize: '0.82rem', fontFamily: 'var(--font-mono)' }}>Pro v{APP_VERSION}</span>
+              JobFinder <span style={{ color: 'var(--text-dim)', fontWeight: 500, fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>v{APP_VERSION}</span>
             </h1>
             <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-              Autonomous ATS Tailoring Engine
+              Precision ATS & Career Infrastructure
             </div>
           </div>
         </div>
@@ -2430,36 +2510,64 @@ function App() {
               </span>
             </div>
           )}
-          {/* Docs & Setup Guide Button */}
-          <button
-            className="btn btn-secondary"
-            style={{
-              padding: '6px 13px',
-              fontSize: '0.82rem',
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: dashboardMode === 'docs' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255,255,255,0.06)',
-              borderColor: dashboardMode === 'docs' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.15)',
-              color: dashboardMode === 'docs' ? '#38bdf8' : '#e2e8f0',
-              cursor: 'pointer',
-              borderRadius: '8px'
-            }}
-            onClick={() => {
-              if (dashboardMode === 'docs') {
-                setDashboardMode('tailor');
+          {/* Top Bar Navigation: Intro -> Docs & Guide -> Platform */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#0F1523', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '3px' }}>
+            <button
+              className="btn btn-secondary"
+              style={{
+                padding: '5px 12px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                border: 'none',
+                background: dashboardMode === 'intro' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
+                color: dashboardMode === 'intro' ? '#38BDF8' : 'var(--text-muted)',
+                cursor: 'pointer',
+                borderRadius: '6px'
+              }}
+              onClick={() => {
+                setDashboardMode('intro');
                 window.history.pushState(null, '', '/');
-              } else {
+              }}
+            >
+              Intro
+            </button>
+            <button
+              className="btn btn-secondary"
+              style={{
+                padding: '5px 12px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                border: 'none',
+                background: dashboardMode === 'docs' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
+                color: dashboardMode === 'docs' ? '#38BDF8' : 'var(--text-muted)',
+                cursor: 'pointer',
+                borderRadius: '6px'
+              }}
+              onClick={() => {
                 setDashboardMode('docs');
                 window.history.pushState(null, '', '/docs');
-              }
-            }}
-            title="View Setup Guide & Documentation"
-          >
-            
-            <span>Docs & Guide</span>
-          </button>
+              }}
+            >
+              Docs & Guide
+            </button>
+            <button
+              className="btn"
+              style={{
+                padding: '5px 14px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                borderRadius: '6px',
+                background: (dashboardMode !== 'intro' && dashboardMode !== 'docs') ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.08)',
+                color: '#FFFFFF'
+              }}
+              onClick={() => {
+                setDashboardMode('tailor');
+                window.history.pushState(null, '', '/platform');
+              }}
+            >
+              Platform
+            </button>
+          </div>
 
           {/* Optimization #2: Keyboard help button */}
           <button
@@ -2574,54 +2682,176 @@ function App() {
         </div>
       </header>
 
-      {dashboardMode === 'docs' ? (
+      {dashboardMode === 'intro' ? (
+        <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Introduction...</div>}>
+          <LandingPage
+            onLaunchApp={() => {
+              setDashboardMode(user ? 'tailor' : 'app');
+              window.history.pushState(null, '', '/platform');
+            }}
+            onLaunchDemo={() => {
+              const demoToken = 'demo_' + Math.random().toString(36).substring(2, 10);
+              localStorage.setItem('auth_token', demoToken);
+              setAuthToken(demoToken);
+              setUser({ id: demoToken, email: 'demo@job-finder.space', name: 'Demo Candidate', is_guest: true });
+              setDashboardMode('tailor');
+              setStatusMessage('Active Demo Session • Sample Candidate Loaded');
+              window.history.pushState(null, '', '/platform');
+            }}
+            onOpenDocs={() => {
+              setDashboardMode('docs');
+              window.history.pushState(null, '', '/docs');
+            }}
+          />
+        </Suspense>
+      ) : (dashboardMode === 'docs' || dashboardMode === 'guide') ? (
         <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Documentation & Setup Guide...</div>}>
           <DocsGuide
             user={user}
             userToken={authToken}
+            initialSection="quickstart"
             onDownloadExtension={() => handleOneClickExtensionSync(user?.sync_code)}
             onNavigateMode={(mode) => {
               setDashboardMode(mode);
-              window.history.pushState(null, '', '/');
+              window.history.pushState(null, '', '/platform');
             }}
           />
         </Suspense>
       ) : !user ? (
-        <div className="login-container" style={{ maxWidth: '460px', margin: '70px auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '38px' }}>
+        <div className="login-container" style={{ maxWidth: '440px', margin: '60px auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '22px', padding: '34px 28px' }}>
             {/* Brand mark */}
             <div style={{ textAlign: 'center' }}>
-              <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', margin: '0 auto 14px', boxShadow: '0 8px 24px rgba(56,189,248,0.3)' }}>📄</div>
-              <h2 style={{ textAlign: 'center', fontSize: '1.4rem', marginBottom: '6px' }}>Welcome to Resume Tailor</h2>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.87rem', lineHeight: 1.6 }}>
-                Paste a job URL, get your ATS score, and receive a tailored LaTeX resume + cover letter in under 60 seconds.
+              <div style={{
+                width: '44px', height: '44px', borderRadius: '8px',
+                background: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 14px', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.15)'
+              }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+              </div>
+              <h2 style={{ textAlign: 'center', fontSize: '1.25rem', fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>JobFinder Access</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.5, margin: 0 }}>
+                Enterprise career operations, multi-board ATS discovery, and publication-grade LaTeX tailoring.
               </p>
             </div>
 
-            {/* Value props */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {['Keyword-matched ATS scoring', 'AI-tailored LaTeX resume & cover letter', '🔍 Recruiter truthfulness validation', '📄 One-click Overleaf export'].map(item => (
-                <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.84rem', color: 'var(--text-muted)', padding: '7px 12px', background: 'var(--panel-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  {item}
+            {/* Email OTP Sign-in Form */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {!otpSent ? (
+                <form onSubmit={handleRequestOtp} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Work / Personal Email
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="name@company.com"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    style={{ marginBottom: '6px' }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={otpLoading}
+                    className="btn"
+                    style={{ width: '100%', padding: '10px', fontSize: '0.86rem' }}
+                  >
+                    {otpLoading ? 'Dispatching Code…' : 'Continue with Email Code →'}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Enter 6-Digit Code
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setOtpSent(false); setOtpCode(''); setOtpError(''); }}
+                      style={{ background: 'none', border: 'none', color: '#38BDF8', fontSize: '0.72rem', cursor: 'pointer', padding: 0 }}
+                    >
+                      Change Email
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '-4px' }}>
+                    Sent to <strong>{loginEmail}</strong>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    placeholder="123456"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    style={{
+                      letterSpacing: '0.3em',
+                      fontSize: '1.2rem',
+                      textAlign: 'center',
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: 700,
+                      marginBottom: '6px'
+                    }}
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    disabled={otpLoading}
+                    className="btn"
+                    style={{ width: '100%', padding: '10px', fontSize: '0.86rem' }}
+                  >
+                    {otpLoading ? 'Verifying Code…' : 'Verify & Sign In'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={otpLoading}
+                    onClick={handleRequestOtp}
+                    style={{
+                      background: 'none', border: 'none', color: 'var(--text-muted)',
+                      fontSize: '0.74rem', cursor: 'pointer', textAlign: 'center', marginTop: '2px'
+                    }}
+                  >
+                    Didn't receive code? Resend
+                  </button>
+                </form>
+              )}
+
+              {otpError && (
+                <div style={{
+                  padding: '8px 12px', borderRadius: '6px', fontSize: '0.76rem',
+                  background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)',
+                  color: '#F87171'
+                }}>
+                  {otpError}
                 </div>
-              ))}
+              )}
             </div>
 
-            <button className="btn" style={{ background: '#4285F4', color: '#fff', fontSize: '0.92rem', padding: '13px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }} onClick={handleGoogleLogin}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-dim)', fontSize: '0.72rem' }}>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+              <span>OR</span>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
+            </div>
+
+            <button className="btn btn-secondary" style={{ color: '#fff', fontSize: '0.86rem', padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }} onClick={handleGoogleLogin}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
               </svg>
-              Sign in with Google
+              Continue with Google
             </button>
 
             <button
               className="btn btn-secondary"
               style={{
-                fontSize: '0.86rem', padding: '11px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px',
-                borderColor: 'rgba(255,255,255,0.15)', color: 'var(--text-main)', background: 'rgba(255,255,255,0.03)'
+                fontSize: '0.82rem', padding: '9px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px',
+                borderColor: 'var(--border-color)', color: 'var(--text-muted)', background: 'transparent'
               }}
               onClick={() => {
                 const guestToken = 'guest_' + Math.random().toString(36).substring(2, 12);
@@ -2631,7 +2861,7 @@ function App() {
                 setStatusMessage('Exploring in Guest Mode!');
               }}
             >
-              <span>Explore as Guest without Sign-in →</span>
+              <span>Explore as Guest without Account →</span>
             </button>
 
             {(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
@@ -3449,88 +3679,67 @@ function App() {
                 </div>
               ) : (
                 <div style={{
-                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(56, 189, 248, 0.08) 100%)',
-                  padding: '32px 28px',
-                  borderRadius: '16px',
-                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  background: 'rgba(16, 185, 129, 0.05)',
+                  padding: '28px 24px',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
                   marginTop: '12px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '28px'
+                  gap: '24px'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <div style={{
-                      width: '62px', height: '62px', borderRadius: '50%',
-                      background: 'rgba(16, 185, 129, 0.22)', border: '2px solid #10B981',
+                      width: '44px', height: '44px', borderRadius: '8px',
+                      background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '2rem', flexShrink: 0, boxShadow: '0 0 24px rgba(16, 185, 129, 0.25)'
+                      color: '#10B981', flexShrink: 0
                     }}>
-                      🏆
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                      </svg>
                     </div>
                     <div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#34D399', letterSpacing: '-0.01em' }}>
-                        Master Playbook Optimization Complete!
+                      <div style={{ fontSize: '1rem', fontWeight: 700, color: '#F1F5F9', letterSpacing: '-0.01em' }}>
+                        Profile Standards Verified
                       </div>
-                      <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: '6px', lineHeight: 1.55 }}>
-                        Your baseline profile satisfies all elite ATS score criteria, metric density guidelines, and skill taxonomy rules.
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: 1.5 }}>
+                        Baseline document meets enterprise ATS parsing standards, metric quantification density, and taxonomy taxonomy alignment.
                       </div>
                     </div>
                   </div>
 
                   {/* Circular Achievement Trophy Badges */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
                     <div style={{
-                      background: 'rgba(0,0,0,0.35)', padding: '26px 14px', borderRadius: '14px',
-                      border: '1px solid rgba(16, 185, 129, 0.3)', textAlign: 'center',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+                      background: 'rgba(0,0,0,0.3)', padding: '20px 14px', borderRadius: '8px',
+                      border: '1px solid var(--border-color)', textAlign: 'center',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'
                     }}>
-                      <div style={{
-                        width: '54px', height: '54px', borderRadius: '50%',
-                        background: 'rgba(16, 185, 129, 0.2)', border: '2px solid #10B981',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
-                      }}>
-                        🎯
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ATS Rating</div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#34D399', marginTop: '4px' }}>{resumeEvaluation.ats_score}% Elite</div>
-                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>ATS Compatibility</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#10B981', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation.ats_score}%</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>Top Tier Benchmark</div>
                     </div>
 
                     <div style={{
-                      background: 'rgba(0,0,0,0.35)', padding: '26px 14px', borderRadius: '14px',
-                      border: '1px solid rgba(56, 189, 248, 0.3)', textAlign: 'center',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+                      background: 'rgba(0,0,0,0.3)', padding: '20px 14px', borderRadius: '8px',
+                      border: '1px solid var(--border-color)', textAlign: 'center',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'
                     }}>
-                      <div style={{
-                        width: '54px', height: '54px', borderRadius: '50%',
-                        background: 'rgba(56, 189, 248, 0.2)', border: '2px solid var(--accent-secondary)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
-                      }}>
-                        ⚡
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Core Skills</div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-secondary)', marginTop: '4px' }}>{resumeEvaluation.skills_count} Verified</div>
-                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Extracted Skills</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation.skills_count}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>Verified Taxonomy</div>
                     </div>
 
                     <div style={{
-                      background: 'rgba(0,0,0,0.35)', padding: '26px 14px', borderRadius: '14px',
-                      border: '1px solid rgba(6, 182, 212, 0.3)', textAlign: 'center',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+                      background: 'rgba(0,0,0,0.3)', padding: '20px 14px', borderRadius: '8px',
+                      border: '1px solid var(--border-color)', textAlign: 'center',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px'
                     }}>
-                      <div style={{
-                        width: '54px', height: '54px', borderRadius: '50%',
-                        background: 'rgba(6, 182, 212, 0.2)', border: '2px solid var(--accent-cyan)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
-                      }}>
-                        📊
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Metrics Density</div>
-                        <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--accent-cyan)', marginTop: '4px' }}>{resumeEvaluation.quantified_percentage}% ({resumeEvaluation.quantified_bullets}/{resumeEvaluation.total_bullets})</div>
-                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Quantified Impact</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>{resumeEvaluation.quantified_percentage}%</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{resumeEvaluation.quantified_bullets} of {resumeEvaluation.total_bullets} bullets</div>
                     </div>
                   </div>
                 </div>
@@ -5529,24 +5738,23 @@ function App() {
                                 {/* Top Row: Match Gauge + Job Info + Freshness */}
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
                                   
-                                  {/* Large Circular Match Score Ring matching Mockup */}
+                                  {/* Metric Score Indicator */}
                                   <div style={{
                                     position: 'relative',
-                                    width: '68px',
-                                    height: '68px',
-                                    borderRadius: '50%',
+                                    width: '58px',
+                                    height: '58px',
+                                    borderRadius: '8px',
                                     flexShrink: 0,
                                     display: 'flex',
                                     flexDirection: 'column',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    background: 'rgba(16, 185, 129, 0.08)',
-                                    border: `2.5px solid ${scoreColor}`,
-                                    boxShadow: `0 0 16px ${scoreColor}44`,
-                                    transition: 'all 0.3s ease'
+                                    background: 'rgba(255, 255, 255, 0.02)',
+                                    border: `1px solid ${scoreColor}`,
+                                    transition: 'all 0.2s ease'
                                   }}>
-                                    <span style={{ fontSize: '1.05rem', fontWeight: 900, color: '#FFFFFF', lineHeight: 1 }}>{score}%</span>
-                                    <span style={{ fontSize: '0.52rem', fontWeight: 800, color: scoreColor, letterSpacing: '0.05em', marginTop: '1px' }}>MATCH</span>
+                                    <span style={{ fontSize: '1.05rem', fontWeight: 700, color: '#FFFFFF', lineHeight: 1, fontFamily: 'var(--font-mono)' }}>{score}%</span>
+                                    <span style={{ fontSize: '0.5rem', fontWeight: 700, color: scoreColor, letterSpacing: '0.06em', marginTop: '3px' }}>MATCH</span>
                                   </div>
 
                                   {/* Job Header & Metadata */}
@@ -5555,39 +5763,39 @@ function App() {
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                         {/* Company logo badge placeholder */}
                                         <div style={{
-                                          width: '24px',
-                                          height: '24px',
-                                          borderRadius: '6px',
-                                          background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%)',
+                                          width: '22px',
+                                          height: '22px',
+                                          borderRadius: '4px',
+                                          background: 'rgba(255,255,255,0.06)',
                                           border: '1px solid rgba(255,255,255,0.1)',
                                           display: 'flex',
                                           alignItems: 'center',
                                           justifyContent: 'center',
-                                          fontWeight: 800,
-                                          fontSize: '0.72rem',
+                                          fontWeight: 700,
+                                          fontSize: '0.7rem',
                                           color: '#FFFFFF'
                                         }}>
                                           {job.company ? job.company.charAt(0).toUpperCase() : 'C'}
                                         </div>
-                                        <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#FFFFFF' }}>{job.company}</span>
+                                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#FFFFFF' }}>{job.company}</span>
                                         {/* UK Visa Sponsorship Badge */}
                                         {job.is_uk_sponsor === true && (
                                           <span
                                             style={{
                                               fontSize: '0.68rem',
                                               padding: '2px 7px',
-                                              borderRadius: '5px',
-                                              fontWeight: 700,
-                                              background: 'rgba(16,185,129,0.18)',
-                                              color: '#34d399',
-                                              border: '1px solid rgba(16,185,129,0.35)',
+                                              borderRadius: '4px',
+                                              fontWeight: 600,
+                                              background: 'rgba(16,185,129,0.12)',
+                                              color: '#10B981',
+                                              border: '1px solid rgba(16,185,129,0.3)',
                                               display: 'inline-flex',
                                               alignItems: 'center',
                                               gap: '3px'
                                             }}
                                             title="Employer is confirmed on the official UK Home Office Register of Licensed Sponsors"
                                           >
-                                            ✓ UK Visa Sponsor
+                                            ✓ Licensed Sponsor
                                           </span>
                                         )}
                                         {job.is_uk_sponsor === false && (
@@ -5595,11 +5803,11 @@ function App() {
                                             style={{
                                               fontSize: '0.68rem',
                                               padding: '2px 7px',
-                                              borderRadius: '5px',
-                                              fontWeight: 700,
-                                              background: 'rgba(239,68,68,0.15)',
-                                              color: '#f87171',
-                                              border: '1px solid rgba(239,68,68,0.35)',
+                                              borderRadius: '4px',
+                                              fontWeight: 600,
+                                              background: 'rgba(239,68,68,0.1)',
+                                              color: '#F87171',
+                                              border: '1px solid rgba(239,68,68,0.25)',
                                               display: 'inline-flex',
                                               alignItems: 'center',
                                               gap: '3px',
@@ -5607,11 +5815,12 @@ function App() {
                                             }}
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              toggleCard(idx);
+                                              setSelectedJobForModal(job);
+                                              setShowSponsorNoticeModal(true);
                                             }}
                                             title="Click to view UK sponsorship guidance advice"
                                           >
-                                            ✗ Not on sponsor
+                                            ✗ Unlisted Sponsor
                                           </span>
                                         )}
                                         <span style={{

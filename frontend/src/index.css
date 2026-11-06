@@ -1,38 +1,38 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-  /* Linear / Vercel Precision Dark Slate Theme */
+  /* Enterprise Precision Palette (Linear / Stripe / Vercel Grade) */
   color-scheme: dark;
 
-  --bg-primary: #090D16;
-  --bg-secondary: #0F172A;
-  --panel-bg: #111C30;
-  --panel-bg-subtle: #0B1220;
-  --border-color: #1E293B;
-  --border-subtle: #162032;
-  --border-focus: #38BDF8;
+  --bg-primary: #07090E;
+  --bg-secondary: #0D111A;
+  --panel-bg: #101522;
+  --panel-bg-subtle: #0A0E17;
+  --border-color: #1A2234;
+  --border-subtle: #141A28;
+  --border-focus: #3B82F6;
 
   --accent-primary: #2563EB;
   --accent-secondary: #38BDF8;
-  --accent-cyan: #38BDF8;
+  --accent-cyan: #0EA5E9;
   --accent-gradient: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
-  --accent-glow: 0 2px 10px rgba(37, 99, 235, 0.25);
+  --accent-glow: 0 1px 3px rgba(37, 99, 235, 0.2);
   --accent-green: #10B981;
   --accent-red: #EF4444;
   --accent-amber: #F59E0B;
   --accent-overleaf: #10B981;
 
-  --text-main: #F8FAFC;
+  --text-main: #F1F5F9;
   --text-muted: #94A3B8;
   --text-dim: #64748B;
 
-  --glass-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.6), 0 0 0 1px #1E293B;
-  --glass-hover-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.7), 0 0 0 1px #334155;
+  --glass-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 0 0 1px #1A2234;
+  --glass-hover-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.5), 0 0 0 1px #26354D;
 
-  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-  --input-bg: #0B1220;
+  --font-display: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --input-bg: #090D15;
 }
 
 * {

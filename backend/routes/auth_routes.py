@@ -85,6 +85,121 @@ async def auth_callback(code: str, request: Request):
         raise HTTPException(status_code=400, detail=f"OAuth verification failed: {str(e)}")
 
 
+class RequestOtpPayload(BaseModel):
+    email: str
+
+
+class VerifyOtpPayload(BaseModel):
+    email: str
+    code: str
+
+
+# In-memory store for OTPs: email -> {"code": "123456", "expires_at": timestamp, "attempts": 0}
+_OTP_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
+@router.post("/auth/request-otp")
+async def request_otp_endpoint(payload: RequestOtpPayload, background_tasks: BackgroundTasks):
+    import time
+    import random
+    from services.email_service import async_send_notification_email
+
+    clean_email = payload.email.strip().lower()
+    if not clean_email or "@" not in clean_email or "." not in clean_email:
+        raise HTTPException(status_code=400, detail="Invalid email address format.")
+
+    # Generate secure 6-digit numeric OTP
+    otp_code = f"{random.randint(100000, 999999)}"
+    now = time.time()
+    _OTP_CACHE[clean_email] = {
+        "code": otp_code,
+        "expires_at": now + 600,  # 10 minutes TTL
+        "attempts": 0
+    }
+
+    # Format clean, corporate light-mode verification email
+    subject = f"{otp_code} is your JobFinder verification code"
+    text_body = f"Your single-use authentication code is: {otp_code}\n\nThis code will expire in 10 minutes.\nIf you did not request this code, you can safely ignore this email."
+    html_body = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="color-scheme" content="light">
+      <meta name="supported-color-schemes" content="light">
+      <style>
+        :root {{ color-scheme: light; supported-color-schemes: light; }}
+        body {{ background-color: #F8FAFC !important; color: #0F172A !important; }}
+      </style>
+    </head>
+    <body style="margin: 0; padding: 24px 12px; background-color: #F8FAFC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <div style="max-width: 480px; margin: 0 auto; background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 32px 28px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);">
+        <div style="font-size: 13px; font-weight: 700; color: #2563EB; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px;">JobFinder Verification</div>
+        <h2 style="font-size: 20px; font-weight: 700; color: #0F172A; margin: 0 0 12px; letter-spacing: -0.01em;">Single-Use Security Code</h2>
+        <p style="font-size: 14px; color: #475569; line-height: 1.6; margin: 0 0 24px;">Use the code below to complete your sign-in to JobFinder. This code expires in 10 minutes.</p>
+        <div style="background-color: #F1F5F9; border: 1px solid #CBD5E1; padding: 18px 24px; text-align: center; border-radius: 6px; letter-spacing: 0.28em; font-size: 30px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #0F172A; margin-bottom: 24px;">
+          {otp_code}
+        </div>
+        <p style="font-size: 12px; color: #64748B; margin: 0; line-height: 1.5;">If you didn't request this code, no action is needed.</p>
+      </div>
+    </body>
+    </html>
+    """
+
+    async def _send_otp_bg():
+        try:
+            await async_send_notification_email(
+                to_email=clean_email,
+                subject=subject,
+                text_body=text_body,
+                html_body=html_body
+            )
+        except Exception as e:
+            print(f"[Auth] Error dispatching OTP email to {clean_email}: {e}")
+
+    background_tasks.add_task(_send_otp_bg)
+    return {"status": "success", "message": "Verification code dispatched to your email."}
+
+
+@router.post("/auth/verify-otp")
+async def verify_otp_endpoint(payload: VerifyOtpPayload):
+    import time
+    clean_email = payload.email.strip().lower()
+    clean_code = payload.code.strip()
+
+    record = _OTP_CACHE.get(clean_email)
+    if not record:
+        raise HTTPException(status_code=400, detail="No active verification code found. Please request a new one.")
+
+    if time.time() > record["expires_at"]:
+        _OTP_CACHE.pop(clean_email, None)
+        raise HTTPException(status_code=400, detail="Verification code has expired. Please request a new one.")
+
+    record["attempts"] += 1
+    if record["attempts"] > 5:
+        _OTP_CACHE.pop(clean_email, None)
+        raise HTTPException(status_code=429, detail="Too many invalid attempts. Please request a fresh code.")
+
+    if record["code"] != clean_code:
+        raise HTTPException(status_code=400, detail="Invalid verification code. Please check and try again.")
+
+    # Code verified! Clear cache and generate session
+    _OTP_CACHE.pop(clean_email, None)
+    user = create_or_get_user(clean_email)
+    token = create_session(user["id"])
+    return {
+        "status": "success",
+        "token": token,
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "name": user.get("name") or clean_email.split("@")[0].capitalize(),
+            "picture_url": user.get("picture_url"),
+            "sync_code": user.get("sync_code")
+        }
+    }
+
+
 @router.post("/auth/mock")
 async def auth_mock(request: dict):
     if not _is_local_deployment():

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { APP_VERSION, EXTENSION_VERSION, CREATOR_SIGNATURE } from '../config/constants';
 
-export default function DocsGuide({ user, userToken, onDownloadExtension, onNavigateMode }) {
-  const [activeSection, setActiveSection] = useState('quickstart');
+export default function DocsGuide({ user, userToken, onDownloadExtension, onNavigateMode, initialSection }) {
+  const [activeSection, setActiveSection] = useState(() => initialSection || 'quickstart');
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
 
@@ -255,7 +255,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                 { step: '3', title: 'Browse Any Career Portal', desc: 'Navigate to LinkedIn, Ashby, Greenhouse, Lever, Workday, or Indeed. The persistent Side Panel auto-extracts the job description in real time.' },
                 { step: '4', title: 'Review Deterministic ATS Fit', desc: 'Inspect your calculated ATS score, required vs. preferred keywords, missing skills chips, and recruiter seniority alignment before tailoring.' },
                 { step: '5', title: '1-Click LaTeX Tailor & Preview', desc: 'Generate a verified 1-page LaTeX PDF resume with XeLaTeX/Tectonic budgeting, live syntax editor, and optional Overleaf sync.' },
-                { step: '6', title: 'In-Page Auto-Fill & Outreach', desc: 'Use inline "✨ AI Answer" and auto-fill buttons to complete form fields instantly, or copy tailored 3-sentence LinkedIn recruiter InMails.' }
+                { step: '6', title: 'In-Page Autofill & Outreach', desc: 'Use inline "Smart Answer" and autofill tools to complete form fields instantly, or copy tailored 3-sentence recruiter outreach messages.' }
               ].map((c) => (
                 <div key={c.step} style={{
                   background: 'rgba(15, 23, 42, 0.6)',
@@ -354,9 +354,9 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               </div>
 
               <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '20px' }}>
-                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>Multimodal Screening AI Answers</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>Contextual Screening Responses</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
-                  Injects inline <code>✨ AI Answer</code> buttons beside open-ended essay questions on live job application forms, synthesizing grounded answers tailored to the company culture.
+                  Injects inline <code>Smart Answer</code> buttons beside open-ended essay questions on live application forms, synthesizing grounded answers aligned with the company culture.
                 </p>
               </div>
             </div>
@@ -619,7 +619,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                  <span style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '4px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>AI Answer</span>
+                  <span style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '4px 8px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700 }}>Smart Answer</span>
                   <div style={{ color: '#cbd5e1', fontSize: '0.9rem', lineHeight: 1.6 }}>
                     Inline buttons appear beside screening question textareas (e.g. <em>"Why are you interested in this role?"</em>, <em>"Describe your experience with distributed systems"</em>). Clicking generates contextual answers tailored to the company and role.
                   </div>
