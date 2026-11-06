@@ -191,9 +191,14 @@ def migrate_storage_directory_to_encrypted(base_user_data_dir: str) -> int:
     and transparently migrates all existing unencrypted PDF, TeX, and JSON files to AES-256-GCM (.enc).
     Immediately unlinks plaintext files after verifying encrypted ciphertext write.
     Preserves shared assets like resume.cls.
+    Uses sentinel flag and atomic existence guards to ensure safe, idempotent execution across multiple workers.
     Returns the count of files migrated.
     """
     if not os.path.exists(base_user_data_dir):
+        return 0
+
+    sentinel_file = os.path.join(base_user_data_dir, ".migration_completed")
+    if os.path.exists(sentinel_file):
         return 0
 
     migrated_count = 0
@@ -222,6 +227,9 @@ def migrate_storage_directory_to_encrypted(base_user_data_dir: str) -> int:
                     # Target extensions for cryptographic zero-knowledge migration
                     if fname.endswith((".pdf", ".tex", ".json")):
                         try:
+                            if not os.path.exists(full_path):
+                                continue
+
                             with open(full_path, "rb") as f:
                                 raw_bytes = f.read()
 
@@ -230,10 +238,22 @@ def migrate_storage_directory_to_encrypted(base_user_data_dir: str) -> int:
 
                             # Verify encrypted file exists and has valid payload before deleting plaintext
                             if os.path.exists(enc_path) and os.path.getsize(enc_path) > len(raw_bytes):
-                                os.remove(full_path)
+                                if os.path.exists(full_path):
+                                    os.remove(full_path)
                                 migrated_count += 1
+                        except FileNotFoundError:
+                            # Concurrently removed or migrated by another worker process
+                            continue
                         except Exception as file_err:
                             print(f"[StorageEncryption] Migration error for {full_path}: {file_err}")
+
+        # Mark migration as complete
+        try:
+            with open(sentinel_file, "w", encoding="utf-8") as sf:
+                sf.write("completed")
+        except Exception:
+            pass
+
     except Exception as e:
         print(f"[StorageEncryption] Error scanning storage directory {base_user_data_dir}: {e}")
 
