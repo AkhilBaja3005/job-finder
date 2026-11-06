@@ -812,14 +812,14 @@ function App() {
         setCompany('');
         setStatusLogs([]);
         setStatusMessage('Caches cleared successfully!');
-        // showToast('🧹 All caches and files deleted!', 'success');
+        // showToast('All caches and files deleted!', 'success');
       } else {
         const err = await res.json();
         throw new Error(err.detail || 'Failed to clear cache');
       }
     } catch (err) {
       setStatusMessage(`Clear cache failed: ${err.message}`);
-      // showToast(`❌ ${err.message}`, 'error');
+      // showToast(`${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -980,7 +980,7 @@ function App() {
       });
       if (res.ok) {
         setStatusMessage('Subscription preferences updated successfully!');
-        // showToast('📬 Subscription updated!', 'success');
+        // showToast('Subscription updated!', 'success');
         const meRes = await fetch(`${API_BASE}/user/me`, {
           headers: { 'Authorization': `Bearer ${authToken}` }
         });
@@ -1152,7 +1152,7 @@ function App() {
           setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
           setTimeout(scrollConsoleToBottom, 30);
         } else if (event.type === 'llm_warn') {
-          const msg = event.message || `⚠️ Rate limit hit on ${event.model}. Retrying in ${event.wait_s}s...`;
+          const msg = event.message || `Rate limit hit on ${event.model}. Retrying in ${event.wait_s}s...`;
           setStatusMessage(msg);
           setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
           setTimeout(scrollConsoleToBottom, 30);
@@ -1328,7 +1328,7 @@ function App() {
           setStatusLogs((prev) => [...prev, { message: event.message, ts: nowTs() }]);
           setTimeout(scrollConsoleToBottom, 30);
         } else if (event.type === 'llm_warn') {
-          const msg = event.message || `⚠️ Rate limit hit on ${event.model}. Retrying in ${event.wait_s}s...`;
+          const msg = event.message || `Rate limit hit on ${event.model}. Retrying in ${event.wait_s}s...`;
           setStatusMessage(msg);
           setStatusLogs((prev) => [...prev, { message: msg, ts: nowTs() }]);
           setTimeout(scrollConsoleToBottom, 30);
@@ -1338,7 +1338,7 @@ function App() {
           if (event.company) setCompany(event.company);
         } else if (event.type === 'rejection_warning') {
           setRejectionWarning(event.message);
-          setStatusLogs((prev) => [...prev, { message: `❌ Warning Paused: ${event.message}`, ts: nowTs() }]);
+          setStatusLogs((prev) => [...prev, { message: `Warning Paused: ${event.message}`, ts: nowTs() }]);
           setStatusMessage('Process paused: Candidate may not be a fit.');
           return;
         } else if (event.type === 'error') {
@@ -1395,7 +1395,7 @@ function App() {
     } catch (error) {
       console.error(error);
       setStatusMessage(`Error: ${error.message}`);
-      setStatusLogs((prev) => [...prev, { message: `❌ Pipeline Interrupted: ${error.message}`, ts: nowTs() }]);
+      setStatusLogs((prev) => [...prev, { message: `Pipeline Interrupted: ${error.message}`, ts: nowTs() }]);
     } finally {
       setLoading(false);
     }
@@ -1426,7 +1426,7 @@ function App() {
     setIsDiscoveryView(true);
     setDiscoveredJobs([]);
 
-    const initMsg = `🔎 Scanning LinkedIn, Indeed, Reed, Greenhouse, Ashby & Lever for matching jobs posted in the last ${searchTimeframe === '24h' ? '24 hours' : searchTimeframe === '48h' ? '48 hours' : searchTimeframe === '1w' ? '1 week' : '1 month'}...`;
+    const initMsg = `Scanning LinkedIn, Indeed, Reed, Greenhouse, Ashby & Lever for matching jobs posted in the last ${searchTimeframe === '24h' ? '24 hours' : searchTimeframe === '48h' ? '48 hours' : searchTimeframe === '1w' ? '1 week' : '1 month'}...`;
     setStatusMessage(initMsg);
     setStatusLogs([{ message: initMsg, ts: nowTs() }]);
 
@@ -1489,7 +1489,7 @@ function App() {
       }
     } catch (err) {
       setStatusMessage(`Discovery failed: ${err.message}`);
-      setStatusLogs((prev) => [...prev, { message: `❌ Discovery failed: ${err.message}`, ts: nowTs() }]);
+      setStatusLogs((prev) => [...prev, { message: `Discovery failed: ${err.message}`, ts: nowTs() }]);
     } finally {
       setDiscovering(false);
     }
@@ -1730,7 +1730,7 @@ function App() {
       });
       if (response.ok) {
         setStatusMessage('Resume compiled successfully!');
-        setStatusLogs((prev) => [...prev, { message: '✅ Tectonic LaTeX compilation completed.', ts: nowTs() }]);
+        setStatusLogs((prev) => [...prev, { message: 'Tectonic LaTeX compilation completed.', ts: nowTs() }]);
       } else {
         const err = await response.json();
         throw new Error(err.detail || 'Failed to compile');
@@ -1738,7 +1738,7 @@ function App() {
     } catch (err) {
       console.error('Failed to compile tailored PDF', err);
       setStatusMessage(`Compilation failed: ${err.message}`);
-      setStatusLogs((prev) => [...prev, { message: `⚠️ Compilation error: ${err.message}`, ts: nowTs() }]);
+      setStatusLogs((prev) => [...prev, { message: `Compilation error: ${err.message}`, ts: nowTs() }]);
     } finally {
       setLoading(false);
     }
@@ -1765,7 +1765,7 @@ function App() {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      // showToast(`❌ ${err.message}`, 'error');
+      // showToast(`${err.message}`, 'error');
     }
   };
 
@@ -1791,10 +1791,10 @@ function App() {
       const data = await response.json();
       window.open(data.url, '_blank');
       setStatusMessage('Overleaf workspace opened!');
-      // showToast('✅ Overleaf opened in a new tab!', 'success');
+      // showToast('Overleaf opened in a new tab!', 'success');
     } catch (err) {
       setStatusMessage(`Error opening in Overleaf: ${err.message}`);
-      // showToast(`❌ ${err.message}`, 'error');
+      // showToast(`${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -2579,16 +2579,16 @@ function App() {
               display: 'flex', alignItems: 'center', gap: '7px',
               padding: '5px 12px', borderRadius: '20px', maxWidth: '340px',
               background: statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
-                ? 'rgba(239,68,68,0.1)' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
+                ? 'rgba(239,68,68,0.1)' : statusMessage.includes('Success') || statusMessage.includes('completed') || statusMessage.includes('success') || statusMessage.includes('Success')
                   ? 'rgba(16,185,129,0.1)' : 'rgba(56,189,248,0.1)',
               border: `1px solid ${statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
-                ? 'rgba(239,68,68,0.25)' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
+                ? 'rgba(239,68,68,0.25)' : statusMessage.includes('Success') || statusMessage.includes('completed') || statusMessage.includes('success') || statusMessage.includes('Success')
                   ? 'rgba(16,185,129,0.25)' : 'rgba(56,189,248,0.25)'}`,
             }}>
               <span style={{
                 width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0, animation: 'pulseGlow 2s infinite',
                 background: statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
-                  ? 'var(--accent-red)' : statusMessage.includes('✅') || statusMessage.includes('success') || statusMessage.includes('Success')
+                  ? 'var(--accent-red)' : statusMessage.includes('Success') || statusMessage.includes('completed') || statusMessage.includes('success') || statusMessage.includes('Success')
                     ? 'var(--accent-green)' : 'var(--accent-secondary)'
               }} />
               <span style={{ fontSize: '0.78rem', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -3438,7 +3438,7 @@ function App() {
             {statusMessage && (
               <div style={{
                 fontSize: '0.82rem',
-                color: statusMessage.includes('❌') ? 'var(--accent-red)' : statusMessage.includes('✅') ? 'var(--accent-green)' : 'var(--accent-primary)',
+                color: statusMessage.includes('Error') || statusMessage.includes('failed') ? 'var(--accent-red)' : statusMessage.includes('Success') || statusMessage.includes('completed') ? 'var(--accent-green)' : 'var(--accent-primary)',
                 textAlign: 'center',
                 padding: '4px 0 0',
                 fontWeight: 600
@@ -3768,7 +3768,7 @@ function App() {
                               throw new Error('Failed to update resume');
                             }
                           } catch (err) {
-                            setStatusMessage(`❌ Error applying suggestion: ${err.message}`);
+                            setStatusMessage(`Error applying suggestion: ${err.message}`);
                           } finally {
                             setApplyingSugIdx(null);
                           }
@@ -4782,7 +4782,7 @@ function App() {
                                     throw new Error('Failed to update resume');
                                   }
                                 } catch (err) {
-                                  setStatusMessage(`❌ Error applying suggestion: ${err.message}`);
+                                  setStatusMessage(`Error applying suggestion: ${err.message}`);
                                 } finally {
                                   setApplyingSugIdx(null);
                                 }
@@ -5567,9 +5567,9 @@ function App() {
                         const msg = typeof entry === 'string' ? entry : entry.message;
                         const ts = typeof entry === 'object' ? entry.ts : '';
                         let cls = 'log-entry-msg log-default';
-                        if (msg.includes('🏁') || msg.includes('✅') || msg.includes('✓')) cls = 'log-entry-msg log-ok';
-                        else if (msg.includes('🔎') || msg.includes('🌐') || msg.includes('🤖')) cls = 'log-entry-msg log-ai';
-                        else if (msg.includes('❌')) cls = 'log-entry-msg log-warn';
+                        if (msg.includes('Scanned') || msg.includes('Finished') || msg.includes('Success') || msg.includes('completed') || msg.includes('✓')) cls = 'log-entry-msg log-ok';
+                        else if (msg.includes('Scanning') || msg.includes('Fetching') || msg.includes('Analyzing')) cls = 'log-entry-msg log-ai';
+                        else if (msg.includes('Error') || msg.includes('failed') || msg.includes('Warning')) cls = 'log-entry-msg log-warn';
                         return (
                           <div key={index} className="log-entry">
                             <span className="log-entry-ts">{ts}</span>
@@ -6223,7 +6223,7 @@ function App() {
                                             transition: 'all 0.15s ease'
                                           }}
                                         >
-                                          {isSaved ? '★ Saved' : '☆ Save'}
+                                          {isSaved ? 'Saved' : 'Save'}
                                         </button>
                                         <button
                                           onClick={(e) => handleQuickStatus(e, 'applied')}
@@ -6263,7 +6263,7 @@ function App() {
                                       }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                                           <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#fca5a5', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            ⚠️ Company Could Not Be Found in Sponsor Database
+                                            Company Not Found in Sponsor Register
                                           </span>
                                           <a
                                             href="https://www.gov.uk/government/publications/register-of-licensed-sponsors-workers"
@@ -6449,9 +6449,9 @@ function App() {
                       const msg = typeof entry === 'string' ? entry : entry.message;
                       const ts = typeof entry === 'object' ? entry.ts : '';
                       let cls = 'log-entry-msg log-default';
-                      if (msg.includes('✅')) cls = 'log-entry-msg log-ok';
-                      else if (msg.includes('⚠️') || msg.includes('❌')) cls = 'log-entry-msg log-warn';
-                      else if (msg.includes('🤖') || msg.includes('👀') || msg.includes('📐') || msg.includes('⚙️') || msg.includes('✍️')) cls = 'log-entry-msg log-ai';
+                      if (msg.includes('Success') || msg.includes('completed')) cls = 'log-entry-msg log-ok';
+                      else if (msg.includes('Warning') || msg.includes('timeout') || msg.includes('Error') || msg.includes('failed') || msg.includes('Warning')) cls = 'log-entry-msg log-warn';
+                      else if (msg.includes('Calculating') || msg.includes('Compiling') || msg.includes('Generating') || msg.includes('')) cls = 'log-entry-msg log-ai';
                       else if (msg.includes('Rate limit') || msg.includes('429')) cls = 'log-entry-msg log-ratelimit';
                       return (
                         <div key={index} className="log-entry">
@@ -7031,10 +7031,10 @@ function App() {
                               setStatusMessage('Tailored cover letter generated!');
                             } else {
                               const err = await res.json();
-                              setStatusMessage(`❌ Error: ${err.detail || 'Failed to generate cover letter'}`);
+                              setStatusMessage(`Error: ${err.detail || 'Failed to generate cover letter'}`);
                             }
                           } catch (e) {
-                            setStatusMessage(`❌ Error: ${e.message}`);
+                            setStatusMessage(`Error: ${e.message}`);
                           } finally {
                             setLoading(false);
                           }
@@ -7060,7 +7060,7 @@ function App() {
                         style={{ padding: '11px 20px' }}
                         onClick={() => {
                           setKeepOriginalMode(true);
-                          // showToast('📄 Keeping original resume — Overleaf export is ready.', 'info');
+                          // showToast('Keeping original resume — Overleaf export is ready.', 'info');
                         }}
                       >
                         Keep Original
@@ -7621,9 +7621,9 @@ function App() {
                         const msg = typeof entry === 'string' ? entry : entry.message;
                         const ts = typeof entry === 'object' ? entry.ts : '';
                         let cls = 'log-entry-msg log-default';
-                        if (msg.includes('✅')) cls = 'log-entry-msg log-ok';
-                        else if (msg.includes('⚠️') || msg.includes('❌')) cls = 'log-entry-msg log-warn';
-                        else if (msg.includes('🤖') || msg.includes('👀') || msg.includes('📐') || msg.includes('⚙️') || msg.includes('✍️')) cls = 'log-entry-msg log-ai';
+                        if (msg.includes('Success') || msg.includes('completed')) cls = 'log-entry-msg log-ok';
+                        else if (msg.includes('Warning') || msg.includes('timeout') || msg.includes('Error') || msg.includes('failed') || msg.includes('Warning')) cls = 'log-entry-msg log-warn';
+                        else if (msg.includes('Calculating') || msg.includes('Compiling') || msg.includes('Generating') || msg.includes('')) cls = 'log-entry-msg log-ai';
                         else if (msg.includes('Rate limit') || msg.includes('429')) cls = 'log-entry-msg log-ratelimit';
                         return (
                           <div key={index} className="log-entry">

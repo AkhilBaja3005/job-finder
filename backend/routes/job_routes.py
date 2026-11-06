@@ -297,7 +297,7 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
     cached_jobs = _job_search_cache.get(cache_key)
     if cached_jobs is not None:
         async def cached_job_stream():
-            yield json.dumps({"type": "log", "message": "⚡ Loaded job results from cache (< 5 min old)!"}) + "\n"
+            yield json.dumps({"type": "log", "message": "Loaded job results from cache (< 5 min old)!"}) + "\n"
             for job in cached_jobs:
                 yield json.dumps({"type": "partial_result", "job": job}) + "\n"
             yield json.dumps({"type": "result", "jobs": cached_jobs}) + "\n"
@@ -340,7 +340,7 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                         await q.put(chunk)
                 except Exception as pe:
                     traceback.print_exc()
-                    await q.put(json.dumps({"type": "log", "message": f"❌ Search error: {pe}"}) + "\n")
+                    await q.put(json.dumps({"type": "log", "message": f"Search error: {pe}"}) + "\n")
                 finally:
                     search_done = True
                     await q.put(None)

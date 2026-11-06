@@ -460,7 +460,7 @@ export default function LiveLatexEditor({
             gap: '10px'
           }}
         >
-          <span style={{ color: '#EF4444', fontWeight: 'bold' }}>⚠️ Compile Error:</span>
+          <span style={{ color: '#EF4444', fontWeight: 'bold' }}> Compile Error:</span>
           <pre style={{ margin: 0, whiteSpace: 'pre-wrap', flex: 1 }}>{compileError}</pre>
           <button
             onClick={() => setCompileError(null)}

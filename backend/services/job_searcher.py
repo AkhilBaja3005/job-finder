@@ -501,7 +501,7 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "2
                                 "per month for the course", "get your money back", "job guaranteed", "guaranteed job"
                             ]
                             if any(sp in jd_raw for sp in jd_spam_patterns):
-                                log_ist(f"[Job Searcher] 🚫 Pre-screening rejected Reed course/fee listing ID {j_id}: '{candidate['title']}'")
+                                log_ist(f"[Job Searcher] Pre-screening rejected Reed course/fee listing ID {j_id}: '{candidate['title']}'")
                                 return None
                     except Exception:
                         pass
@@ -636,7 +636,7 @@ async def search_targetjobs_uk(keyword: str, location: str = "Remote", timeframe
                 "this role has expired", "this opportunity has closed", "this vacancy has closed", "this posting is closed",
                 "position closed", "vacancy closed", "role closed"
             ]):
-                log_ist(f"[Job Searcher] 🚫 Skipping closed TargetJobs listing '{title}'")
+                log_ist(f"[Job Searcher] Skipping closed TargetJobs listing '{title}'")
                 continue
 
             results.append(JobSearchResult(
@@ -984,7 +984,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
                         post_date_raw=pub_date,
                         job_id=j_id
                     ))
-                log_ist(f"[Job Searcher] ⚡ Instantly fetched {len(results)} Indeed jobs via RSS XML feed for '{keyword}'")
+                log_ist(f"[Job Searcher] Instantly fetched {len(results)} Indeed jobs via RSS XML feed for '{keyword}'")
                 return results
     except Exception as rss_err:
         log_ist(f"[Job Searcher] Indeed RSS fetch skipped ({rss_err}), attempting Playwright fallback...")
@@ -1057,7 +1057,7 @@ async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: 
 
         if not cards and (status == 403 or "blocked" in page_title.lower() or "just a moment" in page_title.lower()):
             _indeed_blocked_circuit_breaker = True
-            log_ist(f"[Job Searcher] ⛔ Indeed Cloudflare Challenge triggered (status={status}, title={page_title!r}). Flipping circuit breaker ON to skip remaining Indeed calls. LinkedIn & Reed search remain 100% operational.")
+            log_ist(f"[Job Searcher] Indeed Cloudflare Challenge triggered (status={status}, title={page_title!r}). Flipping circuit breaker ON to skip remaining Indeed calls. LinkedIn & Reed search remain 100% operational.")
             return results
 
         for card in cards:
@@ -1376,7 +1376,7 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
         "job guaranteed", "training course", "course fees"
     ]
     if any(fp in combined_text_lower for fp in fee_patterns):
-        print(f"[Job Searcher] 🚫 Rejecting fee-based course/training listing: '{job.title}'")
+        print(f"[Job Searcher] Rejecting fee-based course/training listing: '{job.title}'")
         return None
 
     ats = compute_ats_score(resume_data, jd_text)
@@ -1552,15 +1552,15 @@ async def find_matching_jobs(
     if keywords and keywords.strip():
         # User-provided search role overrides
         queries = [q.strip() for q in keywords.split(",") if q.strip()]
-        msg = f"🔎 Using user-preferred search queries: {', '.join(queries)}"
+        msg = f"Using user-preferred search queries: {', '.join(queries)}"
         log_ist(msg)
         yield json.dumps({"type": "log", "message": msg}) + " " * 2048 + "\n"
     else:
-        msg1 = "🤖 Analyzing resume context to generate optimal search queries..."
+        msg1 = "Analyzing resume context to generate optimal search queries..."
         log_ist(msg1)
         yield json.dumps({"type": "log", "message": msg1}) + " " * 2048 + "\n"
         queries = await asyncio.to_thread(generate_search_queries_from_resume, resume_data, custom_api_key)
-        msg2 = f"🔎 Generated search queries: {', '.join(queries)}"
+        msg2 = f"Generated search queries: {', '.join(queries)}"
         log_ist(msg2)
         yield json.dumps({"type": "log", "message": msg2}) + " " * 2048 + "\n"
 
@@ -1578,7 +1578,7 @@ async def find_matching_jobs(
     should_scan_portals = len(active_ats_scanned) > 0
 
     if should_scan_portals:
-        portal_start_msg = f"🌐 Scanning target ATS Portals ({', '.join(active_ats_scanned)})..."
+        portal_start_msg = f"Scanning target ATS Portals ({', '.join(active_ats_scanned)})..."
         log_ist(portal_start_msg)
         yield json.dumps({"type": "log", "message": portal_start_msg}) + " " * 2048 + "\n"
         try:
@@ -1618,7 +1618,7 @@ async def find_matching_jobs(
             log_ist(portal_done_msg)
             yield json.dumps({"type": "log", "message": portal_done_msg}) + " " * 2048 + "\n"
         except asyncio.TimeoutError:
-            warn_msg = "[find_matching_jobs] ⚠️ Direct ATS portal scan timed out after 60s, proceeding with live listings."
+            warn_msg = "[find_matching_jobs] Direct ATS portal scan timed out after 60s, proceeding with live listings."
             log_ist(warn_msg)
             print(warn_msg)
         except Exception as pe:
@@ -1630,7 +1630,7 @@ async def find_matching_jobs(
     raw_jobs = list(portal_jobs_raw)
     indeed_jobs_for_est = []
 
-    yield_msg = f"🌐 Concurrently fetching listings across {len(queries)} query streams: {', '.join(queries)}..."
+    yield_msg = f"Concurrently fetching listings across {len(queries)} query streams: {', '.join(queries)}..."
     log_ist(yield_msg)
     yield json.dumps({"type": "log", "message": yield_msg}) + " " * 2048 + "\n"
 
@@ -1642,7 +1642,7 @@ async def find_matching_jobs(
                 else:
                     return await asyncio.wait_for(asyncio.to_thread(coro_or_func, *args), timeout=timeout)
             except asyncio.TimeoutError:
-                log_ist(f"[Job Searcher] ⚠️ Search timeout ({timeout}s) for query '{q}', continuing with remaining sources.")
+                log_ist(f"[Job Searcher] Search timeout ({timeout}s) for query '{q}', continuing with remaining sources.")
                 return default
             except Exception as e:
                 log_ist(f"[Job Searcher] Search source error for '{q}': {e}")
@@ -1725,7 +1725,7 @@ async def find_matching_jobs(
                 seen_canonical.add(canon_key)
             deduped_jobs.append(job)
 
-    yield json.dumps({"type": "log", "message": f"📊 Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + " " * 2048 + "\n"
+    yield json.dumps({"type": "log", "message": f"Found {len(deduped_jobs)} unique postings. Computing ATS matches..."}) + " " * 2048 + "\n"
 
     # Separate instant API jobs (TargetJobs, Reed, Jobserve, Greenhouse, Ashby, Lever, Workday, Direct ATS) from web-scraped jobs (LinkedIn/Indeed)
     fast_platforms = ("targetjobs", "reed", "jobserve", "greenhouse", "ashby", "lever", "workday", "direct ats")
@@ -1751,7 +1751,7 @@ async def find_matching_jobs(
 
     # Phase A: Instant in-memory scoring for direct ATS API jobs (TargetJobs, Greenhouse, Ashby, Lever, Workday, Reed)
     if api_fast_jobs:
-        yield json.dumps({"type": "log", "message": f"⚡ Instantly computing ATS match scores for {len(api_fast_jobs)} direct ATS portal & TargetJobs openings..."}) + " " * 2048 + "\n"
+        yield json.dumps({"type": "log", "message": f"Instantly computing ATS match scores for {len(api_fast_jobs)} direct ATS portal & TargetJobs openings..."}) + " " * 2048 + "\n"
         for job in api_fast_jobs:
             try:
                 if hasattr(job, "full_description") and job.full_description and len(job.full_description.strip()) > 20:
@@ -1790,7 +1790,7 @@ async def find_matching_jobs(
     )
 
     if web_scored_batch:
-        yield json.dumps({"type": "log", "message": f"📄 Fetching real job descriptions for {len(web_scored_batch)} web listings ({min(len(linkedin_scraped), DISCOVERY_PLATFORM_FETCH_CAP)} LinkedIn, {min(len(indeed_scraped), DISCOVERY_PLATFORM_FETCH_CAP)} Indeed)..."}) + " " * 2048 + "\n"
+        yield json.dumps({"type": "log", "message": f"Fetching real job descriptions for {len(web_scored_batch)} web listings ({min(len(linkedin_scraped), DISCOVERY_PLATFORM_FETCH_CAP)} LinkedIn, {min(len(indeed_scraped), DISCOVERY_PLATFORM_FETCH_CAP)} Indeed)..."}) + " " * 2048 + "\n"
         semaphore = asyncio.Semaphore(DISCOVERY_FETCH_CONCURRENCY)
         
         async def _score_and_stream(job, log_queue_stream):
@@ -1809,7 +1809,7 @@ async def find_matching_jobs(
             try:
                 return await asyncio.wait_for(_inner_score(), timeout=25.0)
             except asyncio.TimeoutError:
-                print(f"[Job Searcher] ⚠️ Scoring timed out after 25s for '{job.title}', preserving with title estimate")
+                print(f"[Job Searcher] Scoring timed out after 25s for '{job.title}', preserving with title estimate")
                 return _score_job_with_title_heuristic(job, resume_data)
             except Exception as e:
                 print(f"[Job Searcher] Error scoring job '{job.title}': {e}, preserving with title estimate")
@@ -1835,7 +1835,7 @@ async def find_matching_jobs(
                 yield json.dumps({"type": "log", "message": "⏳ Processing web listings..."}) + " " * 2048 + "\n"
 
     if title_only_batch:
-        yield json.dumps({"type": "log", "message": f"📝 Estimating {len(title_only_batch)} additional matches from title heuristic..."}) + " " * 2048 + "\n"
+        yield json.dumps({"type": "log", "message": f"Estimating {len(title_only_batch)} additional matches from title heuristic..."}) + " " * 2048 + "\n"
         for job in title_only_batch:
             r = _score_job_with_title_heuristic(job, resume_data)
             scored_jobs.append(r)
@@ -1845,7 +1845,7 @@ async def find_matching_jobs(
     scored_jobs.sort(key=lambda x: (x["estimated"], -x["score"]))
     accurate_count = sum(1 for j in scored_jobs if not j["estimated"])
     estimated_count = len(scored_jobs) - accurate_count
-    yield json.dumps({"type": "log", "message": f"🏁 Scanned {len(scored_jobs)} matches successfully! ({accurate_count} JD-scored, {estimated_count} title-estimated)"}) + "\n"
+    yield json.dumps({"type": "log", "message": f"Scanned {len(scored_jobs)} matches successfully! ({accurate_count} JD-scored, {estimated_count} title-estimated)"}) + "\n"
 
     # Prepare EST section for any leftover Indeed jobs that weren't included in scored_jobs
     def _normalize_track_url(u_str: str) -> str:
@@ -1877,7 +1877,7 @@ async def find_matching_jobs(
                     "estimated": True,
                     "reason": "Title-estimated from Indeed search listing"
                 })
-        yield json.dumps({"type": "log", "message": f"📌 Found {len(est_jobs)} Indeed jobs in EST section (not scored by our engine)"}) + "\n"
+        yield json.dumps({"type": "log", "message": f"Found {len(est_jobs)} Indeed jobs in EST section (not scored by our engine)"}) + "\n"
 
     # Save results to 5-minute TTL cache
     cache_key = (keywords or "", location or "Remote", timeframe or "48h")
