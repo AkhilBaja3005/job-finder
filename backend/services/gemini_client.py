@@ -50,6 +50,7 @@ except ImportError:
     )
 
 PROVIDERS = [
+    {"name": "openai",      "key_prefix": "sk-proj-", "models": ["gpt-4o", "gpt-4o-mini"]},
     {"name": "anthropic",   "key_prefix": "sk-ant-",  "models": ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"]},
     {"name": "groq",        "key_prefix": "gsk_",     "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]},
     {"name": "openrouter",  "key_prefix": "sk-or-",   "models": ["google/gemini-2.5-flash", "google/gemini-2.5-flash-lite"]},
@@ -282,6 +283,9 @@ def _generate_with_model_list(
         elif custom_api_key.startswith("sk-ant-"):
             try: return _execute_anthropic(prompt, response_schema, custom_api_key)
             except Exception as e: print(f"[LLM Client] Override Anthropic failed: {e}. Falling back to standard pipeline...")
+        elif custom_api_key.startswith("sk-proj-") or (custom_api_key.startswith("sk-") and not custom_api_key.startswith("sk-ant-") and not custom_api_key.startswith("sk-or-")):
+            try: return _execute_openai(prompt, response_schema, custom_api_key)
+            except Exception as e: print(f"[LLM Client] Override OpenAI failed: {e}. Falling back to standard pipeline...")
         elif custom_api_key.startswith("gsk_"):
             try: return _execute_groq(prompt, response_schema, custom_api_key)
             except Exception as e: print(f"[LLM Client] Override Groq failed: {e}. Falling back to standard pipeline...")
@@ -571,6 +575,29 @@ def _generate_with_cloudflare_llama(prompt: str, response_schema=None, on_log: O
 
     print(f"[LLM Client] Cloudflare generation successful with: {model}")
     return text_str
+
+def _execute_openai(prompt: str, response_schema, api_key: str) -> str:
+    # pyrefly: ignore [missing-import]
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key)
+    is_latex_or_review = (response_schema is None or "latex" in prompt.lower())
+    openai_model = "gpt-4o" if is_latex_or_review else "gpt-4o-mini"
+
+    messages = [
+        {"role": "system", "content": "You are an expert recruiter and career systems engineer."},
+        {"role": "user", "content": prompt}
+    ]
+    kwargs: Dict[str, Any] = {
+        "model": openai_model,
+        "messages": messages,
+        "temperature": 0.1,
+    }
+    if response_schema is not None:
+        kwargs["response_format"] = {"type": "json_object"}
+        messages[1]["content"] += "\nReturn strictly valid JSON only."
+
+    completion = client.chat.completions.create(**kwargs)
+    return completion.choices[0].message.content or ""
 
 def _execute_anthropic(prompt: str, response_schema, api_key: str) -> str:
     # pyrefly: ignore [missing-import]
