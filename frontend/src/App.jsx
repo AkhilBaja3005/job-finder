@@ -2459,7 +2459,7 @@ function App() {
           </div>
           <div>
             <h1 className="title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 700, letterSpacing: '-0.02em' }}>
-              JobFinder <span style={{ color: 'var(--text-dim)', fontWeight: 500, fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>v{APP_VERSION}</span>
+              JobFinder
             </h1>
             <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
               Precision ATS & Career Infrastructure

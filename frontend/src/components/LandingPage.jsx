@@ -120,7 +120,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
           textTransform: 'uppercase'
         }}>
           <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#38BDF8' }} />
-          Production Platform v{APP_VERSION} • Career Operations & ATS Infrastructure
+          Career Operations & ATS Infrastructure
         </div>
 
         {/* Main Heading */}
@@ -529,7 +529,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }} />
-          <span>JobFinder Infrastructure v{APP_VERSION}</span>
+          <span>JobFinder Infrastructure</span>
           <span>•</span>
           <span>UK GOV Sponsor Database Synchronized</span>
         </div>
