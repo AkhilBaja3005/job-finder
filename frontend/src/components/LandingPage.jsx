@@ -9,8 +9,9 @@ import { APP_VERSION, EXTENSION_VERSION } from '../config/constants';
  *  3. System Capabilities (Discovery, Scoring, Tailoring, Autofill, UK Sponsors)
  *  4. Quick Navigation Actions (Launch App, Setup Guide, Full Docs)
  */
-export default function LandingPage({ onLaunchApp, onOpenDocs }) {
+export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
   const [activeTab, setActiveTab] = useState('overview');
+  const [selectedDemoTab, setSelectedDemoTab] = useState('matching');
 
   const pillars = [
     {
@@ -173,6 +174,24 @@ export default function LandingPage({ onLaunchApp, onOpenDocs }) {
             </svg>
           </button>
 
+          {onLaunchDemo && (
+            <button
+              className="btn btn-secondary"
+              style={{
+                padding: '12px 24px',
+                fontSize: '0.94rem',
+                fontWeight: 600,
+                borderRadius: '8px',
+                borderColor: 'rgba(56, 189, 248, 0.4)',
+                color: '#38BDF8',
+                background: 'rgba(56, 189, 248, 0.08)'
+              }}
+              onClick={onLaunchDemo}
+            >
+              ⚡ Try Demo Workspace
+            </button>
+          )}
+
           <button
             className="btn btn-secondary"
             style={{
@@ -193,7 +212,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs }) {
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         gap: '16px',
-        margin: '20px 0 50px'
+        margin: '20px 0 40px'
       }}>
         {[
           { metric: '9 Portals', label: 'Simultaneous ATS aggregation (Ashby, Lever, Greenhouse, etc.)' },
@@ -215,6 +234,128 @@ export default function LandingPage({ onLaunchApp, onOpenDocs }) {
             </div>
           </div>
         ))}
+      </section>
+
+      {/* Live Interactive Product Preview */}
+      <section style={{
+        background: 'var(--panel-bg)',
+        border: '1px solid var(--border-color)',
+        borderRadius: '14px',
+        padding: '30px',
+        marginBottom: '50px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '22px' }}>
+          <div>
+            <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#38BDF8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>
+              Live Architecture Preview
+            </div>
+            <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#FFFFFF', margin: 0, letterSpacing: '-0.02em' }}>
+              From Raw Job Listing to Publication-Grade XeLaTeX
+            </h2>
+          </div>
+          <div style={{ display: 'flex', gap: '6px', background: '#07090E', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            {[
+              { id: 'matching', label: 'ATS Keyword Matrix' },
+              { id: 'sponsors', label: 'UK Visa Verification' },
+              { id: 'latex', label: '1-Page XeLaTeX' }
+            ].map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setSelectedDemoTab(t.id)}
+                style={{
+                  border: 'none',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  background: selectedDemoTab === t.id ? '#2563EB' : 'transparent',
+                  color: selectedDemoTab === t.id ? '#FFFFFF' : 'var(--text-muted)',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {selectedDemoTab === 'matching' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px' }}>
+            <div style={{ background: '#0B101C', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px' }}>
+              <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#38BDF8', textTransform: 'uppercase', marginBottom: '8px' }}>Extracted Job Requirements</div>
+              <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#FFFFFF', marginBottom: '6px' }}>Staff Distributed Systems Engineer</div>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: '0 0 14px' }}>Monzo Bank • London / Hybrid • £110k - £135k</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38BDF8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>Go / Distributed Systems</span>
+                <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38BDF8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>Apache Kafka</span>
+                <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38BDF8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>gRPC & Raft Consensus</span>
+                <span style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38BDF8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>PostgreSQL Partitioning</span>
+              </div>
+            </div>
+
+            <div style={{ background: '#0B101C', border: '1px solid rgba(37, 99, 235, 0.3)', borderRadius: '10px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#10B981', textTransform: 'uppercase' }}>ATS Match Taxonomy</span>
+                  <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10B981', fontFamily: 'var(--font-mono)' }}>94%</span>
+                </div>
+                <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden', marginBottom: '14px' }}>
+                  <div style={{ width: '94%', height: '100%', background: '#10B981' }} />
+                </div>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                  Zero hallucination policy. 18 of 19 required competencies confirmed in Master Profile. Bullet points tailored to emphasize low-latency consensus and stream processing.
+                </p>
+              </div>
+              <div style={{ marginTop: '16px', fontSize: '0.75rem', color: '#94A3B8', fontFamily: 'var(--font-mono)' }}>
+                ✓ Strategy: Balanced (Recommended)
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedDemoTab === 'sponsors' && (
+          <div style={{ background: '#0B101C', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              <span style={{ padding: '4px 10px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#10B981', border: '1px solid rgba(16, 185, 129, 0.3)', fontSize: '0.76rem', fontWeight: 700 }}>
+                ✓ GOV.UK Licensed Visa Sponsor
+              </span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Tier 2 / Skilled Worker Route Verified</span>
+            </div>
+            <p style={{ fontSize: '0.86rem', color: 'var(--text-main)', margin: '0 0 10px', lineHeight: 1.6 }}>
+              JobFinder continuously synchronizes against the official 140,000+ UK Home Office Sponsor register stored in persistent SQLite storage. Revoked employers are flagged immediately to protect international candidate time.
+            </p>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              Database: /data/uk_sponsors.db • Daily automated sync enabled
+            </div>
+          </div>
+        )}
+
+        {selectedDemoTab === 'latex' && (
+          <div style={{ background: '#0B101C', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#38BDF8', textTransform: 'uppercase' }}>XeLaTeX Compilation Budget</div>
+              <span style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38BDF8', fontSize: '0.74rem', fontFamily: 'var(--font-mono)' }}>
+                Exact 1.0 Page (Budget: 100%)
+              </span>
+            </div>
+            <pre style={{
+              margin: 0,
+              padding: '14px',
+              background: '#07090E',
+              borderRadius: '6px',
+              border: '1px solid rgba(255,255,255,0.06)',
+              fontSize: '0.78rem',
+              color: '#CBD5E1',
+              fontFamily: 'var(--font-mono)',
+              lineHeight: 1.5,
+              overflowX: 'auto'
+            }}>
+              {String.raw`\resumeItem{Architected real-time streaming ledger using Apache Kafka and Go, reducing reconciliation latency by 68% across 4.2M daily transactions.}
+\resumeItem{Engineered distributed consensus protocol with gRPC sidecars, enforcing fault tolerance under simulated partition failure.}`}
+            </pre>
+          </div>
+        )}
       </section>
 
       {/* Interactive Workflow Guide */}
@@ -368,10 +509,53 @@ export default function LandingPage({ onLaunchApp, onOpenDocs }) {
             style={{ padding: '10px 18px', fontSize: '0.9rem', fontWeight: 600, borderRadius: '8px' }}
             onClick={onOpenDocs}
           >
-            Read Docs
+            Read Docs & Guide
           </button>
         </div>
       </section>
+
+      {/* Institutional Enterprise Footer */}
+      <footer style={{
+        marginTop: '60px',
+        paddingTop: '24px',
+        borderTop: '1px solid var(--border-color)',
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '16px',
+        fontSize: '0.78rem',
+        color: 'var(--text-muted)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }} />
+          <span>JobFinder Infrastructure v{APP_VERSION}</span>
+          <span>•</span>
+          <span>UK GOV Sponsor Database Synchronized</span>
+        </div>
+        <div style={{ display: 'flex', gap: '16px' }}>
+          <a
+            href="https://github.com/AkhilBaja3005/job-finder"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--text-muted)', textDecoration: 'none' }}
+          >
+            GitHub
+          </a>
+          <button
+            onClick={onOpenDocs}
+            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.78rem' }}
+          >
+            Documentation
+          </button>
+          <button
+            onClick={onLaunchApp}
+            style={{ background: 'none', border: 'none', padding: 0, color: '#38BDF8', cursor: 'pointer', fontSize: '0.78rem' }}
+          >
+            Platform Access
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }

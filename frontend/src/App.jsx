@@ -2689,6 +2689,15 @@ function App() {
               setDashboardMode(user ? 'tailor' : 'app');
               window.history.pushState(null, '', '/platform');
             }}
+            onLaunchDemo={() => {
+              const demoToken = 'demo_' + Math.random().toString(36).substring(2, 10);
+              localStorage.setItem('auth_token', demoToken);
+              setAuthToken(demoToken);
+              setUser({ id: demoToken, email: 'demo@job-finder.space', name: 'Demo Candidate', is_guest: true });
+              setDashboardMode('tailor');
+              setStatusMessage('Active Demo Session • Sample Candidate Loaded');
+              window.history.pushState(null, '', '/platform');
+            }}
             onOpenDocs={() => {
               setDashboardMode('docs');
               window.history.pushState(null, '', '/docs');
