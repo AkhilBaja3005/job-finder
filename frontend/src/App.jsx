@@ -7712,90 +7712,92 @@ function App() {
         </div>
       )}
 
-      {/* Power-User Keyboard & Status Telemetry Strip */}
-      <footer
-        className="power-user-bar"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '8px 24px',
-          marginTop: '32px',
-          borderTop: '1px solid #1E293B',
-          background: 'rgba(9, 13, 22, 0.75)',
-          backdropFilter: 'blur(8px)',
-          fontSize: '0.74rem',
-          color: 'var(--text-muted)',
-          fontFamily: 'var(--font-mono)'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }} />
-            <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>SYSTEM READY</span>
+      {/* Power-User Keyboard & Status Telemetry Strip (Only rendered on Platform / App views) */}
+      {dashboardMode !== 'intro' && (
+        <footer
+          className="power-user-bar"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 24px',
+            marginTop: '32px',
+            borderTop: '1px solid #1E293B',
+            background: 'rgba(9, 13, 22, 0.75)',
+            backdropFilter: 'blur(8px)',
+            fontSize: '0.74rem',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10B981' }} />
+              <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>SYSTEM READY</span>
+            </div>
+            <span>•</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘↵</kbd>
+              <span>Analyze & Tailor</span>
+            </div>
+            <span>•</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘S</kbd>
+              <span>Save Archetype</span>
+            </div>
+            <span>•</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘1-3</kbd>
+              <span>Switch Tabs</span>
+            </div>
+            <span>•</span>
+            <span style={{ color: '#94a3b8' }}>
+              {CREATOR_SIGNATURE}
+            </span>
           </div>
-          <span>•</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘↵</kbd>
-            <span>Analyze & Tailor</span>
-          </div>
-          <span>•</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘S</kbd>
-            <span>Save Archetype</span>
-          </div>
-          <span>•</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <kbd style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid #334155', borderRadius: '4px', padding: '1px 5px', color: '#CBD5E1' }}>⌘1-3</kbd>
-            <span>Switch Tabs</span>
-          </div>
-          <span>•</span>
-          <span style={{ color: '#94a3b8' }}>
-            {CREATOR_SIGNATURE}
-          </span>
-        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <a
-            href="https://linkedin.com/in/akhilbaja"
-            target="_blank"
-            rel="noreferrer"
-            style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.74rem' }}
-            onMouseEnter={(e) => e.target.style.color = '#38bdf8'}
-            onMouseLeave={(e) => e.target.style.color = '#94a3b8'}
-          >
-            LinkedIn
-          </a>
-          <a
-            href="https://github.com/AkhilBaja3005"
-            target="_blank"
-            rel="noreferrer"
-            style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.74rem' }}
-            onMouseEnter={(e) => e.target.style.color = '#38bdf8'}
-            onMouseLeave={(e) => e.target.style.color = '#94a3b8'}
-          >
-            GitHub
-          </a>
-          <button
-            onClick={() => setShowKeyboardHelp(true)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--accent-cyan)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.74rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: 0
-            }}
-          >
-            <kbd style={{ background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '4px', padding: '1px 5px', color: 'var(--accent-cyan)' }}>?</kbd>
-            <span>All Shortcuts</span>
-          </button>
-        </div>
-      </footer>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <a
+              href="https://linkedin.com/in/akhilbaja"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.74rem' }}
+              onMouseEnter={(e) => e.target.style.color = '#38bdf8'}
+              onMouseLeave={(e) => e.target.style.color = '#94a3b8'}
+            >
+              LinkedIn
+            </a>
+            <a
+              href="https://github.com/AkhilBaja3005/job-finder"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.74rem' }}
+              onMouseEnter={(e) => e.target.style.color = '#38bdf8'}
+              onMouseLeave={(e) => e.target.style.color = '#94a3b8'}
+            >
+              GitHub
+            </a>
+            <button
+              onClick={() => setShowKeyboardHelp(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--accent-cyan)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.74rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: 0
+              }}
+            >
+              <kbd style={{ background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '4px', padding: '1px 5px', color: 'var(--accent-cyan)' }}>?</kbd>
+              <span>All Shortcuts</span>
+            </button>
+          </div>
+        </footer>
+      )}
 
     </div>
 
