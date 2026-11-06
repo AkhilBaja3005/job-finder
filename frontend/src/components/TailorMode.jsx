@@ -116,7 +116,7 @@ const TailorMode = ({
         />
         <input
           type="text"
-          placeholder="📹 YouTube Tech Interview URL (optional for transcript prep)"
+          placeholder="YouTube Tech Interview URL (optional for transcript prep)"
           value={youtubeUrl}
           onChange={(e) => setYoutubeUrl && setYoutubeUrl(e.target.value)}
           style={{ fontSize: '0.78rem' }}

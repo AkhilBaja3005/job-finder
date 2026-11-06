@@ -2647,7 +2647,7 @@ function App() {
                       setProfileDropdownOpen(false);
                     }}
                   >
-                    <span>⚙️ Setup & AI Settings</span>
+                    <span>Setup & AI Settings</span>
                   </button>
 
                   <button
@@ -4703,7 +4703,7 @@ function App() {
                         gap: '12px'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '1.4rem' }}>🏆</span>
+                          <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#38BDF8', fontFamily: 'var(--font-mono)' }}>90+</span>
                           <div>
                             <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#34D399' }}>
                               Master Playbook Optimization Complete!
@@ -5061,7 +5061,7 @@ function App() {
                                     color: entry.source_mode === 'extension' ? '#c084fc' : entry.source_mode === 'email' ? '#f472b6' : '#fbbf24',
                                     border: entry.source_mode === 'extension' ? '1px solid rgba(168,85,247,0.3)' : entry.source_mode === 'email' ? '1px solid rgba(236,72,153,0.3)' : '1px solid rgba(245,158,11,0.3)'
                                   }}>
-                                    {entry.source_mode === 'extension' ? '🧩 Extension' : entry.source_mode === 'email' ? '📧 Email' : '💻 Website'}
+                                    {entry.source_mode === 'extension' ? 'Extension' : entry.source_mode === 'email' ? 'Email' : 'Website'}
                                   </span>
                                 </div>
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>{entry.company || 'Unknown Company'}</div>
@@ -5524,8 +5524,11 @@ function App() {
                     }}>
                       {/* Left: Quick Search Bar */}
                       <div style={{ position: 'relative', flex: '1 1 220px', minWidth: '180px', maxWidth: '340px' }}>
-                        <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.8rem', color: '#94a3b8', pointerEvents: 'none' }}>
-                          🔍
+                        <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                          </svg>
                         </span>
                         <input
                           type="text"

@@ -289,9 +289,9 @@ export default function LiveLatexEditor({
             ) : compileError ? (
               'Compilation Error'
             ) : pageCount > 1 ? (
-              `⚠️ ${pageCount} Pages (Exceeds 1-Page Budget)`
+              `${pageCount} Pages (Exceeds 1-Page Budget)`
             ) : (
-              'Ready • 1 Page (Strict Budget ✅)'
+              'Ready • 1 Page (Strict Budget Compliant)'
             )}
           </span>
 
@@ -312,7 +312,7 @@ export default function LiveLatexEditor({
               }}
               title={`Live ATS Breakdown: ${atsSkillsCount || 0} Core Skills Detected, ${atsQuantPercent || 0}% Achievements Quantified`}
             >
-              <span>🎯 ATS: {atsScore}/100</span>
+              <span>ATS: {atsScore}/100</span>
               {atsQuantPercent !== null && (
                 <span style={{ opacity: 0.8, fontWeight: 400, fontSize: '0.68rem', borderLeft: '1px solid rgba(255,255,255,0.15)', paddingLeft: '5px' }}>
                   {atsQuantPercent}% Metrics

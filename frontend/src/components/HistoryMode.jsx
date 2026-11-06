@@ -23,7 +23,7 @@ const SkillsHeatmapWidget = () => {
       borderRadius: '8px'
     }}>
       <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'var(--font-mono)', marginBottom: '8px' }}>
-        📊 ATS Keyword Gap & Skill Heatmap
+        ATS Keyword Gap & Skill Heatmap
       </div>
       {data.top_matched_skills?.length > 0 && (
         <div style={{ marginBottom: '8px' }}>

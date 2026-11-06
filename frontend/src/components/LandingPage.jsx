@@ -188,7 +188,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
               }}
               onClick={onLaunchDemo}
             >
-              ⚡ Try Demo Workspace
+              Try Demo Workspace
             </button>
           )}
 
