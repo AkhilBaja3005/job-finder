@@ -2502,12 +2502,12 @@ function App() {
               </span>
             </div>
           )}
-          {/* Top Bar Navigation Tabs: Overview (Intro), Guide, Docs, App */}
+          {/* Top Bar Navigation: Intro -> Docs & Guide -> App Platform */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#0F1523', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '3px' }}>
             <button
               className="btn btn-secondary"
               style={{
-                padding: '5px 11px',
+                padding: '5px 12px',
                 fontSize: '0.8rem',
                 fontWeight: 600,
                 border: 'none',
@@ -2526,26 +2526,7 @@ function App() {
             <button
               className="btn btn-secondary"
               style={{
-                padding: '5px 11px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                border: 'none',
-                background: dashboardMode === 'guide' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
-                color: dashboardMode === 'guide' ? '#38BDF8' : 'var(--text-muted)',
-                cursor: 'pointer',
-                borderRadius: '6px'
-              }}
-              onClick={() => {
-                setDashboardMode('guide');
-                window.history.pushState(null, '', '/guide');
-              }}
-            >
-              Guide
-            </button>
-            <button
-              className="btn btn-secondary"
-              style={{
-                padding: '5px 11px',
+                padding: '5px 12px',
                 fontSize: '0.8rem',
                 fontWeight: 600,
                 border: 'none',
@@ -2559,16 +2540,16 @@ function App() {
                 window.history.pushState(null, '', '/docs');
               }}
             >
-              Docs
+              Docs & Guide
             </button>
             <button
               className="btn"
               style={{
-                padding: '5px 13px',
+                padding: '5px 14px',
                 fontSize: '0.8rem',
                 fontWeight: 700,
                 borderRadius: '6px',
-                background: (dashboardMode !== 'intro' && dashboardMode !== 'guide' && dashboardMode !== 'docs') ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.08)',
+                background: (dashboardMode !== 'intro' && dashboardMode !== 'docs') ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.08)',
                 color: '#FFFFFF'
               }}
               onClick={() => {
@@ -2701,8 +2682,8 @@ function App() {
               window.history.pushState(null, '', '/');
             }}
             onOpenGuide={() => {
-              setDashboardMode('guide');
-              window.history.pushState(null, '', '/guide');
+              setDashboardMode('docs');
+              window.history.pushState(null, '', '/docs#quickstart');
             }}
             onOpenDocs={() => {
               setDashboardMode('docs');
@@ -2710,25 +2691,12 @@ function App() {
             }}
           />
         </Suspense>
-      ) : dashboardMode === 'guide' ? (
-        <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Setup Guide...</div>}>
-          <DocsGuide
-            user={user}
-            userToken={authToken}
-            initialSection="quickstart"
-            onDownloadExtension={() => handleOneClickExtensionSync(user?.sync_code)}
-            onNavigateMode={(mode) => {
-              setDashboardMode(mode);
-              window.history.pushState(null, '', '/');
-            }}
-          />
-        </Suspense>
-      ) : dashboardMode === 'docs' ? (
+      ) : (dashboardMode === 'docs' || dashboardMode === 'guide') ? (
         <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Documentation & Setup Guide...</div>}>
           <DocsGuide
             user={user}
             userToken={authToken}
-            initialSection="latex-engine"
+            initialSection="quickstart"
             onDownloadExtension={() => handleOneClickExtensionSync(user?.sync_code)}
             onNavigateMode={(mode) => {
               setDashboardMode(mode);
