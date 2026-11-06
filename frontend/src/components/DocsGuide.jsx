@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { APP_VERSION, EXTENSION_VERSION, CREATOR_SIGNATURE } from '../config/constants';
 
-export default function DocsGuide({ user, userToken, onDownloadExtension, onNavigateMode }) {
-  const [activeSection, setActiveSection] = useState('quickstart');
+export default function DocsGuide({ user, userToken, onDownloadExtension, onNavigateMode, initialSection }) {
+  const [activeSection, setActiveSection] = useState(() => initialSection || 'quickstart');
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
 

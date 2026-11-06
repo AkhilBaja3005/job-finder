@@ -8,6 +8,7 @@ const HistoryMode = lazy(() => import('./components/HistoryMode'));
 const SkeletonLoader = lazy(() => import('./components/SkeletonLoader').then(m => ({ default: m.SkeletonLoader })));
 const OutreachModal = lazy(() => import('./components/OutreachModal'));
 const DocsGuide = lazy(() => import('./components/DocsGuide'));
+const LandingPage = lazy(() => import('./components/LandingPage'));
 import LatexCodeViewer from './components/LatexCodeViewer';
 import LiveLatexEditor from './components/LiveLatexEditor';
 import { APP_VERSION, CREATOR_SIGNATURE } from './config/constants';
@@ -175,10 +176,16 @@ function App() {
   const [includeJobserve, setIncludeJobserve] = useState(() => sessionStorage.getItem('include_jobserve') !== 'false'); // true by default
   const [isDiscoveryView, setIsDiscoveryView] = useState(() => sessionStorage.getItem('is_discovery_view') === 'true');
   const [dashboardMode, setDashboardMode] = useState(() => {
-    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/docs')) {
-      return 'docs';
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname.startsWith('/docs')) {
+        return 'docs';
+      }
+      if (window.location.pathname.startsWith('/guide')) {
+        return 'guide';
+      }
     }
-    return sessionStorage.getItem('dashboard_mode') || 'tailor';
+    // Default to 'intro' for guest/unauthenticated visitors, or saved mode
+    return sessionStorage.getItem('dashboard_mode') || 'intro';
   });
   const [searchSortMode, setSearchSortMode] = useState('overall'); // 'overall' | 'role_fit' | 'time'
   const [searchPage, setSearchPage] = useState(1);
@@ -189,11 +196,15 @@ function App() {
   const [applicationHistory, setApplicationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Sync /docs path with dashboardMode
+  // Sync /docs, /guide, and /intro paths with dashboardMode
   useEffect(() => {
     const handleLocation = () => {
       if (window.location.pathname.startsWith('/docs')) {
         setDashboardMode('docs');
+      } else if (window.location.pathname.startsWith('/guide')) {
+        setDashboardMode('guide');
+      } else if (window.location.pathname.startsWith('/intro')) {
+        setDashboardMode('intro');
       }
     };
     handleLocation();
@@ -2491,36 +2502,83 @@ function App() {
               </span>
             </div>
           )}
-          {/* Docs & Setup Guide Button */}
-          <button
-            className="btn btn-secondary"
-            style={{
-              padding: '6px 13px',
-              fontSize: '0.82rem',
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: dashboardMode === 'docs' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255,255,255,0.06)',
-              borderColor: dashboardMode === 'docs' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.15)',
-              color: dashboardMode === 'docs' ? '#38bdf8' : '#e2e8f0',
-              cursor: 'pointer',
-              borderRadius: '8px'
-            }}
-            onClick={() => {
-              if (dashboardMode === 'docs') {
-                setDashboardMode('tailor');
-                window.history.pushState(null, '', '/');
-              } else {
+          {/* Top Bar Navigation Tabs: Overview (Intro), Guide, Docs, App */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#0F1523', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '3px' }}>
+            <button
+              className="btn btn-secondary"
+              style={{
+                padding: '5px 11px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                border: 'none',
+                background: dashboardMode === 'intro' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
+                color: dashboardMode === 'intro' ? '#38BDF8' : 'var(--text-muted)',
+                cursor: 'pointer',
+                borderRadius: '6px'
+              }}
+              onClick={() => {
+                setDashboardMode('intro');
+                window.history.pushState(null, '', '/intro');
+              }}
+            >
+              Intro
+            </button>
+            <button
+              className="btn btn-secondary"
+              style={{
+                padding: '5px 11px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                border: 'none',
+                background: dashboardMode === 'guide' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
+                color: dashboardMode === 'guide' ? '#38BDF8' : 'var(--text-muted)',
+                cursor: 'pointer',
+                borderRadius: '6px'
+              }}
+              onClick={() => {
+                setDashboardMode('guide');
+                window.history.pushState(null, '', '/guide');
+              }}
+            >
+              Guide
+            </button>
+            <button
+              className="btn btn-secondary"
+              style={{
+                padding: '5px 11px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                border: 'none',
+                background: dashboardMode === 'docs' ? 'rgba(37, 99, 235, 0.2)' : 'transparent',
+                color: dashboardMode === 'docs' ? '#38BDF8' : 'var(--text-muted)',
+                cursor: 'pointer',
+                borderRadius: '6px'
+              }}
+              onClick={() => {
                 setDashboardMode('docs');
                 window.history.pushState(null, '', '/docs');
-              }
-            }}
-            title="View Setup Guide & Documentation"
-          >
-            
-            <span>Docs & Guide</span>
-          </button>
+              }}
+            >
+              Docs
+            </button>
+            <button
+              className="btn"
+              style={{
+                padding: '5px 13px',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                borderRadius: '6px',
+                background: (dashboardMode !== 'intro' && dashboardMode !== 'guide' && dashboardMode !== 'docs') ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.08)',
+                color: '#FFFFFF'
+              }}
+              onClick={() => {
+                setDashboardMode('tailor');
+                window.history.pushState(null, '', '/');
+              }}
+            >
+              App Platform
+            </button>
+          </div>
 
           {/* Optimization #2: Keyboard help button */}
           <button
@@ -2635,11 +2693,42 @@ function App() {
         </div>
       </header>
 
-      {dashboardMode === 'docs' ? (
+      {dashboardMode === 'intro' ? (
+        <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Introduction...</div>}>
+          <LandingPage
+            onLaunchApp={() => {
+              setDashboardMode(user ? 'tailor' : 'app');
+              window.history.pushState(null, '', '/');
+            }}
+            onOpenGuide={() => {
+              setDashboardMode('guide');
+              window.history.pushState(null, '', '/guide');
+            }}
+            onOpenDocs={() => {
+              setDashboardMode('docs');
+              window.history.pushState(null, '', '/docs');
+            }}
+          />
+        </Suspense>
+      ) : dashboardMode === 'guide' ? (
+        <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Setup Guide...</div>}>
+          <DocsGuide
+            user={user}
+            userToken={authToken}
+            initialSection="quickstart"
+            onDownloadExtension={() => handleOneClickExtensionSync(user?.sync_code)}
+            onNavigateMode={(mode) => {
+              setDashboardMode(mode);
+              window.history.pushState(null, '', '/');
+            }}
+          />
+        </Suspense>
+      ) : dashboardMode === 'docs' ? (
         <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Documentation & Setup Guide...</div>}>
           <DocsGuide
             user={user}
             userToken={authToken}
+            initialSection="latex-engine"
             onDownloadExtension={() => handleOneClickExtensionSync(user?.sync_code)}
             onNavigateMode={(mode) => {
               setDashboardMode(mode);
