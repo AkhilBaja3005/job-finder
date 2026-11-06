@@ -117,19 +117,33 @@ async def request_otp_endpoint(payload: RequestOtpPayload, background_tasks: Bac
         "attempts": 0
     }
 
-    # Format enterprise verification email
+    # Format clean, corporate light-mode verification email
     subject = f"{otp_code} is your JobFinder verification code"
     text_body = f"Your single-use authentication code is: {otp_code}\n\nThis code will expire in 10 minutes.\nIf you did not request this code, you can safely ignore this email."
     html_body = f"""
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #07090E; color: #F1F5F9; border-radius: 8px; border: 1px solid #1A2234;">
-      <div style="font-size: 14px; font-weight: 700; color: #3B82F6; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 20px;">JobFinder Verification</div>
-      <h2 style="font-size: 20px; font-weight: 700; margin: 0 0 12px; color: #FFFFFF;">Single-Use Security Code</h2>
-      <p style="font-size: 14px; color: #94A3B8; line-height: 1.5; margin: 0 0 24px;">Use the code below to complete your sign-in to JobFinder. This code expires in 10 minutes.</p>
-      <div style="background: #101522; border: 1px solid #26354D; padding: 18px 24px; text-align: center; border-radius: 6px; letter-spacing: 0.25em; font-size: 28px; font-weight: 700; font-family: monospace; color: #38BDF8; margin-bottom: 24px;">
-        {otp_code}
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8">
+      <meta name="color-scheme" content="light">
+      <meta name="supported-color-schemes" content="light">
+      <style>
+        :root {{ color-scheme: light; supported-color-schemes: light; }}
+        body {{ background-color: #F8FAFC !important; color: #0F172A !important; }}
+      </style>
+    </head>
+    <body style="margin: 0; padding: 24px 12px; background-color: #F8FAFC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <div style="max-width: 480px; margin: 0 auto; background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 32px 28px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);">
+        <div style="font-size: 13px; font-weight: 700; color: #2563EB; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px;">JobFinder Verification</div>
+        <h2 style="font-size: 20px; font-weight: 700; color: #0F172A; margin: 0 0 12px; letter-spacing: -0.01em;">Single-Use Security Code</h2>
+        <p style="font-size: 14px; color: #475569; line-height: 1.6; margin: 0 0 24px;">Use the code below to complete your sign-in to JobFinder. This code expires in 10 minutes.</p>
+        <div style="background-color: #F1F5F9; border: 1px solid #CBD5E1; padding: 18px 24px; text-align: center; border-radius: 6px; letter-spacing: 0.28em; font-size: 30px; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #0F172A; margin-bottom: 24px;">
+          {otp_code}
+        </div>
+        <p style="font-size: 12px; color: #64748B; margin: 0; line-height: 1.5;">If you didn't request this code, no action is needed.</p>
       </div>
-      <p style="font-size: 12px; color: #64748B; margin: 0;">If you didn't request this code, no action is needed.</p>
-    </div>
+    </body>
+    </html>
     """
 
     async def _send_otp_bg():
