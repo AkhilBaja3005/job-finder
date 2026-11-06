@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Allow: /docs
+Allow: /platform
+
+Sitemap: https://www.job-finder.space/sitemap.xml

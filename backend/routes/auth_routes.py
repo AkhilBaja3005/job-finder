@@ -94,8 +94,61 @@ class VerifyOtpPayload(BaseModel):
     code: str
 
 
+class ContactQueryPayload(BaseModel):
+    name: Optional[str] = "Anonymous"
+    email: str
+    message: str
+
+
 # In-memory store for OTPs: email -> {"code": "123456", "expires_at": timestamp, "attempts": 0}
 _OTP_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
+@router.post("/contact")
+async def submit_contact_query(payload: ContactQueryPayload, background_tasks: BackgroundTasks):
+    from services.email_service import async_send_notification_email
+    clean_email = payload.email.strip().lower()
+    clean_msg = payload.message.strip()
+    clean_name = (payload.name or "").strip() or "Prospective User"
+
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail="A valid email address is required.")
+    if not clean_msg:
+        raise HTTPException(status_code=400, detail="Message cannot be empty.")
+
+    target_email = "akhilbaja.work@gmail.com"
+    subject = f"[JobFinder Inquiry] New query from {clean_name}"
+    text_body = f"Sender Name: {clean_name}\nSender Email: {clean_email}\n\nMessage:\n{clean_msg}"
+    html_body = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head><meta charset="utf-8"></head>
+    <body style="font-family: -apple-system, sans-serif; background: #f8fafc; padding: 24px; color: #0f172a;">
+      <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px;">
+        <div style="font-size: 13px; font-weight: 700; color: #2563eb; text-transform: uppercase; margin-bottom: 12px;">JobFinder User Inquiry</div>
+        <h3 style="margin: 0 0 16px; color: #0f172a;">New Message from {clean_name}</h3>
+        <div style="background: #f1f5f9; padding: 12px; border-radius: 6px; font-size: 14px; margin-bottom: 16px;">
+          <strong>Email:</strong> <a href="mailto:{clean_email}" style="color: #2563eb;">{clean_email}</a>
+        </div>
+        <div style="font-size: 14px; line-height: 1.6; color: #334155; white-space: pre-wrap; background: #fafafa; border: 1px solid #e2e8f0; padding: 16px; border-radius: 6px;">{clean_msg}</div>
+      </div>
+    </body>
+    </html>
+    """
+
+    async def _send_inquiry_bg():
+        try:
+            await async_send_notification_email(
+                to_email=target_email,
+                subject=subject,
+                text_body=text_body,
+                html_body=html_body
+            )
+        except Exception as e:
+            print(f"[Contact] Error dispatching inquiry: {e}")
+
+    background_tasks.add_task(_send_inquiry_bg)
+    return {"status": "success", "message": "Inquiry submitted successfully. We will follow up shortly."}
 
 
 @router.post("/auth/request-otp")

@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives import hashes
 STORAGE_SALT = os.getenv("STORAGE_ENCRYPTION_SALT", "job-finder-zero-knowledge-v1-salt").encode("utf-8")
 
 
-def derive_user_key(user_token_or_id: Optional[str]) -> bytes:
+def derive_user_key(user_token_or_id: Union[str, bytes, None]) -> bytes:
     """
     Derives a deterministic 256-bit AES-GCM key scoped specifically to the user's
     authentication token / user_id.
@@ -17,7 +17,15 @@ def derive_user_key(user_token_or_id: Optional[str]) -> bytes:
     Zero-knowledge guarantee: Without the user's active session token, raw files
     stored on Hugging Face persistent volumes (/data) cannot be decrypted.
     """
-    raw_id = (user_token_or_id or "guest-unscoped").strip().encode("utf-8")
+    if isinstance(user_token_or_id, bytes):
+        if len(user_token_or_id) == 32:
+            return user_token_or_id
+        raw_id = user_token_or_id
+    elif isinstance(user_token_or_id, str):
+        raw_id = user_token_or_id.strip().encode("utf-8")
+    else:
+        raw_id = b"guest-unscoped"
+
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
@@ -89,3 +97,75 @@ def read_encrypted_file(file_path: str, user_token_or_id: Optional[str]) -> byte
             return f.read()
 
     raise FileNotFoundError(f"Neither {enc_path} nor {file_path} exists.")
+
+
+def compile_encrypted_latex(
+    latex_code: str,
+    output_dir: str,
+    base_filename: str,
+    user_token_or_id: Optional[str]
+) -> tuple:
+    """
+    Compiles LaTeX in an ephemeral temporary directory in RAM/tmp, encrypts both
+    the final .tex and .pdf using AES-256-GCM, saves them to output_dir with .enc extensions,
+    and returns (pdf_bytes, page_count).
+
+    Zero-knowledge guarantee: Plaintext .tex and .pdf files are immediately unlinked
+    from disk after compilation, leaving ONLY encrypted ciphertext in persistent storage.
+    """
+    import tempfile
+    import shutil
+    import subprocess
+    from pypdf import PdfReader
+    from services.session_store import _ensure_resume_cls
+
+    with tempfile.TemporaryDirectory(prefix="tectonic_ephemeral_") as tmp_dir:
+        _ensure_resume_cls(tmp_dir)
+        temp_tex = os.path.join(tmp_dir, f"{base_filename}.tex")
+        with open(temp_tex, "w", encoding="utf-8") as f:
+            f.write(latex_code)
+
+        result = subprocess.run(
+            ["tectonic", temp_tex, "--outdir", tmp_dir],
+            cwd=tmp_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if result.returncode != 0:
+            err_msg = result.stderr.strip() if result.stderr else (result.stdout.strip() if result.stdout else "Compilation failed")
+            raise RuntimeError(f"LaTeX compilation failed: {err_msg}")
+
+        temp_pdf = os.path.join(tmp_dir, f"{base_filename}.pdf")
+        if not os.path.exists(temp_pdf):
+            raise FileNotFoundError("Compiled PDF was not produced by tectonic.")
+
+        page_count = 1
+        try:
+            reader = PdfReader(temp_pdf)
+            page_count = len(reader.pages)
+        except Exception:
+            pass
+
+        with open(temp_pdf, "rb") as f:
+            pdf_bytes = f.read()
+
+        # Save ONLY encrypted artifacts to persistent storage
+        target_tex_enc = os.path.join(output_dir, f"{base_filename}.tex.enc")
+        target_pdf_enc = os.path.join(output_dir, f"{base_filename}.pdf.enc")
+
+        write_encrypted_file(target_tex_enc, latex_code.encode("utf-8"), user_token_or_id)
+        write_encrypted_file(target_pdf_enc, pdf_bytes, user_token_or_id)
+
+        # Remove any lingering unencrypted files in persistent output_dir if they existed
+        unenc_tex = os.path.join(output_dir, f"{base_filename}.tex")
+        unenc_pdf = os.path.join(output_dir, f"{base_filename}.pdf")
+        if os.path.exists(unenc_tex):
+            try: os.remove(unenc_tex)
+            except Exception: pass
+        if os.path.exists(unenc_pdf):
+            try: os.remove(unenc_pdf)
+            except Exception: pass
+
+        return pdf_bytes, page_count
+

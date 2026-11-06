@@ -9,6 +9,7 @@ const SkeletonLoader = lazy(() => import('./components/SkeletonLoader').then(m =
 const OutreachModal = lazy(() => import('./components/OutreachModal'));
 const DocsGuide = lazy(() => import('./components/DocsGuide'));
 const LandingPage = lazy(() => import('./components/LandingPage'));
+const ContactPage = lazy(() => import('./components/ContactPage'));
 import LatexCodeViewer from './components/LatexCodeViewer';
 import LiveLatexEditor from './components/LiveLatexEditor';
 import { APP_VERSION, CREATOR_SIGNATURE } from './config/constants';
@@ -178,6 +179,9 @@ function App() {
   const [dashboardMode, setDashboardMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
+      if (path.startsWith('/contact') || path.startsWith('/support')) {
+        return 'contact';
+      }
       if (path.startsWith('/docs') || path.startsWith('/guide')) {
         return 'docs';
       }
@@ -207,10 +211,12 @@ function App() {
   useEffect(() => {
     const handleLocation = () => {
       const path = window.location.pathname;
-      if (path.startsWith('/docs') || path.startsWith('/guide')) {
+      if (path.startsWith('/contact') || path.startsWith('/support')) {
+        setDashboardMode('contact');
+      } else if (path.startsWith('/docs') || path.startsWith('/guide')) {
         setDashboardMode('docs');
       } else if (path.startsWith('/platform')) {
-        setDashboardMode(prev => (prev === 'intro' || prev === 'docs') ? 'tailor' : prev);
+        setDashboardMode(prev => (prev === 'intro' || prev === 'docs' || prev === 'contact') ? 'tailor' : prev);
       } else if (path === '/' || path.startsWith('/intro')) {
         setDashboardMode('intro');
       }
@@ -2557,7 +2563,7 @@ function App() {
                 fontSize: '0.8rem',
                 fontWeight: 700,
                 borderRadius: '6px',
-                background: (dashboardMode !== 'intro' && dashboardMode !== 'docs') ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.08)',
+                background: (dashboardMode !== 'intro' && dashboardMode !== 'docs' && dashboardMode !== 'contact') ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.08)',
                 color: '#FFFFFF'
               }}
               onClick={() => {
@@ -2714,6 +2720,22 @@ function App() {
             onNavigateMode={(mode) => {
               setDashboardMode(mode);
               window.history.pushState(null, '', '/platform');
+            }}
+          />
+        </Suspense>
+      ) : dashboardMode === 'contact' ? (
+        <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Support & Inquiries...</div>}>
+          <ContactPage
+            onNavigate={(mode) => {
+              if (mode === 'intro') {
+                setDashboardMode('intro');
+                window.history.pushState(null, '', '/');
+              } else if (mode === 'platform') {
+                setDashboardMode('tailor');
+                window.history.pushState(null, '', '/platform');
+              } else {
+                setDashboardMode(mode);
+              }
             }}
           />
         </Suspense>

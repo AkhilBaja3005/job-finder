@@ -29,7 +29,7 @@ from services.resume_parser import parse_resume, sanitize_resume_summary
 from utils.latex_utils import generate_latex_from_json, apply_latex_hotfix, compile_and_check_page_metrics, parse_latex_to_resume_dict
 from services.overleaf import upload_zip_to_tmpfiles
 from services.ats_scorer import evaluate_master_resume
-from services.storage_encryption import write_encrypted_file, read_encrypted_file
+from services.storage_encryption import write_encrypted_file, read_encrypted_file, compile_encrypted_latex
 
 router = APIRouter(tags=["Resume Management"])
 
@@ -328,18 +328,29 @@ async def download_application_pdf(filepath: str):
     candidate_paths = [
         os.path.abspath(os.path.join(OUTPUT_DIR, clean_rel)),
         os.path.abspath(os.path.join(OUTPUT_DIR, os.path.basename(clean_rel))),
+        os.path.abspath(os.path.join(OUTPUT_DIR, f"{clean_rel}.enc")),
+        os.path.abspath(os.path.join(OUTPUT_DIR, f"{os.path.basename(clean_rel)}.enc")),
     ]
 
+    user_token_or_id = None
     if len(parts) >= 2:
         user_key = parts[0]
+        user_token_or_id = user_key
         filename = os.path.join(*parts[1:])
         candidate_paths.append(os.path.abspath(os.path.join(USER_DATA_DIR, user_key, "output", filename)))
         candidate_paths.append(os.path.abspath(os.path.join(USER_DATA_DIR, user_key, "output", os.path.basename(filename))))
+        candidate_paths.append(os.path.abspath(os.path.join(USER_DATA_DIR, user_key, "output", f"{filename}.enc")))
+        candidate_paths.append(os.path.abspath(os.path.join(USER_DATA_DIR, user_key, "output", f"{os.path.basename(filename)}.enc")))
     elif len(parts) == 1 and os.path.exists(USER_DATA_DIR):
         filename = parts[0]
         for root, _, files in os.walk(USER_DATA_DIR):
-            if filename in files:
-                candidate_paths.append(os.path.abspath(os.path.join(root, filename)))
+            if filename in files or f"{filename}.enc" in files:
+                target_f = filename if filename in files else f"{filename}.enc"
+                candidate_paths.append(os.path.abspath(os.path.join(root, target_f)))
+                # Extract user_id from path if possible
+                rel = os.path.relpath(root, USER_DATA_DIR).split(os.sep)
+                if rel:
+                    user_token_or_id = rel[0]
                 break
 
     pdf_path = None
@@ -349,29 +360,21 @@ async def download_application_pdf(filepath: str):
             break
 
     if not pdf_path:
-        # Fallback: Attempt to fetch from Hugging Face storage bucket if available
-        hf_tok = os.getenv("HF_TOKEN")
-        if hf_tok and len(parts) >= 2:
-            try:
-                from huggingface_hub import HfFileSystem  # type: ignore
-                hfs = HfFileSystem(token=hf_tok)
-                user_key = parts[0]
-                filename = os.path.join(*parts[1:])
-                remote_hf_path = f"buckets/abaja/job-finder-storage/user_data/{user_key}/output/{os.path.basename(filename)}"
-                if hfs.exists(remote_hf_path):
-                    cached_dir = os.path.join(USER_DATA_DIR, user_key, "output")
-                    os.makedirs(cached_dir, exist_ok=True)
-                    cached_file = os.path.join(cached_dir, os.path.basename(filename))
-                    hfs.get_file(remote_hf_path, cached_file)
-                    if os.path.exists(cached_file):
-                        pdf_path = cached_file
-            except Exception as hf_err:
-                print(f"[Resume Route] Warning: Hugging Face bucket fallback error: {hf_err}")
-
-    if not pdf_path:
         raise HTTPException(status_code=404, detail="PDF file not found")
 
-    filename = os.path.basename(pdf_path)
+    filename = os.path.basename(pdf_path).replace(".enc", "")
+    if pdf_path.endswith(".enc"):
+        try:
+            decrypted_bytes = read_encrypted_file(pdf_path, user_token_or_id)
+            return Response(
+                content=decrypted_bytes,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f"inline; filename={filename}"}
+            )
+        except Exception as dec_err:
+            print(f"[download_application_pdf] Decryption error: {dec_err}")
+            raise HTTPException(status_code=403, detail="Unable to decrypt PDF with session authorization.")
+
     return FileResponse(
         pdf_path,
         media_type="application/pdf",
@@ -393,41 +396,25 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
     token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
     try:
         user_up_dir, user_out_dir = _get_user_storage_dirs(token or "guest")
-        tex_path, pdf_path = _user_output_paths(token)
         fixed_code = apply_latex_hotfix(request.latex_code)
-        with open(tex_path, "w", encoding="utf-8") as f:
-            f.write(fixed_code)
-
-        _ensure_resume_cls(user_out_dir)
-        _ensure_resume_cls(OUTPUT_DIR)
+        key = _safe_key(token)
+        base_filename = f"tailored_resume_{key}"
 
         try:
-            result = await asyncio.to_thread(
-                subprocess.run,
-                ["tectonic", tex_path, "--outdir", user_out_dir],
-                cwd=user_out_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+            pdf_bytes, page_count = await asyncio.to_thread(
+                compile_encrypted_latex,
+                fixed_code,
+                user_out_dir,
+                base_filename,
+                token
             )
+        except RuntimeError as comp_err:
+            raise HTTPException(status_code=400, detail=str(comp_err))
         except FileNotFoundError:
             raise HTTPException(
                 status_code=503,
                 detail="Tectonic XeLaTeX engine is not installed on this system. Please install tectonic to compile LaTeX resumes."
             )
-
-        if result.returncode != 0:
-            err_msg = result.stderr.strip() if result.stderr else (result.stdout.strip() if result.stdout else "Compilation failed")
-            print(f"[compile_latex] Tectonic error (exit code {result.returncode}): {err_msg}")
-            raise HTTPException(status_code=400, detail=f"LaTeX compilation failed: {err_msg}")
-
-        page_count = 1
-        try:
-            from pypdf import PdfReader
-            reader = PdfReader(pdf_path)
-            page_count = len(reader.pages)
-        except Exception:
-            pass
 
         # Fast deterministic ATS evaluation for Live Preview HUD
         ats_score = 85
@@ -442,8 +429,8 @@ async def compile_latex(request: CompileLatexRequest, authorization: Optional[st
         except Exception as eval_err:
             print(f"[compile_latex] Live ATS evaluation error: {eval_err}")
 
-        return FileResponse(
-            pdf_path,
+        return Response(
+            content=pdf_bytes,
             media_type="application/pdf",
             headers={
                 "Content-Disposition": "inline; filename=resume.pdf",
@@ -530,24 +517,17 @@ async def compile_master_pdf(request: OriginalOverleafRequest, authorization: Op
                     break
 
         final_latex = apply_latex_hotfix(latex_code, opt_scale, opt_ls, None)
-        tex_path = os.path.join(user_out_dir, "master_resume.tex")
-        pdf_path = os.path.join(user_out_dir, "master_resume.pdf")
-        with open(tex_path, "w", encoding="utf-8") as f:
-            f.write(final_latex)
 
-        _ensure_resume_cls(user_out_dir)
-        _ensure_resume_cls(OUTPUT_DIR)
-
-        comp_res = await asyncio.to_thread(
-            subprocess.run,
-            ["tectonic", tex_path, "--outdir", user_out_dir],
-            cwd=user_out_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        if comp_res.returncode != 0:
-            raise HTTPException(status_code=400, detail=f"Tectonic compilation failed: {comp_res.stderr}")
+        try:
+            pdf_bytes, page_count = await asyncio.to_thread(
+                compile_encrypted_latex,
+                final_latex,
+                user_out_dir,
+                "master_resume",
+                token or safe_name
+            )
+        except RuntimeError as comp_err:
+            raise HTTPException(status_code=400, detail=str(comp_err))
 
         download_url = f"/download_application_pdf/{safe_name}/master_resume.pdf"
         return {"status": "success", "pdf_url": download_url, "latex": final_latex}

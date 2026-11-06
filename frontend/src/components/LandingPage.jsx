@@ -12,6 +12,44 @@ import { APP_VERSION, EXTENSION_VERSION } from '../config/constants';
 export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedDemoTab, setSelectedDemoTab] = useState('matching');
+  const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactMessage, setContactMessage] = useState('');
+  const [contactLoading, setContactLoading] = useState(false);
+  const [contactStatus, setContactStatus] = useState({ type: '', text: '' });
+
+  const handleContactSubmit = async (e) => {
+    e.preventDefault();
+    if (!contactEmail || !contactMessage) return;
+    setContactLoading(true);
+    setContactStatus({ type: '', text: '' });
+
+    try {
+      const res = await fetch('/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: contactName,
+          email: contactEmail,
+          message: contactMessage
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to submit inquiry.');
+      }
+
+      setContactStatus({ type: 'success', text: 'Thank you! Your query has been delivered to akhilbaja.work@gmail.com. We will respond shortly.' });
+      setContactName('');
+      setContactEmail('');
+      setContactMessage('');
+    } catch (err) {
+      setContactStatus({ type: 'error', text: err.message || 'Error sending message. Please try emailing directly.' });
+    } finally {
+      setContactLoading(false);
+    }
+  };
 
   const pillars = [
     {
@@ -475,43 +513,41 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
         </div>
       </section>
 
-      {/* Navigation Footer CTA */}
+      {/* Contact & Developer Feedback Section */}
       <section style={{
-        background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(15, 23, 42, 0.8) 100%)',
-        border: '1px solid rgba(37, 99, 235, 0.3)',
+        background: 'var(--panel-bg)',
+        border: '1px solid var(--border-color)',
         borderRadius: '14px',
-        padding: '36px 30px',
+        padding: '32px 28px',
+        marginBottom: '40px',
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: '24px'
+        gap: '20px'
       }}>
-        <div style={{ maxWidth: '600px' }}>
-          <h3 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#FFFFFF', margin: '0 0 6px' }}>
-            Ready to explore opportunities or optimize your resume?
-          </h3>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.5, margin: 0 }}>
-            Sign in with single-use email OTP or Google to sync your profile and access all modules.
+        <div style={{ maxWidth: '620px' }}>
+          <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#38BDF8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
+            Support & Inquiries
+          </div>
+          <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#FFFFFF', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+            Contact & Developer Feedback
+          </h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.6, margin: 0 }}>
+            Have questions about official UK sponsor database updates, ATS compatibility scoring, or custom integrations? Connect directly with our engineering and support team.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <button
-            className="btn"
-            style={{ padding: '10px 22px', fontSize: '0.9rem', fontWeight: 700, borderRadius: '8px' }}
-            onClick={onLaunchApp}
-          >
-            Get Started →
-          </button>
-          <button
-            className="btn btn-secondary"
-            style={{ padding: '10px 18px', fontSize: '0.9rem', fontWeight: 600, borderRadius: '8px' }}
-            onClick={onOpenDocs}
-          >
-            Read Docs & Guide
-          </button>
-        </div>
+        <button
+          onClick={() => {
+            window.history.pushState(null, '', '/contact');
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }}
+          className="btn"
+          style={{ padding: '12px 24px', fontSize: '0.9rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+        >
+          Open Contact Page →
+        </button>
       </section>
 
       {/* Institutional Enterprise Footer */}
@@ -547,6 +583,15 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
             style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.78rem' }}
           >
             Documentation
+          </button>
+          <button
+            onClick={() => {
+              window.history.pushState(null, '', '/contact');
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }}
+            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.78rem' }}
+          >
+            Contact & Support
           </button>
           <button
             onClick={onLaunchApp}
