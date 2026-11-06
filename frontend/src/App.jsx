@@ -177,15 +177,19 @@ function App() {
   const [isDiscoveryView, setIsDiscoveryView] = useState(() => sessionStorage.getItem('is_discovery_view') === 'true');
   const [dashboardMode, setDashboardMode] = useState(() => {
     if (typeof window !== 'undefined') {
-      if (window.location.pathname.startsWith('/docs')) {
+      const path = window.location.pathname;
+      if (path.startsWith('/docs') || path.startsWith('/guide')) {
         return 'docs';
       }
-      if (window.location.pathname.startsWith('/guide')) {
-        return 'guide';
+      if (path.startsWith('/platform')) {
+        return sessionStorage.getItem('dashboard_mode') || 'tailor';
+      }
+      // Root / or /intro always defaults to 'intro'
+      if (path === '/' || path.startsWith('/intro')) {
+        return 'intro';
       }
     }
-    // Default to 'intro' for guest/unauthenticated visitors, or saved mode
-    return sessionStorage.getItem('dashboard_mode') || 'intro';
+    return 'intro';
   });
   const [searchSortMode, setSearchSortMode] = useState('overall'); // 'overall' | 'role_fit' | 'time'
   const [searchPage, setSearchPage] = useState(1);
@@ -196,14 +200,18 @@ function App() {
   const [applicationHistory, setApplicationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Sync /docs, /guide, and /intro paths with dashboardMode
+  // Sync route changes with dashboardMode:
+  // - '/' or '/intro' => 'intro'
+  // - '/platform' => 'tailor' (or user active mode)
+  // - '/docs' => 'docs'
   useEffect(() => {
     const handleLocation = () => {
-      if (window.location.pathname.startsWith('/docs')) {
+      const path = window.location.pathname;
+      if (path.startsWith('/docs') || path.startsWith('/guide')) {
         setDashboardMode('docs');
-      } else if (window.location.pathname.startsWith('/guide')) {
-        setDashboardMode('guide');
-      } else if (window.location.pathname.startsWith('/intro')) {
+      } else if (path.startsWith('/platform')) {
+        setDashboardMode(prev => (prev === 'intro' || prev === 'docs') ? 'tailor' : prev);
+      } else if (path === '/' || path.startsWith('/intro')) {
         setDashboardMode('intro');
       }
     };
@@ -2518,7 +2526,7 @@ function App() {
               }}
               onClick={() => {
                 setDashboardMode('intro');
-                window.history.pushState(null, '', '/intro');
+                window.history.pushState(null, '', '/');
               }}
             >
               Intro
@@ -2554,7 +2562,7 @@ function App() {
               }}
               onClick={() => {
                 setDashboardMode('tailor');
-                window.history.pushState(null, '', '/');
+                window.history.pushState(null, '', '/platform');
               }}
             >
               Platform
@@ -2679,7 +2687,7 @@ function App() {
           <LandingPage
             onLaunchApp={() => {
               setDashboardMode(user ? 'tailor' : 'app');
-              window.history.pushState(null, '', '/');
+              window.history.pushState(null, '', '/platform');
             }}
             onOpenDocs={() => {
               setDashboardMode('docs');
@@ -2696,7 +2704,7 @@ function App() {
             onDownloadExtension={() => handleOneClickExtensionSync(user?.sync_code)}
             onNavigateMode={(mode) => {
               setDashboardMode(mode);
-              window.history.pushState(null, '', '/');
+              window.history.pushState(null, '', '/platform');
             }}
           />
         </Suspense>
