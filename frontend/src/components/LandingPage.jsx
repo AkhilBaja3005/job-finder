@@ -9,7 +9,7 @@ import { APP_VERSION, EXTENSION_VERSION } from '../config/constants';
  *  3. System Capabilities (Discovery, Scoring, Tailoring, Autofill, UK Sponsors)
  *  4. Quick Navigation Actions (Launch App, Setup Guide, Full Docs)
  */
-export default function LandingPage({ onLaunchApp, onOpenGuide, onOpenDocs }) {
+export default function LandingPage({ onLaunchApp, onOpenDocs }) {
   const [activeTab, setActiveTab] = useState('overview');
 
   const pillars = [
@@ -156,7 +156,7 @@ export default function LandingPage({ onLaunchApp, onOpenGuide, onOpenDocs }) {
           <button
             className="btn"
             style={{
-              padding: '12px 26px',
+              padding: '12px 28px',
               fontSize: '0.94rem',
               fontWeight: 700,
               display: 'flex',
@@ -176,27 +176,14 @@ export default function LandingPage({ onLaunchApp, onOpenGuide, onOpenDocs }) {
           <button
             className="btn btn-secondary"
             style={{
-              padding: '12px 22px',
-              fontSize: '0.94rem',
-              fontWeight: 600,
-              borderRadius: '8px'
-            }}
-            onClick={onOpenGuide}
-          >
-            Setup Guide (3 Mins)
-          </button>
-
-          <button
-            className="btn btn-secondary"
-            style={{
-              padding: '12px 22px',
+              padding: '12px 24px',
               fontSize: '0.94rem',
               fontWeight: 600,
               borderRadius: '8px'
             }}
             onClick={onOpenDocs}
           >
-            Technical Documentation
+            Docs & Setup Guide
           </button>
         </div>
       </section>

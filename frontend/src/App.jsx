@@ -2502,7 +2502,7 @@ function App() {
               </span>
             </div>
           )}
-          {/* Top Bar Navigation: Intro -> Docs & Guide -> App Platform */}
+          {/* Top Bar Navigation: Intro -> Docs & Guide -> Platform */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#0F1523', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '3px' }}>
             <button
               className="btn btn-secondary"
@@ -2557,7 +2557,7 @@ function App() {
                 window.history.pushState(null, '', '/');
               }}
             >
-              App Platform
+              Platform
             </button>
           </div>
 
@@ -2680,10 +2680,6 @@ function App() {
             onLaunchApp={() => {
               setDashboardMode(user ? 'tailor' : 'app');
               window.history.pushState(null, '', '/');
-            }}
-            onOpenGuide={() => {
-              setDashboardMode('docs');
-              window.history.pushState(null, '', '/docs#quickstart');
             }}
             onOpenDocs={() => {
               setDashboardMode('docs');
