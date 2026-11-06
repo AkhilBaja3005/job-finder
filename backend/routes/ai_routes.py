@@ -246,7 +246,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 cached["latex_code"] = ""
             if request.skip_tailoring or cached.get("latex_code"):
                 async def cached_event_generator():
-                    yield json.dumps({"type": "log", "message": "⚡ Loaded analysis from local cache!"}) + "\n"
+                    yield json.dumps({"type": "log", "message": "Loaded analysis from local cache!"}) + "\n"
                     company_name = await asyncio.to_thread(_extract_company_from_jd, request.job_description or "", request.job_url)
                     yield json.dumps({
                         "type": "result",
@@ -270,7 +270,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             jd_text = request.job_description
             job_title = request.job_title
             if request.job_url and not jd_text:
-                yield json.dumps({"type": "log", "percent": 15, "message": "🤖 Launching browser to scrape job link..."}) + "\n"
+                yield json.dumps({"type": "log", "percent": 15, "message": "Launching browser to scrape job link..."}) + "\n"
                 t0 = time.time()
                 scraped = await scrape_job_description(request.job_url)
                 jd_text = scraped["description"]
@@ -278,7 +278,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
                 _bot_block_phrases = ["cloudflare security verification", "anti-bot challenge", "verify you are human"]
                 if scraped.get("is_bot_blocked") or any(p in jd_text.lower() for p in _bot_block_phrases):
-                    yield json.dumps({"type": "log", "percent": 100, "message": "⚠️ Security challenge detected on job page."}) + "\n"
+                    yield json.dumps({"type": "log", "percent": 100, "message": "Security challenge detected on job page."}) + "\n"
                     yield json.dumps({
                         "type": "error",
                         "message": "The job posting URL returned an anti-bot challenge page. Please paste the raw job description text directly."
@@ -290,10 +290,10 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     request.company = scraped_company
 
                 ctx.log_step("scrape_job", time.time() - t0)
-                yield json.dumps({"type": "log", "percent": 20, "message": f"✅ Scraped job details for: {job_title} at {scraped_company or 'Company'}"}) + "\n"
+                yield json.dumps({"type": "log", "percent": 20, "message": f"Scraped job details for: {job_title} at {scraped_company or 'Company'}"}) + "\n"
                 yield json.dumps({"type": "scraped_data", "job_title": job_title, "job_description": jd_text, "company": scraped_company}) + "\n"
 
-            yield json.dumps({"type": "log", "percent": 40, "message": "🤖 Calculating ATS fit score & career-ops analysis..."}) + "\n"
+            yield json.dumps({"type": "log", "percent": 40, "message": "Calculating ATS fit score & career-ops analysis..."}) + "\n"
 
             user_selected_skills = getattr(request, 'user_selected_skills', None)
             master_latex = None
@@ -345,7 +345,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             for event in _drain_remaining_logs():
                 yield event
 
-            yield json.dumps({"type": "log", "percent": 75, "message": "✍️ Generated tailored resume content and cover letter."}) + "\n"
+            yield json.dumps({"type": "log", "percent": 75, "message": "Generated tailored resume content and cover letter."}) + "\n"
 
             if request.skip_tailoring:
                 dumped = analysis.model_dump()
@@ -363,7 +363,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 return
 
             # ── Senior Recruiter Review Agent (Structural Integrity + ATS Quality + Truthfulness) ──
-            yield json.dumps({"type": "log", "percent": 80, "message": "🔍 Senior Recruiter Agent reviewing tailored resume for truthfulness and ATS quality..."}) + "\n"
+            yield json.dumps({"type": "log", "percent": 80, "message": "Senior Recruiter Agent reviewing tailored resume for truthfulness and ATS quality..."}) + "\n"
             raw_tailored_latex = analysis.latex_code
             recruiter_scrutiny_report = None
             try:
@@ -387,7 +387,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     "pass_number": 1
                 }
                 if not review_res.satisfied:
-                    yield json.dumps({"type": "log", "percent": 82, "message": f"✍️ Recruiter Agent requested refinements: {review_res.feedback[:90]}..."}) + "\n"
+                    yield json.dumps({"type": "log", "percent": 82, "message": f"Recruiter Agent requested refinements: {review_res.feedback[:90]}..."}) + "\n"
                     print(f"[analyze_job] Recruiter agent flagged issues: {review_res.feedback}. Running refinement pass...")
                     raw_tailored_latex = await asyncio.to_thread(
                         tailor_resume,
@@ -404,7 +404,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     )
 
                     # ── Post-Refinement Scrutiny Check ──────────────────────────────
-                    yield json.dumps({"type": "log", "percent": 84, "message": "🔍 Senior Recruiter Agent performing secondary scrutiny on refined resume..."}) + "\n"
+                    yield json.dumps({"type": "log", "percent": 84, "message": "Senior Recruiter Agent performing secondary scrutiny on refined resume..."}) + "\n"
                     second_review = await asyncio.to_thread(
                         review_tailored_resume,
                         raw_tailored_latex,
@@ -425,17 +425,17 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         "pass_number": 2
                     }
                     if second_review.satisfied:
-                        yield json.dumps({"type": "log", "percent": 85, "message": "✅ Recruiter Agent approved refined resume after scrutiny."}) + "\n"
+                        yield json.dumps({"type": "log", "percent": 85, "message": "Recruiter Agent approved refined resume after scrutiny."}) + "\n"
                         print("[analyze_job] Recruiter agent approved refined resume on secondary scrutiny.")
                     else:
                         yield json.dumps({"type": "log", "percent": 85, "message": f"ℹ️ Recruiter scrutiny noted minor points ({second_review.feedback[:80]}...); proceeding to compile."}) + "\n"
                         print(f"[analyze_job] Recruiter secondary scrutiny feedback: {second_review.feedback}")
                 else:
-                    yield json.dumps({"type": "log", "percent": 83, "message": "✅ Recruiter Agent approved resume quality & truthfulness on first pass."}) + "\n"
+                    yield json.dumps({"type": "log", "percent": 83, "message": "Recruiter Agent approved resume quality & truthfulness on first pass."}) + "\n"
             except Exception as rev_err:
                 print(f"[analyze_job] Recruiter review check warning: {rev_err}")
 
-            yield json.dumps({"type": "log", "percent": 85, "message": "⚙️ Compiling tailored LaTeX resume to PDF..."}) + "\n"
+            yield json.dumps({"type": "log", "percent": 85, "message": "Compiling tailored LaTeX resume to PDF..."}) + "\n"
             t0 = time.time()
 
             safe_key = _safe_key(token)
@@ -521,12 +521,12 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 dest_email = session_resume_data["email"]
 
             if should_send_email and dest_email and os.path.exists(temp_pdf_path):
-                yield json.dumps({"type": "log", "percent": 95, "message": f"📧 Dispatching tailored resume PDF to {dest_email}..."}) + "\n"
+                yield json.dumps({"type": "log", "percent": 95, "message": f"Dispatching tailored resume PDF to {dest_email}..."}) + "\n"
                 from services.email_service import async_send_notification_email
                 cand_name = session_resume_data.get("name", "").strip() or "Candidate" if isinstance(session_resume_data, dict) else "Candidate"
                 ats_score = dumped.get("match_analysis", {}).get("overall_score") or 85
                 ats_display = f"{ats_score}% Match"
-                email_subj = f"📄 [Resume Delivery] Tailored Resume [{ats_display}]: {job_title} at {extracted_company}"
+                email_subj = f"[Resume Delivery] Tailored Resume [{ats_display}]: {job_title} at {extracted_company}"
                 email_text = (
                     f"On-Demand Resume Delivery: Tailored Resume PDF\n"
                     f"For your application at {extracted_company}\n\n"
@@ -910,8 +910,8 @@ async def answer_question(request: AnswerQuestionRequest, authorization: Optiona
         session_resume_data = session.get("data", {})
 
     q_clean = request.question.strip()
-    print(f"\n[AI Screen Solver] ❓ Extracted Question: \"{q_clean}\"")
-    print(f"[AI Screen Solver] 🏢 Company: {request.company_name or 'N/A'} | Role: {request.job_title or 'N/A'}")
+    print(f"\n[AI Screen Solver] Extracted Question: \"{q_clean}\"")
+    print(f"[AI Screen Solver] Company: {request.company_name or 'N/A'} | Role: {request.job_title or 'N/A'}")
 
     q_lower = q_clean.lower()
     custom_notice = session_resume_data.get("notice_period") or session_resume_data.get("noticePeriod")
@@ -919,15 +919,15 @@ async def answer_question(request: AnswerQuestionRequest, authorization: Optiona
 
     if "notice" in q_lower or "how soon" in q_lower or "start date" in q_lower:
         ans = custom_notice or "Available immediately (2 weeks notice)."
-        print(f"[AI Screen Solver] 💡 Deterministic Answer: {ans}\n")
+        print(f"[AI Screen Solver] Deterministic Answer: {ans}\n")
         return {"status": "success", "answer": ans}
     if "hear about" in q_lower or "source" in q_lower or "referred" in q_lower:
         ans = "LinkedIn"
-        print(f"[AI Screen Solver] 💡 Deterministic Answer: {ans}\n")
+        print(f"[AI Screen Solver] Deterministic Answer: {ans}\n")
         return {"status": "success", "answer": ans}
     if "salary" in q_lower or "compensation" in q_lower or "expectation" in q_lower:
         ans = custom_salary or "Competitive market rate / Open to discuss based on role scope."
-        print(f"[AI Screen Solver] 💡 Deterministic Answer: {ans}\n")
+        print(f"[AI Screen Solver] Deterministic Answer: {ans}\n")
         return {"status": "success", "answer": ans}
 
     skills_list = session_resume_data.get("skills", [])
@@ -973,7 +973,7 @@ CRITICAL INSTRUCTIONS:
             model_tier="lite"
         )
         final_ans = answer_text.strip().strip('"')
-        print(f"[AI Screen Solver] 💡 LLM Generated Answer:\n{final_ans}\n")
+        print(f"[AI Screen Solver] LLM Generated Answer:\n{final_ans}\n")
         return {"status": "success", "answer": final_ans}
     except Exception as e:
         print(f"[answer_question] LLM generation error: {e}")
@@ -984,7 +984,7 @@ CRITICAL INSTRUCTIONS:
             final_ans = f"I am drawn to {company}'s vision of transforming collaborative meeting workflows with intuitive, AI-native tools. Having built high-throughput GenAI systems and fast retrieval pipelines at scale, I am excited to contribute directly to engineering robust, low-latency AI features for your users."
         else:
             final_ans = f"With experience building production AI systems and scalable infrastructure, I look forward to contributing directly to {request.company_name or 'the team'}."
-        print(f"[AI Screen Solver] 💡 Fallback Generated Answer:\n{final_ans}\n")
+        print(f"[AI Screen Solver] Fallback Generated Answer:\n{final_ans}\n")
         return {"status": "success", "answer": final_ans}
 
 

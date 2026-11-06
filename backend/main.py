@@ -58,6 +58,14 @@ async def lifespan(app: FastAPI):
     # Startup: Ensure directory structure and baseline assets
     _sync_fallback_resume_cls()
 
+    # Automatically audit & migrate existing legacy files on persistent volumes (Hugging Face / local) to AES-256-GCM
+    try:
+        from services.storage_encryption import migrate_storage_directory_to_encrypted
+        user_data_path = os.path.join(BASE_DIR, "user_data")
+        await asyncio.to_thread(migrate_storage_directory_to_encrypted, user_data_path)
+    except Exception as enc_mig_err:
+        print(f"ℹ️ Storage encryption auto-migration notice: {enc_mig_err}")
+
     # Ensure UK sponsor database is initialized/synced in background without blocking startup
     async def _auto_sync_sponsors():
         try:

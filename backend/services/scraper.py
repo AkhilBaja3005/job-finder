@@ -44,7 +44,7 @@ async def ensure_shared_browser_alive():
     except Exception:
         pass
 
-    print("[Scraper] 🔄 Shared browser disconnected/dead. Auto-recovering...")
+    print("[Scraper] Shared browser disconnected/dead. Auto-recovering...")
     await close_shared_browser()
     await init_shared_browser()
     return _shared_browser
@@ -66,13 +66,13 @@ async def init_shared_browser():
                 "--no-zygote",
             ]
         )
-        print("[Scraper] ⚡ Shared Playwright browser ready")
+        print("[Scraper] Shared Playwright browser ready")
         try:
             pool = asyncio.Queue()
             for _ in range(CONTEXT_POOL_SIZE):
                 pool.put_nowait(await _create_stealth_context(_shared_browser))
             _context_pool = pool
-            print(f"[Scraper] ⚡ Pre-warmed {CONTEXT_POOL_SIZE} browser contexts")
+            print(f"[Scraper] Pre-warmed {CONTEXT_POOL_SIZE} browser contexts")
         except Exception as pool_err:
             print(f"[Scraper] Context pool warm-up failed: {pool_err}")
             _context_pool = None
@@ -236,7 +236,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
             title = cached_res.get("title", "").strip()
             if len(desc) >= 150 and desc != title:
                 if on_log:
-                    on_log(f"[Scraper] ⚡ Instantly retrieved from persistent JD cache: {url[:60]}")
+                    on_log(f"[Scraper] Instantly retrieved from persistent JD cache: {url[:60]}")
                 return cached_res
     except Exception as _ce:
         pass
@@ -262,7 +262,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                         if parsed_text and len(parsed_text) > 50:
                             # pyrefly: ignore [missing-import]
                             from services.log_queue import log_ist
-                            log_ist(f"[Scraper] ⚡ Instantly fetched Reed JD via Official Details API for Job ID: {job_id}")
+                            log_ist(f"[Scraper] Instantly fetched Reed JD via Official Details API for Job ID: {job_id}")
                             return {
                                 "title": data.get("jobTitle", "Job Posting"),
                                 "description": parsed_text,
@@ -581,7 +581,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                                 company = company_elem.get_text().strip() if company_elem else ""
 
                                 if jd_text and len(jd_text) > 100:
-                                    log_ist(f"[Scraper] ⚡ Instantly fetched LinkedIn JD via guest API for Job ID: {job_id}")
+                                    log_ist(f"[Scraper] Instantly fetched LinkedIn JD via guest API for Job ID: {job_id}")
                                     return {
                                         "title": title,
                                         "description": jd_text,
@@ -641,7 +641,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                                     distilled = oc_distill_html(html_desc, url)
                                     parsed_text = distilled["description"] or BeautifulSoup(html_desc, "html.parser").get_text(separator="\n").strip()
                                     if len(parsed_text) > 50:
-                                        log_ist(f"[Scraper] ⚡ Instantly distilled Indeed JD via oc-engine for JK: {jk}")
+                                        log_ist(f"[Scraper] Instantly distilled Indeed JD via oc-engine for JK: {jk}")
                                         return {
                                             "title": "Indeed Job",
                                             "description": parsed_text,
@@ -684,7 +684,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                                 error_titles = {"error processing your request", "just a moment", "access denied", "attention required"}
                                 title = raw_title if raw_title.lower() not in error_titles else "Indeed Job"
                                 company = cmp_anchor.get_text().strip() if cmp_anchor else "Indeed Employer"
-                                log_ist(f"[Scraper] ⚡ Instantly fetched Indeed JD via direct HTML for JK: {jk}")
+                                log_ist(f"[Scraper] Instantly fetched Indeed JD via direct HTML for JK: {jk}")
                                 return {
                                     "title": title,
                                     "description": jd_text,
@@ -1047,7 +1047,7 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
                     try:
                         new_ctx = await _create_stealth_context(_shared_browser)
                         _context_pool.put_nowait(new_ctx)
-                        print("[Scraper] 🧹 Memory cleanup: Recycled Chromium browser context after 25 operations")
+                        print("[Scraper] Memory cleanup: Recycled Chromium browser context after 25 operations")
                     except Exception: pass
 
         if own_browser is not None:
