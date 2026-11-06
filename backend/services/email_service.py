@@ -48,11 +48,11 @@ def send_notification_email(
                     }
                     # Brevo works reliably without custom domain if sender is omitted or verified
                     from_addr = os.getenv("EMAIL_FROM")
-                    sender_dict = {"name": "AI Job Finder"}
+                    sender_dict = {"name": "JobFinder Security"}
                     if from_addr:
                         sender_dict["email"] = from_addr
                     else:
-                        sender_dict["email"] = os.getenv("SMTP_USER", "akhilkumarbaja@gmail.com")
+                        sender_dict["email"] = "auth@job-finder.space"
 
                     payload = {
                         "sender": sender_dict,
