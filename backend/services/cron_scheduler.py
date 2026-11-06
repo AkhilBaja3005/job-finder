@@ -230,9 +230,10 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
     target_email = "akhilkumarbaja@gmail.com" if _is_local_deployment() else email
     sent = await async_send_notification_email(
         to_email=target_email,
-        subject=f"📬 Daily Job Matches Digest: {len(top_jobs)} new roles found" if top_jobs else "📬 Daily Job Matches Digest",
+        subject=f"Daily Job Matches Digest: {len(top_jobs)} new roles found" if top_jobs else "Daily Job Matches Digest",
         text_body=text_digest,
-        html_body=html_digest
+        html_body=html_digest,
+        sender_name="AI Job Finder"
     )
 
     if sent and user_id and not str(user_id).startswith("guest_"):

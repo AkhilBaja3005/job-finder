@@ -15,13 +15,18 @@ def send_notification_email(
     text_body: str,
     html_body: Optional[str] = None,
     attachment_path: Optional[str] = None,
-    attachment_name: Optional[str] = None
+    attachment_name: Optional[str] = None,
+    sender_name: Optional[str] = None,
+    reply_to: Optional[str] = None
 ) -> bool:
     """
-    Sends an email to the recipient.
-    Tries Cloudflare Email Sending REST API first.
-    If credentials are not verified or fail, it automatically falls back to Gmail SMTP.
+    Sends an email to the recipient with purpose-based sender branding.
+    - Security / OTP: sender_name="JobFinder Security"
+    - Contact Inquiries: sender_name="JobFinder Enquiry" (with reply_to set to sender)
+    - Daily Cadence Digest: sender_name="AI Job Finder"
     """
+    effective_sender_name = (sender_name or "AI Job Finder").strip()
+
     # Smart Routing:
     # 1. Brevo allows sending 300 emails/day to ANY recipient email (perfect for all users!)
     # 2. Resend delivers in <2s for the account owner email (akhilkumarbaja@gmail.com)
@@ -46,13 +51,11 @@ def send_notification_email(
                         "Content-Type": "application/json",
                         "User-Agent": "JobFinderApp/1.0"
                     }
-                    # Brevo works reliably without custom domain if sender is omitted or verified
-                    from_addr = os.getenv("EMAIL_FROM")
-                    sender_dict = {"name": "JobFinder Security"}
-                    if from_addr:
-                        sender_dict["email"] = from_addr
-                    else:
-                        sender_dict["email"] = "auth@job-finder.space"
+                    from_addr = os.getenv("EMAIL_FROM") or "noreply@job-finder.space"
+                    sender_dict = {
+                        "name": effective_sender_name,
+                        "email": from_addr
+                    }
 
                     payload = {
                         "sender": sender_dict,
@@ -60,6 +63,8 @@ def send_notification_email(
                         "subject": subject,
                         "textContent": text_body
                     }
+                    if reply_to:
+                        payload["replyTo"] = {"email": reply_to}
                     if html_body:
                         payload["htmlContent"] = html_body
                     
@@ -72,7 +77,7 @@ def send_notification_email(
 
                     resp = requests.post(url, headers=headers, json=payload, timeout=15)
                     if resp.status_code in (200, 201):
-                        print(f"[Mailer] Sent successfully to {to_email} via Brevo REST API.")
+                        print(f"[Mailer] Sent successfully to {to_email} via Brevo REST API ({effective_sender_name}).")
                         return True
                     print(f"[Mailer] Brevo API failed with status {resp.status_code}: {resp.text}. Trying next fallback...")
                 except Exception as e:
@@ -90,9 +95,9 @@ def send_notification_email(
                     }
                     from_env = os.getenv("EMAIL_FROM", "")
                     if from_env and "@gmail.com" not in from_env.lower():
-                        from_addr = from_env
+                        from_addr = f"{effective_sender_name} <{from_env}>"
                     else:
-                        from_addr = "onboarding@resend.dev"
+                        from_addr = f"{effective_sender_name} <noreply@job-finder.space>"
 
                     payload: Dict[str, Any] = {
                         "from": from_addr,
@@ -100,6 +105,8 @@ def send_notification_email(
                         "subject": subject,
                         "text": text_body
                     }
+                    if reply_to:
+                        payload["reply_to"] = reply_to
                     if html_body:
                         payload["html"] = html_body
 
@@ -111,7 +118,7 @@ def send_notification_email(
                         payload["attachments"] = [{"filename": att_name, "content": encoded_b64}]
                     resp = requests.post(url, headers=headers, json=payload, timeout=15)
                     if resp.status_code in (200, 201):
-                        print(f"[Mailer] Sent successfully to {to_email} via Resend REST API.")
+                        print(f"[Mailer] Sent successfully to {to_email} via Resend REST API ({effective_sender_name}).")
                         return True
                     print(f"[Mailer] Resend API failed with status {resp.status_code}: {resp.text}. Trying next fallback...")
                 except Exception as e:
@@ -130,11 +137,14 @@ def send_notification_email(
             payload = {
                 "to": to_email,
                 "subject": subject,
-                "body": html_body or text_body
+                "body": html_body or text_body,
+                "name": effective_sender_name
             }
+            if reply_to:
+                payload["reply"] = reply_to
             resp = requests.post(url, headers=headers, json=payload, timeout=15)
             if resp.status_code in (200, 201, 202):
-                print("[Mailer] Sent successfully via Plunk Open-Source API (Backup 2).")
+                print(f"[Mailer] Sent successfully via Plunk Open-Source API ({effective_sender_name}).")
                 return True
             print(f"[Mailer] Plunk API failed with status {resp.status_code}: {resp.text}")
         except Exception as e:
@@ -153,7 +163,7 @@ def send_notification_email(
                 "Content-Type": "application/json"
             }
             payload = {
-                "from": {"address": cf_from, "name": "Job Finder Digest"},
+                "from": {"address": cf_from, "name": effective_sender_name},
                 "to": to_email,
                 "subject": subject,
                 "text": text_body
@@ -162,13 +172,13 @@ def send_notification_email(
                 payload["html"] = html_body
             resp = requests.post(url, headers=headers, json=payload, timeout=15)
             if resp.status_code == 200:
-                print("[Mailer] Sent successfully via Cloudflare Email API.")
+                print(f"[Mailer] Sent successfully via Cloudflare Email API ({effective_sender_name}).")
                 return True
             print(f"[Mailer] Cloudflare API failed with status {resp.status_code}: {resp.text}")
         except Exception as e:
             print(f"[Mailer] Cloudflare API exception: {e}")
 
-    # 4. Standard SMTP Fallback (Gmail App Password)
+    # 5. Standard SMTP Fallback (Gmail App Password)
     smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER")
@@ -182,8 +192,10 @@ def send_notification_email(
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = email_from or smtp_user or ""
+        msg["From"] = f"{effective_sender_name} <{email_from or smtp_user}>"
         msg["To"] = to_email
+        if reply_to:
+            msg["Reply-To"] = reply_to
 
         msg.attach(MIMEText(text_body, "plain"))
         if html_body:
@@ -229,6 +241,8 @@ async def async_send_notification_email(
     html_body: Optional[str] = None,
     attachment_path: Optional[str] = None,
     attachment_name: Optional[str] = None,
+    sender_name: Optional[str] = None,
+    reply_to: Optional[str] = None,
 ) -> bool:
     """
     Non-blocking wrapper around send_notification_email.
@@ -237,7 +251,7 @@ async def async_send_notification_email(
     """
     return await asyncio.to_thread(
         send_notification_email,
-        to_email, subject, text_body, html_body, attachment_path, attachment_name
+        to_email, subject, text_body, html_body, attachment_path, attachment_name, sender_name, reply_to
     )
 
 def build_digest_email_html(candidate_name: str, jobs: list, base_url: str, user_email: str) -> str:

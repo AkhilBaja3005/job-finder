@@ -142,7 +142,9 @@ async def submit_contact_query(payload: ContactQueryPayload, background_tasks: B
                 to_email=target_email,
                 subject=subject,
                 text_body=text_body,
-                html_body=html_body
+                html_body=html_body,
+                sender_name="JobFinder Enquiry",
+                reply_to=clean_email
             )
         except Exception as e:
             print(f"[Contact] Error dispatching inquiry: {e}")
@@ -205,7 +207,8 @@ async def request_otp_endpoint(payload: RequestOtpPayload, background_tasks: Bac
                 to_email=clean_email,
                 subject=subject,
                 text_body=text_body,
-                html_body=html_body
+                html_body=html_body,
+                sender_name="JobFinder Security"
             )
         except Exception as e:
             print(f"[Auth] Error dispatching OTP email to {clean_email}: {e}")
