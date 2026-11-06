@@ -23,20 +23,52 @@
 
   <!-- Structured Data (JSON-LD) for Google Search Rich Results -->
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": "JobFinder",
-    "url": "https://www.job-finder.space/",
-    "applicationCategory": "BusinessApplication",
-    "operatingSystem": "All",
-    "description": "Enterprise career operations platform for tech job search aggregation, deterministic ATS compatibility scoring, official UK visa sponsorship checks, and publication-grade LaTeX tailoring.",
-    "creator": {
-      "@type": "Person",
-      "name": "Akhil Baja",
-      "url": "https://github.com/AkhilBaja3005"
+  [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "JobFinder",
+      "url": "https://www.job-finder.space/",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "All",
+      "description": "Enterprise career operations platform for tech job search aggregation, deterministic ATS compatibility scoring, official UK visa sponsorship checks, and publication-grade LaTeX tailoring.",
+      "creator": {
+        "@type": "Person",
+        "name": "Akhil Baja",
+        "url": "https://github.com/AkhilBaja3005"
+      }
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How does JobFinder verify UK Tier 2 and Skilled Worker visa sponsorship?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "JobFinder synchronizes directly with the official UK Home Office Register of Licensed Sponsors daily, indexing over 140,000 confirmed organizations to immediately flag whether an employer holds an active sponsorship license."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does deterministic ATS scoring and XeLaTeX tailoring work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "JobFinder scans the target job description against your verified Master Resume competencies, calculating an objective keyword overlap and skills taxonomy score without hallucinating unverified experience, compiling a strict 1-page publication-grade PDF via Tectonic XeLaTeX."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is my resume data private and encrypted?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. JobFinder implements zero-knowledge user-scoped storage encryption using AES-256-GCM. Cryptographic keys are derived on-the-fly from the user session token so raw resumes and generated PDFs cannot be decrypted by storage host maintainers."
+          }
+        }
+      ]
     }
-  }
+  ]
   </script>
 
   <!-- Open Graph / Facebook / LinkedIn -->

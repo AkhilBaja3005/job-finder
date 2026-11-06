@@ -146,6 +146,20 @@
         document.querySelector("a[href*='linkedin.com/company/']") ||
         document.querySelector("a[href*='/company/']")
       )?.innerText?.trim() || "";
+
+      // Extract LinkedIn employee headcount if present in DOM
+      const employeeEl = (
+        document.querySelector("a[aria-label='Search more employees']") ||
+        document.querySelector("a[href*='search/results/people/?currentCompany']") ||
+        document.querySelector(".job-details-jobs-unified-top-card__job-insight") ||
+        Array.from(document.querySelectorAll("li, span, a")).find(el => /^[0-9.]+\s*[kKmM]?\s*(?:-|–|to)\s*[0-9.]+\s*[kKmM]?\s+employees/i.test(el.innerText?.trim()))
+      );
+      if (employeeEl && employeeEl.innerText) {
+        const empMatch = employeeEl.innerText.match(/([0-9.]+\s*[kKmM]?\s*(?:-|–|to)\s*[0-9.]+\s*[kKmM]?\s+employees|[0-9.]+\s*[kKmM]?\+?\s+employees)/i);
+        if (empMatch) {
+          window.__job_finder_company_size = empMatch[1].trim();
+        }
+      }
     } else if (url.includes("indeed.com")) {
       title = (
         document.querySelector(".jobsearch-JobInfoHeader-title") ||
@@ -247,7 +261,9 @@
       if (brandMatch) company = brandMatch[1];
     }
 
-    return { title, company, description, url, pageSource: description };
+    const company_size = window.__job_finder_company_size || undefined;
+
+    return { title, company, description, url, pageSource: description, company_size };
   }
 
   // ── Native Form Value Setters (Framework Safe: React 18/19, Vue, Svelte) ───

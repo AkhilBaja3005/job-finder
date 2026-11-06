@@ -148,7 +148,7 @@ async def submit_contact_query(payload: ContactQueryPayload, background_tasks: B
             print(f"[Contact] Error dispatching inquiry: {e}")
 
     background_tasks.add_task(_send_inquiry_bg)
-    return {"status": "success", "message": "Inquiry submitted successfully. We will follow up shortly."}
+    return {"status": "success", "success": True, "message": "Inquiry submitted successfully. We will follow up shortly."}
 
 
 @router.post("/auth/request-otp")
