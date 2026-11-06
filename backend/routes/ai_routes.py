@@ -577,6 +577,9 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 except Exception as e:
                     print(f"[analyze_job] Email send error: {e}")
 
+            from services.job_searcher import _extract_company_size
+            extracted_company_size = _extract_company_size(jd_text or "")
+            dumped["company_size"] = extracted_company_size
             dumped["email_sent"] = email_sent
             dumped["dest_email"] = dest_email
 
@@ -606,6 +609,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 "job_title": job_title or "",
                 "job_description": jd_text or "",
                 "company": extracted_company,
+                "company_size": extracted_company_size,
                 "analysis": dumped,
                 "overleaf_url": overleaf_url,
                 "download_pdf_url": pdf_download_url,

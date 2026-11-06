@@ -1138,8 +1138,164 @@ def _title_heuristic_score(job: JobSearchResult, resume_data: dict) -> int:
     return 70 + (matched_count * 8) - (tier_gap * 10)
 
 
-def _extract_salary_and_seniority(text: str, title: str) -> Dict[str, Optional[str]]:
-    """Extracts salary estimate and seniority classification from title and description text."""
+def _scrape_linkedin_company_headcount(company_name: str) -> Optional[str]:
+    """
+    Directly scrapes official company headcount scale from LinkedIn company pages
+    (e.g. /company/<slug>/posts/ or /company/<slug>/) using:
+    1. 'Company size' <dd> text (e.g. '1,001-5,000 employees', '51-200 employees')
+    2. Employee link / aria-label (e.g. 'Search more employees' -> '1K-5K employees')
+    3. 'View all X employees' counter normalized to standard brackets
+    """
+    if not company_name or len(company_name.strip()) < 2:
+        return None
+    import re
+    import urllib.request
+
+    clean = re.sub(r'[^a-zA-Z0-9\s\-]', '', company_name).strip()
+    slug_candidates = [
+        clean.lower().replace(' ', '-'),
+        clean.lower().replace(' ', ''),
+    ]
+    # Remove generic legal/jurisdiction suffixes for clean slug matching
+    no_suffix = re.sub(r'\b(ltd|limited|plc|inc|group|corporation|bank|uk)\b', '', clean, flags=re.I).strip()
+    if no_suffix and no_suffix.lower() != clean.lower():
+        slug_candidates.append(no_suffix.lower().replace(' ', '-'))
+        slug_candidates.append(no_suffix.lower().replace(' ', ''))
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9'
+    }
+
+    seen_slugs = set()
+    for slug in slug_candidates:
+        if not slug or slug in seen_slugs:
+            continue
+        seen_slugs.add(slug)
+        for path in [f'/company/{slug}/posts/', f'/company/{slug}/']:
+            url = f'https://www.linkedin.com{path}'
+            try:
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=3.5) as resp:
+                    if resp.status == 200:
+                        html = resp.read().decode('utf-8', errors='ignore')
+
+                        # 1. Look for <dd class="..."> 1,001-5,000 employees </dd> after Company size
+                        m1 = re.search(r'Company size\s*</dt>\s*<dd[^>]*>(.*?)</dd>', html, re.S | re.I)
+                        if m1:
+                            raw_val = re.sub(r'<[^>]+>', ' ', m1.group(1))
+                            raw_val = re.sub(r'\s+', ' ', raw_val).strip()
+                            if 'employees' in raw_val.lower() or any(c.isdigit() for c in raw_val):
+                                return raw_val
+
+                        # 2. Look for employee link / aria-label: e.g. <a aria-label="Search more employees">1K-5K employees</a>
+                        m_aria = re.search(r'<a[^>]*aria-label=[\'"][^\'"]*employees[^\'"]*[\'"][^>]*>(.*?)</a>', html, re.S | re.I)
+                        if m_aria:
+                            raw_val = re.sub(r'<[^>]+>', '', m_aria.group(1)).strip()
+                            if raw_val and ('employees' in raw_val.lower() or any(c.isdigit() for c in raw_val)):
+                                return raw_val
+
+                        # 3. View all X employees
+                        m_view = re.search(r'View all\s+([\d,]+)\s+employees', html, re.I)
+                        if m_view:
+                            count = int(m_view.group(1).replace(',', ''))
+                            if count <= 10: return '1-10 employees'
+                            if count <= 50: return '11-50 employees'
+                            if count <= 200: return '51-200 employees'
+                            if count <= 500: return '201-500 employees'
+                            if count <= 1000: return '501-1,000 employees'
+                            if count <= 5000: return '1,001-5,000 employees'
+                            if count <= 10000: return '5,001-10,000 employees'
+                            return '10,000+ employees'
+            except Exception:
+                pass
+    return None
+
+
+def _resolve_company_headcount_db(company_name: str) -> Optional[str]:
+    """Retrieves cached company headcount or scrapes live from LinkedIn and caches in SQLite."""
+    if not company_name or len(company_name.strip()) < 2:
+        return None
+    import sqlite3
+    import time
+    norm = company_name.strip().lower()
+    db_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "company_meta.db")
+    try:
+        os.makedirs(os.path.dirname(db_file), exist_ok=True)
+        conn = sqlite3.connect(db_file)
+        c = conn.cursor()
+        c.execute("CREATE TABLE IF NOT EXISTS company_scale (norm_company TEXT PRIMARY KEY, company_size TEXT, updated_at REAL);")
+        c.execute("SELECT company_size FROM company_scale WHERE norm_company = ?", (norm,))
+        row = c.fetchone()
+        if row and row[0]:
+            conn.close()
+            return row[0]
+        
+        # Scrape directly from LinkedIn company page (no LLM hallucination)
+        scraped_size = _scrape_linkedin_company_headcount(company_name)
+        if scraped_size:
+            c.execute("INSERT OR REPLACE INTO company_scale VALUES (?, ?, ?)", (norm, scraped_size, time.time()))
+            conn.commit()
+            conn.close()
+            return scraped_size
+
+        conn.close()
+    except Exception:
+        pass
+    return None
+
+
+def _extract_company_size(text: str, company_name: Optional[str] = None) -> Optional[str]:
+    """
+    Extracts standardized headcount or team scale dynamically from job text,
+    page criteria, or automated live company headcount resolution.
+    """
+    # 1. Direct standard bracket (e.g. '1,001-5,000 employees', '51-200 employees')
+    if text:
+        m1 = re.search(r'(\b\d{1,3}(?:,\d{3})*\s*(?:-|–|to)\s*\d{1,3}(?:,\d{3})*\+?\s+(?:employees|people|staff|team members)\b)', text, re.IGNORECASE)
+        if m1:
+            return m1.group(1).strip()
+
+        # 2. Open-ended scale (e.g. '10,000+ employees', '500+ staff')
+        m2 = re.search(r'(\b(?:10,000\+|5,000\+|1,000\+|500\+|200\+|100\+|50\+)\s+(?:employees|people|staff|team members)\b)', text, re.IGNORECASE)
+        if m2:
+            return m2.group(1).strip()
+
+        # 3. Labelled company size (e.g. 'Company size: 50-100')
+        m3 = re.search(r'(?:company size|team size|company headcount|organization size)[\s:]*([0-9,]+(?:\s*-\s*[0-9,]+)?(?:\+)?(?:\s*employees)?)', text, re.IGNORECASE)
+        if m3:
+            cand = m3.group(1).strip()
+            if not cand.lower().endswith("employees"):
+                cand = f"{cand} employees"
+            return cand
+
+        # 4. Contextual headcount sentences (e.g. "We are a team of 45 engineers", "growing company of 250 people")
+        m4 = re.search(r'\b(?:team|company|organization)\s+of\s+([0-9,]+)\+?\s+(?:people|employees|engineers|staff)\b', text, re.IGNORECASE)
+        if m4:
+            try:
+                num = int(m4.group(1).replace(",", ""))
+                if num <= 10: return "1-10 employees"
+                if num <= 50: return "11-50 employees"
+                if num <= 200: return "51-200 employees"
+                if num <= 500: return "201-500 employees"
+                if num <= 1000: return "501-1,000 employees"
+                if num <= 5000: return "1,001-5,000 employees"
+                return "5,000+ employees"
+            except Exception:
+                pass
+
+    # 5. Live resolution for hiring company name
+    if company_name and len(company_name.strip()) >= 2 and company_name.lower() not in ["hiring company", "target role", "confidential"]:
+        db_size = _resolve_company_headcount_db(company_name)
+        if db_size:
+            return db_size
+
+    return None
+
+
+def _extract_salary_and_seniority(text: str, title: str, company: Optional[str] = None) -> Dict[str, Optional[str]]:
+    """Extracts salary estimate, seniority classification, and company size from title and description text."""
     seniority = None
     title_lower = (title or "").lower()
     for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
@@ -1167,7 +1323,9 @@ def _extract_salary_and_seniority(text: str, title: str) -> Dict[str, Optional[s
             if len(cand) >= 3 and any(char.isdigit() for char in cand):
                 salary = cand
 
-    return {"seniority": seniority, "salary": salary}
+    company_size = _extract_company_size(text, company)
+
+    return {"seniority": seniority, "salary": salary, "company_size": company_size}
 
 
 async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, browser, semaphore: asyncio.Semaphore, on_log=None) -> Optional[dict]:
@@ -1242,7 +1400,7 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
         except Exception as e:
             print(f"[Job Searcher] Failed to extract recruiter info for '{job.title}': {e}")
 
-    meta_info = _extract_salary_and_seniority(jd_text, job.title)
+    meta_info = _extract_salary_and_seniority(jd_text, job.title, job.company)
 
     # Attach UK visa sponsorship status and advice notice
     sponsor_info = None
@@ -1274,6 +1432,7 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
         "raw_text": raw_text,
         "seniority": meta_info.get("seniority"),
         "salary": meta_info.get("salary"),
+        "company_size": meta_info.get("company_size"),
         "sponsor_info": sponsor_info,
         "is_uk_sponsor": bool(sponsor_info.get("is_sponsor")) if sponsor_info else None,
     }
@@ -1329,7 +1488,7 @@ def _score_job_with_title_heuristic(job: JobSearchResult, resume_data: dict) -> 
 
     overall_score = int(0.40 * skills_score + 0.35 * experience_score + 0.25 * role_fit_score)
 
-    meta_info = _extract_salary_and_seniority(getattr(job, "full_description", "") or "", job.title)
+    meta_info = _extract_salary_and_seniority(getattr(job, "full_description", "") or "", job.title, job.company)
 
     # Attach UK visa sponsorship status and advice notice
     sponsor_info = None
@@ -1358,6 +1517,7 @@ def _score_job_with_title_heuristic(job: JobSearchResult, resume_data: dict) -> 
         "description": getattr(job, "full_description", None) or f"Role: {job.title} at {job.company} ({job.location}). Direct listing from {job.platform}. Open link to view complete requirements.",
         "seniority": meta_info.get("seniority"),
         "salary": meta_info.get("salary"),
+        "company_size": meta_info.get("company_size"),
         "sponsor_info": sponsor_info,
         "is_uk_sponsor": bool(sponsor_info.get("is_sponsor")) if sponsor_info else None,
     }

@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
 
+const API_BASE = import.meta.env?.VITE_API_BASE
+  || import.meta.env?.VITE_BACKEND_URL
+  || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://127.0.0.1:8000'
+    : window.location.origin);
+
 export default function ContactPage({ onNavigate }) {
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -14,7 +20,7 @@ export default function ContactPage({ onNavigate }) {
     setContactStatus({ type: '', text: '' });
 
     try {
-      const res = await fetch('/contact', {
+      const res = await fetch(`${API_BASE}/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -25,7 +31,7 @@ export default function ContactPage({ onNavigate }) {
       });
 
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok && (data.success || data.status === 'success')) {
         setContactStatus({
           type: 'success',
           text: 'Inquiry dispatched successfully. Our team will review your query and respond shortly.',
@@ -36,7 +42,7 @@ export default function ContactPage({ onNavigate }) {
       } else {
         setContactStatus({
           type: 'error',
-          text: data.detail || 'Failed to submit inquiry. Please email akhilbaja.work@gmail.com directly.',
+          text: data.detail || data.message || 'Failed to submit inquiry. Please email akhilbaja.work@gmail.com directly.',
         });
       }
     } catch (err) {

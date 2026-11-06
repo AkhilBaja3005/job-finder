@@ -1,6 +1,6 @@
 import os
 import hashlib
-from typing import Optional, Union
+from typing import Optional, Union, Dict
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
@@ -99,6 +99,10 @@ def read_encrypted_file(file_path: str, user_token_or_id: Optional[str]) -> byte
     raise FileNotFoundError(f"Neither {enc_path} nor {file_path} exists.")
 
 
+# Ephemeral in-memory compile cache: sha256(latex_code + str(user_token_or_id)) -> (pdf_bytes, page_count)
+_COMPILE_MEM_CACHE: Dict[str, tuple] = {}
+
+
 def compile_encrypted_latex(
     latex_code: str,
     output_dir: str,
@@ -110,14 +114,20 @@ def compile_encrypted_latex(
     the final .tex and .pdf using AES-256-GCM, saves them to output_dir with .enc extensions,
     and returns (pdf_bytes, page_count).
 
+    Leverages an ephemeral in-memory SHA-256 cache for repeat compiles (<10ms return).
     Zero-knowledge guarantee: Plaintext .tex and .pdf files are immediately unlinked
     from disk after compilation, leaving ONLY encrypted ciphertext in persistent storage.
     """
     import tempfile
     import shutil
     import subprocess
+    import hashlib
     from pypdf import PdfReader
     from services.session_store import _ensure_resume_cls
+
+    cache_key = hashlib.sha256((latex_code + str(user_token_or_id or "")).encode("utf-8")).hexdigest()
+    if cache_key in _COMPILE_MEM_CACHE:
+        return _COMPILE_MEM_CACHE[cache_key]
 
     with tempfile.TemporaryDirectory(prefix="tectonic_ephemeral_") as tmp_dir:
         _ensure_resume_cls(tmp_dir)
@@ -166,6 +176,11 @@ def compile_encrypted_latex(
         if os.path.exists(unenc_pdf):
             try: os.remove(unenc_pdf)
             except Exception: pass
+
+        # Cache up to 100 recent compiles in RAM
+        if len(_COMPILE_MEM_CACHE) > 100:
+            _COMPILE_MEM_CACHE.pop(next(iter(_COMPILE_MEM_CACHE)))
+        _COMPILE_MEM_CACHE[cache_key] = (pdf_bytes, page_count)
 
         return pdf_bytes, page_count
 

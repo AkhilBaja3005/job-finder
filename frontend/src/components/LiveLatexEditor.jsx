@@ -38,12 +38,15 @@ export default function LiveLatexEditor({
   const debounceTimerRef = useRef(null);
   const currentBlobUrlRef = useRef(null);
 
-  // Sync initialCode if changed externally
+  // Autosave draft to localStorage
   useEffect(() => {
-    if (initialCode && initialCode !== code) {
-      setCode(initialCode);
+    if (code && code.trim()) {
+      try {
+        const draftKey = `latex_draft_${(jobTitle || 'default').replace(/\s+/g, '_')}`;
+        localStorage.setItem(draftKey, code);
+      } catch (e) {}
     }
-  }, [initialCode]);
+  }, [code, jobTitle]);
 
   // Clean up object URLs on unmount
   useEffect(() => {

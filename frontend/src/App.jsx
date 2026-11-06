@@ -200,6 +200,8 @@ function App() {
   const [discoverySearchQuery, setDiscoverySearchQuery] = useState('');
   const [discoveryQuickFilter, setDiscoveryQuickFilter] = useState('all'); // 'all' | 'unapplied' | 'applied' | 'saved'
   const [sponsorFilter, setSponsorFilter] = useState('all'); // 'all' | 'sponsored' | 'not_sponsored'
+  const [companySizeFilter, setCompanySizeFilter] = useState('all'); // 'all' | 'startup' | 'growth' | 'enterprise'
+  const [minSalaryFilter, setMinSalaryFilter] = useState(0); // numeric annual minimum in k (£/$)
 
   const [applicationHistory, setApplicationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1542,6 +1544,67 @@ function App() {
       filtered = filtered.filter((j) => j.is_uk_sponsor === false);
     }
 
+    // 1e. Company Size filter (all, startup, growth, enterprise)
+    if (companySizeFilter !== 'all') {
+      filtered = filtered.filter((j) => {
+        const raw = (j.company_size || '').toLowerCase().replace(/,/g, '');
+        if (!raw) return false; // strictly match when filtered
+
+        const parseNum = (s) => {
+          if (!s) return 0;
+          const str = String(s).trim().toLowerCase();
+          if (str.includes('k')) return Math.round(parseFloat(str.replace(/[^0-9.]/g, '')) * 1000);
+          if (str.includes('m')) return Math.round(parseFloat(str.replace(/[^0-9.]/g, '')) * 1000000);
+          return parseInt(str.replace(/[^0-9]/g, ''), 10) || 0;
+        };
+
+        let low = 0, high = 0;
+        const rangeMatch = raw.match(/([0-9.]+[km]?)\s*(?:-|–|to)\s*([0-9.]+[km]?)/);
+        if (rangeMatch) {
+          low = parseNum(rangeMatch[1]);
+          high = parseNum(rangeMatch[2]);
+        } else {
+          const plusMatch = raw.match(/([0-9.]+[km]?)\+/);
+          if (plusMatch) {
+            low = parseNum(plusMatch[1]);
+            high = 1000000;
+          } else {
+            const singleMatch = raw.match(/([0-9.]+[km]?)/);
+            if (singleMatch) {
+              low = parseNum(singleMatch[1]);
+              high = low;
+            }
+          }
+        }
+
+        if (companySizeFilter === 'startup') {
+          // Startup: 1-50 employees (or upper bound up to 50, or lower bound under 50 with tight band)
+          return high <= 50 || (low <= 50 && high <= 100);
+        } else if (companySizeFilter === 'growth') {
+          // Growth: 51-500 employees
+          return (low >= 20 && high <= 500) || (low <= 500 && high >= 51 && high <= 500);
+        } else if (companySizeFilter === 'enterprise') {
+          // Enterprise: 500+ employees
+          return high > 500 || low >= 500;
+        }
+        return true;
+      });
+    }
+
+    // 1f. Minimum Salary filter
+    if (minSalaryFilter > 0) {
+      filtered = filtered.filter((j) => {
+        if (!j.salary) return true; // preserve if salary unstated
+        const numMatches = j.salary.replace(/,/g, '').match(/\d+/g);
+        if (numMatches && numMatches.length > 0) {
+          const maxNum = Math.max(...numMatches.map(Number));
+          const normalized = maxNum < 1000 ? maxNum : maxNum / 1000;
+          return normalized >= minSalaryFilter;
+        }
+        return true;
+      });
+    }
+
     // 2. Sort copy of jobs array. Accurate (JD-scored) jobs always sort
     // before estimated (title-only) ones, since an estimated job's score
     // isn't directly comparable to a real ATS-scored one — within each
@@ -1573,7 +1636,7 @@ function App() {
     const paginated = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     return { sorted, paginated, totalPages, currentPage };
-  }, [discoveredJobs, searchSortMode, searchPage, targetPlatform, discoverySearchQuery, discoveryQuickFilter, sponsorFilter, applicationHistory]);
+  }, [discoveredJobs, searchSortMode, searchPage, targetPlatform, discoverySearchQuery, discoveryQuickFilter, sponsorFilter, companySizeFilter, minSalaryFilter, applicationHistory]);
 
   const formatJobDescription = (text) => {
     if (!text) return null;
@@ -2472,11 +2535,11 @@ function App() {
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {/* Hugging Face / Backend Health Badge */}
           <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '3px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600,
+            display: 'inline-flex', alignItems: 'center', gap: '5px',
+            padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 600,
             background: backendHealth === 'healthy' ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.15)',
             border: `1px solid ${backendHealth === 'healthy' ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`,
             color: backendHealth === 'healthy' ? '#10B981' : '#F59E0B',
@@ -2488,10 +2551,27 @@ function App() {
               : 'Hugging Face container warming up...'
           }>
             <span style={{
-              width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
+              width: '5px', height: '5px', borderRadius: '50%', flexShrink: 0,
               background: backendHealth === 'healthy' ? '#10B981' : '#F59E0B'
             }} />
-            {backendHealth === 'healthy' ? 'Engine Online' : 'Warming Up…'}
+            {backendHealth === 'healthy' ? 'Online' : 'Warming…'}
+          </div>
+
+          {/* Cryptographic Zero-Knowledge Verification Trust Badge */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '5px',
+            padding: '3px 8px', borderRadius: '4px',
+            background: 'rgba(56, 189, 248, 0.08)',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            fontSize: '0.68rem', color: '#38BDF8', fontWeight: 600
+          }}
+          title="Zero-Knowledge Privacy: Master resumes, tailored LaTeX, and compiled PDFs are encrypted at rest with AES-256-GCM using client-derived session keys. Storage volume maintainers cannot view user data."
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+            <span>AES-256 Encrypted</span>
           </div>
 
           {statusMessage && (
@@ -5664,6 +5744,8 @@ function App() {
                         })}
                       </div>
 
+
+
                       {/* Right: Sort & Count */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -5846,6 +5928,26 @@ function App() {
                                             title="Click to view UK sponsorship guidance advice"
                                           >
                                             ✗ Unlisted Sponsor
+                                          </span>
+                                        )}
+                                        {/* Company Size / Scale Badge */}
+                                        {job.company_size && (
+                                          <span
+                                            style={{
+                                              fontSize: '0.68rem',
+                                              padding: '2px 7px',
+                                              borderRadius: '4px',
+                                              fontWeight: 600,
+                                              background: 'rgba(56, 189, 248, 0.1)',
+                                              color: '#38BDF8',
+                                              border: '1px solid rgba(56, 189, 248, 0.25)',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '3px'
+                                            }}
+                                            title="Estimated company headcount scale"
+                                          >
+                                            {job.company_size}
                                           </span>
                                         )}
                                         <span style={{
