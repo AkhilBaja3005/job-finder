@@ -29,6 +29,7 @@ from services.resume_parser import parse_resume, sanitize_resume_summary
 from utils.latex_utils import generate_latex_from_json, apply_latex_hotfix, compile_and_check_page_metrics, parse_latex_to_resume_dict
 from services.overleaf import upload_zip_to_tmpfiles
 from services.ats_scorer import evaluate_master_resume
+from services.storage_encryption import write_encrypted_file, read_encrypted_file
 
 router = APIRouter(tags=["Resume Management"])
 
@@ -212,10 +213,10 @@ async def upload_resume(file: UploadFile = File(...), authorization: Optional[st
 
         guest_file = _get_guest_state_file(token)
         try:
-            with open(guest_file, "w") as f:
-                json.dump({"data": data, "path": path, "evaluation": evaluation}, f, indent=2)
+            state_payload = json.dumps({"data": data, "path": path, "evaluation": evaluation}, indent=2)
+            write_encrypted_file(guest_file, state_payload, token)
         except Exception as file_err:
-            print(f"[upload_resume] Could not save guest state file {guest_file}: {file_err}")
+            print(f"[upload_resume] Could not save encrypted state file {guest_file}: {file_err}")
 
         # Automatically sync parsed resume into candidate_profile.json
         try:
@@ -244,26 +245,31 @@ async def get_session_resume(authorization: Optional[str] = Header(None)):
     data = session_info.get("data", {})
     if not data or not data.get("education"):
         user_guest_file = _get_guest_state_file(token)
-        if os.path.exists(user_guest_file):
-            try:
-                with open(user_guest_file, "r", encoding="utf-8") as f:
-                    saved = json.load(f)
-                    data = saved.get("data", {})
-                    set_session_data(token, data, saved.get("path", ""))
-            except Exception as e:
-                print(f"[get_session_resume] Error reading state file: {e}")
+        try:
+            raw_state = read_encrypted_file(user_guest_file, token)
+            saved = json.loads(raw_state.decode("utf-8"))
+            data = saved.get("data", {})
+            set_session_data(token, data, saved.get("path", ""))
+        except Exception as e:
+            if not isinstance(e, FileNotFoundError):
+                print(f"[get_session_resume] Note on reading state file: {e}")
 
     if data and isinstance(data, dict) and "summary" in data:
         data["summary"] = sanitize_resume_summary(data["summary"])
 
     master_latex = ""
     master_path = session_info.get("path", "")
-    if master_path and os.path.exists(master_path):
+    if master_path:
         try:
-            with open(master_path, "r", encoding="utf-8") as f:
-                master_latex = f.read()
+            raw_master = read_encrypted_file(master_path, token)
+            master_latex = raw_master.decode("utf-8")
         except Exception:
-            pass
+            if os.path.exists(master_path):
+                try:
+                    with open(master_path, "r", encoding="utf-8") as f:
+                        master_latex = f.read()
+                except Exception:
+                    pass
 
     return {
         "status": "success",
@@ -634,8 +640,8 @@ async def apply_suggestion(request: ApplySuggestionRequest, authorization: Optio
         guest_file = _get_guest_state_file(token)
         new_eval = evaluate_master_resume(updated_data)
         try:
-            with open(guest_file, "w") as f:
-                json.dump({"data": updated_data, "path": canonical_tex_path, "evaluation": new_eval}, f, indent=2)
+            state_payload = json.dumps({"data": updated_data, "path": canonical_tex_path, "evaluation": new_eval}, indent=2)
+            write_encrypted_file(guest_file, state_payload, token)
         except Exception:
             pass
 
@@ -676,8 +682,8 @@ async def update_master_from_tailored(request: UpdateMasterFromTailoredRequest, 
         guest_file = _get_guest_state_file(token)
         new_eval = evaluate_master_resume(updated_data)
         try:
-            with open(guest_file, "w") as f:
-                json.dump({"data": updated_data, "path": canonical_tex_path, "evaluation": new_eval}, f, indent=2)
+            state_payload = json.dumps({"data": updated_data, "path": canonical_tex_path, "evaluation": new_eval}, indent=2)
+            write_encrypted_file(guest_file, state_payload, token)
         except Exception:
             pass
 

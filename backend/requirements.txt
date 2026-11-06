@@ -20,3 +20,4 @@ pyyaml
 browser-use
 pydantic-settings
 zstandard
+cryptography>=42.0.0
