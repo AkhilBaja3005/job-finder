@@ -229,14 +229,18 @@ async def scan_linkedin_for_top_applicant_jobs(
                     
                     for (let i = 0; i < uniqueCards.length; i++) {
                         const card = uniqueCards[i];
-                        const text = card.innerText.trim();
+                        const text = (card.innerText || '').trim();
+                        if (!text) continue;
+
                         const isTop = /top\\s+applicant|in\\s+the\\s+top|stand\\s+out|competitive\\s+applicant/i.test(text);
                         
                         const lines = text.split('\\n').map(s => s.trim()).filter(Boolean);
-                        let title = lines[0].replace(/^Selected,\\s*/i, '');
+                        if (!lines || lines.length === 0) continue;
+
+                        let title = (lines[0] || '').replace(/^Selected,\\s*/i, '');
                         if (title.includes(' | ')) title = title.split(' | ')[0];
                         let company = lines.length > 1 ? lines[1] : 'Company';
-                        if (company.includes('Verified job')) {
+                        if (company && company.includes('Verified job')) {
                             company = lines.length > 2 ? lines[2] : 'Company';
                         }
                         
