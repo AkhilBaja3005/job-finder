@@ -8,6 +8,7 @@ guardrail validation, and routing between System 1 reflex actions and System 2 L
 import os
 import sys
 import logging
+import requests
 from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,40 @@ try:
     HAS_LAYA = True
 except ImportError:
     HAS_LAYA = False
+
+
+def call_openai_decisions_api(
+    input_text: str,
+    questions: List[Dict[str, Any]],
+    api_key: Optional[str] = None
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Calls OpenAI Decisions API (POST /v1/decisions) using gpt-6-luna.
+    Returns typed answers 10x faster than traditional completion/chat endpoints.
+    """
+    key = api_key or os.getenv("OPENAI_API_KEY")
+    if not key:
+        return None
+
+    url = os.getenv("OPENAI_DECISIONS_URL", "https://api.openai.com/v1/decisions")
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "gpt-6-luna",
+        "input": input_text,
+        "questions": questions
+    }
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=8)
+        if resp.status_code in (200, 201):
+            data = resp.json()
+            return data.get("answers", [])
+        logger.warning(f"[openai-decisions] API returned status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        logger.warning(f"[openai-decisions] Failed to execute decisions request: {e}")
+    return None
 
 
 class LayaDecisionRouter:
@@ -47,8 +82,35 @@ class LayaDecisionRouter:
         """
         text = label_or_placeholder.lower().strip()
 
-        # System 1 non-autoregressive keyword & pattern matching
-        if any(w in text for w in ["country code", "dial code", "phone code", "dialing code", "flag"]):
+        # 1. Primary Priority: If OPENAI_API_KEY is provided, use OpenAI Decisions API (gpt-6-luna)
+        # for complex or ambiguous fields (10x faster typed evaluation than completion endpoints)
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key and len(text) > 5:
+            decisions = call_openai_decisions_api(
+                input_text=label_or_placeholder,
+                questions=[
+                    {
+                        "type": "choice",
+                        "name": "field_category",
+                        "instructions": "Classify this job application form field into the standard taxonomy.",
+                        "choices": [
+                            "first_name", "last_name", "email", "phone", "phone_country_code",
+                            "location", "country", "linkedin", "github", "portfolio", "sponsorship",
+                            "notice_period", "source_referral", "gender", "ethnicity",
+                            "veteran_status", "disability_status", "resume_upload",
+                            "ai_assistance_prohibited", "legal_or_sensitive_blocker", "custom_essay", "generic_text"
+                        ]
+                    }
+                ],
+                api_key=openai_key
+            )
+            if decisions and len(decisions) > 0 and decisions[0].get("choice"):
+                chosen = decisions[0]["choice"]
+                logger.info(f"[openai-decisions] gpt-6-luna classified '{label_or_placeholder}' -> {chosen}")
+                return chosen
+
+        # 2. Reflex keyword & pattern matching (<10ms non-autoregressive)
+        if any(w in text for w in ["country code", "dial code", "phone code", "dialing code", "calling prefix", "flag"]):
             return "phone_country_code"
         if any(w in text for w in ["mobile", "phone", "cell", "telephone", "contact number"]):
             return "phone"
@@ -99,6 +161,7 @@ class LayaDecisionRouter:
             "social security", "ssn", "national insurance", "passport number", "driver's license"
         ]):
             return "legal_or_sensitive_blocker"
+
 
         # Check if length indicates a long-form custom essay requiring System 2 LLM
         if len(text) > 60 or any(w in text for w in ["why do you want", "tell us about", "describe a time", "cover letter"]):

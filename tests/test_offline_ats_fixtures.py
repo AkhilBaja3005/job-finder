@@ -77,3 +77,38 @@ def test_blocker_detection(mock_candidate):
 
     route, _ = router.route_decision("I certify under penalty of perjury that all answers are true", mock_candidate)
     assert route == "blocked_legal_sensitive"
+
+
+def test_openai_decisions_integration(monkeypatch):
+    from backend.services.laya_router import call_openai_decisions_api, get_laya_router
+
+    class MockResponse:
+        status_code = 200
+        def json(self):
+            return {
+                "model": "gpt-6-luna",
+                "answers": [
+                    {
+                        "name": "field_category",
+                        "type": "choice",
+                        "choice": "phone_country_code",
+                        "probabilities": {"phone_country_code": 0.99},
+                        "confidence": 0.99
+                    }
+                ]
+            }
+
+    import requests
+    monkeypatch.setattr(requests, "post", lambda *args, **kwargs: MockResponse())
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-luna")
+
+    answers = call_openai_decisions_api(
+        input_text="Select your country prefix flag",
+        questions=[{"type": "choice", "name": "field_category", "choices": ["phone_country_code"]}]
+    )
+    assert answers is not None
+    assert answers[0]["choice"] == "phone_country_code"
+
+    router = get_laya_router()
+    field = router.classify_form_field("Select your international country calling prefix")
+    assert field == "phone_country_code"
