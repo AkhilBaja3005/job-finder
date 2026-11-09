@@ -150,8 +150,12 @@ async def scan_linkedin_for_top_applicant_jobs(
         tpr_sec = timeframe_hours * 3600
 
         for kw in keywords_list:
-            print(f"\n[Top Applicant Scanner] 🔍 Searching LinkedIn for: '{kw}' in '{location}' (Past {timeframe_hours}h, up to {max_pages_per_keyword} pages)...")
+            print(f"\n[Top Applicant Scanner] 🔍 Searching LinkedIn for: '{kw}' in '{location}' (Past {timeframe_hours}h, up to 30 matches/role)...")
+            kw_matches = 0
             for page_idx in range(max_pages_per_keyword):
+                if kw_matches >= 30:
+                    print(f"   🎯 Reached 30 Top Applicant matches for '{kw}'. Proceeding to next role...")
+                    break
                 start_offset = page_idx * 25
                 query_params = {
                     "keywords": kw,
@@ -316,6 +320,10 @@ async def scan_linkedin_for_top_applicant_jobs(
                             "posted_time": format_posted_date_time("Recent"),
                             "platform": "LinkedIn"
                         })
+                        kw_matches += 1
+                        if kw_matches >= 30:
+                            print(f"   🎯 Reached 30 Top Applicant matches for '{kw}'. Skipping remaining pages...")
+                            break
 
         await page.close()
 
