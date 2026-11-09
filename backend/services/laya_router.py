@@ -80,8 +80,25 @@ class LayaDecisionRouter:
             return "disability_status"
         if any(w in text for w in ["city", "location", "address", "state", "postal", "zipcode", "postcode"]):
             return "location"
+        if any(w in text for w in ["country", "residence country", "nationality"]):
+            return "country"
         if any(w in text for w in ["resume", "cv", "attach file", "upload resume"]):
             return "resume_upload"
+
+        # Explicit AI assistance prohibitions (attention blockers)
+        if any(w in text for w in [
+            "do not use ai", "don't use ai", "without ai assistance", "no ai assistance",
+            "write in your own words", "in your own voice", "generative ai is not allowed",
+            "chatgpt not allowed", "ai generated content is not permitted"
+        ]):
+            return "ai_assistance_prohibited"
+
+        # Legal certification & sensitive identification blockers
+        if any(w in text for w in [
+            "under penalty of perjury", "i certify that", "i swear", "background check consent",
+            "social security", "ssn", "national insurance", "passport number", "driver's license"
+        ]):
+            return "legal_or_sensitive_blocker"
 
         # Check if length indicates a long-form custom essay requiring System 2 LLM
         if len(text) > 60 or any(w in text for w in ["why do you want", "tell us about", "describe a time", "cover letter"]):
@@ -133,6 +150,19 @@ class LayaDecisionRouter:
             return "reflex", cand.get("veteran_status", "No")
         if field_type == "disability_status":
             return "reflex", cand.get("disability_status", "No")
+        if field_type == "country":
+            loc = str(cand.get("location", "")).lower()
+            if "uk" in loc or "london" in loc or "united kingdom" in loc:
+                return "reflex", "United Kingdom"
+            if "india" in loc:
+                return "reflex", "India"
+            if "united states" in loc or "usa" in loc:
+                return "reflex", "United States"
+            return "reflex", cand.get("country", "United Kingdom")
+        if field_type == "ai_assistance_prohibited":
+            return "blocked_ai_policy", None
+        if field_type == "legal_or_sensitive_blocker":
+            return "blocked_legal_sensitive", None
         if field_type == "sponsorship":
             req_spons = cand.get("requires_sponsorship", True)
             return "reflex", "Yes" if req_spons else "No"
