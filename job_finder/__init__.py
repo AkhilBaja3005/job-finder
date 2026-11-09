@@ -3,7 +3,7 @@ job_finder — Autonomous career agent, ATS resume tailor & job search copilot.
 """
 
 # Fixed release version for standalone execution & wheel builds
-__version__ = "1.3.2"
+__version__ = "1.4.0"
 
 try:
     from importlib.metadata import version, PackageNotFoundError
