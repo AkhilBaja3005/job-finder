@@ -319,8 +319,11 @@ Do not wrap in explanatory text. Only return the JSON array."""
 
 # ─── LinkedIn Scraper (Unauthenticated API) ───────────────────────────────
 
-def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str = "48h") -> List[JobSearchResult]:
-    """Scrapes LinkedIn's guest job search API for postings from the specified timeframe."""
+def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str = "48h", max_results: int = 75) -> List[JobSearchResult]:
+    """
+    Scrapes LinkedIn's guest job search API with pagination (start=0, 25, 50, ...)
+    to retrieve up to `max_results` fresh postings from the specified timeframe.
+    """
     encoded_keyword = urllib.parse.quote(keyword)
     encoded_location = urllib.parse.quote(location)
     tf_norm = normalize_timeframe(timeframe)
@@ -333,58 +336,84 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
         "1m": "r2592000"
     }
     tpr = tpr_map.get(tf_norm, "r172800")
-    url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={encoded_keyword}&location={encoded_location}&f_TPR={tpr}&start=0"
     
-    log_ist(f"[Job Searcher] Fetching LinkedIn: {url}")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9"
+    }
+    
     results = []
+    seen_job_ids = set()
+    offsets = [0, 25, 50, 75] if max_results > 50 else ([0, 25] if max_results > 25 else [0])
     
-    try:
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-            }
-        )
-        context = SSL_CONTEXT
-        with urllib.request.urlopen(req, context=context, timeout=12) as response:
-            html = response.read().decode("utf-8")
+    for start_offset in offsets:
+        if len(results) >= max_results:
+            break
             
-        soup = BeautifulSoup(html, "html.parser")
-        cards = soup.select("li")
+        url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={encoded_keyword}&location={encoded_location}&f_TPR={tpr}&start={start_offset}"
+        log_ist(f"[Job Searcher] Fetching LinkedIn offset {start_offset}: {url}")
         
-        for card in cards:
-            title_elem = card.select_one(".base-search-card__title")
-            company_elem = card.select_one(".base-search-card__subtitle")
-            location_elem = card.select_one(".job-search-card__location")
-            link_elem = card.select_one(".base-card__full-link")
-            date_elem = card.select_one(".job-search-card__listdate, .job-search-card__listdate--new")
-            
-            if not title_elem or not link_elem:
-                continue
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=12) as response:
+                html = response.read().decode("utf-8")
                 
-            title = title_elem.get_text(strip=True)
-            company = company_elem.get_text(strip=True) if company_elem else "Unknown Company"
-            loc = location_elem.get_text(strip=True) if location_elem else location
-            href = str(link_elem.get("href", "")).split("?")[0] # Clean query trackers
-            date_str = date_elem.get_text(strip=True) if date_elem else "Just posted"
+            soup = BeautifulSoup(html, "html.parser")
+            cards = soup.select("li")
+            if not cards:
+                # No more postings returned for this offset
+                break
+                
+            page_added = 0
+            for card in cards:
+                title_elem = card.select_one(".base-search-card__title")
+                company_elem = card.select_one(".base-search-card__subtitle")
+                location_elem = card.select_one(".job-search-card__location")
+                link_elem = card.select_one(".base-card__full-link")
+                date_elem = card.select_one(".job-search-card__listdate, .job-search-card__listdate--new")
+                
+                if not title_elem or not link_elem:
+                    continue
+                    
+                title = title_elem.get_text(strip=True)
+                company = company_elem.get_text(strip=True) if company_elem else "Unknown Company"
+                loc = location_elem.get_text(strip=True) if location_elem else location
+                href = str(link_elem.get("href", "")).split("?")[0] # Clean query trackers
+                date_str = date_elem.get_text(strip=True) if date_elem else "Just posted"
+                
+                # Extract job ID from href URN
+                job_id_match = re.search(r"-(\d+)$", href)
+                job_id = job_id_match.group(1) if job_id_match else href.split("/")[-1]
+                
+                if job_id in seen_job_ids:
+                    continue
+                seen_job_ids.add(job_id)
+                
+                results.append(JobSearchResult(
+                    title=title,
+                    company=company,
+                    location=loc,
+                    url=href,
+                    platform="LinkedIn",
+                    post_date_raw=date_str,
+                    job_id=job_id
+                ))
+                page_added += 1
+                if len(results) >= max_results:
+                    break
+                    
+            if page_added == 0:
+                break
+                
+            # Gentle delay between offsets to respect rate limits
+            import time
+            time.sleep(0.4)
             
-            # Extract job ID from href URN
-            job_id_match = re.search(r"-(\d+)$", href)
-            job_id = job_id_match.group(1) if job_id_match else href.split("/")[-1]
+        except Exception as e:
+            log_ist(f"[Job Searcher] LinkedIn search error at offset {start_offset}: {e}")
+            break
             
-            results.append(JobSearchResult(
-                title=title,
-                company=company,
-                location=loc,
-                url=href,
-                platform="LinkedIn",
-                post_date_raw=date_str,
-                job_id=job_id
-            ))
-            
-    except Exception as e:
-        print(f"[Job Searcher] LinkedIn search error: {e}")
-        
     return results
 
 # ─── Reed.co.uk Official API Integration ──────────────────────────────────────
@@ -510,12 +539,12 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "2
             # Run pre-screening checks concurrently across threads
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=8) as executor:
-                screened_results = list(executor.map(_check_reed_spam, raw_candidates[:40]))
+                screened_results = list(executor.map(_check_reed_spam, raw_candidates[:60]))
             valid_results = [r for r in screened_results if r is not None]
 
             # Sort by post date descending (newest jobs first)
             valid_results.sort(key=lambda x: x["dt"], reverse=True)
-            final_jobs = [r["job"] for r in valid_results[:20]]
+            final_jobs = [r["job"] for r in valid_results[:40]]
             log_ist(f"[Job Searcher] ✓ Reed API returned {len(final_jobs)} fresh jobs within {timeframe} for '{keyword}' (sorted newest first)")
             return final_jobs
     except Exception as e:
@@ -1657,12 +1686,12 @@ async def find_matching_jobs(
         should_ind = (not platform_filter_active or "indeed" in target_plats) and not any(x in "indeed" for x in excluded_clean)
         should_ats = (not platform_filter_active or "direct ats" in target_plats) and not any(x in "ats" for x in excluded_clean)
 
-        li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=8) if should_li else asyncio.sleep(0, result=[])
-        reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=6) if should_reed else asyncio.sleep(0, result=[])
-        jobserve_task = _safe_run(search_jobserve_jobs, q, location, timeframe, browser, timeout=12) if should_js else asyncio.sleep(0, result=[])
-        targetjobs_task = _safe_run(search_targetjobs_uk, q, location, timeframe, timeout=6) if should_tj else asyncio.sleep(0, result=[])
-        ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=8) if should_ind else asyncio.sleep(0, result=[])
-        ats_task = _safe_run(search_direct_ats_jobs, q, location, timeframe, timeout=8) if should_ats else asyncio.sleep(0, result=[])
+        li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=25) if should_li else asyncio.sleep(0, result=[])
+        reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=12) if should_reed else asyncio.sleep(0, result=[])
+        jobserve_task = _safe_run(search_jobserve_jobs, q, location, timeframe, browser, timeout=15) if should_js else asyncio.sleep(0, result=[])
+        targetjobs_task = _safe_run(search_targetjobs_uk, q, location, timeframe, timeout=8) if should_tj else asyncio.sleep(0, result=[])
+        ind_task = _safe_run(search_indeed_jobs, q, location, timeframe, timeout=15) if should_ind else asyncio.sleep(0, result=[])
+        ats_task = _safe_run(search_direct_ats_jobs, q, location, timeframe, timeout=15) if should_ats else asyncio.sleep(0, result=[])
 
         li_j, reed_j, js_j, tj_j, ind_j, ats_j = await asyncio.gather(li_task, reed_task, jobserve_task, targetjobs_task, ind_task, ats_task)
         return q, li_j, reed_j, js_j, tj_j, ind_j, ats_j

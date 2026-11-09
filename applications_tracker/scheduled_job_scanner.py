@@ -936,6 +936,18 @@ async def run_pipeline(
             print(f"[{idx}/{len(jobs)}] Skipping existing: {title} @ {company} ({score}% ATS)")
             continue
 
+        # Relevance Pre-Filter: Discard titles completely outside user's target domain
+        title_lower = title.lower()
+        irrelevant_keywords = (
+            "accountant", "nursing", "nurse", "sales representative", "telemarketing",
+            "cook", "chef", "cashier", "cleaner", "driver", "warehouse worker",
+            "construction", "plumber", "electrician", "retail assistant", "dental",
+            "store manager", "receptionist", "hairdresser", "security officer", "call center"
+        )
+        if any(bad in title_lower for bad in irrelevant_keywords):
+            print(f"[{idx}/{len(jobs)}] ⏭️ Skipping irrelevant non-technical posting: {title} @ {company}")
+            continue
+
         # Check UK visa sponsorship status from official Home Office register
         sponsor_badge_log = ""
         is_uk_sponsor = False
