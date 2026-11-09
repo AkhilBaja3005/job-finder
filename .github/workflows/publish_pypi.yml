@@ -187,7 +187,11 @@ jobs:
           if [ -n "${{ github.event.inputs.version_tag }}" ]; then
             echo "tag=v${{ github.event.inputs.version_tag }}" >> $GITHUB_OUTPUT
           else
-            VERSION=$(python -c "import re, sys; m=re.search(r'version\s*=\s*\"([^\"]+)\"', open('pyproject.toml').read()); sys.exit(0) or print(m.group(1)) if m else sys.exit(1)")
+            VERSION=$(python3 -c "import re; m=re.search(r'version\s*=\s*\"([^\"]+)\"', open('pyproject.toml').read()); print(m.group(1).strip() if m else '')")
+            if [ -z "$VERSION" ]; then
+              echo "Error: Failed to extract version from pyproject.toml"
+              exit 1
+            fi
             echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
           fi
 
