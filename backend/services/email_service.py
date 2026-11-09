@@ -209,25 +209,48 @@ def send_notification_email(
                 part.add_header("Content-Disposition", "attachment", filename=name)
                 msg.attach(part)
 
-        # Connect and send (support both Port 587 STARTTLS and Port 465 SSL)
-        if smtp_port == 465:
-            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15) as server:
-                server.login(smtp_user, smtp_pass)
-                server.sendmail(email_from or smtp_user or "", [to_email], msg.as_string())
-        else:
-            try:
-                with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
-                    server.starttls()
-                    server.login(smtp_user, smtp_pass)
-                    server.sendmail(email_from or smtp_user or "", [to_email], msg.as_string())
-            except (OSError, smtplib.SMTPException) as e:
-                # If Port 587 fails (common outbound block on cloud platforms), try Port 465 SSL fallback
-                print(f"[Mailer] Port {smtp_port} failed ({e}). Trying Port 465 SSL fallback...")
-                with smtplib.SMTP_SSL(smtp_host, 465, timeout=15) as server:
-                    server.login(smtp_user, smtp_pass)
-                    server.sendmail(email_from or smtp_user or "", [to_email], msg.as_string())
+        # Connect and send with exponential retry & fallback
+        # Gmail / Cloud hosts frequently drop rapid consecutive connections on 587/465.
+        # We attempt Port 465 (SSL) and Port 587 (STARTTLS) with backoff before giving up.
+        ports_to_try = [smtp_port]
+        fallback_port = 465 if smtp_port != 465 else 587
+        if fallback_port not in ports_to_try:
+            ports_to_try.append(fallback_port)
 
-        print("[Mailer] Sent successfully via SMTP.")
+        import time
+        sent_ok = False
+        last_error = None
+
+        for attempt in range(1, 4):  # Up to 3 attempts with progressive backoff
+            for port in ports_to_try:
+                try:
+                    if port == 465:
+                        with smtplib.SMTP_SSL(smtp_host, 465, timeout=20) as server:
+                            server.login(smtp_user, smtp_pass)
+                            server.sendmail(email_from or smtp_user or "", [to_email], msg.as_string())
+                    else:
+                        with smtplib.SMTP(smtp_host, port, timeout=20) as server:
+                            server.ehlo()
+                            server.starttls()
+                            server.ehlo()
+                            server.login(smtp_user, smtp_pass)
+                            server.sendmail(email_from or smtp_user or "", [to_email], msg.as_string())
+                    sent_ok = True
+                    break
+                except (OSError, smtplib.SMTPException, Exception) as conn_err:
+                    last_error = conn_err
+                    print(f"[Mailer] Attempt {attempt} on port {port} failed ({conn_err}).")
+            
+            if sent_ok:
+                break
+            
+            # Wait 2.5s before retry to let Google SMTP / network socket reset
+            time.sleep(2.5 * attempt)
+
+        if not sent_ok:
+            raise last_error or Exception("All SMTP attempts failed.")
+
+        print(f"[Mailer] Sent successfully via SMTP ({effective_sender_name}).")
         return True
     except Exception as e:
         print(f"[Mailer ERROR] SMTP delivery failed: {e}")
