@@ -29,10 +29,26 @@ def call_openai_decisions_api(
     """
     Calls OpenAI Decisions API (POST /v1/decisions) using gpt-6-luna.
     Returns typed answers 10x faster than traditional completion/chat endpoints.
+    Ensures choices are formatted as [{"value": ...}] objects as required by the schema.
     """
     key = api_key or os.getenv("OPENAI_API_KEY")
     if not key:
         return None
+
+    # Normalize choice questions to ensure choices are objects with 'value'
+    formatted_questions = []
+    for q in questions:
+        q_copy = dict(q)
+        if q_copy.get("type") == "choice" and "choices" in q_copy:
+            raw_choices = q_copy["choices"]
+            norm_choices = []
+            for c in raw_choices:
+                if isinstance(c, str):
+                    norm_choices.append({"value": c})
+                elif isinstance(c, dict) and "value" in c:
+                    norm_choices.append(c)
+            q_copy["choices"] = norm_choices
+        formatted_questions.append(q_copy)
 
     url = os.getenv("OPENAI_DECISIONS_URL", "https://api.openai.com/v1/decisions")
     headers = {
@@ -42,7 +58,7 @@ def call_openai_decisions_api(
     payload = {
         "model": "gpt-6-luna",
         "input": input_text,
-        "questions": questions
+        "questions": formatted_questions
     }
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=8)
@@ -82,7 +98,21 @@ class LayaDecisionRouter:
         """
         text = label_or_placeholder.lower().strip()
 
-        # 1. Primary Priority: If OPENAI_API_KEY is provided, use OpenAI Decisions API (gpt-6-luna)
+        # 1. Check for hard legal/safety blockers and AI policy prohibitions FIRST (zero-latency deterministic match)
+        if any(w in text for w in [
+            "do not use ai", "don't use ai", "without ai assistance", "no ai assistance",
+            "write in your own words", "in your own voice", "generative ai is not allowed",
+            "chatgpt not allowed", "ai generated content is not permitted", "no ai tools"
+        ]):
+            return "ai_assistance_prohibited"
+
+        if any(w in text for w in [
+            "under penalty of perjury", "i certify that", "i swear", "background check consent",
+            "social security", "ssn", "national insurance", "passport number", "driver's license"
+        ]):
+            return "legal_or_sensitive_blocker"
+
+        # 2. If OPENAI_API_KEY is provided, use OpenAI Decisions API (gpt-6-luna)
         # for complex or ambiguous fields (10x faster typed evaluation than completion endpoints)
         openai_key = os.getenv("OPENAI_API_KEY")
         if openai_key and len(text) > 5:
@@ -92,7 +122,7 @@ class LayaDecisionRouter:
                     {
                         "type": "choice",
                         "name": "field_category",
-                        "instructions": "Classify this job application form field into the standard taxonomy.",
+                        "instructions": "Classify this job application form field into the standard taxonomy. Select legal_or_sensitive_blocker for certifications or sensitive ID.",
                         "choices": [
                             "first_name", "last_name", "email", "phone", "phone_country_code",
                             "location", "country", "linkedin", "github", "portfolio", "sponsorship",
