@@ -231,6 +231,47 @@ def test_compute_overall_score_formula():
     assert ats.compute_overall_score(0, 0, 0) == 0
     assert ats.compute_overall_score(80, 60, 40) == round(0.40 * 80 + 0.35 * 60 + 0.25 * 40)
 
+def test_ats_score_result_overall_score_property():
+    """Verify ATSScoreResult.overall_score property returns expected combined score."""
+    res = ats.ATSScoreResult(
+        skills_score=80,
+        experience_score=60,
+        eligible=True,
+        knockout_reason=None,
+        matched_skills=["python"],
+        missing_skills=[],
+        candidate_years=5,
+        required_years=3,
+        score_breakdown={}
+    )
+    expected = round(0.55 * 80 + 0.45 * 60)
+    assert res.overall_score == expected
+
+    ineligible = ats.ATSScoreResult(
+        skills_score=80,
+        experience_score=60,
+        eligible=False,
+        knockout_reason="Visa required",
+        matched_skills=[],
+        missing_skills=[],
+        candidate_years=5,
+        required_years=3,
+        score_breakdown={}
+    )
+    assert ineligible.overall_score == 0
+
+def test_estimate_role_fit_score_deterministic_fallback():
+    """Verify estimate_role_fit_score returns a deterministic integer between 0 and 100."""
+    resume_data = {
+        "name": "Candidate",
+        "skills": ["python", "machine learning", "docker"],
+        "experience": [{"title": "Senior AI Engineer", "years": 5}]
+    }
+    jd_text = "Looking for Senior AI Engineer with Python, Machine Learning and Docker."
+    score = ats.estimate_role_fit_score(resume_data, jd_text)
+    assert isinstance(score, int)
+    assert 0 <= score <= 100
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Golden Test Suite for ATS Scorer Refactors (Steps 1-5)

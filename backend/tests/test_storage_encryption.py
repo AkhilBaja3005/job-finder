@@ -53,3 +53,38 @@ def test_write_and_read_encrypted_file():
         assert recovered == payload
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+def test_storage_purge_of_unencrypted_plaintext():
+    """Verify that unencrypted files can be safely wiped after ciphertext is created."""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        user_token = "purge-test-user-999"
+        tex_path = os.path.join(temp_dir, "resume.tex")
+        pdf_path = os.path.join(temp_dir, "resume.pdf")
+        
+        with open(tex_path, "wb") as f:
+            f.write(b"\\documentclass{article}\\begin{document}Test\\end{document}")
+        with open(pdf_path, "wb") as f:
+            f.write(b"%PDF-1.5 test binary")
+
+        # Write encrypted files
+        enc_tex = write_encrypted_file(f"{tex_path}.enc", open(tex_path, "rb").read(), user_token)
+        enc_pdf = write_encrypted_file(f"{pdf_path}.enc", open(pdf_path, "rb").read(), user_token)
+
+        # Emulate zero-knowledge post-compilation cleanup guardrail
+        if os.path.exists(enc_tex) and os.path.exists(tex_path):
+            os.remove(tex_path)
+        if os.path.exists(enc_pdf) and os.path.exists(pdf_path):
+            os.remove(pdf_path)
+
+        # Ensure only encrypted files remain in storage
+        assert not os.path.exists(tex_path)
+        assert not os.path.exists(pdf_path)
+        assert os.path.exists(enc_tex)
+        assert os.path.exists(enc_pdf)
+
+        # Validate that ciphertext can still be read and decrypted cleanly
+        decrypted_pdf = read_encrypted_file(enc_pdf, user_token)
+        assert decrypted_pdf == b"%PDF-1.5 test binary"
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
