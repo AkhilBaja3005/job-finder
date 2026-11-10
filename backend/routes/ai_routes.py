@@ -493,6 +493,35 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             ctx.log_step("compile_pdf", time.time() - t0)
 
+            # Save AES-256-GCM encrypted copies to persistent disk
+            try:
+                from services.storage_encryption import write_encrypted_file
+                with open(tex_path, "rb") as _tf:
+                    write_encrypted_file(f"{tex_path}.enc", _tf.read(), token or safe_key)
+                if os.path.exists(temp_pdf_path):
+                    with open(temp_pdf_path, "rb") as _pf:
+                        write_encrypted_file(f"{temp_pdf_path}.enc", _pf.read(), token or safe_key)
+            except Exception as enc_err:
+                print(f"[analyze_job] Note: Encrypted artifact save note: {enc_err}")
+
+            # Re-score the final tailored LaTeX deterministically against the job description
+            try:
+                from utils.latex_utils import parse_latex_to_resume_dict
+                from services.ats_scorer import compute_ats_score
+                tailored_dict = parse_latex_to_resume_dict(final_latex)
+                if tailored_dict and jd_text:
+                    post_tailor_ats = compute_ats_score(tailored_dict, jd_text)
+                    if post_tailor_ats and post_tailor_ats.overall_score > 0:
+                        print(f"[analyze_job] Re-scored post-generation ATS: {post_tailor_ats.overall_score}% (was {dumped.get('match_analysis', {}).get('overall_score')}%)")
+                        if "match_analysis" in dumped and isinstance(dumped["match_analysis"], dict):
+                            dumped["match_analysis"]["overall_score"] = post_tailor_ats.overall_score
+                            dumped["match_analysis"]["skills_score"] = post_tailor_ats.skills_score
+                            dumped["match_analysis"]["experience_score"] = post_tailor_ats.experience_score
+                            dumped["match_analysis"]["matched_skills"] = getattr(post_tailor_ats, "matched_skills", [])
+                            dumped["match_analysis"]["missing_skills"] = getattr(post_tailor_ats, "missing_skills", [])
+            except Exception as rescore_err:
+                print(f"[analyze_job] Post-tailoring ATS re-score notice: {rescore_err}")
+
             candidate_name = session_resume_data.get("name", "") if isinstance(session_resume_data, dict) else ""
             extracted_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company']) else await asyncio.to_thread(_extract_company_from_jd, jd_text or "", request.job_url)
 
