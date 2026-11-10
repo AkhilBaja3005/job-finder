@@ -17,7 +17,7 @@ anthropic
 pytest
 sentry-sdk
 pyyaml
-browser-use
+browser-use>=0.1.0,<1.0.0
 pydantic-settings
 zstandard
 cryptography>=42.0.0
