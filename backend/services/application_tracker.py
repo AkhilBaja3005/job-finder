@@ -29,9 +29,9 @@ BASE_DIR = resolve_workspace_root()
 OUTPUT_DIR = get_output_dir()
 
 
-# Cap on entries kept in the local JSON fallback file, so a long-running guest
-# session can't grow this file without bound.
-MAX_LOCAL_HISTORY_ENTRIES = 200
+# Cap on entries kept in the local JSON fallback file and Supabase query limit.
+# Increased from 200 to 5000 so users with extensive application history (1000+ entries) see their full history.
+MAX_LOCAL_HISTORY_ENTRIES = 5000
 
 
 def _safe_key(token: Any) -> str:
