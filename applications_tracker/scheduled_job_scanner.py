@@ -694,6 +694,15 @@ async def apply_to_job(
         )
         print(f"[Browser-Use] Result: {res}")
         return res
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        skip_msg = "User skipped application via Ctrl+C."
+        print(f"\n[Browser-Use] ⏭️ Skip signal (Ctrl+C) received! Aborting application for {company} and advancing to next role...")
+        return {
+            "status": "failed",
+            "job_url": url,
+            "error": skip_msg,
+            "final_result": f"SUBMISSION_SKIPPED: {skip_msg}"
+        }
     except asyncio.TimeoutError:
         err_msg = f"Job application autofill timed out after {int(active_timeout)}s."
         print(f"[Browser-Use] ⏱️ {err_msg}")

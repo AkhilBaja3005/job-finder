@@ -61,8 +61,10 @@ async def lifespan(app: FastAPI):
     # Automatically audit & migrate existing legacy files on persistent volumes (Hugging Face / local) to AES-256-GCM
     try:
         from services.storage_encryption import migrate_storage_directory_to_encrypted
-        user_data_path = os.path.join(BASE_DIR, "user_data")
-        await asyncio.to_thread(migrate_storage_directory_to_encrypted, user_data_path)
+        # In HF Spaces persistent volume is mounted at STORAGE_ROOT (/data or BASE_DIR)
+        for target_dir in [USER_DATA_DIR, os.path.join(BASE_DIR, "user_data"), UPLOAD_DIR, OUTPUT_DIR]:
+            if os.path.exists(target_dir):
+                await asyncio.to_thread(migrate_storage_directory_to_encrypted, target_dir)
     except Exception as enc_mig_err:
         print(f"ℹ️ Storage encryption auto-migration notice: {enc_mig_err}")
 

@@ -439,6 +439,13 @@ def build_application_task_prompt(
            * If the application form asks to attach/upload a resume, CV, or file (e.g. 'Upload a file', 'Attach Resume', 'Upload Resume/CV', 'Select file', or file input dropzone):
            * You MUST upload the provided resume file path using `upload_file` action!
            * Do NOT leave the file upload blank or skip it if a file is requested.
+         - For Cover Letter (Greenhouse, Ashby, Lever, Workday):
+           * GREENHOUSE "TYPE COVER LETTER" MANDATORY ACTION:
+             - Many forms (especially Greenhouse) feature two options/buttons for cover letter: 'Attach' (file upload) vs 'Type Cover Letter' (or 'Write cover letter', 'Paste cover letter', 'Add Cover Letter').
+             - If you see a button, tab, or toggle labeled 'Type Cover Letter', 'Write cover letter', or 'Enter text', CLICK IT to reveal the text area!
+             - If a `<textarea>` or input for cover letter is visible (e.g. `id*="cover_letter"`, `name*="cover_letter"`, `textarea[aria-label*="cover letter" i]`, or `label: "Cover Letter"`):
+               * In a single turn, TYPE a tailored, compelling 3-paragraph cover letter into the textarea highlighting candidate's technical accomplishments and alignment with the job title.
+               * NEVER leave the cover letter empty if 'Type Cover Letter' or a cover letter text area is available.
          - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
     4. Handle Email Verification / OTP Codes:
        - If the form asks to enter a verification code / OTP sent to your email (e.g., micro1, Ashby, Workday):
@@ -667,15 +674,45 @@ def preflight_check_job_url(url: str) -> tuple[str, bool, Optional[str]]:
         return url, True, None
 
 
+def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 2) -> None:
+    """
+    Reaps stale, background, or completed tabs from the persistent Chrome instance.
+    Prevents Chrome tab proliferation and memory exhaustion that causes autofill to freeze.
+    """
+    try:
+        req = urllib.request.Request(f"{cdp_url}/json/list", headers={"User-Agent": "JobFinderCleaner"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            tabs = json.load(resp)
+        
+        # Only consider regular web pages (exclude devtools / extensions / background pages)
+        page_tabs = [t for t in tabs if t.get("type") == "page"]
+        if len(page_tabs) > max_tabs_to_keep:
+            # Keep the newest tab(s), close the oldest ones
+            tabs_to_close = page_tabs[:-max_tabs_to_keep]
+            for t in tabs_to_close:
+                tab_id = t.get("id")
+                if tab_id:
+                    try:
+                        close_req = urllib.request.Request(f"{cdp_url}/json/close/{tab_id}", data=b"", method="PUT")
+                        urllib.request.urlopen(close_req, timeout=2)
+                    except Exception:
+                        pass
+            print(f"[browser-use] Reaped {len(tabs_to_close)} background Chrome tab(s) to optimize memory.")
+    except Exception as e:
+        print(f"[browser-use] Tab cleanup note: {e}")
+
+
 def get_or_create_browser_session(headless: bool = False):
     """
     Maintains a single persistent browser instance across multiple runs by connecting to
     the shared Chrome daemon via CDP so subsequent jobs run in the same browser window.
     Applies aggressive low-latency timings to eliminate idle waiting between actions.
+    Automatically reaps stale background tabs to prevent memory exhaustion and freeze.
     """
     # pyrefly: ignore [missing-import]
     from browser_use import BrowserSession
     cdp_url = ensure_persistent_browser(headless=headless)
+    cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=2)
     return BrowserSession(
         cdp_url=cdp_url,
         minimum_wait_page_load_time=0.1,             # Cut from 0.25s to 0.1s

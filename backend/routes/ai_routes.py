@@ -367,7 +367,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             raw_tailored_latex = analysis.latex_code
             recruiter_scrutiny_report = None
             try:
-                review_res = await asyncio.to_thread(
+                review_task = asyncio.create_task(asyncio.to_thread(
                     review_tailored_resume,
                     raw_tailored_latex,
                     session_resume_data if isinstance(session_resume_data, dict) else {},
@@ -376,7 +376,13 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     active_api_key,
                     log_callback,
                     user_selected_skills
-                )
+                ))
+                async for event in _stream_task_logs(review_task):
+                    yield event
+                review_res = await review_task
+                for event in _drain_remaining_logs():
+                    yield event
+
                 recruiter_scrutiny_report = {
                     "ats_fit_ok": review_res.ats_fit_ok,
                     "impact_metrics_ok": review_res.impact_metrics_ok,
@@ -389,7 +395,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 if not review_res.satisfied:
                     yield json.dumps({"type": "log", "percent": 82, "message": f"Recruiter Agent requested refinements: {review_res.feedback[:90]}..."}) + "\n"
                     print(f"[analyze_job] Recruiter agent flagged issues: {review_res.feedback}. Running refinement pass...")
-                    raw_tailored_latex = await asyncio.to_thread(
+                    refine_task = asyncio.create_task(asyncio.to_thread(
                         tailor_resume,
                         master_latex,
                         job_title or "",
@@ -401,11 +407,16 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         log_callback,
                         user_selected_skills,
                         getattr(request, 'tailoring_intensity', 'balanced') or 'balanced'
-                    )
+                    ))
+                    async for event in _stream_task_logs(refine_task):
+                        yield event
+                    raw_tailored_latex = await refine_task
+                    for event in _drain_remaining_logs():
+                        yield event
 
                     # ── Post-Refinement Scrutiny Check ──────────────────────────────
                     yield json.dumps({"type": "log", "percent": 84, "message": "Senior Recruiter Agent performing secondary scrutiny on refined resume..."}) + "\n"
-                    second_review = await asyncio.to_thread(
+                    second_task = asyncio.create_task(asyncio.to_thread(
                         review_tailored_resume,
                         raw_tailored_latex,
                         session_resume_data if isinstance(session_resume_data, dict) else {},
@@ -414,7 +425,12 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         active_api_key,
                         log_callback,
                         user_selected_skills
-                    )
+                    ))
+                    async for event in _stream_task_logs(second_task):
+                        yield event
+                    second_review = await second_task
+                    for event in _drain_remaining_logs():
+                        yield event
                     recruiter_scrutiny_report = {
                         "ats_fit_ok": second_review.ats_fit_ok,
                         "impact_metrics_ok": second_review.impact_metrics_ok,
@@ -477,6 +493,65 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             ctx.log_step("compile_pdf", time.time() - t0)
 
+            # Save AES-256-GCM encrypted copies to persistent disk
+            try:
+                from services.storage_encryption import write_encrypted_file
+                with open(tex_path, "rb") as _tf:
+                    write_encrypted_file(f"{tex_path}.enc", _tf.read(), token or safe_key)
+                if os.path.exists(temp_pdf_path):
+                    with open(temp_pdf_path, "rb") as _pf:
+                        write_encrypted_file(f"{temp_pdf_path}.enc", _pf.read(), token or safe_key)
+            except Exception as enc_err:
+                print(f"[analyze_job] Note: Encrypted artifact save note: {enc_err}")
+
+            # Re-score the final tailored LaTeX deterministically against the job description
+            # If the candidate's baseline Master resume already had a higher or cleaner score than the tailored draft,
+            # automatically preserve the master resume as the superior, authentic version and notify the user.
+            baseline_score = analysis.match_analysis.overall_score
+            is_master_superior = False
+            reversion_notice = None
+
+            try:
+                from utils.latex_utils import parse_latex_to_resume_dict
+                from services.ats_scorer import compute_ats_score
+                tailored_dict = parse_latex_to_resume_dict(final_latex)
+                if tailored_dict and jd_text:
+                    post_tailor_ats = compute_ats_score(tailored_dict, jd_text)
+                    if post_tailor_ats and post_tailor_ats.overall_score > 0:
+                        tailored_final_score = post_tailor_ats.overall_score
+                        print(f"[analyze_job] Post-generation re-score: tailored={tailored_final_score}%, baseline_master={baseline_score}%")
+
+                        # If tailoring degraded the score or degraded key impact metrics, revert to the Master version
+                        if tailored_final_score < baseline_score and master_latex:
+                            is_master_superior = True
+                            reversion_notice = (
+                                f"Your Master Resume already achieves a superior match ({baseline_score}% vs tailored {tailored_final_score}%) "
+                                "with authentic, uncompromised metrics. The system preserved your Master Resume as the primary document."
+                            )
+                            print(f"[analyze_job] 🛡️ Guardrail triggered: Master resume score ({baseline_score}%) exceeds tailored score ({tailored_final_score}%). Preserving Master version.")
+                            final_latex = master_latex
+                            # Recompile PDF with Master LaTeX
+                            with open(tex_path, "w", encoding="utf-8") as f:
+                                f.write(final_latex)
+                            await asyncio.to_thread(
+                                subprocess.run,
+                                ["tectonic", tex_path, "--outdir", user_out_dir],
+                                cwd=user_out_dir,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                            )
+                        else:
+                            if "match_analysis" in dumped and isinstance(dumped["match_analysis"], dict):
+                                dumped["match_analysis"]["overall_score"] = tailored_final_score
+                                dumped["match_analysis"]["skills_score"] = post_tailor_ats.skills_score
+                                dumped["match_analysis"]["experience_score"] = post_tailor_ats.experience_score
+                                dumped["match_analysis"]["matched_skills"] = getattr(post_tailor_ats, "matched_skills", [])
+                                dumped["match_analysis"]["missing_skills"] = getattr(post_tailor_ats, "missing_skills", [])
+            except Exception as rescore_err:
+                print(f"[analyze_job] Post-tailoring ATS re-score notice: {rescore_err}")
+
+            if is_master_superior and reversion_notice:
+                yield json.dumps({"type": "log", "percent": 90, "message": f"⭐ {reversion_notice}"}) + "\n"
+
             candidate_name = session_resume_data.get("name", "") if isinstance(session_resume_data, dict) else ""
             extracted_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company']) else await asyncio.to_thread(_extract_company_from_jd, jd_text or "", request.job_url)
 
@@ -493,6 +568,9 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             dumped["overleaf_url"] = overleaf_url
             dumped["download_pdf_url"] = pdf_download_url
             dumped["pdf_url"] = pdf_download_url
+            if is_master_superior:
+                dumped["master_preserved"] = True
+                dumped["reversion_notice"] = reversion_notice
             if recruiter_scrutiny_report:
                 dumped["recruiter_scrutiny"] = recruiter_scrutiny_report
                 if "match_analysis" in dumped and isinstance(dumped["match_analysis"], dict):
@@ -664,28 +742,22 @@ async def generate_cover_letter_history(request: CoverLetterHistoryRequest, auth
         except Exception:
             pass
 
-    prompt = f"""You are an expert career writer.
-Write a concise, compelling cover letter (under 300 words) tailored to the role of '{request.job_title}' at '{request.company}'.
-
-CANDIDATE PROFILE:
-{json.dumps(resume, indent=2)}
-
-JOB DETAILS:
-Role: {request.job_title}
-Company: {request.company}
-JD Excerpt: {jd_text[:1200] if jd_text else "Not provided"}
-
-RULES:
-1. Cover letter under 300 words.
-2. STRICTLY NO EM-DASHES (--) OR HYPHENS AS SENTENCE BREAKS.
-3. STRICTLY NO CLICHES or generic filler phrases.
-4. Active, confident voice. Focus on problem-solving accomplishments from candidate's profile.
-5. Return ONLY the raw cover letter text."""
-
-    from services.gemini_client import generate_content_with_fallback
+    from services.cover_letter_generator import generate_structured_cover_letter
     try:
-        cover_letter = await asyncio.to_thread(generate_content_with_fallback, prompt, model_tier="lite")
-        return {"status": "success", "cover_letter": cover_letter.strip()}
+        result = await asyncio.to_thread(
+            generate_structured_cover_letter,
+            job_title=request.job_title,
+            company=request.company,
+            job_description=jd_text,
+            candidate_profile=resume
+        )
+        return {
+            "status": "success",
+            "cover_letter": result["cover_letter"],
+            "role_analysis": result.get("role_analysis", ""),
+            "alternative_openings": result.get("alternative_openings", ""),
+            "full_output": result.get("full_output", "")
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
