@@ -43,11 +43,11 @@ async function* streamNdjson(response) {
 
   try {
     while (true) {
-      // Race stream read against a fresh 120-second stall timer per chunk
+      // Race stream read against a fresh 180-second stall timer per chunk to accommodate deep recruiter reviews
       let timerId;
       const readPromise = reader.read();
       const timeoutPromise = new Promise((_, reject) => {
-        timerId = setTimeout(() => reject(new Error('Stream stalled: No response chunk received for 120s')), 120000);
+        timerId = setTimeout(() => reject(new Error('Stream stalled: No response chunk received for 180s')), 180000);
       });
 
       let res;

@@ -367,7 +367,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             raw_tailored_latex = analysis.latex_code
             recruiter_scrutiny_report = None
             try:
-                review_res = await asyncio.to_thread(
+                review_task = asyncio.create_task(asyncio.to_thread(
                     review_tailored_resume,
                     raw_tailored_latex,
                     session_resume_data if isinstance(session_resume_data, dict) else {},
@@ -376,7 +376,13 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                     active_api_key,
                     log_callback,
                     user_selected_skills
-                )
+                ))
+                async for event in _stream_task_logs(review_task):
+                    yield event
+                review_res = await review_task
+                for event in _drain_remaining_logs():
+                    yield event
+
                 recruiter_scrutiny_report = {
                     "ats_fit_ok": review_res.ats_fit_ok,
                     "impact_metrics_ok": review_res.impact_metrics_ok,
@@ -389,7 +395,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 if not review_res.satisfied:
                     yield json.dumps({"type": "log", "percent": 82, "message": f"Recruiter Agent requested refinements: {review_res.feedback[:90]}..."}) + "\n"
                     print(f"[analyze_job] Recruiter agent flagged issues: {review_res.feedback}. Running refinement pass...")
-                    raw_tailored_latex = await asyncio.to_thread(
+                    refine_task = asyncio.create_task(asyncio.to_thread(
                         tailor_resume,
                         master_latex,
                         job_title or "",
@@ -401,11 +407,16 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         log_callback,
                         user_selected_skills,
                         getattr(request, 'tailoring_intensity', 'balanced') or 'balanced'
-                    )
+                    ))
+                    async for event in _stream_task_logs(refine_task):
+                        yield event
+                    raw_tailored_latex = await refine_task
+                    for event in _drain_remaining_logs():
+                        yield event
 
                     # ── Post-Refinement Scrutiny Check ──────────────────────────────
                     yield json.dumps({"type": "log", "percent": 84, "message": "Senior Recruiter Agent performing secondary scrutiny on refined resume..."}) + "\n"
-                    second_review = await asyncio.to_thread(
+                    second_task = asyncio.create_task(asyncio.to_thread(
                         review_tailored_resume,
                         raw_tailored_latex,
                         session_resume_data if isinstance(session_resume_data, dict) else {},
@@ -414,7 +425,12 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         active_api_key,
                         log_callback,
                         user_selected_skills
-                    )
+                    ))
+                    async for event in _stream_task_logs(second_task):
+                        yield event
+                    second_review = await second_task
+                    for event in _drain_remaining_logs():
+                        yield event
                     recruiter_scrutiny_report = {
                         "ats_fit_ok": second_review.ats_fit_ok,
                         "impact_metrics_ok": second_review.impact_metrics_ok,
