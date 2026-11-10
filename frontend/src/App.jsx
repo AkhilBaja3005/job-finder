@@ -836,7 +836,9 @@ function App() {
     setLoading(true);
     setStatusMessage('Redirecting to Google login...');
     try {
-      const res = await fetch(`${API_BASE}/auth/url`);
+      const currentPath = window.location.pathname || '/platform';
+      const redirectTarget = currentPath.startsWith('/contact') || currentPath.startsWith('/docs') ? currentPath : '/platform';
+      const res = await fetch(`${API_BASE}/auth/url?redirect_to=${encodeURIComponent(redirectTarget)}`);
       const data = await res.json();
       if (data && data.url) {
         window.location.href = data.url;

@@ -56,18 +56,21 @@ class ProfileUpdateRequest(BaseModel):
 
 @router.get("/auth/google")
 @router.get("/auth/url")
-async def auth_google(request: Request):
+async def auth_google(request: Request, redirect_to: Optional[str] = None):
     custom_redirect = None
     if not os.getenv("GOOGLE_REDIRECT_URI"):
         custom_redirect = f"{str(request.base_url).rstrip('/')}/auth/callback"
-    auth_url = get_google_auth_url(redirect_uri=custom_redirect)
+    
+    # State holds the destination path (e.g. /platform, /docs, or specific deep link)
+    state = redirect_to if (redirect_to and redirect_to.startswith("/")) else "/platform"
+    auth_url = get_google_auth_url(redirect_uri=custom_redirect, state=state)
     if not auth_url:
         raise HTTPException(status_code=500, detail="Google OAuth client ID is not configured.")
     return {"url": auth_url}
 
 
 @router.get("/auth/callback")
-async def auth_callback(code: str, request: Request):
+async def auth_callback(code: str, request: Request, state: Optional[str] = None):
     try:
         custom_redirect = None
         if not os.getenv("GOOGLE_REDIRECT_URI"):
@@ -80,7 +83,15 @@ async def auth_callback(code: str, request: Request):
         if not frontend_url:
             base = str(request.base_url).rstrip("/")
             frontend_url = base
-        return RedirectResponse(url=f"{frontend_url.rstrip('/')}?token={token}")
+
+        # Safely determine destination path from state (defaulting to /platform)
+        dest_path = "/platform"
+        if state and state.startswith("/"):
+            # Prevent open redirects by ensuring it's a relative path starting with single slash
+            if not state.startswith("//"):
+                dest_path = state
+
+        return RedirectResponse(url=f"{frontend_url.rstrip('/')}{dest_path}?token={token}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"OAuth verification failed: {str(e)}")
 
@@ -103,10 +114,37 @@ class ContactQueryPayload(BaseModel):
 # In-memory store for OTPs: email -> {"code": "123456", "expires_at": timestamp, "attempts": 0}
 _OTP_CACHE: Dict[str, Dict[str, Any]] = {}
 
+# In-memory rate limiting for contact submissions: ip -> list of timestamps
+_CONTACT_RATE_LIMIT: Dict[str, List[float]] = {}
+CONTACT_MAX_PER_WINDOW = 3
+CONTACT_WINDOW_SECONDS = 600  # 10 minutes
+
 
 @router.post("/contact")
-async def submit_contact_query(payload: ContactQueryPayload, background_tasks: BackgroundTasks):
+async def submit_contact_query(payload: ContactQueryPayload, request: Request, background_tasks: BackgroundTasks):
+    import time
     from services.email_service import async_send_notification_email
+
+    # Extract client IP (respecting standard reverse-proxy headers like CF-Connecting-IP, X-Forwarded-For)
+    client_ip = (
+        request.headers.get("cf-connecting-ip")
+        or request.headers.get("x-real-ip")
+        or (request.headers.get("x-forwarded-for", "").split(",")[0].strip() if request.headers.get("x-forwarded-for") else None)
+        or (request.client.host if request.client else "unknown")
+    )
+
+    now = time.time()
+    ip_history = _CONTACT_RATE_LIMIT.get(client_ip, [])
+    # Prune submissions older than the 10-minute window
+    ip_history = [ts for ts in ip_history if now - ts < CONTACT_WINDOW_SECONDS]
+
+    if len(ip_history) >= CONTACT_MAX_PER_WINDOW:
+        wait_seconds = int(CONTACT_WINDOW_SECONDS - (now - ip_history[0]))
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many contact submissions. Please try again in {max(1, wait_seconds // 60)} minutes."
+        )
+
     clean_email = payload.email.strip().lower()
     clean_msg = payload.message.strip()
     clean_name = (payload.name or "").strip() or "Prospective User"
@@ -115,6 +153,10 @@ async def submit_contact_query(payload: ContactQueryPayload, background_tasks: B
         raise HTTPException(status_code=400, detail="A valid email address is required.")
     if not clean_msg:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
+
+    # Record valid request timestamp for rate limiting
+    ip_history.append(now)
+    _CONTACT_RATE_LIMIT[client_ip] = ip_history
 
     target_email = "akhilbaja.work@gmail.com"
     subject = f"[JobFinder Inquiry] New query from {clean_name}"

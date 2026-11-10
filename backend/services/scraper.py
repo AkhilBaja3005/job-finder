@@ -700,9 +700,24 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
         except Exception as indeed_err:
             # pyrefly: ignore [missing-import]
             from services.log_queue import log_ist
-            log_ist(f"[Scraper] Indeed direct fetch error ({indeed_err}), falling back to Playwright")
+            log_ist(f"[Scraper] Indeed direct fetch error ({indeed_err}), checking Obscura stealth engine")
 
-
+    # Fast path: Try Obscura lightweight stealth engine if available before spinning up heavy Playwright
+    try:
+        from services.obscura_scraper import is_obscura_available, scrape_job_with_obscura
+        if is_obscura_available():
+            obscura_res = await scrape_job_with_obscura(url)
+            if obscura_res and len(obscura_res.get("description", "")) >= 100:
+                if on_log:
+                    on_log(f"[Scraper] Successfully rendered via Obscura stealth engine: {url[:60]}")
+                try:
+                    from services.jd_cache import cache_set
+                    cache_set(url, obscura_res)
+                except Exception:
+                    pass
+                return obscura_res
+    except Exception as obscura_err:
+        pass
 
     own_playwright = None
     own_browser = None

@@ -227,7 +227,7 @@ def update_user_resume_data(user_id, resume_data: dict, master_latex: Optional[s
     supabase_request(f"users?id=eq.{user_id}", "PATCH", payload)
 
 # Google OAuth Parameters (dynamic lookup helpers)
-def get_google_auth_url(redirect_uri: Optional[str] = None) -> str:
+def get_google_auth_url(redirect_uri: Optional[str] = None, state: Optional[str] = None) -> str:
     client_id = os.getenv("GOOGLE_CLIENT_ID", "")
     if not redirect_uri:
         redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/callback")
@@ -239,6 +239,8 @@ def get_google_auth_url(redirect_uri: Optional[str] = None) -> str:
         "access_type": "offline",
         "prompt": "consent"
     }
+    if state:
+        params["state"] = state
     return f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
 
 def exchange_google_code_for_email(code: str, redirect_uri: Optional[str] = None) -> tuple[str, Optional[str]]:
