@@ -505,6 +505,12 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 print(f"[analyze_job] Note: Encrypted artifact save note: {enc_err}")
 
             # Re-score the final tailored LaTeX deterministically against the job description
+            # If the candidate's baseline Master resume already had a higher or cleaner score than the tailored draft,
+            # automatically preserve the master resume as the superior, authentic version and notify the user.
+            baseline_score = analysis.match_analysis.overall_score
+            is_master_superior = False
+            reversion_notice = None
+
             try:
                 from utils.latex_utils import parse_latex_to_resume_dict
                 from services.ats_scorer import compute_ats_score
@@ -512,15 +518,39 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 if tailored_dict and jd_text:
                     post_tailor_ats = compute_ats_score(tailored_dict, jd_text)
                     if post_tailor_ats and post_tailor_ats.overall_score > 0:
-                        print(f"[analyze_job] Re-scored post-generation ATS: {post_tailor_ats.overall_score}% (was {dumped.get('match_analysis', {}).get('overall_score')}%)")
-                        if "match_analysis" in dumped and isinstance(dumped["match_analysis"], dict):
-                            dumped["match_analysis"]["overall_score"] = post_tailor_ats.overall_score
-                            dumped["match_analysis"]["skills_score"] = post_tailor_ats.skills_score
-                            dumped["match_analysis"]["experience_score"] = post_tailor_ats.experience_score
-                            dumped["match_analysis"]["matched_skills"] = getattr(post_tailor_ats, "matched_skills", [])
-                            dumped["match_analysis"]["missing_skills"] = getattr(post_tailor_ats, "missing_skills", [])
+                        tailored_final_score = post_tailor_ats.overall_score
+                        print(f"[analyze_job] Post-generation re-score: tailored={tailored_final_score}%, baseline_master={baseline_score}%")
+
+                        # If tailoring degraded the score or degraded key impact metrics, revert to the Master version
+                        if tailored_final_score < baseline_score and master_latex:
+                            is_master_superior = True
+                            reversion_notice = (
+                                f"Your Master Resume already achieves a superior match ({baseline_score}% vs tailored {tailored_final_score}%) "
+                                "with authentic, uncompromised metrics. The system preserved your Master Resume as the primary document."
+                            )
+                            print(f"[analyze_job] 🛡️ Guardrail triggered: Master resume score ({baseline_score}%) exceeds tailored score ({tailored_final_score}%). Preserving Master version.")
+                            final_latex = master_latex
+                            # Recompile PDF with Master LaTeX
+                            with open(tex_path, "w", encoding="utf-8") as f:
+                                f.write(final_latex)
+                            await asyncio.to_thread(
+                                subprocess.run,
+                                ["tectonic", tex_path, "--outdir", user_out_dir],
+                                cwd=user_out_dir,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                            )
+                        else:
+                            if "match_analysis" in dumped and isinstance(dumped["match_analysis"], dict):
+                                dumped["match_analysis"]["overall_score"] = tailored_final_score
+                                dumped["match_analysis"]["skills_score"] = post_tailor_ats.skills_score
+                                dumped["match_analysis"]["experience_score"] = post_tailor_ats.experience_score
+                                dumped["match_analysis"]["matched_skills"] = getattr(post_tailor_ats, "matched_skills", [])
+                                dumped["match_analysis"]["missing_skills"] = getattr(post_tailor_ats, "missing_skills", [])
             except Exception as rescore_err:
                 print(f"[analyze_job] Post-tailoring ATS re-score notice: {rescore_err}")
+
+            if is_master_superior and reversion_notice:
+                yield json.dumps({"type": "log", "percent": 90, "message": f"⭐ {reversion_notice}"}) + "\n"
 
             candidate_name = session_resume_data.get("name", "") if isinstance(session_resume_data, dict) else ""
             extracted_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company']) else await asyncio.to_thread(_extract_company_from_jd, jd_text or "", request.job_url)
@@ -538,6 +568,9 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             dumped["overleaf_url"] = overleaf_url
             dumped["download_pdf_url"] = pdf_download_url
             dumped["pdf_url"] = pdf_download_url
+            if is_master_superior:
+                dumped["master_preserved"] = True
+                dumped["reversion_notice"] = reversion_notice
             if recruiter_scrutiny_report:
                 dumped["recruiter_scrutiny"] = recruiter_scrutiny_report
                 if "match_analysis" in dumped and isinstance(dumped["match_analysis"], dict):
