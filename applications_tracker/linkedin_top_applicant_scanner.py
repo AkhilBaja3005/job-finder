@@ -461,6 +461,15 @@ async def run_top_applicant_pipeline(
             }
             await record_to_supabase_or_csv(record_payload)
             processed_count += 1
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            print(f"\n[Browser-Use] ⏭️ Skip signal (Ctrl+C) received! Aborting {job_title} @ {company} and advancing to next role...")
+            failed_applications.append({
+                "title": job_title,
+                "company": company,
+                "url": job_url,
+                "reason": "User skipped application via Ctrl+C"
+            })
+            continue
         except Exception as e:
             print(f"   ❌ Error applying to {job_url}: {e}")
 

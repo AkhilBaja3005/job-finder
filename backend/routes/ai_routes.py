@@ -664,28 +664,22 @@ async def generate_cover_letter_history(request: CoverLetterHistoryRequest, auth
         except Exception:
             pass
 
-    prompt = f"""You are an expert career writer.
-Write a concise, compelling cover letter (under 300 words) tailored to the role of '{request.job_title}' at '{request.company}'.
-
-CANDIDATE PROFILE:
-{json.dumps(resume, indent=2)}
-
-JOB DETAILS:
-Role: {request.job_title}
-Company: {request.company}
-JD Excerpt: {jd_text[:1200] if jd_text else "Not provided"}
-
-RULES:
-1. Cover letter under 300 words.
-2. STRICTLY NO EM-DASHES (--) OR HYPHENS AS SENTENCE BREAKS.
-3. STRICTLY NO CLICHES or generic filler phrases.
-4. Active, confident voice. Focus on problem-solving accomplishments from candidate's profile.
-5. Return ONLY the raw cover letter text."""
-
-    from services.gemini_client import generate_content_with_fallback
+    from services.cover_letter_generator import generate_structured_cover_letter
     try:
-        cover_letter = await asyncio.to_thread(generate_content_with_fallback, prompt, model_tier="lite")
-        return {"status": "success", "cover_letter": cover_letter.strip()}
+        result = await asyncio.to_thread(
+            generate_structured_cover_letter,
+            job_title=request.job_title,
+            company=request.company,
+            job_description=jd_text,
+            candidate_profile=resume
+        )
+        return {
+            "status": "success",
+            "cover_letter": result["cover_letter"],
+            "role_analysis": result.get("role_analysis", ""),
+            "alternative_openings": result.get("alternative_openings", ""),
+            "full_output": result.get("full_output", "")
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

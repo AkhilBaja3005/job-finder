@@ -694,6 +694,15 @@ async def apply_to_job(
         )
         print(f"[Browser-Use] Result: {res}")
         return res
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        skip_msg = "User skipped application via Ctrl+C."
+        print(f"\n[Browser-Use] ⏭️ Skip signal (Ctrl+C) received! Aborting application for {company} and advancing to next role...")
+        return {
+            "status": "failed",
+            "job_url": url,
+            "error": skip_msg,
+            "final_result": f"SUBMISSION_SKIPPED: {skip_msg}"
+        }
     except asyncio.TimeoutError:
         err_msg = f"Job application autofill timed out after {int(active_timeout)}s."
         print(f"[Browser-Use] ⏱️ {err_msg}")
@@ -1024,7 +1033,16 @@ async def run_pipeline(
                                 scraped_jd = bu_res["description"].strip()
                                 is_blocked = False
                                 print(f"[{idx}/{len(jobs)}] ⚡ browser-use successfully solved Turnstile and retrieved JD!")
-                        except asyncio.TimeoutError:
+                        except (KeyboardInterrupt, asyncio.CancelledError):
+        skip_msg = "User skipped application via Ctrl+C."
+        print(f"\n[Browser-Use] ⏭️ Skip signal (Ctrl+C) received! Aborting application for {company} and advancing to next role...")
+        return {
+            "status": "failed",
+            "job_url": url,
+            "error": skip_msg,
+            "final_result": f"SUBMISSION_SKIPPED: {skip_msg}"
+        }
+    except asyncio.TimeoutError:
                             print(f"[{idx}/{len(jobs)}] ⏱️ browser-use JD extraction timed out after 60s, keeping original listing info.")
                         except Exception as bu_err:
                             print(f"[{idx}/{len(jobs)}] browser-use JD extraction note: {bu_err}")
@@ -1114,7 +1132,16 @@ async def run_pipeline(
                             else:
                                 pdf_to_submit = master_resume_pdf
                                 print(f"   ℹ️ Master resume scored higher ({master_ats}% > {tailored_ats}%). Keeping master resume: {os.path.basename(pdf_to_submit)}")
-                    except asyncio.TimeoutError:
+                    except (KeyboardInterrupt, asyncio.CancelledError):
+        skip_msg = "User skipped application via Ctrl+C."
+        print(f"\n[Browser-Use] ⏭️ Skip signal (Ctrl+C) received! Aborting application for {company} and advancing to next role...")
+        return {
+            "status": "failed",
+            "job_url": url,
+            "error": skip_msg,
+            "final_result": f"SUBMISSION_SKIPPED: {skip_msg}"
+        }
+    except asyncio.TimeoutError:
                         print(f"   ⏱️ Resume tailoring timed out after 90s. Falling back to master resume.")
                         pdf_to_submit = master_resume_pdf
                     except Exception as te:
