@@ -697,9 +697,9 @@ def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 2) -> None:
                         urllib.request.urlopen(close_req, timeout=2)
                     except Exception:
                         pass
-            logger.info(f"[browser-use] Reaped {len(tabs_to_close)} background Chrome tab(s) to optimize memory.")
+            print(f"[browser-use] Reaped {len(tabs_to_close)} background Chrome tab(s) to optimize memory.")
     except Exception as e:
-        logger.debug(f"[browser-use] Tab cleanup note: {e}")
+        print(f"[browser-use] Tab cleanup note: {e}")
 
 
 def get_or_create_browser_session(headless: bool = False):

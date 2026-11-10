@@ -13,7 +13,10 @@ import os
 import json
 import logging
 from typing import Optional, Dict, Any
-from services.gemini_client import generate_content_with_fallback
+try:
+    from services.gemini_client import generate_content_with_fallback
+except ImportError:
+    from backend.services.gemini_client import generate_content_with_fallback
 
 logger = logging.getLogger(__name__)
 
