@@ -36,8 +36,8 @@ RUN curl -Lo tectonic.tar.gz https://github.com/tectonic-typesetting/tectonic/re
     && mv tectonic /usr/local/bin/ \
     && rm tectonic.tar.gz
 
-# Install Obscura lightweight stealth headless browser for cloud container web scraping
-RUN curl -Lo obscura.tar.gz https://github.com/h4ckf0r0day/obscura/releases/download/v0.2.6/obscura-x86_64-linux-stealth.tar.gz \
+# Install Obscura lightweight stealth headless browser for cloud container web scraping (always latest release)
+RUN curl -fsSL -o obscura.tar.gz https://github.com/h4ckf0r0day/obscura/releases/latest/download/obscura-x86_64-linux-stealth.tar.gz \
     && tar -xzf obscura.tar.gz \
     && mv obscura /usr/local/bin/ \
     && rm obscura.tar.gz

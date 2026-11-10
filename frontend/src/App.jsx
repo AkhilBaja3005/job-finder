@@ -1490,11 +1490,51 @@ function App() {
         }
       }
     } catch (err) {
-      setStatusMessage(`Discovery failed: ${err.message}`);
-      setStatusLogs((prev) => [...prev, { message: `Discovery failed: ${err.message}`, ts: nowTs() }]);
+      const errorMsg = (err.name === 'AbortError' || err.message?.includes('network error') || err.message?.includes('Failed to fetch'))
+        ? 'Connection closed or timed out while streaming matches. The server may still be scanning in background.'
+        : err.message;
+      setStatusMessage(`Discovery failed: ${errorMsg}`);
+      setStatusLogs((prev) => [...prev, { message: `Discovery failed: ${errorMsg}`, ts: nowTs() }]);
     } finally {
       setDiscovering(false);
     }
+  };
+
+  const handleExportDiscoveredJobsCSV = () => {
+    if (!discoveredJobs || discoveredJobs.length === 0) {
+      showToast('No discovered jobs to export.', 'error');
+      return;
+    }
+    const headers = ['Company', 'Role', 'Platform', 'Match Score (%)', 'Location', 'Salary', 'UK Visa Sponsor', 'Posted / Age', 'Job Link'];
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = discoveredJobs.map((j) => [
+      escapeCsv(j.company || 'Unknown'),
+      escapeCsv(j.title || 'Unknown Role'),
+      escapeCsv(j.platform || (j.url?.includes('linkedin') ? 'LinkedIn' : j.url?.includes('indeed') ? 'Indeed' : 'Direct ATS')),
+      escapeCsv(j.score ?? 'N/A'),
+      escapeCsv(j.location || 'Remote/Unspecified'),
+      escapeCsv(j.salary || j.estimated_salary || 'Competitive'),
+      escapeCsv(j.is_uk_sponsor ? 'Yes' : 'No / Unverified'),
+      escapeCsv(j.posted_at || j.age || 'Recent'),
+      escapeCsv(j.url || '')
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.setAttribute('download', `job_discoveries_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+    showToast(`Exported ${discoveredJobs.length} jobs to CSV!`, 'success');
   };
 
 
@@ -4489,20 +4529,37 @@ function App() {
                       : 'Analysis & Preview'}
               </h2>
               {dashboardMode !== 'history' && (analysisResult || isDiscoveryView) && (
-                <button
-                  className="btn btn-secondary"
-                  style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '6px' }}
-                  onClick={() => {
-                    if (isDiscoveryView) {
-                      setIsDiscoveryView(false);
-                    } else {
-                      handleNewJob();
-                    }
-                  }}
-                  aria-label={isDiscoveryView ? 'Back to active job' : 'Start analyzing a new job'}
-                >
-                  {isDiscoveryView ? '← Back to Active' : '+ New Job'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {isDiscoveryView && discoveredJobs.length > 0 && (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '6px', color: 'var(--accent-primary)', borderColor: 'rgba(56, 189, 248, 0.4)' }}
+                      onClick={handleExportDiscoveredJobsCSV}
+                      title="Export all discovered job matches to CSV file"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                      </svg>
+                      <span>Export CSV</span>
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '6px' }}
+                    onClick={() => {
+                      if (isDiscoveryView) {
+                        setIsDiscoveryView(false);
+                      } else {
+                        handleNewJob();
+                      }
+                    }}
+                    aria-label={isDiscoveryView ? 'Back to active job' : 'Start analyzing a new job'}
+                  >
+                    {isDiscoveryView ? '← Back to Active' : '+ New Job'}
+                  </button>
+                </div>
               )}
             </div>
 
