@@ -674,10 +674,47 @@ def preflight_check_job_url(url: str) -> tuple[str, bool, Optional[str]]:
         return url, True, None
 
 
-def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 2) -> None:
+def open_new_chrome_window_via_cdp(cdp_url: str, url: str = "about:blank") -> bool:
     """
-    Reaps stale, background, or completed tabs from the persistent Chrome instance.
-    Prevents Chrome tab proliferation and memory exhaustion that causes autofill to freeze.
+    Spawns a new independent Chrome window via the CDP browser WebSocket target.
+    Used when the current window reaches the threshold (e.g. 30 tabs) so applications
+    can keep their tabs open without crowding or freezing a single window.
+    """
+    try:
+        import websockets
+        import asyncio
+
+        req = urllib.request.Request(f"{cdp_url}/json/version", headers={"User-Agent": "JobFinderCleaner"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.load(resp)
+        browser_ws = data.get("webSocketDebuggerUrl")
+        if not browser_ws:
+            return False
+
+        async def _create_window():
+            async with websockets.connect(browser_ws, open_timeout=3, close_timeout=2) as ws:
+                msg = {
+                    "id": 1,
+                    "method": "Target.createTarget",
+                    "params": {"url": url, "newWindow": True}
+                }
+                await ws.send(json.dumps(msg))
+                raw_res = await ws.recv()
+                res = json.loads(raw_res)
+                return bool(res.get("result", {}).get("targetId"))
+
+        return asyncio.run(_create_window())
+    except Exception as e:
+        print(f"[browser-use] Note: create new Chrome window via CDP: {e}")
+        return False
+
+
+def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 30) -> None:
+    """
+    Manages Chrome tabs across application sessions.
+    Keeps all application tabs open so the candidate can inspect and submit them.
+    When open page tabs exceed max_tabs_to_keep (default 30), opens a fresh Chrome window
+    via CDP rather than closing active applications, or cleanly prunes only when explicitly requested.
     """
     try:
         req = urllib.request.Request(f"{cdp_url}/json/list", headers={"User-Agent": "JobFinderCleaner"})
@@ -686,20 +723,27 @@ def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 2) -> None:
         
         # Only consider regular web pages (exclude devtools / extensions / background pages)
         page_tabs = [t for t in tabs if t.get("type") == "page"]
-        if len(page_tabs) > max_tabs_to_keep:
-            # Keep the newest tab(s), close the oldest ones
-            tabs_to_close = page_tabs[:-max_tabs_to_keep]
-            for t in tabs_to_close:
-                tab_id = t.get("id")
-                if tab_id:
-                    try:
-                        close_req = urllib.request.Request(f"{cdp_url}/json/close/{tab_id}", data=b"", method="PUT")
-                        urllib.request.urlopen(close_req, timeout=2)
-                    except Exception:
-                        pass
-            print(f"[browser-use] Reaped {len(tabs_to_close)} background Chrome tab(s) to optimize memory.")
+        
+        if len(page_tabs) >= max_tabs_to_keep:
+            print(f"[browser-use] 🪟 Tab count reached threshold ({len(page_tabs)}/{max_tabs_to_keep}). Opening new Chrome window...")
+            opened = open_new_chrome_window_via_cdp(cdp_url)
+            if not opened and len(page_tabs) > (max_tabs_to_keep + 5):
+                # Fallback safeguard: only close the very oldest tabs if new window creation failed
+                # and tab proliferation threatens memory limits (>35 tabs)
+                tabs_to_close = page_tabs[:-max_tabs_to_keep]
+                for t in tabs_to_close:
+                    tab_id = t.get("id")
+                    if tab_id:
+                        try:
+                            close_req = urllib.request.Request(f"{cdp_url}/json/close/{tab_id}", data=b"", method="PUT")
+                            urllib.request.urlopen(close_req, timeout=2)
+                        except Exception:
+                            pass
+                print(f"[browser-use] Reaped {len(tabs_to_close)} oldest background Chrome tab(s) as safety ceiling.")
+        else:
+            print(f"[browser-use] 📑 Keeping {len(page_tabs)} active application tab(s) open (threshold: {max_tabs_to_keep}).")
     except Exception as e:
-        print(f"[browser-use] Tab cleanup note: {e}")
+        print(f"[browser-use] Tab management note: {e}")
 
 
 def get_or_create_browser_session(headless: bool = False):
@@ -707,12 +751,12 @@ def get_or_create_browser_session(headless: bool = False):
     Maintains a single persistent browser instance across multiple runs by connecting to
     the shared Chrome daemon via CDP so subsequent jobs run in the same browser window.
     Applies aggressive low-latency timings to eliminate idle waiting between actions.
-    Automatically reaps stale background tabs to prevent memory exhaustion and freeze.
+    Preserves all application tabs open up to 30 tabs before opening a fresh window.
     """
     # pyrefly: ignore [missing-import]
     from browser_use import BrowserSession
     cdp_url = ensure_persistent_browser(headless=headless)
-    cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=2)
+    cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=30)
     return BrowserSession(
         cdp_url=cdp_url,
         minimum_wait_page_load_time=0.1,             # Cut from 0.25s to 0.1s

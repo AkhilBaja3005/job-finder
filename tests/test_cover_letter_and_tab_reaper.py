@@ -95,15 +95,12 @@ def test_cover_letter_fallback_on_llm_failure():
     assert "London, UK" in result["cover_letter"]
 
 
-def test_cleanup_stale_chrome_tabs_reaps_oldest():
+def test_cleanup_stale_chrome_tabs_keeps_tabs_and_opens_window():
+    """Verify that tabs are kept open and a new window is opened when threshold is reached."""
     fake_tabs = [
-        {"id": "tab-1", "type": "page", "title": "Old Job 1"},
-        {"id": "tab-2", "type": "page", "title": "Old Job 2"},
-        {"id": "tab-3", "type": "page", "title": "Old Job 3"},
-        {"id": "tab-4", "type": "page", "title": "Active Target Job"}
+        {"id": f"tab-{i}", "type": "page", "title": f"Job {i}"}
+        for i in range(1, 32)
     ]
-
-    closed_tab_ids = []
 
     class FakeResponse:
         def __init__(self, data):
@@ -116,19 +113,38 @@ def test_cleanup_stale_chrome_tabs_reaps_oldest():
             pass
 
     def mock_urlopen(req, timeout=None):
-        url = req.full_url if hasattr(req, "full_url") else req
-        if "/json/list" in str(url):
-            return FakeResponse(json.dumps(fake_tabs).encode("utf-8"))
-        elif "/json/close/" in str(url):
-            tab_id = str(url).split("/json/close/")[1]
-            closed_tab_ids.append(tab_id)
-            return FakeResponse(b"")
+        return FakeResponse(json.dumps(fake_tabs).encode("utf-8"))
 
     with patch("urllib.request.urlopen", side_effect=mock_urlopen):
-        # We specify max_tabs_to_keep=2, so tab-1 and tab-2 should be closed
-        cleanup_stale_chrome_tabs("http://127.0.0.1:9222", max_tabs_to_keep=2)
+        with patch("services.browser_use_agent.open_new_chrome_window_via_cdp", return_value=True) as mock_win:
+            cleanup_stale_chrome_tabs("http://127.0.0.1:9222", max_tabs_to_keep=30)
+            mock_win.assert_called_once_with("http://127.0.0.1:9222")
 
-    assert closed_tab_ids == ["tab-1", "tab-2"]
+
+def test_cleanup_stale_chrome_tabs_below_threshold():
+    """Verify that tabs are kept open and no new window is opened when below threshold."""
+    fake_tabs = [
+        {"id": f"tab-{i}", "type": "page", "title": f"Job {i}"}
+        for i in range(1, 10)
+    ]
+
+    class FakeResponse:
+        def __init__(self, data):
+            self._data = data
+        def read(self):
+            return self._data
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    def mock_urlopen(req, timeout=None):
+        return FakeResponse(json.dumps(fake_tabs).encode("utf-8"))
+
+    with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+        with patch("services.browser_use_agent.open_new_chrome_window_via_cdp") as mock_win:
+            cleanup_stale_chrome_tabs("http://127.0.0.1:9222", max_tabs_to_keep=30)
+            mock_win.assert_not_called()
 
 
 def test_greenhouse_cover_letter_instruction_in_task_prompt():
