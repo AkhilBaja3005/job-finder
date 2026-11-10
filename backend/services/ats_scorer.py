@@ -287,6 +287,13 @@ class ATSScoreResult:
     required_years: int
     score_breakdown: Dict[str, Any]
 
+    @property
+    def overall_score(self) -> int:
+        """Helper to return combined deterministic score matching default weights (skills 50%, experience 50% without semantic fit)."""
+        if not self.eligible:
+            return 0
+        return round(0.55 * self.skills_score + 0.45 * self.experience_score)
+
 def _flatten_resume_skills(raw_skills: Any) -> str:
     """Safely flattens dictionary or list skills into a single string for taxonomy extraction."""
     if isinstance(raw_skills, dict):

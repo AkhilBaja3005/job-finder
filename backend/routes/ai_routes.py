@@ -513,12 +513,15 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
 
             try:
                 from utils.latex_utils import parse_latex_to_resume_dict
-                from services.ats_scorer import compute_ats_score
+                from services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
                 tailored_dict = parse_latex_to_resume_dict(final_latex)
                 if tailored_dict and jd_text:
                     post_tailor_ats = compute_ats_score(tailored_dict, jd_text)
-                    if post_tailor_ats and post_tailor_ats.overall_score > 0:
-                        tailored_final_score = post_tailor_ats.overall_score
+                    if post_tailor_ats and getattr(post_tailor_ats, "eligible", True):
+                        role_fit_val = getattr(analysis.match_analysis, "role_fit_score", None)
+                        if role_fit_val is None:
+                            role_fit_val = estimate_role_fit_score(tailored_dict, jd_text)
+                        tailored_final_score = compute_overall_score(post_tailor_ats.skills_score, post_tailor_ats.experience_score, role_fit_val)
                         print(f"[analyze_job] Post-generation re-score: tailored={tailored_final_score}%, baseline_master={baseline_score}%")
 
                         # If tailoring degraded the score or degraded key impact metrics, revert to the Master version
@@ -539,6 +542,14 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                                 cwd=user_out_dir,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
                             )
+                            # Re-encrypt updated master PDF & TeX
+                            try:
+                                write_encrypted_file(f"{tex_path}.enc", final_latex.encode("utf-8"), token or safe_key)
+                                if os.path.exists(temp_pdf_path):
+                                    with open(temp_pdf_path, "rb") as _pf:
+                                        write_encrypted_file(f"{temp_pdf_path}.enc", _pf.read(), token or safe_key)
+                            except Exception as re_enc_err:
+                                print(f"[analyze_job] Master re-encrypt note: {re_enc_err}")
                         else:
                             if "match_analysis" in dumped and isinstance(dumped["match_analysis"], dict):
                                 dumped["match_analysis"]["overall_score"] = tailored_final_score
@@ -675,6 +686,16 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 })
             except Exception as rec_err:
                 print(f"[analyze_job] Failed to record application history: {rec_err}")
+
+            # Clean up unencrypted local plaintext files from disk after encryption & email dispatch
+            # Persistent storage retains ONLY the AES-256-GCM ciphertext (.enc)
+            try:
+                if os.path.exists(f"{tex_path}.enc") and os.path.exists(tex_path):
+                    os.remove(tex_path)
+                if os.path.exists(f"{temp_pdf_path}.enc") and os.path.exists(temp_pdf_path):
+                    os.remove(temp_pdf_path)
+            except Exception as cleanup_err:
+                print(f"[analyze_job] Note on plaintext artifact cleanup: {cleanup_err}")
 
             set_cached_analysis(token, job_title or "", jd_text or "", dumped, request.user_selected_skills, session_resume_data)
 
