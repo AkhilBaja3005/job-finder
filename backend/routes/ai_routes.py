@@ -510,6 +510,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
             baseline_score = analysis.match_analysis.overall_score
             is_master_superior = False
             reversion_notice = None
+            dumped = analysis.model_dump()
 
             try:
                 from utils.latex_utils import parse_latex_to_resume_dict
