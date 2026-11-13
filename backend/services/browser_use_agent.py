@@ -105,10 +105,12 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
     if openai_key and forced_provider != "gemini":
         luna_model = model_name or os.getenv("BROWSER_USE_MODEL") or "gpt-6-luna"
         try:
+            # Luna is an OpenAI reasoning model: temperature and frequency_penalty must be None
             return ChatOpenAI(
                 model=luna_model,
                 api_key=openai_key,
-                temperature=0.1,
+                temperature=None,
+                frequency_penalty=None,
                 reasoning_effort="low",
             )
         except Exception as oe:
