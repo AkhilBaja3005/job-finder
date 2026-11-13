@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "job-finder-ai"
-version = "1.4.5"
+version = "1.4.6"
 description = "Autonomous career agent, ATS resume tailor, and job search copilot."
 readme = "README_PYPI.md"
 
@@ -44,7 +44,7 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "python-multipart>=0.0.6",
     "pyyaml>=6.0",
-    "browser-use>=0.1.0,<1.0.0",
+    "browser-use>=1.0.0",
     "pydantic-settings>=2.0.0",
     "zstandard>=0.21.0",
 ]

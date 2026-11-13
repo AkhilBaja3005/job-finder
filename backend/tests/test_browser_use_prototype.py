@@ -36,56 +36,44 @@ def test_get_browser_use_llm_structure():
 
 def test_browser_use_agent_parameters_valid():
     """
-    Validates browser-use Agent parameter constraints.
-    browser-use enforces: assert max_history_items is None or max_history_items > 5
-    Ensures our agent configurations adhere strictly to this constraint.
+    Validates browser-use 1.0+ Agent parameter constraints.
+    Ensures our agent configurations adhere to 1.0 structure:
+    - sensitive_data support for credential shielding
+    - use_vision flag
+    - explicit local browser attachment (e.g. Browser('chromium') or CDP URL)
     """
     try:
-        from browser_use import Agent
+        from browser_use import Agent, Browser, ChatGoogle
     except (ImportError, Exception) as e:
         pytest.skip(f"browser_use Agent optional dependency not available: {e}")
-    from unittest.mock import MagicMock
 
-    mock_llm = MagicMock()
-    mock_llm.model = "gemini-3.5-flash-lite"
+    mock_llm = ChatGoogle(model="gemini-2.5-flash", api_key="fake-key-for-test")
+    local_browser = Browser("chromium", headless=True)
 
-    # Fast DOM pass: max_history_items must be > 5 (we use 8)
+    # 1.0 fast pass with sensitive_data
     agent_fast = Agent(
         task="Test autofill",
         llm=mock_llm,
+        browser=local_browser,
+        sensitive_data={"candidate_password": "supersecretpassword123"},
         use_vision=False,
-        use_judge=False,
-        use_thinking=False,
-        max_history_items=8,
-        max_actions_per_step=15,
-        flash_mode=True,
-        enable_planning=False,
-        max_failures=2,
-        retry_delay=1,
     )
-    assert agent_fast.settings.max_history_items == 8
-    assert agent_fast.settings.max_history_items > 5
+    assert agent_fast.use_vision is False
+    assert agent_fast.sensitive_data == {"candidate_password": "supersecretpassword123"}
+    assert agent_fast.browser == local_browser
 
-    # Vision pass: max_history_items must be > 5 (we use 8)
+    # 1.0 vision pass
     agent_vision = Agent(
         task="Test autofill vision",
         llm=mock_llm,
+        browser=local_browser,
+        sensitive_data={"candidate_phone": "555-0199"},
         use_vision=True,
-        use_judge=False,
-        use_thinking=True,
-        max_history_items=8,
-        max_actions_per_step=10,
-        flash_mode=False,
-        enable_planning=True,
-        max_failures=2,
-        retry_delay=1,
     )
-    assert agent_vision.settings.max_history_items == 8
-    assert agent_vision.settings.max_history_items > 5
+    assert agent_vision.use_vision is True
+    assert agent_vision.sensitive_data == {"candidate_phone": "555-0199"}
 
-    # Verify that <= 5 raises AssertionError as documented by browser-use
-    with pytest.raises(AssertionError, match="max_history_items must be None or greater than 5"):
-        Agent(task="Test fail", llm=mock_llm, max_history_items=5)
+
 
 
 def test_preflight_check_job_url_closed_or_expired():

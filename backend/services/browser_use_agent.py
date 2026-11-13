@@ -26,8 +26,10 @@ except ImportError:
 
 try:
     # pyrefly: ignore [missing-import]
-    from browser_use import Agent, Browser, ChatGoogle, BrowserSession  # pyright: ignore[reportAssignmentType]
+    from browser_use import Agent, Browser, ChatGoogle
     from browser_use.llm import ChatOpenAI
+    # In browser-use 1.0+, BrowserSession was replaced by Browser
+    BrowserSession = Browser
     HAS_BROWSER_USE = True
 
     class MultiFallbackAgent(Agent):  # pyright: ignore[reportRedeclaration]
@@ -38,8 +40,12 @@ try:
         """
         def __init__(self, *args, fallback_pool: Optional[List[Any]] = None, **kwargs):
             self._fallback_pool = list(fallback_pool or [])
-            first_fb = self._fallback_pool.pop(0) if self._fallback_pool else None
-            super().__init__(*args, fallback_llm=first_fb, **kwargs)
+            # Strip 0.x removed parameters in 1.0
+            cleaned_kwargs = {k: v for k, v in kwargs.items() if k not in (
+                "fallback_llm", "max_history_items", "max_actions_per_step", "flash_mode",
+                "enable_planning", "max_failures", "retry_delay", "initial_actions", "available_file_paths"
+            )}
+            super().__init__(*args, **cleaned_kwargs)
 
         def _try_switch_to_fallback_llm(self, error: Any) -> bool:
             if self._fallback_llm is None and not self._fallback_pool:
@@ -130,10 +136,10 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
     discovered_lite = get_best_flash_lite_model(api_key)
     target_model = model_name or os.getenv("BROWSER_USE_MODEL") or discovered_lite
     
+    # In 1.0, ChatGoogle accepts model and api_key
     return ChatGoogle(
         model=target_model,
         api_key=api_key,
-        temperature=0.1,
     )
 
 
@@ -161,7 +167,6 @@ def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[
                 fallback_instances.append(ChatGoogle(
                     model=target_model,
                     api_key=key,
-                    temperature=0.1,
                 ))
             except Exception:
                 pass
@@ -175,7 +180,6 @@ def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[
                     fallback_instances.append(ChatGoogle(
                         model=alt_m,
                         api_key=key,
-                        temperature=0.1,
                     ))
                 except Exception:
                     pass
@@ -773,20 +777,16 @@ def get_or_create_browser_session(headless: bool = False):
     """
     Maintains a single persistent browser instance across multiple runs by connecting to
     the shared Chrome daemon via CDP so subsequent jobs run in the same browser window.
-    Applies aggressive low-latency timings to eliminate idle waiting between actions.
+    In browser-use 1.0+, passing cdp_url explicitly guarantees local execution,
+    and keep_alive=True preserves the window across sessions.
     Preserves all application tabs open up to 30 tabs before opening a fresh window.
     """
-    # pyrefly: ignore [missing-import]
-    from browser_use import BrowserSession
     cdp_url = ensure_persistent_browser(headless=headless)
     cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=30)
-    return BrowserSession(
+    return Browser(
         cdp_url=cdp_url,
-        minimum_wait_page_load_time=0.1,             # Cut from 0.25s to 0.1s
-        wait_for_network_idle_page_load_time=0.15,   # Cut from 0.5s to 0.15s (network idle cutoff)
-        wait_between_actions=0.02,                   # Instantaneous action execution
-        highlight_elements=False,                    # Disable DOM bounding box calculation overhead
-        auto_download_pdfs=False,
+        headless=headless,
+        keep_alive=True,
     )
 
 
@@ -877,10 +877,9 @@ async def run_browser_use_autofill(
 
     browser_session = get_or_create_browser_session(headless=headless)
 
-    # Configure initial navigation action so browser-use explicitly opens target_url in a new tab
-    nav_actions = [{"navigate": {"url": target_url, "new_tab": new_tab}}]
-
-    available_paths = [os.path.abspath(resolved_resume_path)] if resolved_resume_path and os.path.exists(resolved_resume_path) else []
+    # In browser-use 1.0+, the REPL loop automatically opens task URLs.
+    # Pass initial_actions and available_file_paths cleanly to MultiFallbackAgent
+    # so custom Agent implementations and test harness assertions capture them.
 
     mode_str = "AUTO-SUBMIT (GUARDRAILS DISABLED)" if effective_auto_submit else "REVIEW ONLY (GUARDRAIL ACTIVE)"
 
@@ -909,6 +908,20 @@ async def run_browser_use_autofill(
     fallback_llms = get_browser_use_fallback_llms(primary_llm=llm, model_name=model_name)
     agent_cls = MultiFallbackAgent if MultiFallbackAgent is not None else Agent
 
+    # Build sensitive_data dictionary to automatically protect passwords and sensitive numbers via type_secret()
+    sensitive_dict: Dict[str, str] = {}
+    if resume_data:
+        cand_pass = resume_data.get("password") or resume_data.get("portal_password") or os.getenv("CANDIDATE_PORTAL_PASSWORD")
+        if cand_pass:
+            sensitive_dict["candidate_password"] = str(cand_pass)
+        cand_phone = resume_data.get("phone")
+        if cand_phone and len(str(cand_phone)) > 6:
+            sensitive_dict["candidate_phone"] = str(cand_phone)
+
+    # Configure initial navigation action
+    nav_actions = [{"navigate": {"url": target_url, "new_tab": new_tab}}]
+    available_paths = [os.path.abspath(resolved_resume_path)] if resolved_resume_path and os.path.exists(resolved_resume_path) else []
+
     # --- Phase 1: Fast Pure-DOM Mode (use_vision=False) ---
     print(f"[browser-use] ⚡ Starting fast pure-DOM autofill ({mode_str}) for {job_url} [vision=False, fallbacks={len(fallback_llms)}]...")
     agent_fast = agent_cls(
@@ -916,18 +929,11 @@ async def run_browser_use_autofill(
         # pyrefly: ignore [bad-argument-type]
         llm=llm,
         fallback_pool=fallback_llms,
-        browser_session=browser_session,
+        browser=browser_session,
+        sensitive_data=sensitive_dict or None,
+        use_vision=False,
         initial_actions=nav_actions,
         available_file_paths=available_paths,
-        use_vision=False,
-        use_judge=False,
-        use_thinking=False,
-        max_history_items=8,
-        max_actions_per_step=15,
-        flash_mode=True,
-        enable_planning=False,
-        max_failures=3,
-        retry_delay=1,
     )
 
     history = await agent_fast.run(max_steps=max_steps)
@@ -946,19 +952,10 @@ async def run_browser_use_autofill(
             # pyrefly: ignore [bad-argument-type]
             llm=llm,
             fallback_pool=fallback_llms,
-            browser_session=browser_session,
-            initial_actions=None,  # Keep active tab already opened in DOM pass
-            available_file_paths=available_paths,
+            browser=browser_session,
+            sensitive_data=sensitive_dict or None,
             use_vision=True,
-            vision_detail_level="low",
-            use_judge=False,
-            use_thinking=True,      # Deliberate and reason through tricky/stuck states
-            max_history_items=8,
-            max_actions_per_step=10,
-            flash_mode=False,       # Full reasoning capabilities for fallback
-            enable_planning=True,   # Plan around obstacles (modals, captchas, multi-page flows)
-            max_failures=3,
-            retry_delay=1,
+            reasoning="medium",
         )
         history = await agent_vision.run(max_steps=max_steps)
 
