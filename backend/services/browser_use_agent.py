@@ -27,6 +27,7 @@ except ImportError:
 try:
     # pyrefly: ignore [missing-import]
     from browser_use import Agent, Browser, ChatGoogle, BrowserSession  # pyright: ignore[reportAssignmentType]
+    from browser_use.llm import ChatOpenAI
     HAS_BROWSER_USE = True
 
     class MultiFallbackAgent(Agent):  # pyright: ignore[reportRedeclaration]
@@ -90,9 +91,29 @@ DISABLE_GUARDRAILS: bool = os.getenv("BROWSER_USE_DISABLE_GUARDRAILS", "0").stri
 
 def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Optional[str] = None):
     """
-    Initializes browser-use native ChatGoogle client targeting the latest dynamically discovered
-    Gemini Flash-Lite / Flash model (strictly excluding Pro models for high RPM & low latency).
+    Initializes browser-use native LLM client.
+    Priority:
+      1. If OPENAI_API_KEY exists (and no custom Gemini override is forced), uses OpenAI GPT Luna
+         (default model: gpt-6-luna / gpt-5.6-luna) for high-performance, cost-efficient browser decisions.
+      2. Otherwise, falls back to ChatGoogle targeting dynamically discovered Gemini Flash-Lite / Flash.
+    Note: OpenAI credits are used exclusively for browser-use automation, not for resume generation or other tasks.
     """
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    # Explicitly check if provider is forced to gemini
+    forced_provider = os.getenv("BROWSER_USE_PROVIDER", "").strip().lower()
+
+    if openai_key and forced_provider != "gemini":
+        luna_model = model_name or os.getenv("BROWSER_USE_MODEL") or "gpt-6-luna"
+        try:
+            return ChatOpenAI(
+                model=luna_model,
+                api_key=openai_key,
+                temperature=0.1,
+                reasoning_effort="low",
+            )
+        except Exception as oe:
+            print(f"ℹ️ ChatOpenAI initialization notice ({oe}), falling back to Gemini Flash-Lite...")
+
     try:
         # pyrefly: ignore [missing-import]
         from services.gemini_client import get_next_gemini_api_key
@@ -101,7 +122,7 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
         api_key = custom_api_key or os.getenv("GEMINI_API_KEY")
 
     if not api_key:
-        raise ValueError("GEMINI_API_KEY is required for browser-use agent execution.")
+        raise ValueError("GEMINI_API_KEY or OPENAI_API_KEY is required for browser-use agent execution.")
 
     # Automatically resolve the latest available Flash-Lite model if model_name is not explicitly passed
     discovered_lite = get_best_flash_lite_model(api_key)
