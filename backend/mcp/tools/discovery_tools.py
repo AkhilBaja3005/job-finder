@@ -67,7 +67,13 @@ async def handle_search_jobs(arguments: Dict[str, Any]) -> Dict[str, Any]:
     target_roles = prefs.get("target_roles", ["AI Engineer", "Agentic AI Engineer", "LLM Engineer", "Machine Learning Engineer", "Senior AI Engineer", "Applied AI Scientist"])
     default_keywords = ", ".join(target_roles)
 
-    keywords = arguments.get("keywords") or default_keywords
+    keywords_arg = arguments.get("keywords")
+    if isinstance(keywords_arg, list):
+        keywords = ", ".join(str(k) for k in keywords_arg if k)
+    elif keywords_arg:
+        keywords = str(keywords_arg)
+    else:
+        keywords = default_keywords
     location = arguments.get("location") or (prefs.get("target_locations", ["London, UK"])[0])
     timeframe = arguments.get("timeframe") or "24h"
     token = arguments.get("token")

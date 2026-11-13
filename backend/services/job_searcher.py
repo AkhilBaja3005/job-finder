@@ -1578,6 +1578,12 @@ async def find_matching_jobs(
     target_plats = [p.strip().lower() for p in (target_platforms or []) if p.strip()]
     platform_filter_active = len(target_plats) > 0 and "all" not in target_plats
 
+    # Normalize keywords: handle list or string cleanly
+    if isinstance(keywords, list):
+        keywords = ", ".join(str(k) for k in keywords if k)
+    elif keywords:
+        keywords = str(keywords)
+
     if keywords and keywords.strip():
         # User-provided search role overrides
         queries = [q.strip() for q in keywords.split(",") if q.strip()]
