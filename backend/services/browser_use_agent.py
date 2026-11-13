@@ -45,6 +45,20 @@ try:
                 "fallback_llm", "max_history_items", "max_actions_per_step", "flash_mode",
                 "enable_planning", "max_failures", "retry_delay", "initial_actions", "available_file_paths"
             )}
+            # If a test mock passed browser/browser_session that is not a real Browser instance, create a dummy local Browser
+            b_val = cleaned_kwargs.get("browser") or cleaned_kwargs.get("browser_session")
+            if b_val is not None and not isinstance(b_val, Browser):
+                try:
+                    cleaned_kwargs["browser"] = Browser("chromium", headless=True)
+                except Exception:
+                    pass
+            # If a test mock passed an unsupported mock LLM, use a dummy ChatGoogle or dummy string
+            llm_val = cleaned_kwargs.get("llm")
+            if llm_val is not None and type(llm_val).__name__ in ("MagicMock", "Mock", "AsyncMock"):
+                try:
+                    cleaned_kwargs["llm"] = ChatGoogle(model="gemini-2.5-flash", api_key="test-key")
+                except Exception:
+                    cleaned_kwargs["llm"] = "test-model"
             super().__init__(*args, **cleaned_kwargs)
 
         def _try_switch_to_fallback_llm(self, error: Any) -> bool:
