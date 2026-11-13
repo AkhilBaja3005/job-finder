@@ -96,8 +96,6 @@ def test_browser_use_llm_luna_priority_with_openai_key():
         mock_chat_openai.assert_called_once_with(
             model="gpt-6-luna",
             api_key="sk-test-key-luna-12345",
-            temperature=None,
-            frequency_penalty=None,
             reasoning_effort="low",
         )
         assert llm.model == "gpt-6-luna"
