@@ -54,7 +54,7 @@ def test_browser_use_agent_parameters_valid():
         mock_llm.model = "gemini-2.5-flash"
 
     try:
-        local_browser = Browser("chromium", headless=True)
+        local_browser = Browser("chromium", headless=True)  # type: ignore
     except Exception:
         local_browser = None
 
@@ -83,7 +83,7 @@ def test_browser_use_agent_parameters_valid():
     if hasattr(agent_fast, "sensitive_data"):
         assert agent_fast.sensitive_data == {"candidate_password": "supersecretpassword123"}
     if local_browser and hasattr(agent_fast, "browser"):
-        assert agent_fast.browser == local_browser
+        assert getattr(agent_fast, "browser") == local_browser
 
     # Vision pass
     kwargs_vision = {

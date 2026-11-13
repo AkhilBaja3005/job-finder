@@ -26,8 +26,8 @@ except ImportError:
 
 try:
     # pyrefly: ignore [missing-import]
-    from browser_use import Agent, Browser, ChatGoogle
-    from browser_use.llm import ChatOpenAI
+    from browser_use import Agent, Browser, ChatGoogle  # type: ignore
+    from browser_use.llm import ChatOpenAI  # type: ignore
     # In browser-use 1.0+, BrowserSession was replaced by Browser
     BrowserSession = Browser
     HAS_BROWSER_USE = True
@@ -119,13 +119,16 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
     Note: OpenAI credits are used exclusively for browser-use automation, not for resume generation or other tasks.
     """
     openai_key = os.getenv("OPENAI_API_KEY", "").strip()
-    # Explicitly check if provider is forced to gemini
     forced_provider = os.getenv("BROWSER_USE_PROVIDER", "").strip().lower()
 
-    if openai_key and forced_provider != "gemini":
-        luna_model = model_name or os.getenv("BROWSER_USE_MODEL") or "gpt-6-luna"
+    # If a specific Gemini model was explicitly requested, don't use ChatOpenAI for it
+    is_gemini_model = bool(model_name and ("gemini" in model_name.lower()))
+    is_openai_model = bool(model_name and ("gpt" in model_name.lower() or "o1" in model_name.lower() or "o3" in model_name.lower() or "luna" in model_name.lower()))
+
+    if openai_key and forced_provider != "gemini" and not is_gemini_model:
+        luna_model: str = str(model_name if is_openai_model else (os.getenv("BROWSER_USE_MODEL") or "gpt-6-luna"))
         try:
-            # Luna is an OpenAI reasoning model: 1.0 ChatOpenAI takes model, api_key, reasoning_effort
+            # browser-use 1.0 ChatOpenAI takes model, api_key, reasoning_effort
             return ChatOpenAI(
                 model=luna_model,
                 api_key=openai_key,
@@ -516,7 +519,7 @@ def build_application_task_prompt(
 
 _shared_browser_session: Optional[Any] = None
 _chrome_process: Optional[subprocess.Popen] = None
-CDP_PORT = 9222
+CDP_PORT = int(os.getenv("JOB_FINDER_CDP_PORT", "9223"))
 
 def find_browser_executable() -> str:
     """
