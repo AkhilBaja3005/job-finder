@@ -50,16 +50,13 @@ async def mcp_sse_endpoint(request: Request):
     SSE streaming endpoint for remote MCP clients.
     Serves full absolute URL for message posting in compliance with MCP SSE spec.
     """
-    # Build fully-qualified URL for messages endpoint
+    # Ensure HTTPS for public web connectors (Claude.ai rejects plain http)
     base_url = str(request.base_url).rstrip("/")
-    # Check if forwarded headers exist (e.g. Hugging Face Spaces proxy)
-    forwarded_proto = request.headers.get("x-forwarded-proto", "")
-    forwarded_host = request.headers.get("x-forwarded-host", "")
-    if forwarded_proto and forwarded_host:
-        messages_endpoint = f"{forwarded_proto}://{forwarded_host}/mcp/messages"
-    elif "hf.space" in base_url or request.headers.get("host", "").endswith(".hf.space"):
-        host = request.headers.get("host", "abaja-job-finder.hf.space")
-        messages_endpoint = f"https://{host}/mcp/messages"
+    if base_url.startswith("http://"):
+        base_url = "https://" + base_url[len("http://"):]
+    forwarded_host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    if forwarded_host:
+        messages_endpoint = f"https://{forwarded_host}/mcp/messages"
     else:
         messages_endpoint = f"{base_url}/mcp/messages"
 
