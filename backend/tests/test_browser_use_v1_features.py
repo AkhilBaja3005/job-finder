@@ -13,7 +13,7 @@ from unittest.mock import patch, MagicMock
 
 
 def test_browser_use_v1_local_browser_guard():
-    """Ensures get_or_create_browser_session explicitly binds to local CDP with keep_alive=True."""
+    """Ensures get_or_create_browser_session explicitly binds to local CDP with keep_alive=True without headless= kwarg."""
     from backend.services.browser_use_agent import get_or_create_browser_session
 
     with patch("backend.services.browser_use_agent.ensure_persistent_browser", return_value="http://127.0.0.1:9222"), \
@@ -26,7 +26,6 @@ def test_browser_use_v1_local_browser_guard():
         browser = get_or_create_browser_session(headless=True)
         mock_browser_cls.assert_called_once_with(
             cdp_url="http://127.0.0.1:9222",
-            headless=True,
             keep_alive=True,
         )
         assert browser == mock_instance

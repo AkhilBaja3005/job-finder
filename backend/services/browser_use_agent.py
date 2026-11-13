@@ -789,14 +789,18 @@ def get_or_create_browser_session(headless: bool = False):
     """
     Maintains a single persistent browser instance across multiple runs by connecting to
     the shared Chrome daemon via CDP so subsequent jobs run in the same browser window.
-    In browser-use 1.0+, passing cdp_url explicitly guarantees local execution,
-    and keep_alive=True preserves the window across sessions.
-    Preserves all application tabs open up to 30 tabs before opening a fresh window.
+    In browser-use 1.0+, passing cdp_url explicitly guarantees local execution.
+    Note: Browser('cdp') does not take headless= (as it connects to an already running browser).
     """
     cdp_url = ensure_persistent_browser(headless=headless)
     cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=30)
+    if cdp_url:
+        return Browser(
+            cdp_url=cdp_url,
+            keep_alive=True,
+        )
     return Browser(
-        cdp_url=cdp_url,
+        "chromium",
         headless=headless,
         keep_alive=True,
     )
