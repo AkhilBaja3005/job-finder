@@ -58,7 +58,7 @@ HANDLERS = {
 }
 
 
-async def process_mcp_request(request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+async def process_mcp_request(request: Dict[str, Any], user_token: Optional[str] = None) -> Optional[Dict[str, Any]]:
     req_id = request.get("id")
     method = request.get("method")
     params = request.get("params", {})
@@ -94,7 +94,12 @@ async def process_mcp_request(request: Dict[str, Any]) -> Optional[Dict[str, Any
 
     elif method == "tools/call":
         tool_name = params.get("name")
-        arguments = params.get("arguments", {})
+        arguments = dict(params.get("arguments", {}))
+
+        # Automatically inject authenticated user_token into tool arguments if not already specified
+        if user_token and not arguments.get("token"):
+            arguments["token"] = user_token
+
         handler = HANDLERS.get(tool_name)
 
         if not handler:

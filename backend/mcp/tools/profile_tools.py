@@ -140,6 +140,10 @@ PROFILE_TOOLS_SPEC = [
                         }
                     },
                     "description": "Optional list of reference contacts and tiers"
+                },
+                "token": {
+                    "type": "string",
+                    "description": "Optional user session token or 6-digit sync code to save to specific user account."
                 }
             },
             "required": ["name", "email", "target_roles", "target_locations"]
@@ -150,7 +154,12 @@ PROFILE_TOOLS_SPEC = [
         "description": "Retrieves the currently saved candidate profile, search preferences, target roles, locations, timeframe, and reference details.",
         "inputSchema": {
             "type": "object",
-            "properties": {}
+            "properties": {
+                "token": {
+                    "type": "string",
+                    "description": "Optional user session token or 6-digit sync code. Required in remote/cloud environments to load user-specific profile."
+                }
+            }
         }
     },
     {
@@ -162,6 +171,10 @@ PROFILE_TOOLS_SPEC = [
                 "resume_path": {
                     "type": "string",
                     "description": "Path to the resume file to parse. If omitted, automatically detects the master resume."
+                },
+                "token": {
+                    "type": "string",
+                    "description": "Optional user session token or 6-digit sync code."
                 }
             }
         }
@@ -396,6 +409,62 @@ async def handle_save_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 async def handle_get_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
+    token = args.get("token") or os.getenv("JOB_FINDER_USER_TOKEN")
+
+    # In cloud environments (Hugging Face Spaces, Railway, Render, production)
+    is_cloud = bool(
+        any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID"))
+        or os.getenv("ENVIRONMENT") == "production"
+    )
+
+    # 1. If token is provided, resolve authenticated user-specific profile
+    if token:
+        try:
+            # pyrefly: ignore [missing-import]
+            from services.session_store import get_session_data
+            session = get_session_data(token)
+            resume_data = session.get("data")
+            if resume_data and (resume_data.get("name") or resume_data.get("email") or resume_data.get("education") or resume_data.get("skills")):
+                # Wrap into candidate structure if raw dict
+                if "candidate" not in resume_data and "name" in resume_data:
+                    structured_profile = {
+                        "candidate": {
+                            "name": resume_data.get("name", ""),
+                            "email": resume_data.get("email", ""),
+                            "phone": resume_data.get("phone", ""),
+                            "location": resume_data.get("location", ""),
+                            "linkedin": resume_data.get("linkedin", ""),
+                            "github": resume_data.get("github", ""),
+                            "portfolio": resume_data.get("portfolio", ""),
+                            "work_authorization": resume_data.get("work_auth", "Yes"),
+                            "requires_sponsorship": resume_data.get("sponsorship", "").lower() in ("yes", "true", "required"),
+                            "core_skills": resume_data.get("skills", []),
+                            "experience_summary": resume_data.get("summary", ""),
+                            "work_experience": resume_data.get("work_experience", []),
+                            "education": resume_data.get("education", []),
+                            "projects": resume_data.get("projects", [])
+                        },
+                        "search_preferences": {
+                            "target_roles": resume_data.get("target_roles", ["AI Engineer", "Software Engineer"]),
+                            "target_locations": [resume_data.get("location", "London, UK"), "Remote"],
+                            "timeframe": "past_24_hours"
+                        }
+                    }
+                    return {"found": True, "profile": structured_profile, "authenticated": True}
+                return {"found": True, "profile": resume_data, "authenticated": True}
+        except Exception as e:
+            print(f"[handle_get_candidate_profile] User token session resolution notice: {e}")
+
+    # 2. In cloud environments without an authenticated token, prevent leaking shared / stale profiles
+    if is_cloud and not token:
+        return {
+            "found": False,
+            "authenticated": False,
+            "error": "UNAUTHENTICATED",
+            "message": "Authentication required on cloud MCP server. Please pass your session token or 6-digit sync code via header 'Authorization: Bearer <token>' or parameter 'token'."
+        }
+
+    # 3. Local environment fallback (reads active local candidate_profile.json)
     data = load_profile_data()
     if not data:
         return {
@@ -404,7 +473,8 @@ async def handle_get_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
         }
     return {
         "found": True,
-        "profile": data
+        "profile": data,
+        "authenticated": bool(token)
     }
 
 async def handle_sync_candidate_profile_from_resume(args: Dict[str, Any]) -> Dict[str, Any]:
