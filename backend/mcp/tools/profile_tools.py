@@ -452,6 +452,13 @@ async def handle_get_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
                     }
                     return {"found": True, "profile": structured_profile, "authenticated": True}
                 return {"found": True, "profile": resume_data, "authenticated": True}
+            else:
+                # Token was provided but no candidate session data exists for this specific token
+                return {
+                    "found": False,
+                    "authenticated": True,
+                    "message": f"No candidate profile found for the provided session token '{token}'. Please upload or sync a resume first."
+                }
         except Exception as e:
             print(f"[handle_get_candidate_profile] User token session resolution notice: {e}")
 

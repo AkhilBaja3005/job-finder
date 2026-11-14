@@ -37,6 +37,7 @@ from routes.job_routes import router as job_router, _extract_company_from_jd
 from routes.ai_routes import router as ai_router
 from routes.admin_routes import router as admin_router
 from routes.mcp_routes import router as mcp_router
+from routes.oauth_routes import router as oauth_router
 from utils.latex_utils import compile_and_check_page_metrics, apply_latex_hotfix, generate_latex_from_json
 from services.overleaf import upload_zip_to_tmpfiles
 
@@ -171,6 +172,7 @@ app.include_router(job_router)
 app.include_router(ai_router)
 app.include_router(admin_router)
 app.include_router(mcp_router)
+app.include_router(oauth_router)
 
 # Mount Static Asset Directories
 if os.path.exists(OUTPUT_DIR):
@@ -182,9 +184,9 @@ if os.path.exists(os.path.join(BASE_DIR, "assets")):
 # Mount Frontend Build & SPA Catch-All Route
 _this_backend = os.path.dirname(os.path.abspath(__file__))
 frontend_candidates = [
-    os.path.join(_this_backend, "static_frontend"),
     os.path.abspath(os.path.join(BASE_DIR, "frontend/dist")),
     os.path.abspath(os.path.join(BASE_DIR, "../frontend/dist")),
+    os.path.join(_this_backend, "static_frontend"),
     "/app/frontend/dist",
 ]
 frontend_dist = next((p for p in frontend_candidates if os.path.exists(os.path.join(p, "index.html"))), None)

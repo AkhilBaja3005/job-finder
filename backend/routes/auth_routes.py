@@ -57,9 +57,15 @@ class ProfileUpdateRequest(BaseModel):
 @router.get("/auth/google")
 @router.get("/auth/url")
 async def auth_google(request: Request, redirect_to: Optional[str] = None):
-    custom_redirect = None
-    if not os.getenv("GOOGLE_REDIRECT_URI"):
-        custom_redirect = f"{str(request.base_url).rstrip('/')}/auth/callback"
+    # Determine base URL dynamically (respecting reverse proxy / tunnel headers like x-forwarded-proto/host)
+    forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", str(request.base_url.netloc)))
+    base_url = f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+
+    # Use dynamically detected host callback so ngrok and cloud domains route back accurately
+    custom_redirect = f"{base_url}/auth/callback"
+    if os.getenv("GOOGLE_REDIRECT_URI") and ("localhost" not in os.getenv("GOOGLE_REDIRECT_URI", "") or "localhost" in base_url):
+        custom_redirect = os.getenv("GOOGLE_REDIRECT_URI")
     
     # State holds the destination path (e.g. /platform, /docs, or specific deep link)
     state = redirect_to if (redirect_to and redirect_to.startswith("/")) else "/platform"
@@ -72,17 +78,20 @@ async def auth_google(request: Request, redirect_to: Optional[str] = None):
 @router.get("/auth/callback")
 async def auth_callback(code: str, request: Request, state: Optional[str] = None):
     try:
-        custom_redirect = None
-        if not os.getenv("GOOGLE_REDIRECT_URI"):
-            custom_redirect = f"{str(request.base_url).rstrip('/')}/auth/callback"
+        forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+        forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", str(request.base_url.netloc)))
+        base_url = f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+        custom_redirect = f"{base_url}/auth/callback"
+        if os.getenv("GOOGLE_REDIRECT_URI") and ("localhost" not in os.getenv("GOOGLE_REDIRECT_URI", "") or "localhost" in base_url):
+            custom_redirect = os.getenv("GOOGLE_REDIRECT_URI")
+
         email, picture_url = exchange_google_code_for_email(code, redirect_uri=custom_redirect)
         user = create_or_get_user(email, picture_url)
         token = create_session(user["id"])
 
         frontend_url = os.getenv("FRONTEND_URL")
         if not frontend_url:
-            base = str(request.base_url).rstrip("/")
-            frontend_url = base
+            frontend_url = base_url
 
         # Safely determine destination path from state (defaulting to /platform)
         dest_path = "/platform"

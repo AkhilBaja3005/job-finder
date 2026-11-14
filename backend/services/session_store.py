@@ -173,11 +173,11 @@ def get_session_data(token: Optional[str]) -> dict:
     key = token or "guest"
     with _store_lock:
         data = _session_store.get(key)
-        if data and data.get("data") and data["data"].get("education"):
+        if data and data.get("data") and (data["data"].get("education") or data["data"].get("name") or data["data"].get("skills")):
             return data
 
-    # Try fetching from Supabase if token exists
-    if token:
+    # Try fetching from Supabase if token exists and not a local test guest
+    if token and not token.startswith("guest_") and not token.startswith("usr_"):
         try:
             user = get_user_by_token(token)
             if user:
