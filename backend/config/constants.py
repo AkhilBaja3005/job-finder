@@ -42,6 +42,11 @@ def resolve_workspace_root() -> str:
         # Running as installed package: save user data to current working directory
         return os.path.abspath(os.getcwd())
 
+    # Prioritize candidate_profile.json or .env in current working directory if user is working in a separate project
+    cwd = os.path.abspath(os.getcwd())
+    if os.path.exists(os.path.join(cwd, "candidate_profile.json")) or os.path.exists(os.path.join(cwd, ".env")):
+        return cwd
+
     # Running from source checkout: backend/config/constants.py -> backend -> repo root
     repo_candidate = os.path.dirname(os.path.dirname(os.path.dirname(this_file)))
     return repo_candidate
