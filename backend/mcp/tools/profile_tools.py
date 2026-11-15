@@ -7,7 +7,10 @@ import os
 import json
 from typing import Dict, Any, Optional
 # pyrefly: ignore [missing-import]
-from config.constants import resolve_workspace_root
+try:
+    from config.constants import resolve_workspace_root
+except ImportError:
+    from backend.config.constants import resolve_workspace_root
 
 try:
     from dotenv import load_dotenv

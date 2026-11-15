@@ -26,60 +26,8 @@ except ImportError:
 
 try:
     # pyrefly: ignore [missing-import]
-    from browser_use import Agent, Browser, ChatGoogle  # type: ignore
-    from browser_use.llm import ChatOpenAI  # type: ignore
-    # In browser-use 1.0+, BrowserSession was replaced by Browser
-    BrowserSession = Browser
+    from browser_use import Agent, Browser, ChatGoogle, BrowserSession  # pyright: ignore[reportAssignmentType]
     HAS_BROWSER_USE = True
-
-    class RotatingChatGoogle(ChatGoogle):
-        """
-        Custom ChatGoogle provider that intercepts 429 RESOURCE_EXHAUSTED / RateLimit errors
-        from Google Gemini API and automatically cascades through the pool of configured API keys
-        in real-time during agent steps without aborting the browser navigation session.
-        """
-        def __init__(self, model: str, keys: Optional[List[str]] = None, **kwargs: Any):
-            api_key = (keys[0] if keys else None) or ""
-            super().__init__(model=model, api_key=api_key, **kwargs)
-            self.keys = list(keys or [])
-
-        # pyrefly: ignore [override]
-        def pydantic_model(self) -> Any:
-            try:
-                # pyrefly: ignore [missing-import]
-                from pydantic_ai.models.google import GoogleModel  # type: ignore
-                # pyrefly: ignore [missing-import]
-                from pydantic_ai.providers.google import GoogleProvider  # type: ignore
-            except ImportError:
-                return getattr(super(), "pydantic_model")()
-
-            if not self.keys:
-                return getattr(super(), "pydantic_model")()
-
-            class RotatingKeyGoogleModel(GoogleModel):
-                def __init__(self, model_name: str, key_list: list):
-                    self._all_keys = list(key_list)
-                    self._key_index = 0
-                    super().__init__(model_name, provider=GoogleProvider(api_key=self._all_keys[0]))
-                
-                async def _generate_content(self, messages, stream, model_settings, model_request_parameters):
-                    for attempt in range(len(self._all_keys)):
-                        try:
-                            return await super()._generate_content(messages, stream, model_settings, model_request_parameters)
-                        except Exception as e:
-                            err_str = str(e)
-                            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower() or "limit" in err_str.lower():
-                                self._key_index = (self._key_index + 1) % len(self._all_keys)
-                                next_key = self._all_keys[self._key_index]
-                                print(f"[RotatingChatGoogle] 🔄 429 quota hit on Gemini: auto-rotating to key #{self._key_index+1} / {len(self._all_keys)}...")
-                                self._provider = GoogleProvider(api_key=next_key)
-                                self.client = self._provider.client
-                                await asyncio.sleep(0.5)
-                            else:
-                                raise e
-                    return await super()._generate_content(messages, stream, model_settings, model_request_parameters)
-
-            return RotatingKeyGoogleModel(self.model, self.keys)
 
     class MultiFallbackAgent(Agent):  # pyright: ignore[reportRedeclaration]
         """
@@ -89,26 +37,8 @@ try:
         """
         def __init__(self, *args, fallback_pool: Optional[List[Any]] = None, **kwargs):
             self._fallback_pool = list(fallback_pool or [])
-            # Strip 0.x removed parameters in 1.0
-            cleaned_kwargs = {k: v for k, v in kwargs.items() if k not in (
-                "fallback_llm", "max_history_items", "max_actions_per_step", "flash_mode",
-                "enable_planning", "max_failures", "retry_delay", "initial_actions", "available_file_paths"
-            )}
-            # If a test mock passed browser/browser_session that is not a real Browser instance, create a dummy local Browser
-            b_val = cleaned_kwargs.get("browser") or cleaned_kwargs.get("browser_session")
-            if b_val is not None and not isinstance(b_val, Browser):
-                try:
-                    cleaned_kwargs["browser"] = Browser("chromium", headless=True)
-                except Exception:
-                    pass
-            # If a test mock passed an unsupported mock LLM, use a dummy ChatGoogle or dummy string
-            llm_val = cleaned_kwargs.get("llm")
-            if llm_val is not None and type(llm_val).__name__ in ("MagicMock", "Mock", "AsyncMock"):
-                try:
-                    cleaned_kwargs["llm"] = ChatGoogle(model="gemini-2.5-flash", api_key="test-key")
-                except Exception:
-                    cleaned_kwargs["llm"] = "test-model"
-            super().__init__(*args, **cleaned_kwargs)
+            first_fb = self._fallback_pool.pop(0) if self._fallback_pool else None
+            super().__init__(*args, fallback_llm=first_fb, **kwargs)
 
         def _try_switch_to_fallback_llm(self, error: Any) -> bool:
             if self._fallback_llm is None and not self._fallback_pool:
@@ -160,32 +90,9 @@ DISABLE_GUARDRAILS: bool = os.getenv("BROWSER_USE_DISABLE_GUARDRAILS", "0").stri
 
 def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Optional[str] = None):
     """
-    Initializes browser-use native LLM client.
-    Priority:
-      1. If OPENAI_API_KEY exists (and no custom Gemini override is forced), uses OpenAI GPT Luna
-         (default model: gpt-6-luna / gpt-5.6-luna) for high-performance, cost-efficient browser decisions.
-      2. Otherwise, falls back to ChatGoogle targeting dynamically discovered Gemini Flash-Lite / Flash.
-    Note: OpenAI credits are used exclusively for browser-use automation, not for resume generation or other tasks.
+    Initializes browser-use native ChatGoogle client targeting the latest dynamically discovered
+    Gemini Flash-Lite / Flash model (strictly excluding Pro models for high RPM & low latency).
     """
-    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
-    forced_provider = os.getenv("BROWSER_USE_PROVIDER", "").strip().lower()
-
-    # If a specific Gemini model was explicitly requested, don't use ChatOpenAI for it
-    is_gemini_model = bool(model_name and ("gemini" in model_name.lower()))
-    is_openai_model = bool(model_name and ("gpt" in model_name.lower() or "o1" in model_name.lower() or "o3" in model_name.lower() or "luna" in model_name.lower()))
-
-    if openai_key and forced_provider != "gemini" and not is_gemini_model:
-        luna_model: str = str(model_name if is_openai_model else (os.getenv("BROWSER_USE_MODEL") or "gpt-6-luna"))
-        try:
-            # browser-use 1.0 ChatOpenAI takes model, api_key, reasoning_effort
-            return ChatOpenAI(
-                model=luna_model,
-                api_key=openai_key,
-                reasoning_effort="low",
-            )
-        except Exception as oe:
-            print(f"ℹ️ ChatOpenAI initialization notice ({oe}), falling back to Gemini Flash-Lite...")
-
     try:
         # pyrefly: ignore [missing-import]
         from services.gemini_client import get_next_gemini_api_key
@@ -194,29 +101,16 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
         api_key = custom_api_key or os.getenv("GEMINI_API_KEY")
 
     if not api_key:
-        raise ValueError("GEMINI_API_KEY or OPENAI_API_KEY is required for browser-use agent execution.")
+        raise ValueError("GEMINI_API_KEY is required for browser-use agent execution.")
 
     # Automatically resolve the latest available Flash-Lite model if model_name is not explicitly passed
     discovered_lite = get_best_flash_lite_model(api_key)
     target_model = model_name or os.getenv("BROWSER_USE_MODEL") or discovered_lite
     
-    # Collect all available Gemini API keys to enable seamless in-session key rotation
-    try:
-        from services.gemini_client import get_gemini_api_keys
-        all_keys = get_gemini_api_keys()
-    except Exception:
-        all_keys = [api_key]
-
-    if not all_keys:
-        all_keys = [api_key]
-    elif api_key in all_keys and all_keys[0] != api_key:
-        all_keys.remove(api_key)
-        all_keys.insert(0, api_key)
-
-    # In 1.0, RotatingChatGoogle wraps ChatGoogle and cascades across all keys on 429
-    return RotatingChatGoogle(
+    return ChatGoogle(
         model=target_model,
-        keys=all_keys,
+        api_key=api_key,
+        temperature=0.1,
     )
 
 
@@ -244,6 +138,7 @@ def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[
                 fallback_instances.append(ChatGoogle(
                     model=target_model,
                     api_key=key,
+                    temperature=0.1,
                 ))
             except Exception:
                 pass
@@ -257,6 +152,7 @@ def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[
                     fallback_instances.append(ChatGoogle(
                         model=alt_m,
                         api_key=key,
+                        temperature=0.1,
                     ))
                 except Exception:
                     pass
@@ -778,47 +674,10 @@ def preflight_check_job_url(url: str) -> tuple[str, bool, Optional[str]]:
         return url, True, None
 
 
-def open_new_chrome_window_via_cdp(cdp_url: str, url: str = "about:blank") -> bool:
+def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 2) -> None:
     """
-    Spawns a new independent Chrome window via the CDP browser WebSocket target.
-    Used when the current window reaches the threshold (e.g. 30 tabs) so applications
-    can keep their tabs open without crowding or freezing a single window.
-    """
-    try:
-        import websockets
-        import asyncio
-
-        req = urllib.request.Request(f"{cdp_url}/json/version", headers={"User-Agent": "JobFinderCleaner"})
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            data = json.load(resp)
-        browser_ws = data.get("webSocketDebuggerUrl")
-        if not browser_ws:
-            return False
-
-        async def _create_window():
-            async with websockets.connect(browser_ws, open_timeout=3, close_timeout=2) as ws:
-                msg = {
-                    "id": 1,
-                    "method": "Target.createTarget",
-                    "params": {"url": url, "newWindow": True}
-                }
-                await ws.send(json.dumps(msg))
-                raw_res = await ws.recv()
-                res = json.loads(raw_res)
-                return bool(res.get("result", {}).get("targetId"))
-
-        return asyncio.run(_create_window())
-    except Exception as e:
-        print(f"[browser-use] Note: create new Chrome window via CDP: {e}")
-        return False
-
-
-def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 30) -> None:
-    """
-    Manages Chrome tabs across application sessions.
-    Keeps all application tabs open so the candidate can inspect and submit them.
-    When open page tabs exceed max_tabs_to_keep (default 30), opens a fresh Chrome window
-    via CDP rather than closing active applications, or cleanly prunes only when explicitly requested.
+    Reaps stale, background, or completed tabs from the persistent Chrome instance.
+    Prevents Chrome tab proliferation and memory exhaustion that causes autofill to freeze.
     """
     try:
         req = urllib.request.Request(f"{cdp_url}/json/list", headers={"User-Agent": "JobFinderCleaner"})
@@ -827,47 +686,40 @@ def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 30) -> None:
         
         # Only consider regular web pages (exclude devtools / extensions / background pages)
         page_tabs = [t for t in tabs if t.get("type") == "page"]
-        
-        if len(page_tabs) >= max_tabs_to_keep:
-            print(f"[browser-use] 🪟 Tab count reached threshold ({len(page_tabs)}/{max_tabs_to_keep}). Opening new Chrome window...")
-            opened = open_new_chrome_window_via_cdp(cdp_url)
-            if not opened and len(page_tabs) > (max_tabs_to_keep + 5):
-                # Fallback safeguard: only close the very oldest tabs if new window creation failed
-                # and tab proliferation threatens memory limits (>35 tabs)
-                tabs_to_close = page_tabs[:-max_tabs_to_keep]
-                for t in tabs_to_close:
-                    tab_id = t.get("id")
-                    if tab_id:
-                        try:
-                            close_req = urllib.request.Request(f"{cdp_url}/json/close/{tab_id}", data=b"", method="PUT")
-                            urllib.request.urlopen(close_req, timeout=2)
-                        except Exception:
-                            pass
-                print(f"[browser-use] Reaped {len(tabs_to_close)} oldest background Chrome tab(s) as safety ceiling.")
-        else:
-            print(f"[browser-use] 📑 Keeping {len(page_tabs)} active application tab(s) open (threshold: {max_tabs_to_keep}).")
+        if len(page_tabs) > max_tabs_to_keep:
+            # Keep the newest tab(s), close the oldest ones
+            tabs_to_close = page_tabs[:-max_tabs_to_keep]
+            for t in tabs_to_close:
+                tab_id = t.get("id")
+                if tab_id:
+                    try:
+                        close_req = urllib.request.Request(f"{cdp_url}/json/close/{tab_id}", data=b"", method="PUT")
+                        urllib.request.urlopen(close_req, timeout=2)
+                    except Exception:
+                        pass
+            print(f"[browser-use] Reaped {len(tabs_to_close)} background Chrome tab(s) to optimize memory.")
     except Exception as e:
-        print(f"[browser-use] Tab management note: {e}")
+        print(f"[browser-use] Tab cleanup note: {e}")
 
 
 def get_or_create_browser_session(headless: bool = False):
     """
     Maintains a single persistent browser instance across multiple runs by connecting to
     the shared Chrome daemon via CDP so subsequent jobs run in the same browser window.
-    In browser-use 1.0+, passing cdp_url explicitly guarantees local execution.
-    Note: Browser('cdp') does not take headless= (as it connects to an already running browser).
+    Applies aggressive low-latency timings to eliminate idle waiting between actions.
+    Automatically reaps stale background tabs to prevent memory exhaustion and freeze.
     """
+    # pyrefly: ignore [missing-import]
+    from browser_use import BrowserSession
     cdp_url = ensure_persistent_browser(headless=headless)
-    cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=30)
-    if cdp_url:
-        return Browser(
-            cdp_url=cdp_url,
-            keep_alive=True,
-        )
-    return Browser(
-        "chromium",
-        headless=headless,
-        keep_alive=True,
+    cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=2)
+    return BrowserSession(
+        cdp_url=cdp_url,
+        minimum_wait_page_load_time=0.1,             # Cut from 0.25s to 0.1s
+        wait_for_network_idle_page_load_time=0.15,   # Cut from 0.5s to 0.15s (network idle cutoff)
+        wait_between_actions=0.02,                   # Instantaneous action execution
+        highlight_elements=False,                    # Disable DOM bounding box calculation overhead
+        auto_download_pdfs=False,
     )
 
 
@@ -958,29 +810,37 @@ async def run_browser_use_autofill(
 
     browser_session = get_or_create_browser_session(headless=headless)
 
-    # In browser-use 1.0+, the REPL loop automatically opens task URLs.
-    # Pass initial_actions and available_file_paths cleanly to MultiFallbackAgent
-    # so custom Agent implementations and test harness assertions capture them.
+    # Configure initial navigation action so browser-use explicitly opens target_url in a new tab
+    nav_actions = [{"navigate": {"url": target_url, "new_tab": new_tab}}]
+
+    available_paths = [os.path.abspath(resolved_resume_path)] if resolved_resume_path and os.path.exists(resolved_resume_path) else []
 
     mode_str = "AUTO-SUBMIT (GUARDRAILS DISABLED)" if effective_auto_submit else "REVIEW ONLY (GUARDRAIL ACTIVE)"
+
+    # --- Tier 1: Laya / Jev Ultrafast System 1 Reflex Engine (<10ms) ---
+    use_fast_tier = os.getenv("USE_JEV_ULTRAFAST", "1").lower() in ("1", "true", "yes")
+    if use_fast_tier:
+        try:
+            from services.jev_ultrafast_agent import run_jev_ultrafast_autofill
+            fast_res = await run_jev_ultrafast_autofill(
+                job_url=target_url,
+                resume_data=resume_data,
+                resume_pdf_path=resolved_resume_path,
+                cdp_url=getattr(browser_session, "cdp_url", None),
+                auto_submit=effective_auto_submit,
+                max_steps=max_steps
+            )
+            if fast_res.get("status") == "completed":
+                print(f"[laya-engine] ✅ Successfully completed application via on-device reflex engine.")
+                return fast_res
+            else:
+                print(f"[laya-engine] ⚡ Laya on-device routing active. Delegating multi-step navigation to browser-use pure-DOM engine.")
+        except Exception as fast_err:
+            print(f"[laya-engine] Fast tier note: {fast_err}. Continuing with browser-use.")
 
     # Prepare multi-key fallback pool across all configured GEMINI_API_KEYS
     fallback_llms = get_browser_use_fallback_llms(primary_llm=llm, model_name=model_name)
     agent_cls = MultiFallbackAgent if MultiFallbackAgent is not None else Agent
-
-    # Build sensitive_data dictionary to automatically protect passwords and sensitive numbers via type_secret()
-    sensitive_dict: Dict[str, str] = {}
-    if resume_data:
-        cand_pass = resume_data.get("password") or resume_data.get("portal_password") or os.getenv("CANDIDATE_PORTAL_PASSWORD")
-        if cand_pass:
-            sensitive_dict["candidate_password"] = str(cand_pass)
-        cand_phone = resume_data.get("phone")
-        if cand_phone and len(str(cand_phone)) > 6:
-            sensitive_dict["candidate_phone"] = str(cand_phone)
-
-    # Configure initial navigation action
-    nav_actions = [{"navigate": {"url": target_url, "new_tab": new_tab}}]
-    available_paths = [os.path.abspath(resolved_resume_path)] if resolved_resume_path and os.path.exists(resolved_resume_path) else []
 
     # --- Phase 1: Fast Pure-DOM Mode (use_vision=False) ---
     print(f"[browser-use] ⚡ Starting fast pure-DOM autofill ({mode_str}) for {job_url} [vision=False, fallbacks={len(fallback_llms)}]...")
@@ -989,11 +849,18 @@ async def run_browser_use_autofill(
         # pyrefly: ignore [bad-argument-type]
         llm=llm,
         fallback_pool=fallback_llms,
-        browser=browser_session,
-        sensitive_data=sensitive_dict or None,
-        use_vision=False,
+        browser_session=browser_session,
         initial_actions=nav_actions,
         available_file_paths=available_paths,
+        use_vision=False,
+        use_judge=False,
+        use_thinking=False,
+        max_history_items=8,
+        max_actions_per_step=15,
+        flash_mode=True,
+        enable_planning=False,
+        max_failures=3,
+        retry_delay=1,
     )
 
     history = await agent_fast.run(max_steps=max_steps)
@@ -1012,10 +879,19 @@ async def run_browser_use_autofill(
             # pyrefly: ignore [bad-argument-type]
             llm=llm,
             fallback_pool=fallback_llms,
-            browser=browser_session,
-            sensitive_data=sensitive_dict or None,
+            browser_session=browser_session,
+            initial_actions=None,  # Keep active tab already opened in DOM pass
+            available_file_paths=available_paths,
             use_vision=True,
-            reasoning="medium",
+            vision_detail_level="low",
+            use_judge=False,
+            use_thinking=True,      # Deliberate and reason through tricky/stuck states
+            max_history_items=8,
+            max_actions_per_step=10,
+            flash_mode=False,       # Full reasoning capabilities for fallback
+            enable_planning=True,   # Plan around obstacles (modals, captchas, multi-page flows)
+            max_failures=3,
+            retry_delay=1,
         )
         history = await agent_vision.run(max_steps=max_steps)
 
