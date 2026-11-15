@@ -109,7 +109,8 @@ def test_browser_use_llm_gemini_fallback_without_openai_key():
 
     with patch.dict(os.environ, env_without_openai, clear=True), \
          patch("services.gemini_client.get_next_gemini_api_key", return_value="gemini-test-key"), \
-         patch("backend.services.browser_use_agent.ChatGoogle") as mock_chat_google, \
+         patch("services.gemini_client.get_gemini_api_keys", return_value=["gemini-test-key"]), \
+         patch("backend.services.browser_use_agent.RotatingChatGoogle") as mock_chat_google, \
          patch("backend.services.browser_use_agent.get_best_flash_lite_model", return_value="gemini-3.5-flash-lite"):
 
         mock_chat_google.return_value = MagicMock(model="gemini-3.5-flash-lite")
@@ -117,6 +118,6 @@ def test_browser_use_llm_gemini_fallback_without_openai_key():
 
         mock_chat_google.assert_called_once_with(
             model="gemini-3.5-flash-lite",
-            api_key="gemini-test-key",
+            keys=["gemini-test-key"],
         )
         assert llm.model == "gemini-3.5-flash-lite"

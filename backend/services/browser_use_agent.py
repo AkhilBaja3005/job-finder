@@ -32,6 +32,55 @@ try:
     BrowserSession = Browser
     HAS_BROWSER_USE = True
 
+    class RotatingChatGoogle(ChatGoogle):
+        """
+        Custom ChatGoogle provider that intercepts 429 RESOURCE_EXHAUSTED / RateLimit errors
+        from Google Gemini API and automatically cascades through the pool of configured API keys
+        in real-time during agent steps without aborting the browser navigation session.
+        """
+        def __init__(self, model: str, keys: Optional[List[str]] = None, **kwargs: Any):
+            api_key = (keys[0] if keys else None) or ""
+            super().__init__(model=model, api_key=api_key, **kwargs)
+            self.keys = list(keys or [])
+
+        # pyrefly: ignore [override]
+        def pydantic_model(self) -> Any:
+            try:
+                # pyrefly: ignore [missing-import]
+                from pydantic_ai.models.google import GoogleModel  # type: ignore
+                # pyrefly: ignore [missing-import]
+                from pydantic_ai.providers.google import GoogleProvider  # type: ignore
+            except ImportError:
+                return getattr(super(), "pydantic_model")()
+
+            if not self.keys:
+                return getattr(super(), "pydantic_model")()
+
+            class RotatingKeyGoogleModel(GoogleModel):
+                def __init__(self, model_name: str, key_list: list):
+                    self._all_keys = list(key_list)
+                    self._key_index = 0
+                    super().__init__(model_name, provider=GoogleProvider(api_key=self._all_keys[0]))
+                
+                async def _generate_content(self, messages, stream, model_settings, model_request_parameters):
+                    for attempt in range(len(self._all_keys)):
+                        try:
+                            return await super()._generate_content(messages, stream, model_settings, model_request_parameters)
+                        except Exception as e:
+                            err_str = str(e)
+                            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower() or "limit" in err_str.lower():
+                                self._key_index = (self._key_index + 1) % len(self._all_keys)
+                                next_key = self._all_keys[self._key_index]
+                                print(f"[RotatingChatGoogle] 🔄 429 quota hit on Gemini: auto-rotating to key #{self._key_index+1} / {len(self._all_keys)}...")
+                                self._provider = GoogleProvider(api_key=next_key)
+                                self.client = self._provider.client
+                                await asyncio.sleep(0.5)
+                            else:
+                                raise e
+                    return await super()._generate_content(messages, stream, model_settings, model_request_parameters)
+
+            return RotatingKeyGoogleModel(self.model, self.keys)
+
     class MultiFallbackAgent(Agent):  # pyright: ignore[reportRedeclaration]
         """
         Agent subclass that supports an ordered pool of fallback LLMs across all configured
@@ -151,10 +200,23 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
     discovered_lite = get_best_flash_lite_model(api_key)
     target_model = model_name or os.getenv("BROWSER_USE_MODEL") or discovered_lite
     
-    # In 1.0, ChatGoogle accepts model and api_key
-    return ChatGoogle(
+    # Collect all available Gemini API keys to enable seamless in-session key rotation
+    try:
+        from services.gemini_client import get_gemini_api_keys
+        all_keys = get_gemini_api_keys()
+    except Exception:
+        all_keys = [api_key]
+
+    if not all_keys:
+        all_keys = [api_key]
+    elif api_key in all_keys and all_keys[0] != api_key:
+        all_keys.remove(api_key)
+        all_keys.insert(0, api_key)
+
+    # In 1.0, RotatingChatGoogle wraps ChatGoogle and cascades across all keys on 429
+    return RotatingChatGoogle(
         model=target_model,
-        api_key=api_key,
+        keys=all_keys,
     )
 
 
@@ -901,27 +963,6 @@ async def run_browser_use_autofill(
     # so custom Agent implementations and test harness assertions capture them.
 
     mode_str = "AUTO-SUBMIT (GUARDRAILS DISABLED)" if effective_auto_submit else "REVIEW ONLY (GUARDRAIL ACTIVE)"
-
-    # --- Tier 1: Laya / Jev Ultrafast System 1 Reflex Engine (<10ms) ---
-    use_fast_tier = os.getenv("USE_JEV_ULTRAFAST", "1").lower() in ("1", "true", "yes")
-    if use_fast_tier:
-        try:
-            from services.jev_ultrafast_agent import run_jev_ultrafast_autofill
-            fast_res = await run_jev_ultrafast_autofill(
-                job_url=target_url,
-                resume_data=resume_data,
-                resume_pdf_path=resolved_resume_path,
-                cdp_url=getattr(browser_session, "cdp_url", None),
-                auto_submit=effective_auto_submit,
-                max_steps=max_steps
-            )
-            if fast_res.get("status") == "completed":
-                print(f"[laya-engine] ✅ Successfully completed application via on-device reflex engine.")
-                return fast_res
-            else:
-                print(f"[laya-engine] ⚡ Laya on-device routing active. Delegating multi-step navigation to browser-use pure-DOM engine.")
-        except Exception as fast_err:
-            print(f"[laya-engine] Fast tier note: {fast_err}. Continuing with browser-use.")
 
     # Prepare multi-key fallback pool across all configured GEMINI_API_KEYS
     fallback_llms = get_browser_use_fallback_llms(primary_llm=llm, model_name=model_name)
