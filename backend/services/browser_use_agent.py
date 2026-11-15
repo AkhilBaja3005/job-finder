@@ -26,7 +26,18 @@ except ImportError:
 
 try:
     # pyrefly: ignore [missing-import]
-    from browser_use import Agent, Browser, ChatGoogle, BrowserSession  # pyright: ignore[reportAssignmentType]
+    from browser_use import Agent, Browser, ChatGoogle  # pyright: ignore[reportAssignmentType]
+    try:
+        from browser_use import BrowserSession
+    except (ImportError, Exception):
+        try:
+            from browser_use.browser.session import BrowserSession
+        except (ImportError, Exception):
+            # Compatibility wrapper for browser-use >= 1.0 environments (e.g. CI runner)
+            class BrowserSession(Browser):  # type: ignore
+                def __init__(self, cdp_url: Optional[str] = None, **kwargs):
+                    super().__init__(cdp_url=cdp_url)
+
     HAS_BROWSER_USE = True
 
     class MultiFallbackAgent(Agent):  # pyright: ignore[reportRedeclaration]
@@ -38,12 +49,16 @@ try:
         def __init__(self, *args, fallback_pool: Optional[List[Any]] = None, **kwargs):
             self._fallback_pool = list(fallback_pool or [])
             first_fb = self._fallback_pool.pop(0) if self._fallback_pool else None
-            super().__init__(*args, fallback_llm=first_fb, **kwargs)
+            # Handle browser-use 0.13.x vs 1.0.x constructor arguments
+            super_kwargs = dict(kwargs)
+            if first_fb is not None:
+                super_kwargs["fallback_llm"] = first_fb
+            super().__init__(*args, **super_kwargs)
 
         def _try_switch_to_fallback_llm(self, error: Any) -> bool:
-            if self._fallback_llm is None and not self._fallback_pool:
+            if getattr(self, "_fallback_llm", None) is None and not self._fallback_pool:
                 return False
-            if self._using_fallback_llm:
+            if getattr(self, "_using_fallback_llm", False):
                 if self._fallback_pool:
                     next_fb = self._fallback_pool.pop(0)
                     self._fallback_llm = next_fb
@@ -53,7 +68,9 @@ try:
                     )
                 else:
                     return False
-            return super()._try_switch_to_fallback_llm(error)
+            if hasattr(super(), "_try_switch_to_fallback_llm"):
+                return super()._try_switch_to_fallback_llm(error)
+            return False
 
 except (ImportError, Exception):
     HAS_BROWSER_USE = False
