@@ -25,8 +25,14 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Inject Hugging Face Space frontmatter dynamically into README.md
+          printf -- "---\ntitle: AI Job Finder Agent\nsdk: docker\napp_port: 8000\npinned: false\n---\n\n" | cat - README.md > /tmp/README.md
+          mv /tmp/README.md README.md
+          git commit -am "chore(hf): inject Hugging Face Space metadata for container build [skip ci]" || true
+
           git remote add hf https://AkhilBaja3005:${HF_TOKEN}@huggingface.co/spaces/abaja/job-finder
-          git push hf main --force
+          git push hf HEAD:main --force
 
       - name: Trigger Hugging Face Factory Rebuild
         env:

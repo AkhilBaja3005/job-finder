@@ -1,13 +1,3 @@
----
-title: AI Job Finder Agent
-emoji: 💼
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 8000
-pinned: false
----
-
 # AI Job Finder Agent
 
 <div align="center">
