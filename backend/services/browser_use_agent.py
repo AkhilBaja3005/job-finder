@@ -64,7 +64,7 @@ try:
                     self._fallback_llm = next_fb
                     self._using_fallback_llm = False
                     self.logger.warning(
-                        f"🔄 429 quota reached on current key. Cascading to next Gemini API key ({getattr(next_fb, 'model', 'flash-lite')}). Remaining fallbacks: {len(self._fallback_pool)}"
+                        f"429 quota reached on current key. Cascading to next Gemini API key ({getattr(next_fb, 'model', 'flash-lite')}). Remaining fallbacks: {len(self._fallback_pool)}"
                     )
                 else:
                     return False
@@ -636,7 +636,7 @@ def ensure_persistent_browser(headless: bool = False) -> str:
     for _ in range(20):
         time.sleep(0.5)
         if _chrome_process.poll() is not None:
-            print(f"[browser-use] ⚠️ Chrome process exited prematurely with code {_chrome_process.poll()}")
+            print(f"[browser-use] Warning: Chrome process exited prematurely with code {_chrome_process.poll()}")
             break
         try:
             with urllib.request.urlopen(f"{cdp_url}/json/version", timeout=1) as resp:
@@ -691,10 +691,47 @@ def preflight_check_job_url(url: str) -> tuple[str, bool, Optional[str]]:
         return url, True, None
 
 
-def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 2) -> None:
+def open_new_chrome_window_via_cdp(cdp_url: str, url: str = "about:blank") -> bool:
     """
-    Reaps stale, background, or completed tabs from the persistent Chrome instance.
-    Prevents Chrome tab proliferation and memory exhaustion that causes autofill to freeze.
+    Spawns a new independent Chrome window via the CDP browser WebSocket target.
+    Used when the current window reaches the threshold (e.g. 30 tabs) so applications
+    can keep their tabs open without crowding or freezing a single window.
+    """
+    try:
+        import websockets
+        import asyncio
+
+        req = urllib.request.Request(f"{cdp_url}/json/version", headers={"User-Agent": "JobFinderCleaner"})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.load(resp)
+        browser_ws = data.get("webSocketDebuggerUrl")
+        if not browser_ws:
+            return False
+
+        async def _create_window():
+            async with websockets.connect(browser_ws, open_timeout=3, close_timeout=2) as ws:
+                msg = {
+                    "id": 1,
+                    "method": "Target.createTarget",
+                    "params": {"url": url, "newWindow": True}
+                }
+                await ws.send(json.dumps(msg))
+                raw_res = await ws.recv()
+                res = json.loads(raw_res)
+                return bool(res.get("result", {}).get("targetId"))
+
+        return asyncio.run(_create_window())
+    except Exception as e:
+        print(f"[browser-use] Note: create new Chrome window via CDP: {e}")
+        return False
+
+
+def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 30) -> None:
+    """
+    Manages Chrome tabs across application sessions.
+    Keeps all application tabs and windows open so the candidate can inspect, validate, and submit them.
+    When open page tabs in the current window reach or exceed max_tabs_to_keep (default 30),
+    opens a fresh independent Chrome window via CDP without closing ANY active tabs or windows.
     """
     try:
         req = urllib.request.Request(f"{cdp_url}/json/list", headers={"User-Agent": "JobFinderCleaner"})
@@ -703,20 +740,18 @@ def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 2) -> None:
         
         # Only consider regular web pages (exclude devtools / extensions / background pages)
         page_tabs = [t for t in tabs if t.get("type") == "page"]
-        if len(page_tabs) > max_tabs_to_keep:
-            # Keep the newest tab(s), close the oldest ones
-            tabs_to_close = page_tabs[:-max_tabs_to_keep]
-            for t in tabs_to_close:
-                tab_id = t.get("id")
-                if tab_id:
-                    try:
-                        close_req = urllib.request.Request(f"{cdp_url}/json/close/{tab_id}", data=b"", method="PUT")
-                        urllib.request.urlopen(close_req, timeout=2)
-                    except Exception:
-                        pass
-            print(f"[browser-use] Reaped {len(tabs_to_close)} background Chrome tab(s) to optimize memory.")
+        
+        if len(page_tabs) >= max_tabs_to_keep:
+            print(f"[browser-use] Tab count reached {len(page_tabs)} (threshold: {max_tabs_to_keep}). Opening a new Chrome window to keep all applications open for validation...")
+            opened = open_new_chrome_window_via_cdp(cdp_url)
+            if opened:
+                print(f"[browser-use] Successfully opened new Chrome window. Existing {len(page_tabs)} tabs remain completely open for validation.")
+            else:
+                print(f"[browser-use] Keeping all {len(page_tabs)} tabs open (window creation note: fallback to current window, zero tabs closed).")
+        else:
+            print(f"[browser-use] Keeping {len(page_tabs)} active application tab(s) open (threshold: {max_tabs_to_keep}).")
     except Exception as e:
-        print(f"[browser-use] Tab cleanup note: {e}")
+        print(f"[browser-use] Tab management note: {e}")
 
 
 def get_or_create_browser_session(headless: bool = False):
@@ -724,12 +759,12 @@ def get_or_create_browser_session(headless: bool = False):
     Maintains a single persistent browser instance across multiple runs by connecting to
     the shared Chrome daemon via CDP so subsequent jobs run in the same browser window.
     Applies aggressive low-latency timings to eliminate idle waiting between actions.
-    Automatically reaps stale background tabs to prevent memory exhaustion and freeze.
+    Keeps submitted application tabs open for review without aggressive auto-closing.
     """
     # pyrefly: ignore [missing-import]
     from browser_use import BrowserSession
     cdp_url = ensure_persistent_browser(headless=headless)
-    cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=2)
+    cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=30)
     return BrowserSession(
         cdp_url=cdp_url,
         minimum_wait_page_load_time=0.1,             # Cut from 0.25s to 0.1s
@@ -759,7 +794,7 @@ async def run_browser_use_autofill(
     # Module-level flag overrides the per-call argument
     effective_auto_submit = DISABLE_GUARDRAILS or auto_submit
     if DISABLE_GUARDRAILS and not auto_submit:
-        print("[browser-use] ⚠️  DISABLE_GUARDRAILS=True — overriding auto_submit to True. Application WILL be submitted.")
+        print("[browser-use] Warning: DISABLE_GUARDRAILS=True — overriding auto_submit to True. Application WILL be submitted.")
 
     if not HAS_BROWSER_USE:
         return {
@@ -778,7 +813,7 @@ async def run_browser_use_autofill(
     # 1. Pre-flight check: resolve redirects (e.g. LinkedIn -> Ashby) and check for expired job
     resolved_url, is_active, inactive_reason = await asyncio.to_thread(preflight_check_job_url, job_url)
     if not is_active:
-        print(f"[browser-use] ⚡ Pre-flight detected closed job without browser ({inactive_reason}). Terminating early.")
+        print(f"[browser-use] Pre-flight detected closed job without browser ({inactive_reason}). Terminating early.")
         return {
             "status": "failed",
             "job_url": job_url,
@@ -800,11 +835,11 @@ async def run_browser_use_autofill(
             jk_val = jk_m.group(1)
             domain = "uk.indeed.com" if "uk.indeed.com" in target_url else "www.indeed.com"
             rewritten_indeed = f"https://{domain}/jobs?q=engineer&vjk={jk_val}"
-            print(f"[browser-use] 🔄 Rewrote Indeed viewjob URL to side-pane search format: {rewritten_indeed}")
+            print(f"[browser-use] Rewrote Indeed viewjob URL to side-pane search format: {rewritten_indeed}")
             target_url = rewritten_indeed
 
     if target_url != job_url and "indeed.com" not in target_url:
-        print(f"[browser-use] 🎯 Resolved direct ATS application URL: {target_url}")
+        print(f"[browser-use] Resolved direct ATS application URL: {target_url}")
 
     # Auto-detect master resume if not explicitly passed
     resolved_resume_path = resume_pdf_path
@@ -814,7 +849,7 @@ async def run_browser_use_autofill(
             detected_resume = find_master_resume_with_mac_tags()
             if detected_resume and os.path.exists(detected_resume):
                 resolved_resume_path = detected_resume
-                print(f"[browser-use] 📄 Auto-detected master resume PDF: {resolved_resume_path}")
+                print(f"[browser-use] Auto-detected master resume PDF: {resolved_resume_path}")
         except Exception as e:
             print(f"[browser-use] Note: resume auto-detection error: {e}")
 
@@ -848,10 +883,10 @@ async def run_browser_use_autofill(
                 max_steps=max_steps
             )
             if fast_res.get("status") == "completed":
-                print(f"[laya-engine] ✅ Successfully completed application via on-device reflex engine.")
+                print(f"[laya-engine] Successfully completed application via on-device reflex engine.")
                 return fast_res
             else:
-                print(f"[laya-engine] ⚡ Laya on-device routing active. Delegating multi-step navigation to browser-use pure-DOM engine.")
+                print(f"[laya-engine] Laya on-device routing active. Delegating multi-step navigation to browser-use pure-DOM engine.")
         except Exception as fast_err:
             print(f"[laya-engine] Fast tier note: {fast_err}. Continuing with browser-use.")
 
@@ -860,7 +895,7 @@ async def run_browser_use_autofill(
     agent_cls = MultiFallbackAgent if MultiFallbackAgent is not None else Agent
 
     # --- Phase 1: Fast Pure-DOM Mode (use_vision=False) ---
-    print(f"[browser-use] ⚡ Starting fast pure-DOM autofill ({mode_str}) for {job_url} [vision=False, fallbacks={len(fallback_llms)}]...")
+    print(f"[browser-use] Starting fast pure-DOM autofill ({mode_str}) for {job_url} [vision=False, fallbacks={len(fallback_llms)}]...")
     agent_fast = agent_cls(
         task=task_prompt,
         # pyrefly: ignore [bad-argument-type]
@@ -890,7 +925,7 @@ async def run_browser_use_autofill(
     needs_vision_fallback = not is_done or any(ind in final_res.lower() for ind in ["unable to fill", "cannot locate", "stuck", "element not found"])
 
     if needs_vision_fallback:
-        print(f"[browser-use] 👁️ Pure-DOM pass encountered difficulties. Activating Vision + Reasoning (thinking=True) fallback...")
+        print(f"[browser-use] Pure-DOM pass encountered difficulties. Activating Vision + Reasoning (thinking=True) fallback...")
         agent_vision = agent_cls(
             task=task_prompt + "\nNOTE: Retrying with visual sight and deep reasoning enabled. Analyze the visual layout carefully to locate, solve, and fill any inputs, custom dropdowns, or multi-step modals that were missed.",
             # pyrefly: ignore [bad-argument-type]
