@@ -220,3 +220,19 @@ def test_quick_approve_rate_limited(client):
         codes.append(client.post("/oauth/quick-approve", data={"session_id": sid, "sync_code": "ZZZZZZ"}).status_code)
     assert codes[-1] == 429, codes
     oauth_routes._SYNC_FAILURES.clear()
+
+
+def test_client_registration_survives_restart(client):
+    """A registered client_id must stay valid after in-memory state is lost (restart / other worker)."""
+    from routes import oauth_routes
+    cid = _register(client)
+    oauth_routes._OAUTH_CLIENTS.clear()
+    res = client.get(f"/oauth/authorize?response_type=code&client_id={cid}&redirect_uri=https://claude.ai/oauth/callback&code_challenge=abc&code_challenge_method=S256")
+    assert res.status_code == 200
+
+
+def test_tampered_client_id_rejected_with_invalid_client(client):
+    cid = _register(client)
+    res = client.get(f"/oauth/authorize?response_type=code&client_id={cid[:-1]}0&redirect_uri=https://claude.ai/oauth/callback&code_challenge=abc&code_challenge_method=S256")
+    assert res.status_code == 400
+    assert res.json()["error"] == "invalid_client"

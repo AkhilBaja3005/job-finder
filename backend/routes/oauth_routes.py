@@ -38,6 +38,53 @@ SYNC_CODE_WINDOW = 600
 _SYNC_FAILURES: Dict[str, List[float]] = {}
 
 
+def _client_signing_key() -> bytes:
+    """Secret used to sign stateless client_ids so registrations survive restarts and multiple workers."""
+    secret = (
+        os.getenv("OAUTH_CLIENT_SECRET")
+        or os.getenv("ENCRYPTION_KEY")
+        or os.getenv("SUPABASE_KEY")
+    )
+    if not secret:
+        global _EPHEMERAL_KEY
+        if _EPHEMERAL_KEY is None:
+            _EPHEMERAL_KEY = uuid.uuid4().hex
+            print("WARNING: OAUTH_CLIENT_SECRET not set; OAuth client registrations will not survive a restart.")
+        secret = _EPHEMERAL_KEY
+    return secret.encode("utf-8")
+
+
+_EPHEMERAL_KEY: Optional[str] = None
+
+
+def _make_client_id(client_name: Optional[str], redirect_uris: List[str]) -> str:
+    body = base64.urlsafe_b64encode(
+        json.dumps({"n": client_name or "", "r": redirect_uris}, separators=(",", ":")).encode("utf-8")
+    ).decode("ascii").rstrip("=")
+    sig = hmac.new(_client_signing_key(), body.encode("ascii"), hashlib.sha256).hexdigest()[:32]
+    return f"claude_client_{body}.{sig}"
+
+
+def _lookup_client(client_id: str) -> Optional[Dict[str, Any]]:
+    """Resolve a client from memory or by verifying its signed client_id."""
+    known = _OAUTH_CLIENTS.get(client_id)
+    if known:
+        return known
+    prefix = "claude_client_"
+    if not client_id.startswith(prefix) or "." not in client_id:
+        return None
+    body, _, sig = client_id[len(prefix):].rpartition(".")
+    expected = hmac.new(_client_signing_key(), body.encode("ascii", "ignore"), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(sig, expected):
+        return None
+    try:
+        padded = body + "=" * (-len(body) % 4)
+        data = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+        return {"client_id": client_id, "client_name": data.get("n", ""), "redirect_uris": list(data.get("r", []))}
+    except Exception:
+        return None
+
+
 def _prune_expired() -> None:
     """Drop expired authorize sessions and authorization codes."""
     now = time.time()
@@ -127,7 +174,7 @@ async def oauth_register_client(payload: ClientRegistrationPayload):
     RFC 7591 Dynamic Client Registration endpoint.
     Accepts Claude's registration and returns a client_id.
     """
-    client_id = f"claude_client_{uuid.uuid4().hex[:16]}"
+    client_id = _make_client_id(payload.client_name, list(payload.redirect_uris))
     _OAUTH_CLIENTS[client_id] = {
         "client_id": client_id,
         "client_name": payload.client_name,
@@ -165,11 +212,21 @@ async def oauth_authorize(
     Renders login & authorization consent screen where the user authenticates with Job Finder.
     """
     _prune_expired()
-    client = _OAUTH_CLIENTS.get(client_id)
+    client = _lookup_client(client_id)
     if not client:
-        raise HTTPException(status_code=400, detail="Unknown client_id. Register the client first via /oauth/register.")
+        # RFC 6749 invalid_client: lets clients discard a stale client_id and re-register
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "invalid_client",
+                "error_description": "Unknown client_id. Register the client first via /oauth/register.",
+            },
+        )
     if redirect_uri not in client.get("redirect_uris", []):
-        raise HTTPException(status_code=400, detail="redirect_uri does not match a registered redirect URI.")
+        return JSONResponse(
+            status_code=400,
+            content={"error": "invalid_request", "error_description": "redirect_uri does not match a registered redirect URI."},
+        )
     if response_type != "code":
         raise HTTPException(status_code=400, detail="Only response_type=code is supported.")
     if not code_challenge or code_challenge_method != "S256":
