@@ -143,7 +143,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
       <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '32px' }} className="docs-grid">
         
         {/* Navigation Sidebar */}
-        <div style={{ position: 'sticky', top: '24px', height: 'fit-content' }}>
+        <div className="docs-sidebar" style={{ position: 'sticky', top: '24px', height: 'fit-content' }}>
           <div style={{
             background: 'rgba(15, 23, 42, 0.75)',
             backdropFilter: 'blur(12px)',
@@ -155,7 +155,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '0 12px 10px' }}>
               Topics
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div className="docs-nav-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {navItems.map((item) => {
                 const isActive = activeSection === item.id;
                 return (
@@ -248,7 +248,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               Follow these 6 streamlined steps to connect your master resume with live job postings, tailor ATS-optimized LaTeX resumes, and auto-fill applications.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
               {[
                 { step: '1', title: 'Upload & Lock Master Resume', desc: 'Upload your .pdf, .docx, or native .tex file in the Master tab to extract and preserve your exact skill categories, experiences, and metrics.' },
                 { step: '2', title: 'Pair Chrome Extension', desc: 'Download the pre-baked zip package and unpack it in chrome://extensions. Your 6-digit Sync Key pairs the browser side panel automatically.' },
@@ -317,7 +317,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             </div>
 
             {/* In-Page Capabilities (6 Core Features) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
               <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '20px' }}>
                 <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc', marginBottom: '8px' }}>Live Toolbar ATS Badge</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
@@ -453,7 +453,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               Choose your tailoring strategy and interact directly with our deterministic keyword matrix to produce an ATS-optimized, strictly 1-page PDF.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '16px' }}>
               <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
                 <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#38bdf8', marginBottom: '6px' }}>Strict Conservative</div>
                 <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
@@ -484,7 +484,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               flexDirection: 'column',
               gap: '16px'
             }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '20px' }}>
                 <div>
                   <h4 style={{ color: '#10b981', margin: '0 0 8px', fontSize: '1rem' }}>Interactive Keyword Pill Matrix</h4>
                   <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
@@ -517,7 +517,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               Every resume is rendered using the modern <strong>XeLaTeX</strong> typesetting engine with <code>TeX Gyre Termes</code> typography and dual-file compiler configuration for seamless local and Overleaf builds.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '16px', marginBottom: '20px' }}>
               <div style={{ background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '18px' }}>
                 <div style={{ fontSize: '1rem', fontWeight: 700, color: '#38bdf8', marginBottom: '6px' }}>
                   XeLaTeX & TeX Gyre Termes
@@ -669,7 +669,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             </p>
 
             {/* MCP Highlights */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '16px', marginBottom: '24px' }}>
               <div style={{
                 background: 'rgba(15, 23, 42, 0.6)',
                 border: '1px solid rgba(168, 85, 247, 0.25)',
@@ -769,7 +769,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               Connect frontend clients to production endpoints, configure BYOK Gemini API keys, or run containerized instances via Docker or local uvicorn.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '20px' }}>
               {/* Endpoint Card */}
               <div style={{
                 background: 'rgba(15, 23, 42, 0.6)',
@@ -984,7 +984,45 @@ SMTP_PASSWORD="your-app-password"`}
       <style>{`
         @media (max-width: 900px) {
           .docs-grid {
-            grid-template-columns: 1fr !important;
+            /* minmax(0, 1fr): a plain 1fr track grows to its widest code block and overflows the phone */
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 16px !important;
+          }
+          .docs-grid > * {
+            min-width: 0;
+          }
+          .docs-sidebar {
+            position: static !important;
+          }
+          .docs-nav-list {
+            flex-direction: row !important;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 6px;
+          }
+          .docs-nav-list > button {
+            flex: 0 0 auto;
+            white-space: nowrap;
+            min-height: 44px;
+          }
+          .docs-container pre,
+          .docs-container code {
+            max-width: 100%;
+            overflow-x: auto;
+          }
+          .docs-container kbd {
+            white-space: normal;
+            max-width: 100%;
+          }
+          .docs-container div:has(> kbd) {
+            flex-wrap: wrap;
+          }
+          .docs-container button:not(.docs-nav-list > button),
+          .docs-container a[href] {
+            min-height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
           }
         }
       `}</style>

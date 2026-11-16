@@ -1121,7 +1121,7 @@ textarea:focus-visible {
   input, select, textarea {
     min-height: 48px !important;
     padding: 12px 14px !important;
-    font-size: 0.92rem !important;
+    font-size: 16px !important; /* 16px stops iOS Safari from zooming the page when a field gets focus */
     border-radius: 10px !important;
     box-sizing: border-box !important;
   }
@@ -1155,6 +1155,140 @@ textarea:focus-visible {
   .score-grid {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 8px !important;
+  }
+}
+
+/* Laptop suggestion shown only on phones, only inside the Platform workspace */
+.desktop-hint {
+  display: none;
+}
+
+/* ─── Phones: compact header, readable chips, touch-friendly targets ──────── */
+@media (max-width: 768px) {
+  header.app-header {
+    gap: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+
+  /* Brand: one compact row (logo + name), no tagline */
+  header.app-header > .app-header-brand {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-start;
+    gap: 10px !important;
+  }
+  .app-header-tagline {
+    display: none;
+  }
+  header.app-header > .app-header-brand h1.title {
+    text-align: left;
+    justify-content: flex-start;
+  }
+
+  /* Actions: status chip and account on one row, navigation full width below */
+  header.app-header > .app-header-actions {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+    align-items: center !important;
+    justify-content: space-between;
+    gap: 8px !important;
+  }
+  .app-header-badge {
+    order: 1;
+  }
+  .app-header-user {
+    order: 1;
+    margin-left: auto;
+  }
+  .app-header-nav {
+    order: 2;
+    flex: 1 1 100%;
+  }
+  .app-header-nav > button {
+    flex: 1 1 0;
+    min-height: 40px !important;
+    padding: 6px 8px !important;
+    font-size: 0.82rem !important;
+    white-space: nowrap;
+  }
+  .app-header-status {
+    order: 3;
+    flex: 1 1 100%;
+    max-width: 100% !important;
+  }
+  .app-header-badge-privacy,
+  .app-header-help {
+    display: none !important; /* privacy badge is in the docs; keyboard shortcuts do not apply to touch */
+  }
+  .app-header-user > div[style*="position: absolute"] {
+    max-width: calc(100vw - 24px);
+  }
+  .app-header-user > button {
+    width: auto !important;
+    min-height: 40px !important;
+  }
+
+  /* Chips and captions rendered below 12px are hard to read on a phone */
+  [style*="font-size: 0.66rem"],
+  [style*="font-size: 0.68rem"],
+  [style*="font-size: 0.7rem"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* Footer and inline text links: at least 44px touch area */
+  footer a,
+  footer button {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .demo-tabs > button {
+    flex: 1 1 auto;
+    min-height: 40px;
+  }
+
+  footer > div {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 4px;
+  }
+  .footer-shortcuts {
+    display: none !important; /* keyboard shortcuts do not apply to touch */
+  }
+
+  .desktop-hint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    background: rgba(56, 189, 248, 0.08);
+    color: #cbd5e1;
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+  .desktop-hint button {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    background: transparent;
+    color: #38bdf8;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* Keep content clear of the iPhone home indicator */
+  .app-container {
+    padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
 

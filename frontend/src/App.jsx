@@ -267,6 +267,14 @@ function App() {
   const [user, setUser] = useState(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [showExtensionGuide, setShowExtensionGuide] = useState(false);
+  // The Platform workspace (resume editor, diffs, LaTeX) is dense; on phones we suggest a laptop once per session.
+  const [desktopHintDismissed, setDesktopHintDismissed] = useState(() => {
+    try { return sessionStorage.getItem('jf_desktop_hint') === '1'; } catch { return false; }
+  });
+  const dismissDesktopHint = useCallback(() => {
+    setDesktopHintDismissed(true);
+    try { sessionStorage.setItem('jf_desktop_hint', '1'); } catch { /* storage unavailable: hint returns next load */ }
+  }, []);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
@@ -2553,7 +2561,7 @@ function App() {
       )}
 
       <header className="app-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="app-header-brand" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{
             width: '32px',
             height: '32px',
@@ -2576,14 +2584,14 @@ function App() {
             <h1 className="title" style={{ fontSize: '1.05rem', margin: 0, fontWeight: 700, letterSpacing: '-0.02em' }}>
               JobFinder
             </h1>
-            <div style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+            <div className="app-header-tagline" style={{ fontSize: '0.66rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
               Precision ATS & Career Infrastructure
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="app-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {/* Hugging Face / Backend Health Badge */}
-          <div style={{
+          <div className="app-header-badge" style={{
             display: 'inline-flex', alignItems: 'center', gap: '5px',
             padding: '3px 8px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 600,
             background: backendHealth === 'healthy' ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.15)',
@@ -2604,7 +2612,7 @@ function App() {
           </div>
 
           {/* Cryptographic Zero-Knowledge Verification Trust Badge */}
-          <div style={{
+          <div className="app-header-badge app-header-badge-privacy" style={{
             display: 'inline-flex', alignItems: 'center', gap: '5px',
             padding: '3px 8px', borderRadius: '4px',
             background: 'rgba(56, 189, 248, 0.08)',
@@ -2621,7 +2629,7 @@ function App() {
           </div>
 
           {statusMessage && (
-            <div style={{
+            <div className="app-header-status" style={{
               display: 'flex', alignItems: 'center', gap: '7px',
               padding: '5px 12px', borderRadius: '20px', maxWidth: '340px',
               background: statusMessage.includes('Error') || statusMessage.includes('error') || statusMessage.includes('failed')
@@ -2643,7 +2651,7 @@ function App() {
             </div>
           )}
           {/* Top Bar Navigation: Intro -> Docs & Guide -> Platform */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#0F1523', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '3px' }}>
+          <div className="app-header-nav" style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#0F1523', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '3px' }}>
             <button
               className="btn btn-secondary"
               style={{
@@ -2703,7 +2711,7 @@ function App() {
 
           {/* Optimization #2: Keyboard help button */}
           <button
-            className="btn btn-secondary"
+            className="btn btn-secondary app-header-help"
             style={{ padding: '6px 10px', fontSize: '0.9rem', minWidth: '36px', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={() => setShowKeyboardHelp(true)}
             aria-label="Show keyboard shortcuts help"
@@ -2712,7 +2720,7 @@ function App() {
             ?
           </button>
           {user && (
-            <div style={{ position: 'relative', display: 'inline-block', zIndex: 10000 }}>
+            <div className="app-header-user" style={{ position: 'relative', display: 'inline-block', zIndex: 10000 }}>
               <button
                 className="btn btn-secondary"
                 style={{
@@ -2813,6 +2821,16 @@ function App() {
           )}
         </div>
       </header>
+
+      {!desktopHintDismissed && dashboardMode !== 'intro' && dashboardMode !== 'docs' && dashboardMode !== 'contact' && (
+        <div className="desktop-hint" role="note">
+          <span>
+            The Platform workspace works best on a laptop or desktop. You can use it on your phone, but resume
+            editing and PDF previews are cramped.
+          </span>
+          <button type="button" onClick={dismissDesktopHint} aria-label="Dismiss this notice">Got it</button>
+        </div>
+      )}
 
       {dashboardMode === 'intro' ? (
         <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Introduction...</div>}>
@@ -7003,7 +7021,7 @@ function App() {
                         </div>
 
                         {/* Audit check indicators */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', marginTop: '10px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 130px), 1fr))', gap: '8px', marginTop: '10px' }}>
                           <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem' }}>
                             <span style={{ color: 'var(--text-muted)' }}>Truthfulness: </span>
                             <span style={{ color: '#34D399', fontWeight: 700 }}>Verified Ground Truth</span>
@@ -7966,6 +7984,7 @@ function App() {
               GitHub
             </a>
             <button
+              className="footer-shortcuts"
               onClick={() => setShowKeyboardHelp(true)}
               style={{
                 background: 'none',

@@ -282,7 +282,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
       {/* Quick Stats Banner with Fluid Animated Counters */}
       <section style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
         gap: '16px',
         margin: '20px 0 40px'
       }}>
@@ -337,7 +337,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
               From Raw Job Listing to Publication-Grade XeLaTeX
             </h2>
           </div>
-          <div style={{ display: 'flex', gap: '6px', background: '#07090E', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+          <div className="demo-tabs" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', background: '#07090E', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
             {[
               { id: 'matching', label: 'ATS Keyword Matrix' },
               { id: 'sponsors', label: 'UK Visa Verification' },
@@ -365,7 +365,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
         </div>
 
         {selectedDemoTab === 'matching' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '18px' }}>
             <div style={{ background: '#0B101C', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px' }}>
               <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#38BDF8', textTransform: 'uppercase', marginBottom: '8px' }}>Extracted Job Requirements</div>
               <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#FFFFFF', marginBottom: '6px' }}>Staff Distributed Systems Engineer</div>
@@ -464,7 +464,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
           gap: '20px'
         }}>
           {steps.map((st) => (
@@ -519,7 +519,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
           gap: '18px'
         }}>
           {pillars.map((p) => (
