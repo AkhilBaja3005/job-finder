@@ -240,7 +240,7 @@ async def oauth_authorize(
     </head>
     <body>
       <div class="card">
-        <div class="logo">🚀</div>
+        <div class="logo">Job Finder</div>
         <h2>Connect Claude to Job Finder</h2>
         <p>Sign in to allow Claude to access your personalized candidate profile, tailor resumes, and view tracked applications.</p>
         
