@@ -13,7 +13,9 @@ def _read(*parts):
 
 def test_viewport_meta_allows_zoom():
     html = _read("frontend", "index.html")
-    content = re.search(r'<meta name="viewport" content="([^"]+)"', html).group(1)
+    match = re.search(r'<meta name="viewport" content="([^"]+)"', html)
+    assert match is not None, "index.html has no viewport meta tag"
+    content = match.group(1)
     assert "width=device-width" in content
     assert "user-scalable=no" not in content and "maximum-scale=1" not in content
 
