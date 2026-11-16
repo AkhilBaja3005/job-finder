@@ -1,18 +1,20 @@
 """
-cover_letter_generator.py — High-conversion, zero-hallucination cover letter agent.
-Implements the 6-step prompt workflow:
-1. Analyse the Role (extract requirements, core problem, ATS keywords)
-2. Match Evidence (match against candidate profile, flag gaps, pick top 2 stories)
-3. Plan (Hook, 2 Proof points, Fit statement, Close)
-4. Draft (3-4 short paragraphs, 250-350 words, active voice)
-5. Critique (Sceptical recruiter swap test & concision audit)
-6. Revise (Deterministic word budget, correct names, zero cliches)
+cover_letter_generator.py: tailored, evidence-based cover letters.
+
+Safeguards:
+- Only an allowlist of non-sensitive profile fields is sent to the LLM (never contact
+  details, passwords, tokens or API keys).
+- The draft is validated (length, banned phrases, dashes, placeholders, unsupported numbers)
+  and regenerated once with the findings fed back to the model.
+- If the model is unavailable, a factual template built only from profile fields is returned
+  with status "fallback". It never claims experience the profile does not contain.
 """
 
-import os
 import json
 import logging
-from typing import Optional, Dict, Any
+import re
+from typing import Any, Dict, List, Optional
+
 try:
     from services.gemini_client import generate_content_with_fallback
 except ImportError:
@@ -20,13 +22,50 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+MIN_WORDS = 200
+MAX_WORDS = 380
+JD_CHAR_LIMIT = 6000
+
+BANNED_PHRASES = (
+    "i am writing to apply", "i am writing to express", "passionate about", "team player",
+    "hard worker", "go-getter", "think outside the box", "results-driven", "dynamic environment",
+    "perfect fit", "i believe i would be", "synergy",
+)
+
+# Profile fields that are safe and useful for writing a letter.
+_TOP_LEVEL_FIELDS = (
+    "name", "location", "notice_period", "work_authorization", "requires_sponsorship",
+    "experience_summary", "summary", "core_skills", "skills", "certifications", "achievements",
+    "languages",
+)
+_EXPERIENCE_FIELDS = ("company", "role", "title", "start_date", "end_date", "location", "description", "achievements")
+_EDUCATION_FIELDS = ("institution", "school", "degree", "field", "start_date", "end_date", "grade")
+_PROJECT_FIELDS = ("name", "title", "description", "technologies", "tech", "impact", "highlights")
+
+
+def _pick(source: Dict[str, Any], keys) -> Dict[str, Any]:
+    return {k: source[k] for k in keys if k in source and source[k] not in (None, "", [], {})}
+
+
+def build_safe_profile(candidate_profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Return only the allowlisted, non-sensitive parts of a candidate profile."""
+    cand = candidate_profile.get("candidate", candidate_profile) if isinstance(candidate_profile, dict) else {}
+    safe = _pick(cand, _TOP_LEVEL_FIELDS)
+    for key, fields in (
+        ("work_experience", _EXPERIENCE_FIELDS), ("experience", _EXPERIENCE_FIELDS),
+        ("education", _EDUCATION_FIELDS), ("projects", _PROJECT_FIELDS),
+    ):
+        items = cand.get(key)
+        if isinstance(items, list):
+            safe[key] = [_pick(i, fields) if isinstance(i, dict) else i for i in items]
+    return safe
+
 
 COVER_LETTER_AGENT_PROMPT = """ROLE
-You are a cover letter agent. You write tailored, specific, concise cover
-letters that stand out to recruiters. You never invent facts: every claim
-must come from the CANDIDATE PROFILE or the JOB INPUT.
+You are a cover letter agent. You write tailored, specific, concise cover letters.
+Every claim must come from the CANDIDATE PROFILE or the JOB INPUT. Never invent facts,
+employers, numbers, tools or outcomes. If evidence for a requirement is missing, do not claim it.
 
-INPUTS
 <job_description>
 Title: {job_title}
 Company: {company}
@@ -35,7 +74,6 @@ Description:
 </job_description>
 
 <company_context>
-Company Name: {company}
 {company_context}
 </company_context>
 
@@ -45,65 +83,99 @@ Company Name: {company}
 
 <constraints>
 - Length: 250-350 words, 3-4 short paragraphs
-- Tone: Professional, direct, and technical
+- Tone: professional, direct, technical
 - Address to: Hiring Team
-- Practical details to mention: {practical_details}
+- Practical details to mention if relevant: {practical_details}
+- Lead with results, not duties. Active voice, short sentences.
+- Do not use cliches such as "passionate", "team player", "I am writing to apply".
+- Do not use em dashes or double hyphens. Use commas or full stops.
+- Use only numbers that appear in the candidate profile or the job description.
 </constraints>
+{feedback}
+Plan silently: pick the 2 strongest pieces of evidence for the top requirements, then write.
+Run a swap test: the letter must not work for another company with only the name changed.
 
-WORKFLOW (execute each step internally and thoroughly):
+OUTPUT FORMAT (exactly these headings, nothing before the first heading):
+### Cover Letter
+(the final letter, ready to send)
 
-STEP 1: ANALYSE THE ROLE
-Extract: (a) top 5 requirements/skills, (b) the core problem this team
-is hired to solve, (c) keywords to mirror for ATS, (d) tone of the
-company's language.
+### Gaps
+(one short bullet per requirement with no evidence in the profile, or "None")
 
-STEP 2: MATCH EVIDENCE
-For each of the top 5 requirements, find the strongest matching evidence
-in the candidate profile (project, metric, outcome). Rank by relevance.
-Flag any requirement with no evidence as a GAP (do not fabricate).
-Select the 2 best stories to feature.
-
-STEP 3: PLAN
-Define: the hook (specific reason for this company/role), the 2 proof
-points, the fit statement (how the candidate helps in the first 3-6
-months), and the close.
-
-STEP 4: DRAFT
-Write the letter using this structure:
- 1. Hook: why this company and role (specific), plus one-line value
- 2. Proof: 1-2 achievements with numbers and context beyond the CV
- 3. Fit: link experience to their needs using JD language
- 4. Close: availability, confident invitation to talk
-Rules: lead with results, not duties. No clichés ("passionate",
-"team player", "I am writing to apply"). Don't restate the CV line by
-line. Active voice, short sentences. STRICTLY NO EM-DASHES (--) OR HYPHENS AS SENTENCE BREAKS.
-
-STEP 5: CRITIQUE (act as a sceptical recruiter with 20 seconds)
-Score 1-10 on: specificity, evidence/metrics, relevance to JD,
-originality, concision. List the 3 weakest sentences and why.
-Run the swap test: could this go to another company with only the
-name changed? If yes, flag what to make specific.
-
-STEP 6: REVISE
-Rewrite fixing every issue from Step 5. Verify:
- - word count within 250-350 words
- - every claim traceable to the inputs
- - no filler phrases, no repeated CV bullets
- - company and role names are correct
-
-OUTPUT FORMAT (strictly adhere to this format):
-### 1. Role Analysis
-(Bullet points on core requirements and problem to solve)
-
-### 2. Gaps & Highlights
-(Matched candidate strengths and flagged gaps)
-
-### 3. Cover Letter
-(The polished, final 3-4 paragraph cover letter text ready to send)
-
-### 4. Alternative Opening Lines
-(Two punchy, alternative opening hooks from different angles)
+### Alternative Opening Lines
+(two alternative opening sentences from different angles)
 """
+
+
+def _words(text: str) -> int:
+    return len(re.findall(r"\b[\w'’-]+\b", text))
+
+
+def _numbers(text: str) -> set:
+    return set(re.findall(r"\d[\d,.]*%?", text))
+
+
+def validate_letter(letter: str, profile_text: str, job_text: str = "") -> List[str]:
+    """Return a list of human-readable problems; empty means the letter passes."""
+    issues: List[str] = []
+    count = _words(letter)
+    if count < MIN_WORDS:
+        issues.append(f"Too short ({count} words); aim for 250-350.")
+    elif count > MAX_WORDS:
+        issues.append(f"Too long ({count} words); aim for 250-350.")
+
+    lowered = letter.lower()
+    for phrase in BANNED_PHRASES:
+        if phrase in lowered:
+            issues.append(f"Contains cliche '{phrase}'.")
+
+    if "—" in letter or "–" in letter or "--" in letter:
+        issues.append("Contains dashes used as sentence breaks; use commas or full stops.")
+    if re.search(r"\[[^\]]+\]|\{[^}]+\}|<[^>]+>", letter):
+        issues.append("Contains an unfilled placeholder.")
+
+    allowed = _numbers(profile_text) | _numbers(job_text)
+    unsupported = sorted(n for n in _numbers(letter) if len(n.strip(".,")) >= 2 and n not in allowed)
+    if unsupported:
+        issues.append("Numbers not found in the profile or job description: " + ", ".join(unsupported[:5]) + ".")
+    return issues
+
+
+_HEADING_RE = re.compile(r"^#{1,4}\s*(?:\d+\.\s*)?(cover letter|gaps(?: & highlights)?|alternative opening lines|role analysis)\s*:?\s*$",
+                         re.IGNORECASE | re.MULTILINE)
+
+
+def parse_sections(output: str) -> Dict[str, str]:
+    """Split model output by headings; tolerate numbering, case and missing sections."""
+    sections: Dict[str, str] = {}
+    matches = list(_HEADING_RE.finditer(output))
+    for i, m in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(output)
+        sections[m.group(1).lower().split(" &")[0]] = output[m.end():end].strip()
+    if "cover letter" not in sections:
+        # No recognizable heading: drop any markdown heading lines and treat the rest as the letter
+        body = "\n".join(l for l in output.splitlines() if not l.lstrip().startswith("#")).strip()
+        sections["cover letter"] = body
+    return sections
+
+
+def _fallback_letter(job_title: str, company: str, cand: Dict[str, Any]) -> str:
+    """Factual template built only from profile fields. Intentionally plain."""
+    name = cand.get("name") or "Candidate"
+    skills = cand.get("core_skills") or cand.get("skills") or []
+    if isinstance(skills, dict):
+        skills = list(skills.keys())
+    skill_text = ", ".join(str(s) for s in list(skills)[:5])
+    summary = (cand.get("experience_summary") or cand.get("summary") or "").strip()
+    lines = [f"Dear Hiring Team at {company},", "", f"I am applying for the {job_title} role."]
+    if summary:
+        lines += ["", summary]
+    if skill_text:
+        lines += ["", f"My core skills include {skill_text}."]
+    if cand.get("location"):
+        lines += ["", f"I am based in {cand['location']}."]
+    lines += ["", f"I would welcome a conversation about how I can contribute to {company}.", "", "Sincerely,", name]
+    return "\n".join(lines)
 
 
 def generate_structured_cover_letter(
@@ -112,90 +184,62 @@ def generate_structured_cover_letter(
     job_description: str,
     candidate_profile: Dict[str, Any],
     company_context: Optional[str] = None,
-    custom_api_key: Optional[str] = None
-) -> Dict[str, str]:
+    custom_api_key: Optional[str] = None,
+) -> Dict[str, Any]:
     """
-    Generates a high-converting cover letter using the 6-step prompt workflow.
-    Returns:
-      {
-        "full_output": str,
-        "cover_letter": str,
-        "role_analysis": str,
-        "alternative_openings": str
-      }
+    Returns {status, cover_letter, alternative_openings, gaps, warnings, full_output}.
+    status: "success" (validated), "needs_review" (generated but validation findings remain),
+            "fallback" (LLM unavailable; plain factual template, review before sending).
     """
-    cand = candidate_profile.get("candidate", candidate_profile)
-    cand_name = cand.get("name", "Candidate")
-    loc = cand.get("location", "London, UK")
-    spons = "Requires UK Skilled Worker sponsorship" if cand.get("requires_sponsorship") else "Authorized to work in UK"
-    notice = cand.get("notice_period", "Available immediately")
+    cand = candidate_profile.get("candidate", candidate_profile) if isinstance(candidate_profile, dict) else {}
+    safe_profile = build_safe_profile(candidate_profile)
+    profile_text = json.dumps(safe_profile, indent=2, default=str)
 
-    practical_details = f"Location: {loc}, Work Authorization: {spons}, Availability: {notice}"
+    spons = "requires UK Skilled Worker sponsorship" if cand.get("requires_sponsorship") else "authorized to work in the UK"
+    practical = f"Location: {cand.get('location', 'not stated')}; work authorization: {spons}; availability: {cand.get('notice_period', 'not stated')}"
+    jd = (job_description or "Job details not provided")[:JD_CHAR_LIMIT]
+    job_title = job_title or "Target Role"
+    company = company or "Target Company"
 
-    # Extract resume text or serialize JSON
-    cand_text = json.dumps(candidate_profile, indent=2)
-
-    prompt = COVER_LETTER_AGENT_PROMPT.format(
-        job_title=job_title or "Target Role",
-        company=company or "Target Company",
-        job_description=(job_description[:3000] if job_description else "Job details not provided"),
-        company_context=company_context or f"Target employer: {company}",
-        candidate_profile=cand_text,
-        practical_details=practical_details
-    )
+    def build_prompt(feedback: str = "") -> str:
+        return COVER_LETTER_AGENT_PROMPT.format(
+            job_title=job_title, company=company, job_description=jd,
+            company_context=company_context or f"Target employer: {company}",
+            candidate_profile=profile_text, practical_details=practical,
+            feedback=f"\nFIX THESE PROBLEMS FROM YOUR PREVIOUS DRAFT:\n{feedback}\n" if feedback else "",
+        )
 
     try:
-        raw_response = generate_content_with_fallback(
-            prompt,
-            custom_api_key=custom_api_key,
-            model_tier="lite"
-        )
-        output_text = raw_response.strip()
-
-        # Parse sections
-        cover_letter_clean = output_text
-        role_analysis = ""
-        alt_openings = ""
-
-        if "### 3. Cover Letter" in output_text:
-            parts = output_text.split("### 3. Cover Letter")
-            before_letter = parts[0]
-            after_letter = parts[1]
-
-            if "### 1. Role Analysis" in before_letter:
-                role_analysis = before_letter.split("### 2. Gaps")[0].replace("### 1. Role Analysis", "").strip()
-
-            if "### 4. Alternative Opening Lines" in after_letter:
-                letter_parts = after_letter.split("### 4. Alternative Opening Lines")
-                cover_letter_clean = letter_parts[0].strip()
-                alt_openings = letter_parts[1].strip()
-            else:
-                cover_letter_clean = after_letter.strip()
-
+        output = generate_content_with_fallback(build_prompt(), custom_api_key=custom_api_key, model_tier="strong").strip()
+        sections = parse_sections(output)
+        issues = validate_letter(sections["cover letter"], profile_text, jd)
+        if issues:
+            logger.info("[cover-letter] Draft failed validation, retrying: %s", issues)
+            retry = generate_content_with_fallback(
+                build_prompt("\n".join(f"- {i}" for i in issues)), custom_api_key=custom_api_key, model_tier="strong"
+            ).strip()
+            retry_sections = parse_sections(retry)
+            retry_issues = validate_letter(retry_sections["cover letter"], profile_text, jd)
+            if len(retry_issues) <= len(issues):
+                output, sections, issues = retry, retry_sections, retry_issues
         return {
-            "status": "success",
-            "full_output": output_text,
-            "cover_letter": cover_letter_clean,
-            "role_analysis": role_analysis,
-            "alternative_openings": alt_openings
+            "status": "success" if not issues else "needs_review",
+            "full_output": output,
+            "cover_letter": sections["cover letter"],
+            "gaps": sections.get("gaps", ""),
+            "alternative_openings": sections.get("alternative opening lines", ""),
+            "role_analysis": sections.get("role analysis", ""),
+            "warnings": issues,
         }
     except Exception as e:
-        logger.error(f"[cover-letter-agent] Generation failed: {e}")
-        # Deterministic fallback letter using factual profile fields
-        fallback_letter = f"""Dear Hiring Team at {company},
-
-I am applying for the {job_title} position. With my background in software engineering, distributed systems, and agentic AI pipelines, I have consistently focused on building scalable, reliable production software.
-
-Throughout my experience, I have led technical initiatives that improved automation throughput and system reliability. My technical foundation spans Python, TypeScript, and modern AI development frameworks, allowing me to take end-to-end ownership of core engineering problems.
-
-I am based in {loc} and {notice.lower()}. I would welcome the opportunity to discuss how my technical skills and problem-solving experience align with the goals of the engineering team at {company}.
-
-Sincerely,
-{cand_name}"""
+        logger.error("[cover-letter] Generation failed: %s", e)
+        letter = _fallback_letter(job_title, company, cand)
         return {
             "status": "fallback",
-            "full_output": fallback_letter,
-            "cover_letter": fallback_letter,
-            "role_analysis": "Automated fallback generated due to LLM timeout.",
-            "alternative_openings": f"1. Seeing {company}'s focus on engineering excellence prompted me to apply for the {job_title} role.\n2. As an engineer specializing in production AI systems, I am eager to contribute to {company}."
+            "full_output": letter,
+            "cover_letter": letter,
+            "gaps": "",
+            "alternative_openings": "",
+            "role_analysis": "",
+            "warnings": [f"LLM unavailable ({type(e).__name__}); plain template from your profile. Review before sending."],
         }

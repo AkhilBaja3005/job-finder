@@ -774,10 +774,12 @@ async def generate_cover_letter_history(request: CoverLetterHistoryRequest, auth
             candidate_profile=resume
         )
         return {
-            "status": "success",
+            "status": result.get("status", "success"),
             "cover_letter": result["cover_letter"],
             "role_analysis": result.get("role_analysis", ""),
+            "gaps": result.get("gaps", ""),
             "alternative_openings": result.get("alternative_openings", ""),
+            "warnings": result.get("warnings", []),
             "full_output": result.get("full_output", "")
         }
     except Exception as e:

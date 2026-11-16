@@ -64,7 +64,10 @@ Akhil Baja
             candidate_profile=mock_profile
         )
 
-    assert result["status"] == "success"
+    # This mock letter is deliberately weak (too short, uses a cliche), so validation must flag it
+    assert result["status"] == "needs_review"
+    assert any("Too short" in w for w in result["warnings"])
+    assert any("cliche" in w for w in result["warnings"])
     assert "Dear Hiring Team" in result["cover_letter"]
     assert "Acme Corp" in result["cover_letter"]
     assert len(result["role_analysis"]) > 5
