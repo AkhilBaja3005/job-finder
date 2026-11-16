@@ -778,7 +778,7 @@ def generate_latex_from_json(
         # Load candidate profile projects lookup for fallback URLs and technologies
         known_profile_projects = {}
         try:
-            from mcp.tools.profile_tools import PROFILE_CONFIG_PATH
+            from job_finder_mcp.tools.profile_tools import PROFILE_CONFIG_PATH
             if os.path.exists(PROFILE_CONFIG_PATH):
                 with open(PROFILE_CONFIG_PATH, "r", encoding="utf-8") as _pf:
                     pdata = json.load(_pf)

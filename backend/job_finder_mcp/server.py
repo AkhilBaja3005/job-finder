@@ -13,14 +13,14 @@ from typing import Dict, Any, List, Optional
 # Ensure backend root is on sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mcp.tools.discovery_tools import DISCOVERY_TOOLS_SPEC, handle_search_jobs, handle_scrape_job_posting
-from mcp.tools.ats_tools import ATS_TOOLS_SPEC, handle_calculate_ats_score, handle_analyze_skill_gap, handle_extract_seniority_salary
-from mcp.tools.resume_tools import RESUME_TOOLS_SPEC, handle_tailor_resume_latex, handle_compile_latex_metrics, handle_export_overleaf_bundle, handle_parse_and_convert_to_latex
-from mcp.tools.networking_tools import NETWORKING_TOOLS_SPEC, handle_extract_recruiter_profile, handle_generate_outreach_inmail
-from mcp.tools.interview_tools import INTERVIEW_TOOLS_SPEC, handle_generate_interview_pack, handle_company_culture_brief
-from mcp.tools.tracking_tools import TRACKING_TOOLS_SPEC, handle_track_application, handle_list_applications, handle_check_duplicate_application
-from mcp.tools.profile_tools import PROFILE_TOOLS_SPEC, handle_save_candidate_profile, handle_get_candidate_profile, handle_sync_candidate_profile_from_resume
-from mcp.tools.autofill_tools import AUTOFILL_TOOLS_SPEC, handle_apply_to_job_browser, handle_pipeline_auto_apply
+from job_finder_mcp.tools.discovery_tools import DISCOVERY_TOOLS_SPEC, handle_search_jobs, handle_scrape_job_posting
+from job_finder_mcp.tools.ats_tools import ATS_TOOLS_SPEC, handle_calculate_ats_score, handle_analyze_skill_gap, handle_extract_seniority_salary
+from job_finder_mcp.tools.resume_tools import RESUME_TOOLS_SPEC, handle_tailor_resume_latex, handle_compile_latex_metrics, handle_export_overleaf_bundle, handle_parse_and_convert_to_latex
+from job_finder_mcp.tools.networking_tools import NETWORKING_TOOLS_SPEC, handle_extract_recruiter_profile, handle_generate_outreach_inmail
+from job_finder_mcp.tools.interview_tools import INTERVIEW_TOOLS_SPEC, handle_generate_interview_pack, handle_company_culture_brief
+from job_finder_mcp.tools.tracking_tools import TRACKING_TOOLS_SPEC, handle_track_application, handle_list_applications, handle_check_duplicate_application
+from job_finder_mcp.tools.profile_tools import PROFILE_TOOLS_SPEC, handle_save_candidate_profile, handle_get_candidate_profile, handle_sync_candidate_profile_from_resume
+from job_finder_mcp.tools.autofill_tools import AUTOFILL_TOOLS_SPEC, handle_apply_to_job_browser, handle_pipeline_auto_apply
 
 _RAW_TOOLS = (
     DISCOVERY_TOOLS_SPEC

@@ -57,7 +57,7 @@ DISCOVERY_TOOLS_SPEC = [
 ]
 
 
-from mcp.tools.profile_tools import load_profile_data
+from job_finder_mcp.tools.profile_tools import load_profile_data
 
 async def handle_search_jobs(arguments: Dict[str, Any]) -> Dict[str, Any]:
     prof_data = load_profile_data()

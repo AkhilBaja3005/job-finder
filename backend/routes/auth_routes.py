@@ -438,7 +438,7 @@ async def update_user_profile(request: ProfileUpdateRequest, authorization: Opti
 
     # Also persist telemetry updates to config/candidate_profile.json
     try:
-        from mcp.tools.profile_tools import PROFILE_CONFIG_PATH
+        from job_finder_mcp.tools.profile_tools import PROFILE_CONFIG_PATH
         if os.path.exists(PROFILE_CONFIG_PATH):
             with open(PROFILE_CONFIG_PATH, "r", encoding="utf-8") as cf:
                 cfg_data = json.load(cf)

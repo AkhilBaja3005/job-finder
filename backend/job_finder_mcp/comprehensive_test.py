@@ -10,7 +10,7 @@ import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mcp.server import process_mcp_request, ALL_TOOLS
+from job_finder_mcp.server import process_mcp_request, ALL_TOOLS
 
 async def test_all_mcp_tools():
     print("=" * 65)
@@ -168,7 +168,7 @@ async def test_all_mcp_tools():
     print(f"  [] 15. company_culture_brief: Generated culture brief ({len(cult_data['culture_brief_markdown'])} chars)")
 
     # 16. save_candidate_profile (isolated backup & restore to not pollute user profile)
-    from mcp.tools.profile_tools import PROFILE_CONFIG_PATH
+    from job_finder_mcp.tools.profile_tools import PROFILE_CONFIG_PATH
     real_profile_backup = None
     if os.path.exists(PROFILE_CONFIG_PATH):
         with open(PROFILE_CONFIG_PATH, "r", encoding="utf-8") as f:

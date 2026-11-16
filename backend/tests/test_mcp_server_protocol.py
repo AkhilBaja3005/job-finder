@@ -3,7 +3,7 @@
 import asyncio
 import pytest
 
-from mcp.server import process_mcp_request, ALL_TOOLS
+from job_finder_mcp.server import process_mcp_request, ALL_TOOLS
 
 
 def run(req):
@@ -40,7 +40,7 @@ def test_tool_annotations_present():
 
 
 def test_auto_submit_requires_confirmation(monkeypatch):
-    import mcp.server as server
+    import job_finder_mcp.server as server
     seen = {}
 
     async def fake(arguments):
@@ -60,7 +60,7 @@ def test_auto_submit_requires_confirmation(monkeypatch):
 
 
 def test_tool_errors_do_not_leak_tracebacks(monkeypatch):
-    import mcp.server as server
+    import job_finder_mcp.server as server
 
     async def boom(arguments):
         raise RuntimeError("kaboom")

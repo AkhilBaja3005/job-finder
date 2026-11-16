@@ -2,9 +2,9 @@
 """
 CLI tool for users to quickly view, configure, or update their profile & job search preferences.
 Usage:
-    python backend/mcp/cli_profile.py show
-    python backend/mcp/cli_profile.py set --roles "AI Engineer,LLM Engineer" --locations "London,Remote" --timeframe "past_24_hours" --ats 65
-    python backend/mcp/cli_profile.py interactive
+    python backend/job_finder_mcp/cli_profile.py show
+    python backend/job_finder_mcp/cli_profile.py set --roles "AI Engineer,LLM Engineer" --locations "London,Remote" --timeframe "past_24_hours" --ats 65
+    python backend/job_finder_mcp/cli_profile.py interactive
 """
 
 import sys
@@ -14,7 +14,7 @@ import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # pyrefly: ignore [missing-import]
-from mcp.tools.profile_tools import load_profile_data, PROFILE_CONFIG_PATH
+from job_finder_mcp.tools.profile_tools import load_profile_data, PROFILE_CONFIG_PATH
 
 def show_profile():
     data = load_profile_data()
@@ -79,7 +79,7 @@ def main():
     elif args.command == "sync":
         import asyncio
         # pyrefly: ignore [missing-import]
-        from mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
+        from job_finder_mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
         res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": args.resume_path}))
         if res.get("success"):
             print(f"{res.get('message')}")

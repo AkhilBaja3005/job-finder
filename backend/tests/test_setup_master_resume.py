@@ -74,7 +74,7 @@ def test_setup_prompts_and_persists_master_resume(fake_workspace, monkeypatch):
 
     with patch("sys.stdin.isatty", return_value=True):
         with patch("builtins.input", return_value=resume_file):
-            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 8, "experience_count": 3, "education_count": 1}) as mock_sync:
+            with patch("backend.job_finder_mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 8, "experience_count": 3, "education_count": 1}) as mock_sync:
                 with patch("backend.services.gemini_client.generate_content_with_fallback", return_value="Optimized executive summary"):
                     with patch("backend.services.browser_use_agent.ensure_persistent_browser", return_value="http://127.0.0.1:9222"):
                         with patch("urllib.request.urlopen") as mock_urlopen:
@@ -107,7 +107,7 @@ def test_setup_with_resume_cli_argument(fake_workspace, monkeypatch):
     monkeypatch.delenv("MASTER_RESUME_PATH", raising=False)
 
     with patch("sys.stdin.isatty", return_value=False):
-        with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}) as mock_sync:
+        with patch("backend.job_finder_mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}) as mock_sync:
             with patch.object(sys, "argv", ["job-finder", "setup", "--resume", resume_file, "--api-key", "AIzaTestKey"]):
                 main()
 
@@ -130,7 +130,7 @@ def test_setup_interactive_accepts_detected_default(fake_workspace, monkeypatch)
             with patch("sys.stdin.isatty", return_value=True):
                 # User presses Enter without typing (empty string input)
                 with patch("builtins.input", return_value=""):
-                    with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 4, "experience_count": 1, "education_count": 1}) as mock_sync:
+                    with patch("backend.job_finder_mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 4, "experience_count": 1, "education_count": 1}) as mock_sync:
                         with patch("backend.services.browser_use_agent.ensure_persistent_browser", return_value="http://127.0.0.1:9222"):
                             with patch("urllib.request.urlopen") as mock_urlopen:
                                 from unittest.mock import MagicMock
@@ -190,7 +190,7 @@ def test_setup_prompts_and_launches_automation_browser(fake_workspace, monkeypat
 
     with patch("sys.stdin.isatty", return_value=True):
         with patch("builtins.input", side_effect=mock_input):
-            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
+            with patch("backend.job_finder_mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
                 with patch("backend.services.gemini_client.generate_content_with_fallback", return_value="Optimized executive summary"):
                     with patch("backend.services.browser_use_agent.ensure_persistent_browser", return_value="http://127.0.0.1:9222") as mock_ensure:
                         with patch("urllib.request.urlopen") as mock_urlopen:
@@ -226,7 +226,7 @@ def test_setup_browser_prompt_skipped(fake_workspace, monkeypatch):
 
     with patch("sys.stdin.isatty", return_value=True):
         with patch("builtins.input", side_effect=mock_input):
-            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
+            with patch("backend.job_finder_mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", new_callable=AsyncMock, return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
                 with patch("backend.services.gemini_client.generate_content_with_fallback", return_value="Optimized executive summary"):
                     with patch("backend.services.browser_use_agent.ensure_persistent_browser") as mock_ensure:
                         with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaTestKey"]):

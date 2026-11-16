@@ -179,6 +179,7 @@ def _main():
     )
     scanner_parser.add_argument("url", nargs="?", default=None, help="Target specific job URL to process directly (optional)")
     scanner_parser.add_argument("--auto-apply", "--auto-submit", dest="auto_apply", action="store_true", help="Enable automatic browser form submission")
+    scanner_parser.add_argument("--dry-run", action="store_true", help="Fill forms and stop at the review step; never submit (overrides --auto-apply and .env)")
     scanner_parser.add_argument("--timeout", type=float, default=300.0, help="Autofill session timeout in seconds (default: 300s)")
     scanner_parser.add_argument("--tailor-timeout", type=float, default=90.0, help="Resume tailoring timeout in seconds (default: 90s)")
     scanner_parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps per application (default: 50)")
@@ -201,6 +202,7 @@ def _main():
     )
     apply_parser.add_argument("target", type=str, help="Job posting URL, or path to a .txt/.json/.csv file containing job URLs")
     apply_parser.add_argument("--submit", action="store_true", help="Auto-submit the application if safe")
+    apply_parser.add_argument("--dry-run", action="store_true", help="Fill forms and stop at the review step; never submit (overrides --submit and .env)")
     apply_parser.add_argument("--timeout", type=float, default=300.0, help="Application timeout in seconds (default: 300s)")
     apply_parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps (default: 50)")
     apply_parser.add_argument("--model", type=str, default="gemini-3.5-flash-lite", help="LLM model to use (default: gemini-3.5-flash-lite)")
@@ -388,6 +390,15 @@ def _main():
     if args.subcommand != "mcp":
         check_for_updates()
 
+    if args.subcommand in ("scan", "apply") and getattr(args, "dry_run", False):
+        # Dry run: fill and review only. Overrides .env and any auto-submit flag so nothing is submitted.
+        os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "0"
+        os.environ["BROWSER_USE_DISABLE_GUARDRAILS"] = "0"
+        args.auto_apply = False
+        if hasattr(args, "submit"):
+            args.submit = False
+        ui.info("Dry run: applications will be filled but never submitted.")
+
     if args.subcommand == "scan":
         if args.auto_apply:
             os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
@@ -437,7 +448,7 @@ def _main():
         import asyncio
         import re
         from applications_tracker.scheduled_job_scanner import run_browser_use_autofill, find_master_resume_with_mac_tags
-        from backend.mcp.tools.profile_tools import load_profile_data
+        from backend.job_finder_mcp.tools.profile_tools import load_profile_data
 
         urls_to_process = []
         target_path = args.target.strip()
@@ -526,7 +537,7 @@ def _main():
 
         async def _batch_apply():
             nonlocal failed_jobs, successful_jobs, batch_applied_buffer, batch_failed_buffer
-            from mcp.tools.tracking_tools import handle_track_application
+            from job_finder_mcp.tools.tracking_tools import handle_track_application
 
             for idx, url in enumerate(urls_to_process, 1):
                 print(f"\n========================================================")
@@ -612,18 +623,17 @@ def _main():
         except Exception as mail_err:
             print(f"[Email Alert] Note: Could not send summary email alert: {mail_err}")
 
-        print(f"\n========================================================")
-        print(f"   BATCH APPLICATION SUMMARY")
-        print(f"========================================================")
-        print(f"Total Processed: {len(urls_to_process)}")
-        print(f"Successful     : {len(successful_jobs)}")
-        print(f"Failed         : {len(failed_jobs)}")
+        ui.key_values("Batch application summary", {
+            "Total processed": len(urls_to_process),
+            "Successful": len(successful_jobs),
+            "Failed": len(failed_jobs),
+        })
         if failed_jobs:
-            print(f"\nFailed Application Details:")
-            for f_item in failed_jobs:
-                print(f"  {f_item['url']}")
-                print(f"     Reason: {f_item['reason']}")
-        print(f"========================================================\n")
+            ui.print_table(
+                "Failed applications",
+                ["URL", "Reason"],
+                [[f_item["url"], str(f_item["reason"])[:120]] for f_item in failed_jobs],
+            )
 
     elif args.subcommand == "server":
         os.environ["PORT"] = str(args.port)
@@ -632,13 +642,13 @@ def _main():
         start_server()
 
     elif args.subcommand == "mcp":
-        from backend.mcp.server import main as mcp_main
+        from backend.job_finder_mcp.server import main as mcp_main
         mcp_main()
 
     elif args.subcommand == "profile":
         if getattr(args, "sync", None):
             import asyncio
-            from backend.mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
+            from backend.job_finder_mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
             resume_arg = None if args.sync == "AUTO" else args.sync
             res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": resume_arg}))
             if res.get("success"):
@@ -648,7 +658,7 @@ def _main():
                 print(f"Sync failed: {res.get('error')}")
             return
 
-        from backend.mcp.tools.profile_tools import get_profile_config_path, load_profile_data
+        from backend.job_finder_mcp.tools.profile_tools import get_profile_config_path, load_profile_data
         prof_path = get_profile_config_path()
         data = load_profile_data()
         if data:
@@ -676,7 +686,7 @@ def _main():
         sys.exit(run_cover_letter(args.title, args.company, args.jd_file, args.jd_url, args.out, as_json=args.json))
 
     elif args.subcommand == "ats":
-        from backend.mcp.tools.profile_tools import load_profile_data, save_profile_data
+        from backend.job_finder_mcp.tools.profile_tools import load_profile_data, save_profile_data
         from backend.services.ats_scorer import evaluate_master_resume
 
         target_data = None
@@ -813,7 +823,7 @@ Output Markdown with 4 sections:
         import asyncio
         from services.job_searcher import search_targetjobs_uk
         from utils.location_resolver import resolve_location_country
-        from backend.mcp.tools.profile_tools import load_profile_data
+        from backend.job_finder_mcp.tools.profile_tools import load_profile_data
 
         # 1. Resolve keyword from candidate profile if not explicitly passed
         keyword = args.keyword
@@ -867,7 +877,7 @@ Output Markdown with 4 sections:
 
             if args.auto_apply:
                 from applications_tracker.scheduled_job_scanner import apply_to_job, find_master_resume_with_mac_tags, notify_user_of_failed_applications, notify_user_of_applied_applications
-                from mcp.tools.tracking_tools import handle_track_application
+                from job_finder_mcp.tools.tracking_tools import handle_track_application
                 os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
                 master_resume_pdf = find_master_resume_with_mac_tags()
                 print(f"Starting automatic submission for {len(selected_jobs)} TargetJobs role(s)...")
@@ -936,7 +946,7 @@ Output Markdown with 4 sections:
     elif args.subcommand == "jobserve":
         import asyncio
         from services.job_searcher import search_jobserve_jobs
-        from backend.mcp.tools.profile_tools import load_profile_data
+        from backend.job_finder_mcp.tools.profile_tools import load_profile_data
 
         keyword = args.keyword
         profile = load_profile_data() or {}
@@ -983,7 +993,7 @@ Output Markdown with 4 sections:
 
             if args.auto_apply:
                 from applications_tracker.scheduled_job_scanner import apply_to_job, find_master_resume_with_mac_tags, notify_user_of_failed_applications, notify_user_of_applied_applications
-                from mcp.tools.tracking_tools import handle_track_application
+                from job_finder_mcp.tools.tracking_tools import handle_track_application
                 os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
                 master_resume_pdf = find_master_resume_with_mac_tags()
                 print(f"Starting automatic submission for {len(selected_jobs)} Jobserve role(s)...")
@@ -1049,7 +1059,7 @@ Output Markdown with 4 sections:
         import asyncio
         from backend.services.application_tracker import list_applications
         from backend.services.outreach_generator import generate_outreach_message
-        from backend.mcp.tools.profile_tools import load_profile_data
+        from backend.job_finder_mcp.tools.profile_tools import load_profile_data
 
         print("\n========================================================")
         print("  RECRUITER 3-DAY FOLLOW-UP & PROFILE VIEW ENGINE")
@@ -1177,7 +1187,7 @@ Output Markdown with 4 sections:
         print("          JOB FINDER AI - QUICK SETUP WIZARD")
         print("========================================================\n")
         from backend.config.constants import resolve_workspace_root
-        from backend.mcp.tools.profile_tools import get_profile_config_path, get_profile_save_path
+        from backend.job_finder_mcp.tools.profile_tools import get_profile_config_path, get_profile_save_path
 
         ws = resolve_workspace_root()
         env_path = os.path.join(ws, ".env")
@@ -1369,7 +1379,7 @@ Output Markdown with 4 sections:
 
             print(f"Syncing candidate profile from resume: {resume_target}")
             import asyncio
-            from backend.mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
+            from backend.job_finder_mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
             res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": resume_target}))
             if res.get("success"):
                 print(f"Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
@@ -1377,7 +1387,7 @@ Output Markdown with 4 sections:
                 # Run ATS Health Audit & Display Improvement Tips
                 try:
                     from backend.services.ats_scorer import evaluate_master_resume
-                    from backend.mcp.tools.profile_tools import load_profile_data, save_profile_data
+                    from backend.job_finder_mcp.tools.profile_tools import load_profile_data, save_profile_data
                     profile_data = load_profile_data()
                     ats_eval = evaluate_master_resume(profile_data.get("candidate", {}))
                     ats_score = ats_eval.get("ats_score", 80)

@@ -70,7 +70,7 @@ ATS_TOOLS_SPEC = [
 ]
 
 
-from mcp.tools.profile_tools import load_profile_data
+from job_finder_mcp.tools.profile_tools import load_profile_data
 
 async def handle_calculate_ats_score(arguments: Dict[str, Any]) -> Dict[str, Any]:
     jd = arguments.get("job_description", "")

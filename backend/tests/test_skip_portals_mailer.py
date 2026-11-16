@@ -75,7 +75,7 @@ class TestSkipPortalsMailer(unittest.IsolatedAsyncioTestCase):
             captured_exclude.extend(kwargs.get("exclude_portals") or [])
             yield json.dumps({"type": "result", "jobs": []})
 
-        with patch("mcp.tools.profile_tools.load_profile_data", return_value=mock_profile), \
+        with patch("job_finder_mcp.tools.profile_tools.load_profile_data", return_value=mock_profile), \
              patch("services.job_searcher.find_matching_jobs", side_effect=fake_find_matching_jobs), \
              patch("services.cron_scheduler._is_local_deployment", return_value=False), \
              patch("services.cron_scheduler.async_send_notification_email", new_callable=AsyncMock) as mock_send:

@@ -74,7 +74,7 @@ except ImportError:
     pass
 
 
-from mcp.tools.profile_tools import load_profile_data
+from job_finder_mcp.tools.profile_tools import load_profile_data
 from services.browser_use_agent import run_browser_use_autofill
 # pyrefly: ignore [missing-import]
 from scheduled_job_scanner import (

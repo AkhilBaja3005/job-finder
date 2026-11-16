@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath("backend"))
 
 from services.portal_scanner import PortalScanner
 from services.job_searcher import search_jobserve_jobs
-from mcp.tools.profile_tools import load_profile_data
+from job_finder_mcp.tools.profile_tools import load_profile_data
 
 async def check_48h_uk_profile_jobs():
     print("=" * 70)

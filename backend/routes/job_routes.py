@@ -275,7 +275,7 @@ async def search_matching_jobs(request: SearchJobsRequest, http_request: Request
                 effective_exclude = [p.strip().lower() for p in user_skip.split(",") if p.strip()]
         elif not user:
             try:
-                from mcp.tools.profile_tools import load_profile_data
+                from job_finder_mcp.tools.profile_tools import load_profile_data
                 prof = load_profile_data() or {}
                 p_prefs = prof.get("search_preferences", {})
                 if "skip_portals" in p_prefs or "exclude_portals" in p_prefs:

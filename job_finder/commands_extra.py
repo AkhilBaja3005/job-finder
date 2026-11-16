@@ -31,7 +31,7 @@ def _mask_key(key: Optional[str]) -> str:
 
 
 def run_status(as_json: bool = False) -> int:
-    from backend.mcp.tools.profile_tools import get_profile_config_path, load_profile_data
+    from backend.job_finder_mcp.tools.profile_tools import get_profile_config_path, load_profile_data
     from applications_tracker.scheduled_job_scanner import find_master_resume_with_mac_tags
 
     # These helpers print progress lines; send them to stderr so --json stdout stays clean
@@ -71,7 +71,7 @@ def run_status(as_json: bool = False) -> int:
 def run_config(as_json: bool = False) -> int:
     """Show where Job Finder reads and writes things (no secret values)."""
     from job_finder.logging_setup import log_file_path
-    from backend.mcp.tools.profile_tools import get_profile_config_path
+    from backend.job_finder_mcp.tools.profile_tools import get_profile_config_path
 
     env_keys = ["GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_KEY", "BREVO_API_KEY", "RESEND_API_KEY", "SMTP_USER",
                 "NOTIFY_EMAIL", "BROWSER_USE_TIMEOUT", "JOB_FINDER_CDP_PORT", "JOB_FINDER_EMAIL_BATCH_SIZE"]
@@ -109,7 +109,7 @@ def export_applications(apps: List[Dict[str, Any]], out_path: str, fmt: str = "c
 
 def run_cover_letter(job_title: str, company: str, jd_file: Optional[str], jd_url: Optional[str],
                      out_path: Optional[str], as_json: bool = False) -> int:
-    from backend.mcp.tools.profile_tools import load_profile_data
+    from backend.job_finder_mcp.tools.profile_tools import load_profile_data
     from backend.services.cover_letter_generator import generate_structured_cover_letter
     from job_finder import ats_view
 

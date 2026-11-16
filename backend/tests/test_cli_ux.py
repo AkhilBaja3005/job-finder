@@ -80,14 +80,18 @@ def test_shell_completion_suggests_subcommands():
     pytest = __import__("pytest")
     pytest.importorskip("argcomplete")
     import os
-    code = ("import sys; sys.argv=['job-finder']\n"
-            "from job_finder.cli import main; main()")
+    import shlex
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    code = "import sys; sys.argv=['job-finder']; from job_finder.cli import main; main()"
+    # argcomplete writes completions to fd 8, so redirect it to stdout in a shell
+    cmd = f"{shlex.quote(sys.executable)} -c {shlex.quote(code)} 8>&1 2>/dev/null"
     env = {"PATH": "/usr/bin:/bin", "_ARGCOMPLETE": "1", "_ARGCOMPLETE_IFS": "\n", "COMP_LINE": "job-finder cov",
            "COMP_POINT": "14", "JOB_FINDER_NO_UPDATE_CHECK": "1"}
-    r, w = os.pipe()
-    res = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, pass_fds=(w,),
-                         preexec_fn=lambda: os.dup2(w, 8))
-    os.close(w)
-    out = os.read(r, 4096).decode()
-    os.close(r)
-    assert "cover-letter" in out, (out, res.stderr[-300:])
+    res = subprocess.run(["sh", "-c", cmd], env=env, cwd=root, capture_output=True, text=True)
+    assert "cover-letter" in res.stdout, res.stdout
+
+
+def test_dry_run_flags_are_accepted_by_scan_and_apply():
+    for cmd in (["scan", "--help"], ["apply", "--help"]):
+        res = _run(*cmd)
+        assert res.returncode == 0 and "--dry-run" in res.stdout

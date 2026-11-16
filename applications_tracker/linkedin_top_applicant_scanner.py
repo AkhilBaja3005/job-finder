@@ -78,7 +78,7 @@ except ImportError:
     pass
 
 
-from mcp.tools.profile_tools import load_profile_data
+from job_finder_mcp.tools.profile_tools import load_profile_data
 from services.browser_use_agent import run_browser_use_autofill, preflight_check_job_url
 from config.constants import get_best_flash_lite_model
 # pyrefly: ignore [missing-import]

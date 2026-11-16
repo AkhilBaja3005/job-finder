@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 from services.recruiter_extractor import extract_recruiter
 from services.outreach_generator import generate_outreach_message
 from services.session_store import get_session_data
-from mcp.tools.profile_tools import load_profile_data
+from job_finder_mcp.tools.profile_tools import load_profile_data
 
 NETWORKING_TOOLS_SPEC = [
     {

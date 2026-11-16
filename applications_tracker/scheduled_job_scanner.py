@@ -160,11 +160,11 @@ if BACKEND_DIR not in sys.path and os.path.isdir(BACKEND_DIR):
 
 # Core backend imports
 # pyrefly: ignore [missing-import]
-from mcp.tools.discovery_tools import handle_search_jobs  # type: ignore
-from mcp.tools.profile_tools import load_profile_data  # type: ignore
-from mcp.tools.tracking_tools import handle_track_application  # type: ignore
-from mcp.tools.autofill_tools import build_and_compile_tailored_pdf, _get_default_resume_path  # type: ignore
-from mcp.tools.ats_tools import handle_calculate_ats_score  # type: ignore
+from job_finder_mcp.tools.discovery_tools import handle_search_jobs  # type: ignore
+from job_finder_mcp.tools.profile_tools import load_profile_data  # type: ignore
+from job_finder_mcp.tools.tracking_tools import handle_track_application  # type: ignore
+from job_finder_mcp.tools.autofill_tools import build_and_compile_tailored_pdf, _get_default_resume_path  # type: ignore
+from job_finder_mcp.tools.ats_tools import handle_calculate_ats_score  # type: ignore
 from services.browser_use_agent import run_browser_use_autofill  # type: ignore
 from services.email_service import send_notification_email  # type: ignore
 from services.job_searcher import normalize_timeframe  # type: ignore
@@ -548,7 +548,7 @@ def notify_user_of_applied_applications(applied_jobs: list, to_email: Optional[s
     # Build plain text summary
     cand_name = "Candidate"
     try:
-        from backend.mcp.tools.profile_tools import load_profile_data
+        from backend.job_finder_mcp.tools.profile_tools import load_profile_data
         prof = load_profile_data() or {}
         cand_name = prof.get("candidate", {}).get("name", "Candidate").split()[0]
     except Exception:

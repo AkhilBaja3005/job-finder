@@ -45,7 +45,7 @@ def test_ats_render_json_and_ineligible(capsys):
 
 
 def test_cover_letter_command_uses_generator(monkeypatch, tmp_path, capsys):
-    import backend.mcp.tools.profile_tools as pt
+    import backend.job_finder_mcp.tools.profile_tools as pt
     import backend.services.cover_letter_generator as gen
     monkeypatch.setattr(pt, "load_profile_data", lambda: {"candidate": {"name": "Jane"}})
     monkeypatch.setattr(gen, "generate_structured_cover_letter",
@@ -57,7 +57,7 @@ def test_cover_letter_command_uses_generator(monkeypatch, tmp_path, capsys):
 
 
 def test_cover_letter_fallback_exit_code(monkeypatch):
-    import backend.mcp.tools.profile_tools as pt
+    import backend.job_finder_mcp.tools.profile_tools as pt
     import backend.services.cover_letter_generator as gen
     monkeypatch.setattr(pt, "load_profile_data", lambda: {"candidate": {"name": "Jane"}})
     monkeypatch.setattr(gen, "generate_structured_cover_letter",

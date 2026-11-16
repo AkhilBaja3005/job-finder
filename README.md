@@ -274,10 +274,10 @@ Located in `.agents/skills/` (with YAML frontmatter compatible across all major 
 Users can also view and configure their preferences directly via the terminal:
 ```bash
 # View active configuration
-python backend/mcp/cli_profile.py show
+python backend/job_finder_mcp/cli_profile.py show
 
 # Update search preferences
-python backend/mcp/cli_profile.py set --roles "AI Engineer,LLM Engineer" --locations "London,Remote" --timeframe "past_24_hours" --ats 65
+python backend/job_finder_mcp/cli_profile.py set --roles "AI Engineer,LLM Engineer" --locations "London,Remote" --timeframe "past_24_hours" --ats 65
 ```
 
 ### 🔌 Connecting to AI Harnesses

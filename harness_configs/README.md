@@ -8,7 +8,7 @@ This directory contains pre-configured MCP definitions and agent runbooks to con
 
 Add the contents of `claude_desktop_config.json` to your Claude configuration file:
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Claude Code CLI**: Run `claude mcp add job-finder -- /Users/akhilbaja/Documents/Akhil/Job\ Finder/backend/venv/bin/python /Users/akhilbaja/Documents/Akhil/Job\ Finder/backend/mcp/server.py`
+- **Claude Code CLI**: Run `claude mcp add job-finder -- /Users/akhilbaja/Documents/Akhil/Job\ Finder/backend/venv/bin/python /Users/akhilbaja/Documents/Akhil/Job\ Finder/backend/job_finder_mcp/server.py`
 
 ---
 
@@ -28,7 +28,7 @@ In Cursor:
 2. Click **+ Add New MCP Server**.
 3. Choose **Type: Stdio**.
 4. Set Command to `/Users/akhilbaja/Documents/Akhil/Job Finder/backend/venv/bin/python`.
-5. Set Args to `/Users/akhilbaja/Documents/Akhil/Job Finder/backend/mcp/server.py`.
+5. Set Args to `/Users/akhilbaja/Documents/Akhil/Job Finder/backend/job_finder_mcp/server.py`.
 6. Add Environment Variable: `PYTHONPATH=/Users/akhilbaja/Documents/Akhil/Job Finder/backend`.
 
 ---

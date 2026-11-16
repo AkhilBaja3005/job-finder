@@ -7,7 +7,7 @@ import json
 sys.path.insert(0, os.path.abspath("backend"))
 
 from services.job_searcher import find_matching_jobs
-from mcp.tools.profile_tools import load_profile_data
+from job_finder_mcp.tools.profile_tools import load_profile_data
 
 async def run_profile_yield_benchmark():
     print("=" * 70)

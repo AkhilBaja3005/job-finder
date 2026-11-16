@@ -8,7 +8,7 @@ import asyncio
 from typing import Optional
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse, JSONResponse
-from mcp.server import process_mcp_request, ALL_TOOLS
+from job_finder_mcp.server import process_mcp_request, ALL_TOOLS
 from services.auth import _is_local_deployment
 
 router = APIRouter(prefix="/mcp", tags=["Model Context Protocol"])

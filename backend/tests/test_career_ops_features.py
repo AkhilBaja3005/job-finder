@@ -127,7 +127,7 @@ def test_sync_resume_data_to_profile(tmp_path):
     """Verify that sync_resume_data_to_profile correctly populates profile configuration."""
     import os
     import unittest.mock as mock
-    from mcp.tools.profile_tools import sync_resume_data_to_profile, PROFILE_CONFIG_PATH
+    from job_finder_mcp.tools.profile_tools import sync_resume_data_to_profile, PROFILE_CONFIG_PATH
 
 
     sample_parsed = {
@@ -173,7 +173,7 @@ def test_sync_resume_data_to_profile(tmp_path):
 
     dummy_config = str(tmp_path / "candidate_profile.json")
     with mock.patch.dict(os.environ, {"CANDIDATE_PROFILE_PATH": dummy_config}), \
-         mock.patch("mcp.tools.profile_tools.load_profile_data", return_value={}):
+         mock.patch("job_finder_mcp.tools.profile_tools.load_profile_data", return_value={}):
         result = sync_resume_data_to_profile(sample_parsed)
         assert result["candidate"]["name"] == "Jane Tester"
         assert result["candidate"]["email"] == "jane.tester@example.com"
@@ -192,7 +192,7 @@ def test_sync_resume_preserves_work_experience_technologies(tmp_path):
     """Verify that when a resume is synced without technologies per role, existing technologies are preserved."""
     from unittest import mock
     import os
-    from mcp.tools.profile_tools import sync_resume_data_to_profile
+    from job_finder_mcp.tools.profile_tools import sync_resume_data_to_profile
 
     existing_profile = {
         "candidate": {
@@ -223,7 +223,7 @@ def test_sync_resume_preserves_work_experience_technologies(tmp_path):
 
     dummy_config = str(tmp_path / "candidate_profile.json")
     with mock.patch.dict(os.environ, {"CANDIDATE_PROFILE_PATH": dummy_config}), \
-         mock.patch("mcp.tools.profile_tools.load_profile_data", return_value=existing_profile):
+         mock.patch("job_finder_mcp.tools.profile_tools.load_profile_data", return_value=existing_profile):
         result = sync_resume_data_to_profile(incoming_parsed)
         exp = result["candidate"]["work_experience"][0]
         assert exp["technologies"] == ["Python", "Spark", "Kafka", "Docker"]

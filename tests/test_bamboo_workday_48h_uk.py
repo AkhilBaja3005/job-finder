@@ -7,7 +7,7 @@ from collections import defaultdict
 sys.path.insert(0, os.path.abspath("backend"))
 
 from services.portal_scanner import PortalScanner
-from mcp.tools.profile_tools import load_profile_data
+from job_finder_mcp.tools.profile_tools import load_profile_data
 
 async def check_48h_uk_bamboo_workday():
     print("=" * 70)

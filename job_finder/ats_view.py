@@ -1,7 +1,7 @@
 """`job-finder ats --jd-file/--jd-url`: score a resume against one job description with a full breakdown."""
 
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from job_finder import ui
 
@@ -33,7 +33,7 @@ def score_against_jd(candidate: Dict[str, Any], jd_text: str) -> Dict[str, Any]:
     }
 
 
-def load_jd_text(jd_file: str = None, jd_url: str = None) -> str:
+def load_jd_text(jd_file: Optional[str] = None, jd_url: Optional[str] = None) -> str:
     if jd_file:
         if jd_file == "-":
             return sys.stdin.read()

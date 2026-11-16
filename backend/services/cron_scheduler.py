@@ -61,7 +61,7 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
         # Fallback to candidate profile or default targetjobs exclusion
         excluded_portals = ["targetjobs"]
         try:
-            from mcp.tools.profile_tools import load_profile_data
+            from job_finder_mcp.tools.profile_tools import load_profile_data
             prof = load_profile_data() or {}
             p_prefs = prof.get("search_preferences", {})
             if "skip_portals" in p_prefs or "exclude_portals" in p_prefs:

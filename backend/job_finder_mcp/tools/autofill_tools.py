@@ -23,13 +23,13 @@ try:
 except Exception:
     pass
 # pyrefly: ignore [missing-import]
-from mcp.tools.profile_tools import load_profile_data
+from job_finder_mcp.tools.profile_tools import load_profile_data
 # pyrefly: ignore [missing-import]
-from mcp.tools.ats_tools import handle_calculate_ats_score, handle_analyze_skill_gap
+from job_finder_mcp.tools.ats_tools import handle_calculate_ats_score, handle_analyze_skill_gap
 # pyrefly: ignore [missing-import]
-from mcp.tools.discovery_tools import handle_search_jobs, handle_scrape_job_posting
+from job_finder_mcp.tools.discovery_tools import handle_search_jobs, handle_scrape_job_posting
 # pyrefly: ignore [missing-import]
-from mcp.tools.resume_tools import handle_tailor_resume_latex
+from job_finder_mcp.tools.resume_tools import handle_tailor_resume_latex
 # pyrefly: ignore [missing-import]
 from utils.latex_utils import apply_latex_hotfix, compile_and_check_page_metrics
 # pyrefly: ignore [missing-import]

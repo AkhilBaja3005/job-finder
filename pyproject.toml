@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "job-finder-ai"
-version = "1.5.2"
+version = "1.6.0"
 description = "Autonomous career agent, ATS resume tailor, and job search copilot."
 readme = "README_PYPI.md"
 
@@ -111,7 +111,7 @@ all = [
 [project.scripts]
 job-finder = "job_finder.cli:main"
 job-finder-scanner = "job_finder.cli:scanner_cli"
-job-finder-mcp = "backend.mcp.server:main"
+job-finder-mcp = "backend.job_finder_mcp.server:main"
 job-finder-server = "backend.main:start_server"
 
 [project.urls]
@@ -124,8 +124,8 @@ packages = [
     "backend",
     "backend.assets",
     "backend.config",
-    "backend.mcp",
-    "backend.mcp.tools",
+    "backend.job_finder_mcp",
+    "backend.job_finder_mcp.tools",
     "backend.routes",
     "backend.services",
     "backend.utils",

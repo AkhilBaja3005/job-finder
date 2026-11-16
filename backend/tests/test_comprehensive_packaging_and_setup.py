@@ -44,7 +44,7 @@ def test_cli_setup_wizard_flow(tmp_path):
 
     with patch.dict(os.environ, {"JOB_FINDER_ROOT": str(fake_repo)}):
         with patch("os.path.dirname", return_value=str(fake_repo / "job_finder")):
-            with patch("backend.mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
+            with patch("backend.job_finder_mcp.tools.profile_tools.handle_sync_candidate_profile_from_resume", return_value={"success": True, "skills_count": 5, "experience_count": 2, "education_count": 1}):
                 with patch.object(sys, "argv", ["job-finder", "setup", "--api-key", "AIzaSyTestKey123"]):
                     main()
 

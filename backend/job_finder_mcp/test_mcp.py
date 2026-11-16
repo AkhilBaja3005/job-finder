@@ -9,7 +9,7 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from mcp.server import process_mcp_request, ALL_TOOLS
+from job_finder_mcp.server import process_mcp_request, ALL_TOOLS
 
 async def test_mcp_endpoints():
     print("Testing MCP initialize...")

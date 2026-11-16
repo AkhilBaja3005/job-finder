@@ -746,7 +746,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
   "mcpServers": {
     "job-finder": {
       "command": "python",
-      "args": ["-m", "mcp.server"],
+      "args": ["-m", "job_finder_mcp.server"],
       "cwd": "/path/to/Job Finder/backend",
       "env": {
         "GEMINI_API_KEY": "your-gemini-api-key"

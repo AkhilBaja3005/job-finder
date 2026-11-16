@@ -5,7 +5,7 @@ Executes all 21 MCP tool protocol assertions and 8 Agent Skill frontmatter check
 
 import pytest
 import asyncio
-from mcp.comprehensive_test import test_all_mcp_tools as _run_all_mcp_tools, test_all_skills as _run_all_skills
+from job_finder_mcp.comprehensive_test import test_all_mcp_tools as _run_all_mcp_tools, test_all_skills as _run_all_skills
 
 pytestmark = pytest.mark.slow
 
@@ -34,12 +34,12 @@ async def test_mcp_tools_and_skills_suite():
 
     with patch("services.gemini_client.generate_content_with_fallback", return_value="Generated mock content with required keywords and metrics."):
         with patch("backend.services.gemini_client.generate_content_with_fallback", return_value="Generated mock content with required keywords and metrics."):
-            with patch("mcp.tools.interview_tools.generate_content_with_fallback", return_value="Generated mock content with required keywords and metrics."):
-                with patch("mcp.tools.resume_tools.tailor_latex_code", return_value=mock_latex):
+            with patch("job_finder_mcp.tools.interview_tools.generate_content_with_fallback", return_value="Generated mock content with required keywords and metrics."):
+                with patch("job_finder_mcp.tools.resume_tools.tailor_latex_code", return_value=mock_latex):
                     with patch("services.gemini_client.generate_latex_with_strong_model", return_value=mock_latex):
                         with patch("backend.services.gemini_client.generate_latex_with_strong_model", return_value=mock_latex):
                             with patch("services.gemini_client.call_gemini_grounded", return_value={"text": "Mock grounded response", "citations": []}):
-                                with patch("mcp.tools.networking_tools.extract_recruiter", new_callable=AsyncMock, return_value={"recruiter_name": "Alex Recruiter", "recruiter_profile_url": "https://linkedin.com/in/alex", "company_name": "Stripe", "platform": "linkedin"}):
-                                    with patch("mcp.tools.networking_tools.generate_outreach_message", return_value=mock_outreach):
+                                with patch("job_finder_mcp.tools.networking_tools.extract_recruiter", new_callable=AsyncMock, return_value={"recruiter_name": "Alex Recruiter", "recruiter_profile_url": "https://linkedin.com/in/alex", "company_name": "Stripe", "platform": "linkedin"}):
+                                    with patch("job_finder_mcp.tools.networking_tools.generate_outreach_message", return_value=mock_outreach):
                                         await _run_all_mcp_tools()
                                         _run_all_skills()
