@@ -23,7 +23,7 @@ from typing import List, Tuple, Dict, Set, Optional, Any
 # ─────────────────────────────────────────────────────────────────────────────
 SKILL_ALIASES: Dict[str, List[str]] = {
     "machine learning":    ["machine learning", "ml", "sklearn", "scikit-learn"],
-    "deep learning":       ["deep learning", "dl", "neural network", "neural net", "cnn", "rnn"],
+    "deep learning":       ["deep learning", "neural network", "neural net", "cnn", "rnn"],
     "llm":                 ["llm", "large language model", "gpt", "gemini", "claude", "chatgpt"],
     "nlp":                 ["nlp", "natural language processing", "text mining"],
     "computer vision":     ["computer vision", "image recognition", "object detection"],
@@ -36,14 +36,14 @@ SKILL_ALIASES: Dict[str, List[str]] = {
     "claude":              ["claude", "anthropic"],
     "fine-tuning":         ["fine-tuning", "finetuning", "lora", "qlora", "peft"],
     "pytorch":             ["pytorch", "torch"],
-    "tensorflow":          ["tensorflow", "tf", "keras"],
+    "tensorflow":          ["tensorflow", "keras"],
     "langchain":           ["langchain", "lang chain"],
     "prompt engineering": ["prompt engineering", "prompt design"],
-    "huggingface":          ["hugging face", "huggingface", "transformers library", "transformers"],
+    "huggingface":          ["hugging face", "huggingface", "transformers library", "hf transformers"],
     "mlops":               ["mlops", "mlflow", "kubeflow", "sagemaker"],
-    "python":              ["python", "py"],
-    "javascript":          ["javascript", "js", "node", "nodejs", "node.js"],
-    "typescript":          ["typescript", "ts"],
+    "python":              ["python", "python3"],
+    "javascript":          ["javascript", "js", "nodejs", "node.js"],
+    "typescript":          ["typescript"],
     "java":                ["java", "jvm"],
     "c++":                 ["c++", "cpp"],
     "csharp":              ["c#", "csharp", ".net", "dotnet", "asp.net"],
@@ -80,7 +80,6 @@ SKILL_ALIASES: Dict[str, List[str]] = {
     "graphql":             ["graphql"],
     "mobile":              ["react native", "flutter", "ios", "android"],
     "cybersecurity":       ["cybersecurity", "penetration testing", "soc2", "iso 27001", "iam", "oauth"],
-    "vector database":     ["vector database", "vector db", "pinecone", "weaviate", "chromadb", "qdrant", "milvus"],
 
     # ── Product management ──────────────────────────────────────────────
     "product management":  ["product management", "product manager", "product owner"],
@@ -127,10 +126,10 @@ SKILL_ALIASES: Dict[str, List[str]] = {
     "excel":                ["microsoft excel", "spreadsheet modeling"], # bare "excel" is guarded via HIGH_RISK_TOKEN_CONTEXT
     "quickbooks":           ["quickbooks", "netsuite"], # bare "sap" is guarded via HIGH_RISK_TOKEN_CONTEXT
     "valuation":            ["valuation", "dcf", "discounted cash flow"],
-    "audit":                ["audit", "auditing", "internal controls"],
+    "audit":                ["internal audit", "auditing", "internal controls"],
 
     # ── HR & people operations ───────────────────────────────────────────
-    "recruiting":           ["recruiting", "talent acquisition", "sourcing"],
+    "recruiting":           ["recruiting", "talent acquisition", "candidate sourcing"],
     "hris":                 ["hris", "workday", "bamboohr", "adp"],
     "onboarding":           ["onboarding", "employee onboarding"],
     "performance management": ["performance management", "performance reviews"],
@@ -248,6 +247,7 @@ class ScoringConfig:
     overall_exp_weight: float = 0.35        # Overall score weight for experience
     overall_fit_weight: float = 0.25        # Overall score weight for role fit
     tier_penalty_per_level: float = 0.15    # Penalty per missing seniority tier level
+    overqualified_penalty_per_level: float = 0.05  # Mild penalty per tier the candidate exceeds the role by, beyond one level
     tenure_volatility_modifier: float = 0.88# Default tenure modifier for avg tenure < 9 months
     tenure_volatility_modifier_range: float = 0.12 # Max scaling penalty range for severe job hopping (< 0.75 yrs avg)
     master_ats_floor: int = 55              # Standalone master resume score min floor
@@ -293,6 +293,10 @@ class ATSScoreResult:
         if not self.eligible:
             return 0
         return round(0.55 * self.skills_score + 0.45 * self.experience_score)
+
+def _experience_list(resume_data: dict) -> list:
+    """Work history under either supported key ("experience" or "work_experience")."""
+    return resume_data.get("experience") or resume_data.get("work_experience") or []
 
 def _flatten_resume_skills(raw_skills: Any) -> str:
     """Safely flattens dictionary or list skills into a single string for taxonomy extraction."""
@@ -560,6 +564,8 @@ def get_highest_education_tier(resume_data: dict, only_completed: bool = True) -
 
     return tier
 
+_SENTENCE_HINT = re.compile(r"\b(you|we|will|reports?|reporting|looking|join|our|your|team)\b")
+
 def extract_jd_expectations(jd_text: str) -> Tuple[int, str, str]:
     """Parses JD text for explicit years, required degrees, and targeted seniority tiers."""
     cleaned = _clean_text(jd_text)
@@ -578,12 +584,17 @@ def extract_jd_expectations(jd_text: str) -> Tuple[int, str, str]:
     # 2. Parse education tier request
     edu_tier = "bachelors"
     if "phd" in cleaned or "ph.d" in cleaned: edu_tier = "phd"
-    elif "master" in cleaned: edu_tier = "masters"
+    elif re.search(r"\bmaster'?s\b|\bmsc\b|\bm\.?s\.? degree\b", cleaned): edu_tier = "masters"
     
     # 3. Parse required seniority tier
+    # Only the title/header decides the target tier. Scanning the whole JD misreads text such as
+    # "reports to the Director" or "work with senior engineers" as the seniority of the role itself.
+    # Title lines are short; a long sentence in line 1-2 is body text, not a title.
+    title_lines = [_clean_text(ln) for ln in jd_text.split("\n") if ln.strip()][:2]
+    title_lines = [ln for ln in title_lines if len(ln) <= 80 and not _SENTENCE_HINT.search(ln)]
     role_tier = "mid"
     for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
-        if pattern.search(cleaned):
+        if any(pattern.search(ln) for ln in title_lines):
             role_tier = tier
             break
 
@@ -591,14 +602,14 @@ def extract_jd_expectations(jd_text: str) -> Tuple[int, str, str]:
 
 def get_candidate_seniority_tier(resume_data: dict) -> str:
     """Classifies the candidate's professional tier using their most recent job titles."""
-    exp = resume_data.get("experience", [])
+    exp = _experience_list(resume_data)
     if not exp: return "junior"
 
     recent_roles = ""
     for i in range(min(len(exp), 2)):
         exp_item = exp[i]
         if isinstance(exp_item, dict):
-            recent_roles += " " + exp_item.get("role", "").lower()
+            recent_roles += " " + str(exp_item.get("role") or exp_item.get("title") or "").lower()
 
     for tier, pattern in _COMPILED_TITLE_TIER_PATTERNS:
         if pattern.search(recent_roles):
@@ -675,7 +686,7 @@ def compute_skills_score(
     skills_sec_canon = _extract_taxonomy_skills(_flatten_resume_skills(resume_data.get("skills", [])))
 
     job_profiles: List[Tuple[Set[str], float]] = []
-    for exp in resume_data.get("experience", []):
+    for exp in _experience_list(resume_data):
         if not isinstance(exp, dict):
             continue
         start = _parse_date_to_ordinal(exp.get("start_date", ""))
@@ -796,6 +807,9 @@ def compute_ats_score(resume_data: dict, jd_text: str, config: ScoringConfig = D
     if cand_tier_idx < req_tier_idx:
         # Penalize undersized seniority context (e.g., Senior role target vs Junior candidate title history)
         tier_modifier -= config.tier_penalty_per_level * (req_tier_idx - cand_tier_idx)
+    elif cand_tier_idx - req_tier_idx >= 2:
+        # Clearly overqualified (two or more levels above the role): small penalty, flight and cost risk
+        tier_modifier -= config.overqualified_penalty_per_level * (cand_tier_idx - req_tier_idx - 1)
 
     # Stage 6: Apply Volatility Metrics (Tenure stability scaling factor)
     tenure_modifier = 1.0

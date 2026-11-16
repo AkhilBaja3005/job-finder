@@ -247,6 +247,9 @@ def _main():
     )
     ats_parser.add_argument("--resume", type=str, default=None, help="Path to resume file to evaluate (default: active candidate profile)")
     ats_parser.add_argument("--optimize", action="store_true", help="Auto-optimize summary for ATS conversion using AI")
+    ats_parser.add_argument("--jd-file", type=str, default=None, help="Score against a job description text file ('-' reads stdin)")
+    ats_parser.add_argument("--jd-url", type=str, default=None, help="Score against a job posting URL")
+    ats_parser.add_argument("--json", action="store_true", help="Print results as JSON")
 
     # 9. Tracker subcommand
     tracker_parser = subparsers.add_parser(
@@ -681,7 +684,18 @@ def _main():
             print("No resume or candidate profile available to evaluate. Run `job-finder setup` first.")
             return
 
+        if args.jd_file or args.jd_url:
+            from job_finder import ats_view
+            jd_text = ats_view.load_jd_text(jd_file=args.jd_file, jd_url=args.jd_url)
+            if not jd_text.strip():
+                ui.error("Could not read any job description text from the given source.")
+                sys.exit(1)
+            sys.exit(ats_view.render(ats_view.score_against_jd(target_data, jd_text), as_json=args.json))
+
         ats_eval = evaluate_master_resume(target_data)
+        if args.json and not args.optimize:
+            ui.print_json(ats_eval)
+            return
         ats_score = ats_eval.get("ats_score", 80)
         suggestions = ats_eval.get("suggestions", [])
 
@@ -712,7 +726,7 @@ def _main():
             prompt = (
                 "Optimize this professional summary for ATS conversion, keyword density, and executive impact.\n"
                 "Keep it to 2-3 visual lines (~25-45 words).\n"
-                "CRITICAL: You MUST explicitly include candidate's core technical keywords (e.g. LLMs, RAG, Vector Search, PyTorch, Python, GenAI) and quantified metrics (%, latency cuts, user volume).\n"
+                "CRITICAL: Use ONLY keywords from the Core Skills and facts from the Current Summary below. Do not add skills, tools or numbers that are not stated there. Never invent metrics.\n"
                 f"Candidate Name: {cand.get('name')}\n"
                 f"Current Summary: {cur_summary}\n"
                 f"Core Skills: {skills_str}\n"
