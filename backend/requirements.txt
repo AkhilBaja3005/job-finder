@@ -21,3 +21,4 @@ browser-use>=0.1.0,<1.0.0
 pydantic-settings
 zstandard
 cryptography>=42.0.0
+rich>=13.0.0

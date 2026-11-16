@@ -53,6 +53,9 @@ def check_for_updates():
     Non-blocking update check against PyPI / GitHub releases with local cache.
     Caches check result for 24 hours to prevent network overhead on every CLI invocation.
     """
+    # Never touch the network or stdout in scripts, pipes, quiet or JSON mode
+    if os.getenv("JOB_FINDER_NO_UPDATE_CHECK") or not sys.stdout.isatty() or "--json" in sys.argv or "--quiet" in sys.argv or "-q" in sys.argv:
+        return
     try:
         import time
         import urllib.request
@@ -79,7 +82,7 @@ def check_for_updates():
                 # If checked within 24h (86400s), reuse cached latest version
                 if now - last_check < 86400 and latest:
                     if _parse_ver(latest) > _parse_ver(current_ver):
-                        print(f"Update available: v{current_ver} → v{latest}. Run 'pip install --upgrade job-finder-ai' to update.\n")
+                        print(f"Update available: v{current_ver} → v{latest}. Run 'pip install --upgrade job-finder-ai' to update.\n", file=sys.stderr)
                     return
             except Exception:
                 pass
@@ -94,7 +97,7 @@ def check_for_updates():
             json.dump({"latest_version": latest_ver, "last_check": now}, f)
 
         if _parse_ver(latest_ver) > _parse_ver(current_ver):
-            print(f"Update available: v{current_ver} → v{latest_ver}. Run 'pip install --upgrade job-finder-ai' to update.\n")
+            print(f"Update available: v{current_ver} → v{latest_ver}. Run 'pip install --upgrade job-finder-ai' to update.\n", file=sys.stderr)
     except Exception:
         pass
 
@@ -112,11 +115,51 @@ def _parse_ver(v_str: str):
 
 
 def main():
+    """Console entry point: friendly errors, clean Ctrl-C, full traceback with --debug."""
+    try:
+        _main()
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        sys.exit(130)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        if "--debug" in sys.argv or os.getenv("JOB_FINDER_DEBUG"):
+            raise
+        from job_finder import ui
+        ui.error(f"{type(exc).__name__}: {exc}")
+        ui.error("Run again with --debug for the full traceback, or `job-finder doctor` to check your setup.")
+        sys.exit(1)
+
+
+EXAMPLES = """\
+examples:
+  job-finder setup                       first-time setup (resume, keys, browser login)
+  job-finder doctor                      check keys, Chrome, CDP port and email config
+  job-finder scan --limit 5              discover, score and prepare 5 applications
+  job-finder scan --auto-apply --limit 3 submit applications (guardrails off, be sure)
+  job-finder status                      configuration and master resume overview
+  job-finder tracker --status blocked    applications waiting on a CAPTCHA or login
+  job-finder tracker --json | jq .summary machine-readable output
+
+environment:
+  NO_COLOR=1                  disable colors      JOB_FINDER_NO_UPDATE_CHECK=1  skip update check
+  JOB_FINDER_DEBUG=1          show tracebacks     JOB_FINDER_LOG_DIR=<dir>      where logs are written
+"""
+
+
+def _main():
     from job_finder import __version__
     parser = argparse.ArgumentParser(
         prog="job-finder",
         description="Job Finder AI - Autonomous Agentic Career & Application Toolkit",
+        epilog=EXAMPLES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("--quiet", "-q", action="store_true", help="Only print errors and requested data")
+    parser.add_argument("--verbose", action="store_true", help="Print detailed progress (debug logging)")
+    parser.add_argument("--debug", action="store_true", help="Show full tracebacks on errors")
+    parser.add_argument("--no-color", action="store_true", help="Disable colored output (also honors NO_COLOR)")
     parser.add_argument(
         "--version",
         "-v",
@@ -210,8 +253,9 @@ def main():
         "tracker",
         help="List and inspect tracked applications, saved roles, and tailored resumes",
     )
-    tracker_parser.add_argument("--status", type=str, default="all", help="Filter by status (all, saved, tailored, applied)")
-    tracker_parser.add_argument("--limit", type=int, default=20, help="Max entries to list (default: 20)")
+    tracker_parser.add_argument("--status", type=str, default="all", help="Filter by status text, case-insensitive (all, saved, applied, review, blocked, ...)")
+    tracker_parser.add_argument("--limit", type=int, default=20, help="Max entries to list (default: 20, 0 = all)")
+    tracker_parser.add_argument("--json", action="store_true", help="Print results as JSON")
 
     # 10. Company subcommand (Agent-Reach Culture Brief)
     company_parser = subparsers.add_parser(
@@ -291,12 +335,26 @@ def main():
     )
     doctor_parser.add_argument("--json", action="store_true", help="Print results as JSON")
 
-    args, unknown = parser.parse_known_args()
+    # Optional shell tab-completion: `pip install argcomplete` then `eval "$(register-python-argcomplete job-finder)"`
+    try:
+        import argcomplete  # type: ignore[import-not-found]
+        argcomplete.autocomplete(parser)
+    except ImportError:
+        pass
+
+    # Unknown flags are errors (typos used to be ignored silently)
+    args = parser.parse_args()
+
+    from job_finder import ui
+    from job_finder.logging_setup import configure_logging
+    ui.configure(quiet=args.quiet, no_color=args.no_color)
+    configure_logging(verbose=args.verbose, quiet=args.quiet)
 
     if args.subcommand == "doctor":
         from job_finder.doctor import run_doctor
         load_workspace_env()
         sys.exit(run_doctor(as_json=args.json))
+
 
     if not args.subcommand:
         parser.print_help()
@@ -675,27 +733,8 @@ def main():
 
     elif args.subcommand == "tracker":
         from backend.services.application_tracker import list_applications
-        apps = list_applications()
-        if not apps:
-            print("No tracked job applications found.")
-            return
-
-        status_filter = args.status.lower()
-        if status_filter != "all":
-            apps = [a for a in apps if a.get("status", "").lower() == status_filter]
-
-        apps = apps[:args.limit]
-        print(f"\nTracker Pipeline ({len(apps)} entries):")
-        print(f"{'STATUS':<12} {'ATS':<6} {'COMPANY':<20} {'ROLE':<25} {'DATE':<12}")
-        print("-" * 78)
-        for a in apps:
-            st = a.get("status", "saved")[:11]
-            sc = f"{a.get('score', 'N/A')}%"
-            co = (a.get("company") or "Unknown")[:19]
-            ro = (a.get("job_title") or "Position")[:24]
-            dt = str(a.get("updated_at") or a.get("created_at") or "")[:10]
-            print(f"{st:<12} {sc:<6} {co:<20} {ro:<25} {dt:<12}")
-        print("-" * 78 + "\n")
+        from job_finder.tracker_view import render_tracker
+        sys.exit(render_tracker(list_applications(), status=args.status, limit=args.limit, as_json=args.json))
 
     elif args.subcommand == "company":
         from backend.services.agent_reach_service import generate_enhanced_company_brief

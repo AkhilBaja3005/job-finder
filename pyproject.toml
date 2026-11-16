@@ -47,9 +47,16 @@ dependencies = [
     "browser-use>=0.1.0,<1.0.0",
     "pydantic-settings>=2.0.0",
     "zstandard>=0.21.0",
+    "rich>=13.0.0",
 ]
 
+
 [project.optional-dependencies]
+# Shell tab completion for the CLI
+completion = [
+    "argcomplete>=3.0.0",
+]
+
 # Cloud Database / Auth integrations
 supabase = [
     "httpx>=0.24.0",

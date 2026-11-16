@@ -87,7 +87,12 @@ def run_doctor(as_json: bool = False) -> int:
     if as_json:
         print(json.dumps(checks, indent=2))
     else:
-        for c in checks:
-            tag = {"ok": "[ ok ]", "warn": "[warn]", "fail": "[FAIL]"}[c["status"]]
-            print(f"{tag} {c['check']:<16} {c['detail']}")
+        from job_finder import ui
+        ui.print_table("Job Finder health check", ["Check", "Status", "Detail"],
+                       [[c["check"], c["status"], c["detail"]] for c in checks], status_col=1)
+        failed = [c for c in checks if c["status"] == "fail"]
+        if failed:
+            ui.error(f"{len(failed)} check(s) failed. Fix the items marked fail above.")
+        else:
+            ui.success("No blocking problems found.")
     return 1 if any(c["status"] == "fail" for c in checks) else 0
