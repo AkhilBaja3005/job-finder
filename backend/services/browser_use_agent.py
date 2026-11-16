@@ -920,7 +920,35 @@ async def run_browser_use_autofill(
         retry_delay=1,
     )
 
-    history = await agent_fast.run(max_steps=max_steps)
+    try:
+        from services.browser_use_helpers import detect_blocker, get_run_timeout, save_review_screenshot
+    except ImportError:
+        from backend.services.browser_use_helpers import detect_blocker, get_run_timeout, save_review_screenshot
+
+    import time as _time
+    run_deadline = _time.monotonic() + get_run_timeout()
+
+    def _timeout_result() -> Dict[str, Any]:
+        print(f"[browser-use] Run exceeded BROWSER_USE_TIMEOUT budget for {job_url}. Marking for manual review.")
+        return {
+            "status": "failed",
+            "job_url": job_url,
+            "auto_submit": effective_auto_submit,
+            "guardrails_disabled": DISABLE_GUARDRAILS,
+            "model_used": getattr(llm, "model", model_name),
+            "steps_taken": 0,
+            "is_done": False,
+            "blocker": "timeout",
+            "final_result": "Timed out before the application finished. Needs manual review.",
+        }
+
+    try:
+        history = await asyncio.wait_for(
+            agent_fast.run(max_steps=max_steps),
+            timeout=max(1.0, run_deadline - _time.monotonic()),
+        )
+    except asyncio.TimeoutError:
+        return _timeout_result()
     is_done = history.is_done() if hasattr(history, "is_done") else True
     final_res = str(history.final_result() if hasattr(history, "final_result") else "")
 
@@ -928,6 +956,12 @@ async def run_browser_use_autofill(
     # If not done or explicitly stated failure/unable to interact, fallback to vision
     failure_indicators = ["unable", "could not find", "cannot find", "failed", "error", "not found"]
     needs_vision_fallback = not is_done or any(ind in final_res.lower() for ind in ["unable to fill", "cannot locate", "stuck", "element not found"])
+
+    # CAPTCHAs and login walls need a human; a vision retry only burns tokens
+    early_blocker = detect_blocker(final_res)
+    if early_blocker:
+        print(f"[browser-use] Human-only blocker detected ({early_blocker}). Skipping vision retry.")
+        needs_vision_fallback = False
 
     if needs_vision_fallback:
         print(f"[browser-use] Pure-DOM pass encountered difficulties. Activating Vision + Reasoning (thinking=True) fallback...")
@@ -950,7 +984,13 @@ async def run_browser_use_autofill(
             max_failures=3,
             retry_delay=1,
         )
-        history = await agent_vision.run(max_steps=max_steps)
+        try:
+            history = await asyncio.wait_for(
+                agent_vision.run(max_steps=max_steps),
+                timeout=max(1.0, run_deadline - _time.monotonic()),
+            )
+        except asyncio.TimeoutError:
+            return _timeout_result()
 
     is_done = history.is_done() if hasattr(history, "is_done") else True
     final_res = str(history.final_result() if hasattr(history, "final_result") else "")
@@ -985,9 +1025,13 @@ async def run_browser_use_autofill(
         "an error occurred",
     ])
 
+    blocker = detect_blocker(final_res)
+
     if effective_auto_submit:
-        if submission_confirmed and not submission_failed:
+        if submission_confirmed and not blocker and not submission_failed:
             exec_status = "success"
+        elif blocker:
+            exec_status = "needs_review"
         elif submission_failed or not is_done:
             exec_status = "failed"
         elif any(f in res_lower for f in ["submitted", "complete", "finished"]):
@@ -996,10 +1040,17 @@ async def run_browser_use_autofill(
             # Fallback if unsure whether it actually submitted
             exec_status = "needs_review"
     else:
-        exec_status = "preview_ready" if is_done else "failed"
+        exec_status = "needs_review" if blocker else ("preview_ready" if is_done else "failed")
+
+    screenshot_dir = os.getenv("JOB_FINDER_SCREENSHOT_DIR") or os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "applications_tracker", "screenshots")
+    )
+    review_screenshot = save_review_screenshot(history, job_url, screenshot_dir)
 
     return {
         "status": exec_status,
+        "blocker": blocker,
+        "review_screenshot": review_screenshot,
         "job_url": job_url,
         "auto_submit": effective_auto_submit,
         "guardrails_disabled": DISABLE_GUARDRAILS,
