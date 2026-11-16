@@ -63,7 +63,7 @@ def test_rfc7591_dynamic_client_registration(client):
     assert data["redirect_uris"] == ["https://claude.ai/oauth/callback"]
 
 
-def test_oauth_authorize_screen_and_pkce_flow(client):
+def test_oauth_authorize_screen_and_pkce_flow(client, monkeypatch):
     """Tests the full OAuth 2.1 flow: authorize screen -> sync code approval -> token exchange."""
     # Register client
     reg = client.post("/oauth/register", json={"redirect_uris": ["https://claude.ai/oauth/callback"]})
@@ -73,6 +73,14 @@ def test_oauth_authorize_screen_and_pkce_flow(client):
     code_verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
     digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
     code_challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+    # Mock a real (non-guest) user so the test does not depend on Supabase or a real sync code
+    from routes import oauth_routes
+    monkeypatch.setattr(
+        oauth_routes, "get_user_by_token",
+        lambda token: {"id": 42, "email": "user@example.com"} if token == "TESTCODE" else {"id": "guest_x", "is_guest": True},
+    )
+    monkeypatch.setattr(oauth_routes, "create_session", lambda user_id: "session-token-for-test")
 
     # Request authorize page
     auth_res = client.get(
@@ -85,10 +93,10 @@ def test_oauth_authorize_screen_and_pkce_flow(client):
     assert session_match is not None
     session_id = session_match.group(1)
 
-    # Approve with user sync code (EYP0LA for Akhil)
+    # Approve with the mocked user sync code
     approve_res = client.post(
         "/oauth/quick-approve",
-        data={"session_id": session_id, "sync_code": "EYP0LA"},
+        data={"session_id": session_id, "sync_code": "TESTCODE"},
         follow_redirects=False
     )
     assert approve_res.status_code == 302
@@ -116,7 +124,7 @@ def test_oauth_authorize_screen_and_pkce_flow(client):
     token_data = token_res.json()
     assert token_data["token_type"] == "Bearer"
     # A dedicated session token is issued; the sync code is never the bearer token
-    assert token_data["access_token"] and token_data["access_token"] != "EYP0LA"
+    assert token_data["access_token"] == "session-token-for-test"
     assert token_data["scope"] == "mcp:tools"
 
 
