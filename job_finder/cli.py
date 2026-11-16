@@ -124,37 +124,16 @@ def _main():
         _run(args)
 
     elif args.subcommand == "server":
-        os.environ["PORT"] = str(args.port)
-        os.environ["HOST"] = args.host
-        from backend.main import start_server
-        start_server()
+        from job_finder.commands.server import run as _run
+        _run(args)
 
     elif args.subcommand == "mcp":
-        from backend.job_finder_mcp.server import main as mcp_main
-        mcp_main()
+        from job_finder.commands.mcp import run as _run
+        _run(args)
 
     elif args.subcommand == "profile":
-        if getattr(args, "sync", None):
-            import asyncio
-            from backend.job_finder_mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
-            resume_arg = None if args.sync == "AUTO" else args.sync
-            res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": resume_arg}))
-            if res.get("success"):
-                print(f"{res.get('message')}")
-                print(f"Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
-            else:
-                print(f"Sync failed: {res.get('error')}")
-            return
-
-        from backend.job_finder_mcp.tools.profile_tools import get_profile_config_path, load_profile_data
-        prof_path = get_profile_config_path()
-        data = load_profile_data()
-        if data:
-            from job_finder.commands_extra import mask_secrets
-            ui.info(f"Profile: {prof_path}")
-            print(json.dumps(mask_secrets(data), indent=2))
-        else:
-            print(f"Candidate profile not found. Run `job-finder setup` to initialize one at: {prof_path}")
+        from job_finder.commands.profile import run as _run
+        _run(args)
 
     elif args.subcommand == "status":
         from job_finder.commands_extra import run_status
@@ -178,59 +157,16 @@ def _main():
         _run(args)
 
     elif args.subcommand == "tracker":
-        from backend.services.application_tracker import list_applications
-        from job_finder.tracker_view import render_tracker
-        sys.exit(render_tracker(list_applications(), status=args.status, limit=args.limit, as_json=args.json))
+        from job_finder.commands.tracker import run as _run
+        _run(args)
 
     elif args.subcommand == "company":
-        from backend.services.agent_reach_service import generate_enhanced_company_brief
-        print(f"⏳ Fetching Agent-Reach community culture brief for '{args.name}'...")
-        res = generate_enhanced_company_brief(args.name, args.role)
-        if res.get("status") == "success":
-            print(f"\n========================================================")
-            print(f"    AGENT-REACH COMPANY BRIEF: {args.name.upper()} ({args.role})")
-            print("========================================================\n")
-            print(res.get("brief_markdown", ""))
-        else:
-            print(f"Could not fetch company brief: {res.get('message')}")
+        from job_finder.commands.company import run as _run
+        _run(args)
 
     elif args.subcommand == "interview":
-        from backend.services.session_store import get_session_data
-        from backend.services.gemini_client import generate_content_with_fallback
-        from backend.services.agent_reach_service import extract_youtube_transcript
-
-        session = get_session_data("guest")
-        cand_data = session.get("data", {})
-        
-        yt_transcript = ""
-        if args.youtube:
-            print(f"Parsing YouTube interview transcript from: {args.youtube}...")
-            yt_res = extract_youtube_transcript(args.youtube)
-            if yt_res.get("status") == "success":
-                yt_transcript = yt_res.get("transcript", "")
-                print(f"Extracted {len(yt_transcript)} chars of technical interview transcript via {yt_res.get('source')}.")
-
-        prompt = f"""You are a professional Interview Coach.
-Generate a custom Interview Prep Pack for candidate applying to '{args.role}' at '{args.company}'.
-
-CANDIDATE DATA:
-{json.dumps(cand_data, indent=2)}
-
-{"YOUTUBE TECHNICAL INTERVIEW TRANSCRIPT: " + yt_transcript[:2000] if yt_transcript else ""}
-
-Output Markdown with 4 sections:
-1. Behavioral STAR Q&A
-2. Technical Review Checklist
-3. Tough Questions ('Why this company?')
-4. Smart Questions to Ask Interviewers"""
-
-        print(f"Generating Interview Prep Pack for {args.company}...")
-        prep_md = generate_content_with_fallback(prompt, model_tier="lite")
-        print(f"\n========================================================")
-        print(f"    INTERVIEW PREP PACK: {args.company.upper()} ({args.role})")
-        print("========================================================\n")
-        print(prep_md)
-
+        from job_finder.commands.interview import run as _run
+        _run(args)
 
     elif args.subcommand == "targetjobs":
         from job_finder.commands.targetjobs import run as _run
@@ -245,20 +181,8 @@ Output Markdown with 4 sections:
         _run(args)
 
     elif args.subcommand == "harvest-slugs":
-        import asyncio
-        from backend.services.company_slug_harvester import harvest_all_company_slugs
-        from backend.services.company_slug_registry import validate_all_unverified_slugs, get_active_slugs
-
-        sources = [s.strip().lower() for s in args.source.split(",")]
-        asyncio.run(harvest_all_company_slugs(sources=sources))
-
-        if args.validate:
-            asyncio.run(validate_all_unverified_slugs(ats_filter=args.ats, limit=args.limit))
-
-        active = get_active_slugs(ats=args.ats)
-        print("\nActive Company Board Registry Summary:")
-        for platform, slugs in active.items():
-            print(f"  • {platform.capitalize():<12}: {len(slugs)} active board slugs")
+        from job_finder.commands.harvest_slugs import run as _run
+        _run(args)
 
     elif args.subcommand == "sponsor":
         from job_finder.commands.sponsor import run as _run

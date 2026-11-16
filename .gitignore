@@ -45,3 +45,4 @@ data/
 bandit_report.txt
 /jobserve_*.json
 /applications_tracker/screenshots/
+applications_tracker/*.bak*

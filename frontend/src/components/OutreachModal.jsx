@@ -263,10 +263,10 @@ const OutreachModal = ({
                 <button className="btn" onClick={handleCopyEmail} style={{ flex: '1 1 auto' }}>
                   {copied ? 'Copied!' : 'Copy Email'}
                 </button>
-                <button className="btn btn-secondary" onClick={handleSendEmail} style={{ flex: '1 1 auto' }} title="Opens Gmail with pre-filled draft">
+                <button className="btn btn-secondary" onClick={handleSendEmail} style={{ flex: '1 1 auto' }} title="Opens Gmail with pre-filled draft" aria-label="Opens Gmail with pre-filled draft">
                   Open in Gmail
                 </button>
-                <button className="btn btn-secondary" onClick={handleMailtoFallback} style={{ flex: '1 1 auto' }} title="Opens your default mail client (Outlook, Apple Mail, etc.)">
+                <button className="btn btn-secondary" onClick={handleMailtoFallback} style={{ flex: '1 1 auto' }} title="Opens your default mail client (Outlook, Apple Mail, etc.)" aria-label="Opens your default mail client (Outlook, Apple Mail, etc.)">
                   Open Default Mail Client
                 </button>
               </div>
