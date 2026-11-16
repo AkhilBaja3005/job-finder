@@ -102,7 +102,12 @@ from config.constants import (
 # This can also be controlled via the environment variable:
 #   BROWSER_USE_DISABLE_GUARDRAILS=1  (any non-empty/non-zero value enables it)
 # ─────────────────────────────────────────────────────────────────────────────
-DISABLE_GUARDRAILS: bool = os.getenv("BROWSER_USE_DISABLE_GUARDRAILS", "0").strip() not in ("", "0", "false", "False", "no")
+#   JOB_FINDER_DISABLE_GUARDRAILS is accepted as an alias (set by the CLI and .env template).
+_FALSY = ("", "0", "false", "False", "no")
+DISABLE_GUARDRAILS: bool = any(
+    os.getenv(_name, "0").strip() not in _FALSY
+    for _name in ("BROWSER_USE_DISABLE_GUARDRAILS", "JOB_FINDER_DISABLE_GUARDRAILS")
+)
 
 
 def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Optional[str] = None):

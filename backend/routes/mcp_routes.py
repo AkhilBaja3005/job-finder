@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse, JSONResponse
 from mcp.server import process_mcp_request, ALL_TOOLS
+from services.auth import _is_local_deployment
 
 router = APIRouter(prefix="/mcp", tags=["Model Context Protocol"])
 
@@ -55,6 +56,13 @@ async def handle_mcp_message(request: Request):
     """
     try:
         user_token = _extract_auth_token(request)
+        if not user_token and not _is_local_deployment():
+            base = f"{request.headers.get('x-forwarded-proto', 'https')}://{request.headers.get('x-forwarded-host') or request.headers.get('host', '')}"
+            return JSONResponse(
+                status_code=401,
+                content={"error": "unauthorized", "error_description": "Bearer token required."},
+                headers={"WWW-Authenticate": f'Bearer resource_metadata="{base}/.well-known/oauth-protected-resource"'},
+            )
         body = await request.json()
         response = await process_mcp_request(body, user_token=user_token)
         if response is not None:

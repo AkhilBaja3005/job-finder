@@ -444,7 +444,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         yield json.dumps({"type": "log", "percent": 85, "message": "Recruiter Agent approved refined resume after scrutiny."}) + "\n"
                         print("[analyze_job] Recruiter agent approved refined resume on secondary scrutiny.")
                     else:
-                        yield json.dumps({"type": "log", "percent": 85, "message": f"ℹRecruiter scrutiny noted minor points ({second_review.feedback[:80]}...); proceeding to compile."}) + "\n"
+                        yield json.dumps({"type": "log", "percent": 85, "message": f"Recruiter scrutiny noted minor points ({second_review.feedback[:80]}...); proceeding to compile."}) + "\n"
                         print(f"[analyze_job] Recruiter secondary scrutiny feedback: {second_review.feedback}")
                 else:
                     yield json.dumps({"type": "log", "percent": 83, "message": "Recruiter Agent approved resume quality & truthfulness on first pass."}) + "\n"

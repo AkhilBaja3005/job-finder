@@ -22,7 +22,7 @@ from mcp.tools.tracking_tools import TRACKING_TOOLS_SPEC, handle_track_applicati
 from mcp.tools.profile_tools import PROFILE_TOOLS_SPEC, handle_save_candidate_profile, handle_get_candidate_profile, handle_sync_candidate_profile_from_resume
 from mcp.tools.autofill_tools import AUTOFILL_TOOLS_SPEC, handle_apply_to_job_browser, handle_pipeline_auto_apply
 
-ALL_TOOLS = (
+_RAW_TOOLS = (
     DISCOVERY_TOOLS_SPEC
     + ATS_TOOLS_SPEC
     + RESUME_TOOLS_SPEC
@@ -32,6 +32,51 @@ ALL_TOOLS = (
     + PROFILE_TOOLS_SPEC
     + AUTOFILL_TOOLS_SPEC
 )
+
+SUBMIT_TOOLS = {"apply_to_job_browser", "pipeline_auto_apply"}
+WRITE_TOOLS = {
+    "track_application", "save_candidate_profile", "sync_candidate_profile_from_resume",
+    "tailor_resume_latex", "export_overleaf_bundle", "parse_and_convert_to_latex",
+    "compile_latex_metrics",
+} | SUBMIT_TOOLS
+
+SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
+
+
+def _with_annotations(tool: Dict[str, Any]) -> Dict[str, Any]:
+    spec = dict(tool)
+    name = spec["name"]
+    spec["annotations"] = {
+        "readOnlyHint": name not in WRITE_TOOLS,
+        "destructiveHint": name in SUBMIT_TOOLS,
+        "openWorldHint": True,
+    }
+    if name in SUBMIT_TOOLS:
+        schema = json.loads(json.dumps(spec.get("inputSchema", {})))
+        schema.setdefault("properties", {})["confirm_submit"] = {
+            "type": "boolean",
+            "description": "Must be true together with auto_submit to actually submit. Otherwise the run stops at the review step.",
+            "default": False,
+        }
+        spec["inputSchema"] = schema
+    return spec
+
+
+ALL_TOOLS = [_with_annotations(t) for t in _RAW_TOOLS]
+_TOOL_SCHEMAS = {t["name"]: t.get("inputSchema", {}) for t in ALL_TOOLS}
+
+
+def _server_version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("job-finder-ai")
+    except Exception:
+        return "unknown"
+
+
+def _log(msg: str) -> None:
+    sys.stderr.write(msg + "\n")
+    sys.stderr.flush()
 
 HANDLERS = {
     "search_jobs": handle_search_jobs,
@@ -64,17 +109,19 @@ async def process_mcp_request(request: Dict[str, Any], user_token: Optional[str]
     params = request.get("params", {})
 
     if method == "initialize":
+        requested = params.get("protocolVersion")
+        negotiated = requested if requested in SUPPORTED_PROTOCOLS else SUPPORTED_PROTOCOLS[0]
         return {
             "jsonrpc": "2.0",
             "id": req_id,
             "result": {
-                "protocolVersion": "2024-11-05",
+                "protocolVersion": negotiated,
                 "capabilities": {
                     "tools": {"listChanged": False}
                 },
                 "serverInfo": {
                     "name": "job-finder-career-engine",
-                    "version": "1.0.0"
+                    "version": _server_version()
                 }
             }
         }
@@ -82,6 +129,9 @@ async def process_mcp_request(request: Dict[str, Any], user_token: Optional[str]
     elif method in ("notifications/initialized", "initialized"):
         # Notifications do not have an 'id' and MUST NOT receive a response in JSON-RPC 2.0
         return None
+
+    elif method == "ping":
+        return {"jsonrpc": "2.0", "id": req_id, "result": {}}
 
     elif method == "tools/list":
         return {
@@ -112,8 +162,24 @@ async def process_mcp_request(request: Dict[str, Any], user_token: Optional[str]
                 }
             }
 
+        missing = [k for k in _TOOL_SCHEMAS.get(tool_name, {}).get("required", []) if arguments.get(k) in (None, "")]
+        if missing:
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -32602, "message": f"Missing required argument(s) for '{tool_name}': {', '.join(missing)}"}
+            }
+
+        notice = None
+        if tool_name in SUBMIT_TOOLS and arguments.get("auto_submit") and not arguments.get("confirm_submit"):
+            arguments["auto_submit"] = False
+            notice = "auto_submit ignored: pass confirm_submit=true to submit. Run stopped at the review step."
+        arguments.pop("confirm_submit", None)
+
         try:
             result = await handler(arguments)
+            if notice and isinstance(result, dict):
+                result["notice"] = notice
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -127,6 +193,7 @@ async def process_mcp_request(request: Dict[str, Any], user_token: Optional[str]
                 }
             }
         except Exception as e:
+            _log(f"Tool '{tool_name}' failed:\n{traceback.format_exc()}")
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -135,7 +202,7 @@ async def process_mcp_request(request: Dict[str, Any], user_token: Optional[str]
                     "content": [
                         {
                             "type": "text",
-                            "text": f"Error executing tool '{tool_name}': {str(e)}\n{traceback.format_exc()}"
+                            "text": f"Error executing tool '{tool_name}': {e}"
                         }
                     ]
                 }
@@ -165,16 +232,35 @@ async def run_stdio_server():
         )
         sys.stderr.flush()
 
-    loop = asyncio.get_event_loop()
-    reader = asyncio.StreamReader()
+    loop = asyncio.get_running_loop()
+    reader = asyncio.StreamReader(limit=16 * 1024 * 1024)
     protocol = asyncio.StreamReaderProtocol(reader)
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+
+    write_lock = asyncio.Lock()
+    tasks: set = set()
+
+    async def send(payload: Dict[str, Any]) -> None:
+        async with write_lock:
+            sys.stdout.write(json.dumps(payload) + "\n")
+            sys.stdout.flush()
+
+    async def handle(req: Dict[str, Any]) -> None:
+        try:
+            resp = await process_mcp_request(req)
+        except Exception as err:
+            _log(f"Internal error:\n{traceback.format_exc()}")
+            if req.get("id") is None:
+                return
+            resp = {"jsonrpc": "2.0", "id": req.get("id"),
+                    "error": {"code": -32603, "message": f"Internal error: {err}"}}
+        if resp is not None:
+            await send(resp)
 
     while True:
         line = await reader.readline()
         if not line:
             break
-
 
         line_str = line.decode("utf-8").strip()
         if not line_str:
@@ -182,18 +268,22 @@ async def run_stdio_server():
 
         try:
             req = json.loads(line_str)
-            resp = await process_mcp_request(req)
-            if resp is not None:
-                sys.stdout.write(json.dumps(resp) + "\n")
-                sys.stdout.flush()
-        except Exception as err:
-            err_resp = {
-                "jsonrpc": "2.0",
-                "id": None,
-                "error": {"code": -32700, "message": f"Parse error: {str(err)}"}
-            }
-            sys.stdout.write(json.dumps(err_resp) + "\n")
-            sys.stdout.flush()
+        except json.JSONDecodeError as err:
+            await send({"jsonrpc": "2.0", "id": None,
+                        "error": {"code": -32700, "message": f"Parse error: {err}"}})
+            continue
+
+        if not isinstance(req, dict):
+            await send({"jsonrpc": "2.0", "id": None,
+                        "error": {"code": -32600, "message": "Invalid Request"}})
+            continue
+
+        task = asyncio.create_task(handle(req))
+        tasks.add(task)
+        task.add_done_callback(tasks.discard)
+
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 def main():

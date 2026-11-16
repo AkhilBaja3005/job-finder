@@ -117,8 +117,8 @@ def test_cleanup_stale_chrome_tabs_keeps_tabs_and_opens_window():
 
     with patch("urllib.request.urlopen", side_effect=mock_urlopen):
         with patch("services.browser_use_agent.open_new_chrome_window_via_cdp", return_value=True) as mock_win:
-            cleanup_stale_chrome_tabs("http://127.0.0.1:9222", max_tabs_to_keep=30)
-            mock_win.assert_called_once_with("http://127.0.0.1:9222")
+            cleanup_stale_chrome_tabs("http://127.0.0.1:9223", max_tabs_to_keep=30)
+            mock_win.assert_called_once_with("http://127.0.0.1:9223")
 
 
 def test_cleanup_stale_chrome_tabs_below_threshold():
@@ -143,7 +143,7 @@ def test_cleanup_stale_chrome_tabs_below_threshold():
 
     with patch("urllib.request.urlopen", side_effect=mock_urlopen):
         with patch("services.browser_use_agent.open_new_chrome_window_via_cdp") as mock_win:
-            cleanup_stale_chrome_tabs("http://127.0.0.1:9222", max_tabs_to_keep=30)
+            cleanup_stale_chrome_tabs("http://127.0.0.1:9223", max_tabs_to_keep=30)
             mock_win.assert_not_called()
 
 

@@ -115,7 +115,8 @@ def test_oauth_authorize_screen_and_pkce_flow(client):
     assert token_res.status_code == 200
     token_data = token_res.json()
     assert token_data["token_type"] == "Bearer"
-    assert token_data["access_token"] == "EYP0LA"
+    # A dedicated session token is issued; the sync code is never the bearer token
+    assert token_data["access_token"] and token_data["access_token"] != "EYP0LA"
     assert token_data["scope"] == "mcp:tools"
 
 
@@ -147,3 +148,67 @@ def test_mcp_profile_token_isolation(client):
     assert data["found"] is True
     assert data["profile"]["candidate"]["name"] == "Bob Vance"
     assert data["profile"]["candidate"]["email"] == "bob@vancerefrigeration.com"
+
+
+def _register(client, uri="https://claude.ai/oauth/callback"):
+    return client.post("/oauth/register", json={"redirect_uris": [uri]}).json()["client_id"]
+
+
+def test_authorize_rejects_unknown_client(client):
+    res = client.get("/oauth/authorize?response_type=code&client_id=nope&redirect_uri=https://evil.example/cb&code_challenge=abc&code_challenge_method=S256")
+    assert res.status_code == 400
+
+
+def test_authorize_rejects_unregistered_redirect_uri(client):
+    cid = _register(client)
+    res = client.get(f"/oauth/authorize?response_type=code&client_id={cid}&redirect_uri=https://evil.example/cb&code_challenge=abc&code_challenge_method=S256")
+    assert res.status_code == 400
+
+
+def test_authorize_requires_pkce(client):
+    cid = _register(client)
+    res = client.get(f"/oauth/authorize?response_type=code&client_id={cid}&redirect_uri=https://claude.ai/oauth/callback")
+    assert res.status_code == 400
+
+
+def test_token_rejects_refresh_grant_and_garbage(client):
+    res = client.post("/oauth/token", data={"grant_type": "refresh_token", "code": "anything"})
+    assert res.status_code == 400
+    res = client.post("/oauth/token", data={"grant_type": "authorization_code", "code": "bogus"})
+    assert res.status_code == 400
+
+
+def test_token_requires_code_verifier(client):
+    from routes import oauth_routes
+    oauth_routes._AUTH_CODES["mcp_code_test"] = {
+        "auth_code": "mcp_code_test", "user_id": 1, "user_token": "tok",
+        "client_id": "c", "redirect_uri": "https://x/cb",
+        "code_challenge": "abc", "code_challenge_method": "S256", "created_at": __import__("time").time(),
+    }
+    res = client.post("/oauth/token", data={"grant_type": "authorization_code", "code": "mcp_code_test", "client_id": "c", "redirect_uri": "https://x/cb"})
+    assert res.status_code == 400
+
+
+def test_expired_auth_code_rejected(client):
+    from routes import oauth_routes
+    oauth_routes._AUTH_CODES["mcp_code_old"] = {
+        "auth_code": "mcp_code_old", "user_token": "tok", "client_id": "c",
+        "redirect_uri": "https://x/cb", "code_challenge": "abc", "created_at": 0,
+    }
+    res = client.post("/oauth/token", data={"grant_type": "authorization_code", "code": "mcp_code_old", "code_verifier": "v"})
+    assert res.status_code == 400
+
+
+def test_quick_approve_rate_limited(client):
+    from routes import oauth_routes
+    oauth_routes._SYNC_FAILURES.clear()
+    cid = _register(client)
+    page = client.get(f"/oauth/authorize?response_type=code&client_id={cid}&redirect_uri=https://claude.ai/oauth/callback&code_challenge=abc&code_challenge_method=S256")
+    sid_match = re.search(r"name=\"session_id\"\s+value=\"([a-f0-9]+)\"", page.text)
+    assert sid_match is not None
+    sid = sid_match.group(1)
+    codes = []
+    for _ in range(oauth_routes.SYNC_CODE_MAX_FAILURES + 1):
+        codes.append(client.post("/oauth/quick-approve", data={"session_id": sid, "sync_code": "ZZZZZZ"}).status_code)
+    assert codes[-1] == 429, codes
+    oauth_routes._SYNC_FAILURES.clear()

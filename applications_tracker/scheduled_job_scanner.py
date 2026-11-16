@@ -1081,7 +1081,7 @@ async def run_pipeline(
                         job["estimated"] = False
                         print(f"   Successfully retrieved JD ({len(jd_text)} chars). Recomputed ATS Score: {score}% (Skills: {ats_res.skills_score}%, Exp: {ats_res.experience_score}%)")
                     else:
-                        print(f"   ℹLive JD blocked or incomplete, keeping original title '{title}' and estimate ({score}%).")
+                        print(f"   Live JD blocked or incomplete, keeping original title '{title}' and estimate ({score}%).")
                 except Exception as jd_err:
                     print(f"   Could not fetch live JD on-demand ({jd_err}), using current score ({score}%).")
 
@@ -1126,7 +1126,7 @@ async def run_pipeline(
                                 print(f"   Tailored PDF outperforms master ({tailored_ats}% >= {master_ats}%). Selected: {os.path.basename(pdf_to_submit)}")
                             else:
                                 pdf_to_submit = master_resume_pdf
-                                print(f"   ℹMaster resume scored higher ({master_ats}% > {tailored_ats}%). Keeping master resume: {os.path.basename(pdf_to_submit)}")
+                                print(f"   Master resume scored higher ({master_ats}% > {tailored_ats}%). Keeping master resume: {os.path.basename(pdf_to_submit)}")
                     except asyncio.TimeoutError:
                         print(f"   ⏱Resume tailoring timed out after 90s. Falling back to master resume.")
                         pdf_to_submit = master_resume_pdf
@@ -1134,7 +1134,7 @@ async def run_pipeline(
                         print(f"   Tailoring error: {te}. Falling back to master resume.")
             else:
                 status = "Saved & Scored"
-                print(f"[{idx}/{len(jobs)}] ℹBelow threshold: {title} @ {company} ({score}% < {min_ats_score}%) - Saved.")
+                print(f"[{idx}/{len(jobs)}] Below threshold: {title} @ {company} ({score}% < {min_ats_score}%) - Saved.")
 
         # Record to Supabase (and CSV fallback)
         record_payload = {

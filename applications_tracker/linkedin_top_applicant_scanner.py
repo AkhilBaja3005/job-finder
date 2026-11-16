@@ -380,7 +380,7 @@ async def run_top_applicant_pipeline(
     )
 
     if not top_jobs:
-        print("[Top Applicant Scanner] ℹNo new 'Top Applicant' jobs found in this run. Try expanding search keywords or timeframe.")
+        print("[Top Applicant Scanner] No new 'Top Applicant' jobs found in this run. Try expanding search keywords or timeframe.")
         return
 
     selected_model = get_best_flash_lite_model()

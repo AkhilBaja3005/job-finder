@@ -8,6 +8,7 @@ import time
 import json
 import uuid
 import hashlib
+import hmac
 import base64
 import urllib.parse
 from typing import Optional, Dict, Any, List
@@ -29,6 +30,34 @@ router = APIRouter(tags=["MCP OAuth 2.1 Authorization"])
 _OAUTH_CLIENTS: Dict[str, Dict[str, Any]] = {}
 _AUTH_CODES: Dict[str, Dict[str, Any]] = {}
 _AUTH_SESSIONS: Dict[str, Dict[str, Any]] = {}
+
+AUTH_SESSION_TTL = 600   # seconds an authorize session stays valid
+AUTH_CODE_TTL = 300      # seconds an authorization code stays valid
+SYNC_CODE_MAX_FAILURES = 5
+SYNC_CODE_WINDOW = 600
+_SYNC_FAILURES: Dict[str, List[float]] = {}
+
+
+def _prune_expired() -> None:
+    """Drop expired authorize sessions and authorization codes."""
+    now = time.time()
+    for store, ttl in ((_AUTH_SESSIONS, AUTH_SESSION_TTL), (_AUTH_CODES, AUTH_CODE_TTL)):
+        for key in [k for k, v in store.items() if now - v.get("created_at", 0) > ttl]:
+            store.pop(key, None)
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _sync_code_blocked(ip: str) -> bool:
+    now = time.time()
+    recent = [t for t in _SYNC_FAILURES.get(ip, []) if now - t < SYNC_CODE_WINDOW]
+    _SYNC_FAILURES[ip] = recent
+    return len(recent) >= SYNC_CODE_MAX_FAILURES
 
 
 def _get_base_url(request: Request) -> str:
@@ -135,6 +164,17 @@ async def oauth_authorize(
     OAuth 2.1 /authorize endpoint.
     Renders login & authorization consent screen where the user authenticates with Job Finder.
     """
+    _prune_expired()
+    client = _OAUTH_CLIENTS.get(client_id)
+    if not client:
+        raise HTTPException(status_code=400, detail="Unknown client_id. Register the client first via /oauth/register.")
+    if redirect_uri not in client.get("redirect_uris", []):
+        raise HTTPException(status_code=400, detail="redirect_uri does not match a registered redirect URI.")
+    if response_type != "code":
+        raise HTTPException(status_code=400, detail="Only response_type=code is supported.")
+    if not code_challenge or code_challenge_method != "S256":
+        raise HTTPException(status_code=400, detail="PKCE with code_challenge_method=S256 is required.")
+
     session_id = uuid.uuid4().hex
     _AUTH_SESSIONS[session_id] = {
         "client_id": client_id,
@@ -262,25 +302,36 @@ async def oauth_authorize(
 
 @router.post("/oauth/quick-approve")
 async def oauth_quick_approve(
+    request: Request,
     session_id: str = Form(...),
     sync_code: str = Form(...)
 ):
     """Approves OAuth flow via 6-digit sync code directly."""
+    _prune_expired()
+    ip = _client_ip(request)
+    if _sync_code_blocked(ip):
+        raise HTTPException(status_code=429, detail="Too many invalid sync codes. Try again later.")
+
     auth_req = _AUTH_SESSIONS.get(session_id)
     if not auth_req:
         raise HTTPException(status_code=400, detail="OAuth authorization session expired. Please retry.")
 
     clean_code = sync_code.strip().upper()
     user = get_user_by_token(clean_code)
-    if not user:
+    # get_user_by_token falls back to a guest for unknown tokens; never authorize those
+    if not user or user.get("is_guest"):
+        _SYNC_FAILURES.setdefault(ip, []).append(time.time())
         raise HTTPException(status_code=401, detail="Invalid sync code. Please check your Job Finder profile.")
+    _AUTH_SESSIONS.pop(session_id, None)
+    # Issue a dedicated session token so the sync code is never used as a bearer token
+    session_token = create_session(user["id"])
 
     # Generate authorization code
     auth_code = f"mcp_code_{uuid.uuid4().hex}"
     _AUTH_CODES[auth_code] = {
         "auth_code": auth_code,
         "user_id": user.get("id"),
-        "user_token": clean_code,
+        "user_token": session_token,
         "client_id": auth_req.get("client_id"),
         "redirect_uri": auth_req.get("redirect_uri"),
         "code_challenge": auth_req.get("code_challenge"),
@@ -305,6 +356,7 @@ async def oauth_consent(
     token: Optional[str] = None
 ):
     """Callback after Google OAuth completes to issue the authorization code back to Claude."""
+    _prune_expired()
     auth_req = _AUTH_SESSIONS.get(session)
     if not auth_req:
         raise HTTPException(status_code=400, detail="OAuth authorization session expired. Please retry.")
@@ -313,6 +365,9 @@ async def oauth_consent(
         raise HTTPException(status_code=401, detail="Authentication failed: No token received.")
 
     user = get_user_by_token(token)
+    if not user or user.get("is_guest"):
+        raise HTTPException(status_code=401, detail="Authentication failed: invalid token.")
+    _AUTH_SESSIONS.pop(session, None)
     auth_code = f"mcp_code_{uuid.uuid4().hex}"
     _AUTH_CODES[auth_code] = {
         "auth_code": auth_code,
@@ -349,33 +404,30 @@ async def oauth_token(
     Validates PKCE S256 verifier and returns user access token to Claude.
     """
     if grant_type == "authorization_code":
+        _prune_expired()
         if not code or code not in _AUTH_CODES:
             raise HTTPException(status_code=400, detail="Invalid or expired authorization code.")
 
         auth_record = _AUTH_CODES.pop(code)
 
-        # Validate PKCE S256 if challenge was provided
-        code_challenge = auth_record.get("code_challenge")
-        if code_challenge and code_verifier:
-            # SHA256 base64url encode
-            digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
-            calculated_challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
-            if calculated_challenge != code_challenge:
-                raise HTTPException(status_code=400, detail="Invalid code_verifier (PKCE validation failed).")
+        if client_id and auth_record.get("client_id") != client_id:
+            raise HTTPException(status_code=400, detail="client_id does not match the authorization code.")
+        if redirect_uri and auth_record.get("redirect_uri") != redirect_uri:
+            raise HTTPException(status_code=400, detail="redirect_uri does not match the authorization request.")
 
-        user_token = auth_record["user_token"]
+        # PKCE S256 is mandatory: a challenge was required at /authorize
+        code_challenge = auth_record.get("code_challenge")
+        if not code_challenge or not code_verifier:
+            raise HTTPException(status_code=400, detail="code_verifier is required (PKCE).")
+        digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+        calculated_challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+        if not hmac.compare_digest(calculated_challenge, code_challenge):
+            raise HTTPException(status_code=400, detail="Invalid code_verifier (PKCE validation failed).")
+
         return {
-            "access_token": user_token,
+            "access_token": auth_record["user_token"],
             "token_type": "Bearer",
             "expires_in": 3600 * 24 * 30,  # 30-day token
-            "scope": "mcp:tools"
-        }
-
-    elif grant_type == "refresh_token":
-        return {
-            "access_token": code or str(uuid.uuid4()),
-            "token_type": "Bearer",
-            "expires_in": 3600 * 24 * 30,
             "scope": "mcp:tools"
         }
 

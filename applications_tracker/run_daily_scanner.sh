@@ -6,7 +6,7 @@ set -eo pipefail
 # Automated daily job scanner & auto-apply pipeline for macOS
 # ─────────────────────────────────────────────────────────────────────────────
 
-PROJECT_DIR="/Users/akhilbaja/Documents/Akhil/Job Finder"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_PYTHON="$PROJECT_DIR/backend/venv/bin/python"
 SCANNER_SCRIPT="$PROJECT_DIR/applications_tracker/scheduled_job_scanner.py"
 LINKEDIN_SCANNER_SCRIPT="$PROJECT_DIR/applications_tracker/linkedin_top_applicant_scanner.py"

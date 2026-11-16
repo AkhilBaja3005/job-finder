@@ -38,3 +38,7 @@ applications_tracker/company_slugs.db
 brag-plan.md
 data/
 
+
+# Local reports and scratch outputs
+bandit_report.txt
+/jobserve_*.json

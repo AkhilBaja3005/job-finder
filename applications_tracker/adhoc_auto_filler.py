@@ -280,7 +280,7 @@ async def main():
         jobs_to_process = load_jobs_from_csv(csv_target, status_filter=args.filter)
 
     if not jobs_to_process:
-        print("[Ad-hoc Filler] ℹNo jobs found matching the criteria.")
+        print("[Ad-hoc Filler] No jobs found matching the criteria.")
         return
 
     # Filter out duplicates if requested

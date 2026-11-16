@@ -67,7 +67,7 @@ async def main():
             await asyncio.sleep(4)
             print("Session saved permanently for both scanner and auto-fill!")
         except Exception:
-            print("\nℹHelper closed or session timed out.")
+            print("\nHelper closed or session timed out.")
         finally:
             await ctx.close()
 

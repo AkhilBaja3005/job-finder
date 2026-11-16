@@ -285,7 +285,18 @@ def main():
     sponsor_parser.add_argument("--sync", action="store_true", help="Download and sync latest Home Office sponsor register CSV")
     sponsor_parser.add_argument("--stats", action="store_true", help="Display local sponsor database statistics and last sync date")
 
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Check keys, browser, CDP port, email and guardrail configuration",
+    )
+    doctor_parser.add_argument("--json", action="store_true", help="Print results as JSON")
+
     args, unknown = parser.parse_known_args()
+
+    if args.subcommand == "doctor":
+        from job_finder.doctor import run_doctor
+        load_workspace_env()
+        sys.exit(run_doctor(as_json=args.json))
 
     if not args.subcommand:
         parser.print_help()
@@ -666,7 +677,7 @@ def main():
         from backend.services.application_tracker import list_applications
         apps = list_applications()
         if not apps:
-            print("ℹNo tracked job applications found.")
+            print("No tracked job applications found.")
             return
 
         status_filter = args.status.lower()
@@ -987,7 +998,7 @@ Output Markdown with 4 sections:
         cand = profile_data.get("candidate", {})
 
         if not apps:
-            print("ℹNo tracked applications found to follow up on.\n")
+            print("No tracked applications found to follow up on.\n")
         else:
             min_days = args.min_days
             print(f"Scanning applications submitted >= {min_days} days ago without response...\n")
@@ -1028,7 +1039,7 @@ Output Markdown with 4 sections:
                     print(f"    \"{inmail_text}\"\n")
 
             if followup_count == 0:
-                print(f"ℹNo pending applications older than {min_days} days require follow-up at this time.\n")
+                print(f"No pending applications older than {min_days} days require follow-up at this time.\n")
 
     elif args.subcommand == "harvest-slugs":
         import asyncio
@@ -1349,14 +1360,14 @@ Output Markdown with 4 sections:
                         except (EOFError, KeyboardInterrupt):
                             print("\nSkipping summary optimization.")
                 except Exception as ats_err:
-                    print(f"ℹCould not compute ATS baseline: {ats_err}")
+                    print(f"Could not compute ATS baseline: {ats_err}")
             else:
-                print(f"ℹCould not auto-parse resume: {res.get('error')}")
+                print(f"Could not auto-parse resume: {res.get('error')}")
         elif resume_target and not os.path.exists(resume_target):
             print(f"Provided resume file does not exist: {resume_target}")
-            print("ℹTip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
+            print("Tip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
         else:
-            print("ℹTip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
+            print("Tip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
 
         # 4. Review Candidate Profile Completeness (Demographics, Location, Portals Password)
         profile_to_check = profile_path if (profile_path and os.path.exists(profile_path)) else example_profile
@@ -1435,7 +1446,7 @@ Output Markdown with 4 sections:
                 else:
                     print(f"\nNote: Review or edit these anytime in `{profile_path}` or run `job-finder profile`.")
             except Exception as pe:
-                print(f"ℹCould not inspect candidate profile: {pe}")
+                print(f"Could not inspect candidate profile: {pe}")
 
         # 5. Interactive Dedicated Browser Setup for One-Time Login (LinkedIn, Indeed, Gmail)
         if sys.stdin.isatty():

@@ -58,7 +58,7 @@ The project includes:
 - **Pre-Flight HTTP Probing**: Follows redirects to resolve direct ATS destinations (e.g. LinkedIn $\rightarrow$ Ashby) and exits in **~200ms** on closed/expired listings without launching Chrome.
 - **Smart Form Field Preservation & Updating**: Inspects auto-filled inputs on application portals; if candidate profile has current data, outdated browser/portal auto-filled values are cleanly cleared and replaced with verified candidate details, while preserving pre-filled fields if no candidate value exists.
 - **Workday Prompt Button & Menu Selection**: Accurately handles Workday triple-bar ("hamburger" / prompt button) multi-select menus by typing the target value followed by Enter to trigger native platform option selection (e.g., source questions, dropdowns).
-- **Persistent Chrome Instance**: Reuses a dedicated Chrome daemon on CDP port 9222 with performance flags (disabled image painting, timer throttling bypass).
+- **Persistent Chrome Instance**: Reuses a dedicated Chrome daemon on CDP port 9223 with performance flags (disabled image painting, timer throttling bypass).
 - **Safety Guardrails**: Default `REVIEW_ONLY` mode navigates through multi-step forms and pauses on the final preview step; `AUTO_SUBMIT` mode autonomously submits when enabled (`--auto-apply` or `--auto-submit`).
 - 📖 **Full Architecture Guide**: See [`docs/AUTONOMOUS_AUTOFILL_README.md`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/docs/AUTONOMOUS_AUTOFILL_README.md).
 
@@ -437,7 +437,7 @@ Dedicated autonomous scanner and pipeline integration that specifically targets 
 - **Zero-JD Scoring & Tailoring Bypass**: Because LinkedIn already validates candidate suitability, the scanner skips live JD scraping, ATS scoring, and LaTeX compilation, immediately queuing for direct application with the master resume.
 - **Full Auto-Apply Support**: Seamlessly supports both `REVIEW_ONLY` (preview form filling and pause) and `AUTO_SUBMIT` (`--auto-apply` / `--auto-submit`) to autonomously submit applications end-to-end.
 - **Unified & Standalone CLI Access**: Run via the unified CLI (`job-finder scan --top-applicant --auto-apply`) or direct script execution (`python applications_tracker/linkedin_top_applicant_scanner.py --auto-submit`).
-- **Persistent Chrome Session (CDP Port 9222)**: Reuses your authenticated Chrome profile (`backend/user_data/browser_use_chrome_session`), eliminating repetitive LinkedIn logins, captcha prompts, and session resets.
+- **Persistent Chrome Session (CDP Port 9223)**: Reuses your authenticated Chrome profile (`backend/user_data/browser_use_chrome_session`), eliminating repetitive LinkedIn logins, captcha prompts, and session resets.
 - **Top Applicant Badge DOM Filter**: Evaluates rendered search listing cards and detail views to pinpoint roles where you have an unfair competitive advantage.
 - **Master Resume Direct Dispatch**: Dispatches your Master Resume directly without unnecessary LaTeX recompilation.
 - **Automated Email OTP Retrieval via Gmail Tab**: If an external application portal (e.g. micro1, Ashby, Workday) asks for an email verification code, the agent automatically opens `https://mail.google.com` in a new tab, extracts the latest OTP code, and enters it seamlessly.
