@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.1
+
+### Fixed
+- CI: the ATS golden-set fixture (`backend/tests/fixtures/ats_golden.json`) was hidden by the `*.json`
+  rule in `.gitignore` and was never committed, so the test suite failed at collection on a clean checkout.
+  The fixture is now tracked and `.gitignore` allows JSON files under `backend/tests/fixtures/`.
+
 ## 1.6.0
 
 ### Security
