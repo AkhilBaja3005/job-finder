@@ -176,7 +176,9 @@ async def submit_contact_query(payload: ContactQueryPayload, request: Request, b
     ip_history.append(now)
     _CONTACT_RATE_LIMIT[client_ip] = ip_history
 
-    target_email = "akhilbaja.work@gmail.com"
+    target_email = os.getenv("CONTACT_EMAIL", "")
+    if not target_email:
+        raise HTTPException(status_code=503, detail="Contact form is not configured (CONTACT_EMAIL is unset).")
     subject = f"[JobFinder Inquiry] New query from {clean_name}"
     text_body = f"Sender Name: {clean_name}\nSender Email: {clean_email}\n\nMessage:\n{clean_msg}"
     html_body = f"""

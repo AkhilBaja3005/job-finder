@@ -227,7 +227,7 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
     </div>
     """
 
-    target_email = "akhilkumarbaja@gmail.com" if _is_local_deployment() else email
+    target_email = (os.getenv("NOTIFY_EMAIL") or email) if _is_local_deployment() else email
     sent = await async_send_notification_email(
         to_email=target_email,
         subject=f"Daily Job Matches Digest: {len(top_jobs)} new roles found" if top_jobs else "Daily Job Matches Digest",

@@ -50,7 +50,7 @@ flowchart TD
 
 ### 3. Deliberation Bypass (`use_thinking=False` on Fast Pass)
 - Standard models are instructed by default to stream 200–400 tokens of `"thinking": "..."` prose before taking actions.
-- Form autofill is a deterministic mapping task (e.g. `Email -> akhilbaja.work@gmail.com`).
+- Form autofill is a deterministic mapping task (e.g. `Email -> candidate.email`).
 - Disabling thinking tokens causes the LLM to emit the structured action array immediately, saving **2–4 seconds per turn**.
 
 ### 4. Adaptive Recovery (`use_thinking=True` + `use_vision=True` on Fallback)

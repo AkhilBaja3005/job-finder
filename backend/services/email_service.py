@@ -29,8 +29,8 @@ def send_notification_email(
 
     # Smart Routing:
     # 1. Brevo allows sending 300 emails/day to ANY recipient email (perfect for all users!)
-    # 2. Resend delivers in <2s for the account owner email (akhilkumarbaja@gmail.com)
-    owner_email = os.getenv("SMTP_USER", "akhilkumarbaja@gmail.com").lower()
+    # 2. Resend delivers in <2s for the account owner email (OWNER_EMAIL, defaults to SMTP_USER)
+    owner_email = (os.getenv("OWNER_EMAIL") or os.getenv("SMTP_USER", "")).lower()
     is_owner = to_email.lower() == owner_email
 
     # Try Brevo first for general users, or as secondary fallback

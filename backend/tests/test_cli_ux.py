@@ -74,3 +74,20 @@ def test_help_lists_examples_and_new_commands():
     res = _run("--help")
     assert res.returncode == 0
     assert "tracker" in res.stdout and "doctor" in res.stdout and "examples:" in res.stdout
+
+
+def test_shell_completion_suggests_subcommands():
+    pytest = __import__("pytest")
+    pytest.importorskip("argcomplete")
+    import os
+    code = ("import sys; sys.argv=['job-finder']\n"
+            "from job_finder.cli import main; main()")
+    env = {"PATH": "/usr/bin:/bin", "_ARGCOMPLETE": "1", "_ARGCOMPLETE_IFS": "\n", "COMP_LINE": "job-finder cov",
+           "COMP_POINT": "14", "JOB_FINDER_NO_UPDATE_CHECK": "1"}
+    r, w = os.pipe()
+    res = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, pass_fds=(w,),
+                         preexec_fn=lambda: os.dup2(w, 8))
+    os.close(w)
+    out = os.read(r, 4096).decode()
+    os.close(r)
+    assert "cover-letter" in out, (out, res.stderr[-300:])

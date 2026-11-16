@@ -455,7 +455,10 @@ def notify_user_of_failed_applications(failed_jobs: list, to_email: Optional[str
     if not failed_jobs:
         return False
 
-    recipient = to_email or os.getenv("NOTIFY_EMAIL") or "akhilbaja.work@gmail.com"
+    recipient = to_email or os.getenv("NOTIFY_EMAIL") or ""
+    if not recipient:
+        print("[Notify] No recipient configured (set NOTIFY_EMAIL or candidate email); skipping email.")
+        return False
     subject = f"Job Finder Alert: User Review Needed for {len(failed_jobs)} Application(s)"
 
     # Build plain text summary
@@ -536,7 +539,10 @@ def notify_user_of_applied_applications(applied_jobs: list, to_email: Optional[s
     if not applied_jobs:
         return False
 
-    recipient = to_email or os.getenv("NOTIFY_EMAIL") or "akhilbaja.work@gmail.com"
+    recipient = to_email or os.getenv("NOTIFY_EMAIL") or ""
+    if not recipient:
+        print("[Notify] No recipient configured (set NOTIFY_EMAIL or candidate email); skipping email.")
+        return False
     subject = f"Job Finder Success: {len(applied_jobs)} Application(s) Submitted Successfully!"
 
     # Build plain text summary
@@ -770,7 +776,7 @@ async def run_pipeline(
             model_name=model_override,
             headless_override=headless
         )
-        cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
+        cand_email = candidate.get("email") or os.getenv("NOTIFY_EMAIL", "")
         res_status = res.get("status") if isinstance(res, dict) else ""
         final_res = str(res.get("final_result", "")) if isinstance(res, dict) else ""
         if disable_guardrails and res_status == "success":
@@ -923,7 +929,7 @@ async def run_pipeline(
     applied_applications = []
     batch_applied_buffer = []
     batch_failed_buffer = []
-    cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
+    cand_email = candidate.get("email") or os.getenv("NOTIFY_EMAIL", "")
     EMAIL_BATCH_SIZE = int(os.getenv("JOB_FINDER_EMAIL_BATCH_SIZE", "20"))
 
     for idx, job in enumerate(jobs, start=1):
@@ -1251,7 +1257,7 @@ async def run_pipeline(
 
     print(f"\n[Scanner] Scan complete! Discovered & processed {new_jobs_added} new postings ({direct_applied_count} direct applied, {tailored_count} tailored).")
 
-    cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
+    cand_email = candidate.get("email") or os.getenv("NOTIFY_EMAIL", "")
 
     # Send final summary alerts for any remaining unnotified jobs in the buffers (or overall totals if none sent yet)
     if batch_applied_buffer:

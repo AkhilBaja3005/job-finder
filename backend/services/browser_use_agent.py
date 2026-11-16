@@ -1061,48 +1061,6 @@ async def run_browser_use_autofill(
     }
 
 
-if __name__ == "__main__":
-    import sys
-
-    # Dynamically load profile from candidate_profile.json
-    config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "config", "candidate_profile.json"))
-    candidate_profile = {}
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-                cand = cfg.get("candidate", {})
-                candidate_profile = {
-                    "name": cand.get("name", "Akhil Baja"),
-                    "email": cand.get("email", "akhilbaja.work@gmail.com"),
-                    "phone": cand.get("phone", "+91 9948083135"),
-                    "location": cand.get("location", "London, UK"),
-                    "linkedin": cand.get("linkedin", "https://linkedin.com/in/akhilbaja"),
-                    "github": cand.get("github", "https://github.com/AkhilBaja3005"),
-                    "summary": cand.get("experience_summary", ""),
-                    "gender": cand.get("gender", "Male"),
-                    "citizenship": cand.get("citizenship", "Indian"),
-                    "work_authorization": cand.get("work_authorization", "Authorized to work in the UK"),
-                    "requires_sponsorship": cand.get("requires_sponsorship", False),
-                    "skills": cand.get("core_skills", []),
-                    "education": cand.get("education", []),
-                    "work_experience": cand.get("work_experience", []),
-                }
-        except Exception as e:
-            print(f"Error loading candidate_profile.json: {e}")
-
-    # Fallback to minimal dict if file load failed
-    if not candidate_profile:
-        candidate_profile = {
-            "name": "Akhil Baja",
-            "email": "akhilbaja.work@gmail.com",
-            "phone": "+91 9948083135",
-            "location": "London, UK",
-            "linkedin": "https://linkedin.com/in/akhilbaja",
-            "github": "https://github.com/AkhilBaja3005",
-            "requires_sponsorship": True
-        }
-
 async def extract_jd_with_browser_use(
     url: str,
     max_steps: int = 15,
@@ -1212,16 +1170,16 @@ if __name__ == "__main__":
                 cfg = json.load(f)
                 cand = cfg.get("candidate", {})
                 candidate_profile = {
-                    "name": cand.get("name", "Akhil Baja"),
-                    "email": cand.get("email", "akhilbaja.work@gmail.com"),
-                    "phone": cand.get("phone", "+91 9948083135"),
-                    "location": cand.get("location", "London, UK"),
-                    "linkedin": cand.get("linkedin", "https://linkedin.com/in/akhilbaja"),
-                    "github": cand.get("github", "https://github.com/AkhilBaja3005"),
+                    "name": cand.get("name", ""),
+                    "email": cand.get("email", ""),
+                    "phone": cand.get("phone", ""),
+                    "location": cand.get("location", ""),
+                    "linkedin": cand.get("linkedin", ""),
+                    "github": cand.get("github", ""),
                     "summary": cand.get("experience_summary", ""),
-                    "gender": cand.get("gender", "Male"),
-                    "citizenship": cand.get("citizenship", "Indian"),
-                    "work_authorization": cand.get("work_authorization", "Authorized to work in the UK"),
+                    "gender": cand.get("gender", ""),
+                    "citizenship": cand.get("citizenship", ""),
+                    "work_authorization": cand.get("work_authorization", ""),
                     "requires_sponsorship": cand.get("requires_sponsorship", False),
                     "skills": cand.get("core_skills", []),
                     "education": cand.get("education", []),
@@ -1230,17 +1188,8 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error loading candidate_profile.json: {e}")
 
-    # Fallback to minimal dict if file load failed
     if not candidate_profile:
-        candidate_profile = {
-            "name": "Akhil Baja",
-            "email": "akhilbaja.work@gmail.com",
-            "phone": "+91 9948083135",
-            "location": "London, UK",
-            "linkedin": "https://linkedin.com/in/akhilbaja",
-            "github": "https://github.com/AkhilBaja3005",
-            "requires_sponsorship": True
-        }
+        sys.exit("No candidate profile found. Run `job-finder setup` first.")
 
     # Quick standalone CLI prototype runner
     test_url = sys.argv[1] if len(sys.argv) > 1 else "https://boards.greenhouse.io"

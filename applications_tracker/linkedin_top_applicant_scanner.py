@@ -477,7 +477,7 @@ async def run_top_applicant_pipeline(
 
     # Alert user via email if any applications failed/need review
     if failed_applications:
-        cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
+        cand_email = candidate.get("email") or os.getenv("NOTIFY_EMAIL", "")
         notify_user_of_failed_applications(failed_applications, to_email=cand_email)
 
 

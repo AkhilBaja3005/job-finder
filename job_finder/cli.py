@@ -141,6 +141,9 @@ examples:
   job-finder status                      configuration and master resume overview
   job-finder tracker --status blocked    applications waiting on a CAPTCHA or login
   job-finder tracker --json | jq .summary machine-readable output
+  job-finder ats --jd-url <url>          score your resume against one job, with skill breakdown
+  job-finder cover-letter "AI Engineer" Acme --jd-url <url> --out letter.txt
+  job-finder export apps.csv --status applied   export tracked applications
 
 environment:
   NO_COLOR=1                  disable colors      JOB_FINDER_NO_UPDATE_CHECK=1  skip update check
@@ -235,10 +238,27 @@ def _main():
     setup_parser.add_argument("--api-key", type=str, default=None, help="Gemini API Key")
 
     # 7. Status subcommand
-    subparsers.add_parser(
+    status_parser = subparsers.add_parser(
         "status",
         help="Display system configuration, environment status, master resume, and API keys",
     )
+    status_parser.add_argument("--json", action="store_true", help="Print results as JSON")
+
+    config_parser = subparsers.add_parser("config", help="Show where Job Finder stores its profile, logs and tracker, and which settings are set")
+    config_parser.add_argument("--json", action="store_true", help="Print results as JSON")
+
+    export_parser = subparsers.add_parser("export", help="Export tracked applications to CSV or JSON")
+    export_parser.add_argument("out", help="Output file path")
+    export_parser.add_argument("--format", choices=["csv", "json"], default="csv", help="Output format (default: csv)")
+    export_parser.add_argument("--status", default="all", help="Only export applications whose status contains this text")
+
+    cover_parser = subparsers.add_parser("cover-letter", help="Generate a validated cover letter for a job")
+    cover_parser.add_argument("title", help="Job title")
+    cover_parser.add_argument("company", help="Company name")
+    cover_parser.add_argument("--jd-file", default=None, help="Job description text file ('-' reads stdin)")
+    cover_parser.add_argument("--jd-url", default=None, help="Job posting URL")
+    cover_parser.add_argument("--out", default=None, help="Write the letter to this file")
+    cover_parser.add_argument("--json", action="store_true", help="Print the full result as JSON")
 
     # 8. ATS subcommand
     ats_parser = subparsers.add_parser(
@@ -502,7 +522,7 @@ def _main():
         batch_applied_buffer = []
         batch_failed_buffer = []
         BATCH_SIZE = int(os.getenv("JOB_FINDER_EMAIL_BATCH_SIZE", "20"))
-        cand_email = cand.get("email") or "akhilbaja.work@gmail.com"
+        cand_email = cand.get("email") or os.getenv("NOTIFY_EMAIL", "")
 
         async def _batch_apply():
             nonlocal failed_jobs, successful_jobs, batch_applied_buffer, batch_failed_buffer
@@ -632,39 +652,28 @@ def _main():
         prof_path = get_profile_config_path()
         data = load_profile_data()
         if data:
-            print(f"Profile: {prof_path}")
-            print(json.dumps(data, indent=2))
+            from job_finder.commands_extra import mask_secrets
+            ui.info(f"Profile: {prof_path}")
+            print(json.dumps(mask_secrets(data), indent=2))
         else:
             print(f"Candidate profile not found. Run `job-finder setup` to initialize one at: {prof_path}")
 
     elif args.subcommand == "status":
-        from backend.mcp.tools.profile_tools import load_profile_data, get_profile_config_path
-        from applications_tracker.scheduled_job_scanner import find_master_resume_with_mac_tags
+        from job_finder.commands_extra import run_status
+        sys.exit(run_status(as_json=args.json))
 
-        print("\n========================================================")
-        print("        JOB FINDER AI SYSTEM HEALTH & STATUS")
-        print("========================================================")
-        g_key = os.getenv("GEMINI_API_KEY")
-        masked_key = f"{g_key[:4]}...{g_key[-4:]}" if (g_key and len(g_key) > 8) else ("Configured " if g_key else "Missing ")
-        print(f"  • Gemini API Key    : {masked_key}")
+    elif args.subcommand == "config":
+        from job_finder.commands_extra import run_config
+        sys.exit(run_config(as_json=args.json))
 
-        master_resume = find_master_resume_with_mac_tags()
-        resume_status = f"{master_resume} (Exists )" if (master_resume and os.path.exists(master_resume)) else "Not set (Run `job-finder setup`)"
-        print(f"  • Master Resume     : {resume_status}")
+    elif args.subcommand == "export":
+        from backend.services.application_tracker import list_applications
+        from job_finder.commands_extra import export_applications
+        sys.exit(export_applications(list_applications(), args.out, fmt=args.format, status=args.status))
 
-        prof_path = get_profile_config_path()
-        data = load_profile_data()
-        if data and "candidate" in data:
-            cand = data["candidate"]
-            prefs = data.get("search_preferences", {})
-            print(f"  • Candidate Name    : {cand.get('name', 'N/A')}")
-            print(f"  • Base Location     : {cand.get('location', 'N/A')}")
-            print(f"  • Target Roles      : {', '.join(prefs.get('target_roles', [])) or 'N/A'}")
-            print(f"  • Target Locations  : {', '.join(prefs.get('target_locations', [])) or 'N/A'}")
-            print(f"  • ATS Score Floor   : {prefs.get('min_ats_score_threshold', 65)}%")
-        else:
-            print(f"  • Candidate Profile : Not configured ({prof_path})")
-        print("========================================================\n")
+    elif args.subcommand == "cover-letter":
+        from job_finder.commands_extra import run_cover_letter
+        sys.exit(run_cover_letter(args.title, args.company, args.jd_file, args.jd_url, args.out, as_json=args.json))
 
     elif args.subcommand == "ats":
         from backend.mcp.tools.profile_tools import load_profile_data, save_profile_data
@@ -1025,7 +1034,7 @@ Output Markdown with 4 sections:
                         except Exception:
                             pass
 
-                    cand_email = cand_info.get("email") or "akhilbaja.work@gmail.com"
+                    cand_email = cand_info.get("email") or os.getenv("NOTIFY_EMAIL", "")
                     if applied_js_jobs:
                         notify_user_of_applied_applications(applied_js_jobs, to_email=cand_email)
                     if failed_js_jobs:
