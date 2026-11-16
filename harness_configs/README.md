@@ -8,7 +8,7 @@ This directory contains pre-configured MCP definitions and agent runbooks to con
 
 Add the contents of `claude_desktop_config.json` to your Claude configuration file:
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Claude Code CLI**: Run `claude mcp add job-finder -- /Users/akhilbaja/Documents/Akhil/Job\ Finder/backend/venv/bin/python /Users/akhilbaja/Documents/Akhil/Job\ Finder/backend/job_finder_mcp/server.py`
+- **Claude Code CLI**: Run `claude mcp add job-finder -- <repo>/backend/venv/bin/python <repo>/backend/job_finder_mcp/server.py`
 
 ---
 
@@ -27,9 +27,9 @@ In Cursor:
 1. Go to **Settings > Cursor Settings > Features > MCP**.
 2. Click **+ Add New MCP Server**.
 3. Choose **Type: Stdio**.
-4. Set Command to `/Users/akhilbaja/Documents/Akhil/Job Finder/backend/venv/bin/python`.
-5. Set Args to `/Users/akhilbaja/Documents/Akhil/Job Finder/backend/job_finder_mcp/server.py`.
-6. Add Environment Variable: `PYTHONPATH=/Users/akhilbaja/Documents/Akhil/Job Finder/backend`.
+4. Set Command to `<repo>/backend/venv/bin/python`.
+5. Set Args to `<repo>/backend/job_finder_mcp/server.py`.
+6. Add Environment Variable: `PYTHONPATH=<repo>/backend`.
 
 ---
 
@@ -44,7 +44,11 @@ Add the `mcpServers` block to:
 ## Available MCP Tools:
 - **Discovery**: `search_jobs`, `scrape_job_posting`
 - **ATS Scoring**: `calculate_ats_score`, `analyze_skill_gap`, `extract_seniority_salary`
-- **Resume & LaTeX**: `tailor_resume_latex`, `compile_latex_metrics`, `export_overleaf_bundle`
+- **Resume & LaTeX**: `tailor_resume_latex`, `compile_latex_metrics`, `export_overleaf_bundle`, `parse_and_convert_to_latex`
 - **Recruiter Intel**: `extract_recruiter_profile`, `generate_outreach_inmail`
 - **Interview Prep**: `generate_interview_pack`, `company_culture_brief`
 - **Application CRM**: `track_application`, `list_applications`, `check_duplicate_application`
+- **Candidate Profile**: `get_candidate_profile`, `save_candidate_profile`, `sync_candidate_profile_from_resume`
+- **Autofill (submits applications)**: `apply_to_job_browser`, `pipeline_auto_apply`. By default these stop at the review step. They submit only when both `auto_submit` and `confirm_submit` are true.
+
+In this guide `<repo>` is the folder where you cloned the project. Alternatively install the package and use `job-finder mcp` (see `claude_desktop_config.json`).
