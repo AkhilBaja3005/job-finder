@@ -269,7 +269,7 @@ def check_uk_sponsor(company_name: str) -> Dict[str, Any]:
                     "tier_rating": row["tier_rating"],
                     "route": row["route"]
                 },
-                "badge": "✓ UK Visa Sponsor",
+                "badge": "UK Visa Sponsor",
                 "badge_color": "green",
                 "notice": None
             }
@@ -279,7 +279,7 @@ def check_uk_sponsor(company_name: str) -> Dict[str, Any]:
                 "company_name": company_name,
                 "matched_name": None,
                 "details": None,
-                "badge": "✗ Not on sponsor",
+                "badge": "Not on sponsor",
                 "badge_color": "red",
                 "notice": {
                     "title": "Company Could Not Be Found in Sponsor Database",

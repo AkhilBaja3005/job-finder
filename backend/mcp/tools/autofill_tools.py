@@ -245,7 +245,7 @@ def build_and_compile_tailored_pdf(
                 candidate_info=candidate_info
             )
             if slotted and "\\begin{document}" in slotted and "\\documentclass" in slotted:
-                print(f"[tailor_resume] ⚡ Applied instantaneous precision slot injection for {len(skills_to_inject)} skills: {skills_to_inject}")
+                print(f"[tailor_resume] Applied instantaneous precision slot injection for {len(skills_to_inject)} skills: {skills_to_inject}")
                 raw_tailored = slotted
         except Exception as se:
             print(f"[tailor_resume] Slot injection error, falling back: {se}")
@@ -382,9 +382,9 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
 
     # pyrefly: ignore [missing-import]
     from services.log_queue import log_ist
-    print(f"\n[Pipeline] 🚀 Pipeline Auto-Apply Started", flush=True)
-    print(f"[Pipeline] 🎯 Keywords: '{keywords}' | 📍 Location: '{location}' | 🎯 Min ATS: {min_ats_score}%", flush=True)
-    log_ist(f"[Pipeline] 🚀 Pipeline Auto-Apply started for '{keywords}' in '{location}' (Min ATS: {min_ats_score}%)")
+    print(f"\n[Pipeline] Pipeline Auto-Apply Started", flush=True)
+    print(f"[Pipeline] Keywords: '{keywords}' | Location: '{location}' | Min ATS: {min_ats_score}%", flush=True)
+    log_ist(f"[Pipeline] Pipeline Auto-Apply started for '{keywords}' in '{location}' (Min ATS: {min_ats_score}%)")
 
     # 1. Search for matching jobs
     search_res = await handle_search_jobs({
@@ -395,8 +395,8 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
     })
 
     jobs = search_res.get("jobs", [])
-    print(f"[Pipeline] 📊 Discovered {len(jobs)} total jobs to evaluate", flush=True)
-    log_ist(f"[Pipeline] 📊 Discovered {len(jobs)} total jobs to evaluate")
+    print(f"[Pipeline] Discovered {len(jobs)} total jobs to evaluate", flush=True)
+    log_ist(f"[Pipeline] Discovered {len(jobs)} total jobs to evaluate")
 
     if not jobs:
         return {
@@ -414,7 +414,7 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
 
     for idx, job in enumerate(jobs, start=1):
         if applied_count >= max_applications:
-            print(f"[Pipeline] 🛑 Reached max target applications limit ({max_applications}). Stopping.", flush=True)
+            print(f"[Pipeline] Reached max target applications limit ({max_applications}). Stopping.", flush=True)
             break
 
         job_url = job.get("url")
@@ -442,7 +442,7 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
             else:
                 ats_score = 0
 
-        print(f"[Pipeline] 📈 ATS Compatibility: {ats_score}% (Required: {min_ats_score}%)", flush=True)
+        print(f"[Pipeline] ATS Compatibility: {ats_score}% (Required: {min_ats_score}%)", flush=True)
 
         job_summary = {
             "title": job_title,
@@ -455,8 +455,8 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
 
         # 3. Check ATS threshold (>= min_ats_score)
         if ats_score >= min_ats_score:
-            print(f"[Pipeline] ✅ QUALIFIED! '{job_title}' at {company} ({ats_score}% >= {min_ats_score}%)", flush=True)
-            log_ist(f"[Pipeline] ✅ QUALIFIED: '{job_title}' @ {company} ({ats_score}%)")
+            print(f"[Pipeline] QUALIFIED! '{job_title}' at {company} ({ats_score}% >= {min_ats_score}%)", flush=True)
+            log_ist(f"[Pipeline] QUALIFIED: '{job_title}' @ {company} ({ats_score}%)")
 
             # Check if resume can/should be tailored to the JD
             resume_to_upload = master_resume_pdf
@@ -479,8 +479,8 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
 
             # 4. Autofill / Auto-apply via browser-use (50 max steps)
             action_desc = "Submitting application" if auto_submit else "Autofilling application (Preview Mode)"
-            print(f"[Pipeline] 🌐 Launching browser-use: {action_desc} for {company}...", flush=True)
-            log_ist(f"[Pipeline] 🌐 Launching browser-use: {action_desc} for {company}")
+            print(f"[Pipeline] Launching browser-use: {action_desc} for {company}...", flush=True)
+            log_ist(f"[Pipeline] Launching browser-use: {action_desc} for {company}")
 
             apply_res = await run_browser_use_autofill(
                 job_url=job_url,
@@ -495,8 +495,8 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
             job_summary["status"] = "applied" if auto_submit else "filled_review_needed"
             job_summary["browser_result"] = apply_res.get("final_result")
             applied_count += 1
-            print(f"[Pipeline] ✨ Completed application cycle for '{job_title}' @ {company}! Status: {job_summary['status']}", flush=True)
-            log_ist(f"[Pipeline] ✨ Completed application cycle for '{job_title}' @ {company} ({job_summary['status']})")
+            print(f"[Pipeline] Completed application cycle for '{job_title}' @ {company}! Status: {job_summary['status']}", flush=True)
+            log_ist(f"[Pipeline] Completed application cycle for '{job_title}' @ {company} ({job_summary['status']})")
 
             # 5. Record application status in CRM
             try:

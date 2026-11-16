@@ -108,7 +108,7 @@ const OutreachModal = ({
               {recruiterInfo?.recruiter_name && ` • ${recruiterInfo.recruiter_name}`}
             </p>
           </div>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" onClick={onClose}></button>
         </div>
 
         {/* Recruiter Info */}

@@ -117,7 +117,7 @@ async def collect_100_jobs_for_role(
     seen_snippet_hashes: set = set()
     seen_jd_hashes: set = set()
 
-    print(f"\n[Jobserve Ingestor] 🚀 Target: {target_count} unique listings for role='{role}', location='{location}', timeframe='{timeframe}' (Age: {age_val}d)...")
+    print(f"\n[Jobserve Ingestor] Target: {target_count} unique listings for role='{role}', location='{location}', timeframe='{timeframe}' (Age: {age_val}d)...")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -188,7 +188,7 @@ async def collect_100_jobs_for_role(
                     return items;
                 }''')
 
-                print(f"\n  📄 [Page {page_num}] Discovered {len(raw_items)} listings on page. Current total: {len(collected_jobs)}/{target_count}")
+                print(f"\n  [Page {page_num}] Discovered {len(raw_items)} listings on page. Current total: {len(collected_jobs)}/{target_count}")
 
                 added_this_page = 0
                 for item in raw_items:
@@ -286,7 +286,7 @@ async def collect_100_jobs_for_role(
                         "platform": "Jobserve"
                     }
                     added_this_page += 1
-                    print(f"    ✓ [{len(collected_jobs)}/{target_count}] {title[:40]} | {rate[:18]}")
+                    print(f"    [{len(collected_jobs)}/{target_count}] {title[:40]} | {rate[:18]}")
 
                 # Paginate to Next Page if target not reached
                 if len(collected_jobs) < target_count:
@@ -304,13 +304,13 @@ async def collect_100_jobs_for_role(
         finally:
             await browser.close()
 
-    print(f"\n[Ingestion Complete] ✓ Successfully collected {len(collected_jobs)} strictly unique jobs for '{role}'.")
+    print(f"\n[Ingestion Complete] Successfully collected {len(collected_jobs)} strictly unique jobs for '{role}'.")
     return list(collected_jobs.values())
 
 
 def score_and_rank_jobs(jobs: List[Dict[str, Any]], candidate_profile: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Runs full deterministic ATS scoring across all collected jobs."""
-    print(f"\n[ATS Engine] 🎯 Scoring {len(jobs)} jobs against candidate profile...")
+    print(f"\n[ATS Engine] Scoring {len(jobs)} jobs against candidate profile...")
     ranked = []
 
     for job in jobs:
@@ -334,7 +334,7 @@ def score_and_rank_jobs(jobs: List[Dict[str, Any]], candidate_profile: Dict[str,
                 "role_fit_score": role_fit,
                 "matched_skills": matched,
                 "missing_skills": missing,
-                "fit_tier": "🔥 Top Tier (>=75%)" if overall >= 75 else ("⚡ High Fit (65-74%)" if overall >= 65 else "📋 Moderate (<65%)")
+                "fit_tier": "Top Tier (>=75%)" if overall >= 75 else ("High Fit (65-74%)" if overall >= 65 else "Moderate (<65%)")
             })
         except Exception as e:
             print(f"  Error scoring '{title}': {e}")
@@ -346,10 +346,10 @@ def score_and_rank_jobs(jobs: List[Dict[str, Any]], candidate_profile: Dict[str,
 def generate_shortlist_report(role: str, ranked_jobs: List[Dict[str, Any]], top_n: int = 30) -> str:
     """Generates Markdown Shortlist Report for the role."""
     report = []
-    report.append(f"# 🎯 Jobserve 100 Shortlist Report: {role}\n")
+    report.append(f"# Jobserve 100 Shortlist Report: {role}\n")
     report.append(f"**Target Role:** `{role}` | **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M')} | **Total Evaluated:** {len(ranked_jobs)} Unique Jobs\n")
     report.append("--- \n")
-    report.append(f"## 🏆 Top {min(top_n, len(ranked_jobs))} Shortlisted Opportunities\n")
+    report.append(f"## Top {min(top_n, len(ranked_jobs))} Shortlisted Opportunities\n")
     report.append("| Rank | Overall ATS | Skills Fit | Rate / Salary | Role & Location | Direct Link |")
     report.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
 
@@ -358,7 +358,7 @@ def generate_shortlist_report(role: str, ranked_jobs: List[Dict[str, Any]], top_
         report.append(f"| **#{idx}** | **{j['overall_score']}%** | {j['skills_score']}% | `{rate}` | **{j['title']}** <br>_{j['company']}_ ({j['location']}) | [View Job]({j['url']}) |")
 
     report.append("\n---\n")
-    report.append("## 📋 Detailed Breakdown of Top Opportunities\n")
+    report.append("## Detailed Breakdown of Top Opportunities\n")
 
     for idx, j in enumerate(ranked_jobs[:top_n], 1):
         report.append(f"### #{idx}. {j['title']}")
@@ -402,7 +402,7 @@ async def main():
     )
 
     if not jobs:
-        print(f"✕ No jobs collected for role '{args.role}'.")
+        print(f"No jobs collected for role '{args.role}'.")
         return
 
     # ATS Scoring
@@ -414,12 +414,12 @@ async def main():
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(ranked_jobs, f, indent=2)
-    print(f"\n✓ Saved {len(ranked_jobs)} scored jobs to {json_path}")
+    print(f"\nSaved {len(ranked_jobs)} scored jobs to {json_path}")
 
     report_md = generate_shortlist_report(args.role, ranked_jobs, top_n=30)
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report_md)
-    print(f"✓ Saved Shortlist Report to {report_path}")
+    print(f"Saved Shortlist Report to {report_path}")
 
     print("\n" + "=" * 90)
     print(f" Top 20 Shortlisted Jobs for Role: '{args.role}' (Total Evaluated: {len(ranked_jobs)})")

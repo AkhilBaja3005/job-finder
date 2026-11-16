@@ -387,7 +387,7 @@ def _execute_nvidia_nim_fallback(prompt: str, response_schema, api_key: str, on_
         for retry_attempt in range(3):
             try:
                 if on_log:
-                    on_log(json.dumps({"type": "llm_info", "message": f"🤖 Attempting NVIDIA NIM model {model_name}..."}))
+                    on_log(json.dumps({"type": "llm_info", "message": f"Attempting NVIDIA NIM model {model_name}..."}))
                 print(f"Attempting NVIDIA NIM generation with model: {model_name} (try {retry_attempt + 1})...")
                 
                 url = "https://integrate.api.nvidia.com/v1/chat/completions".strip().lstrip("[")
@@ -523,7 +523,7 @@ def _generate_with_cloudflare_llama(prompt: str, response_schema=None, on_log: O
         )
 
     if on_log:
-        on_log(json.dumps({"type": "llm_info", "message": f"🤖 Attempting Cloudflare Workers AI model {model}..."}))
+        on_log(json.dumps({"type": "llm_info", "message": f"Attempting Cloudflare Workers AI model {model}..."}))
     print(f"[LLM Client] Attempting Cloudflare Workers AI model: {model}...")
 
     # Fixed: Forced strict string sanitization to eliminate the `<urlopen error unknown url type: [https>` block completely

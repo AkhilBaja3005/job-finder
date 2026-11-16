@@ -172,9 +172,9 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
             recruiter_html = ""
             if rec_name:
                 if rec_profile:
-                    recruiter_html = f'<p style="margin: 4px 0 0 0; color: #475569; font-size: 0.84rem;">👤 Recruiter: <a href="{rec_profile}" target="_blank" style="color: #0284C7; text-decoration: none; font-weight: 600;">{rec_name}</a></p>'
+                    recruiter_html = f'<p style="margin: 4px 0 0 0; color: #475569; font-size: 0.84rem;">Recruiter: <a href="{rec_profile}" target="_blank" style="color: #0284C7; text-decoration: none; font-weight: 600;">{rec_name}</a></p>'
                 else:
-                    recruiter_html = f'<p style="margin: 4px 0 0 0; color: #475569; font-size: 0.84rem;">👤 Recruiter: <span style="font-weight: 600;">{rec_name}</span></p>'
+                    recruiter_html = f'<p style="margin: 4px 0 0 0; color: #475569; font-size: 0.84rem;">Recruiter: <span style="font-weight: 600;">{rec_name}</span></p>'
 
             cards_html += f"""
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px; margin-bottom: 12px; box-sizing: border-box;">
@@ -198,7 +198,7 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
                             <a href="{job_url}" target="_blank" style="display: block; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #64748B; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; text-decoration: none; font-weight: 600;">View Listing</a>
                         </td>
                         <td style="width: 50%; padding-left: 5px;">
-                            <a href="{tailor_url}" target="_blank" style="display: block; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold;">⚡ Auto-Tailor</a>
+                            <a href="{tailor_url}" target="_blank" style="display: block; text-align: center; padding: 9px 12px; font-size: 0.82rem; color: #FFFFFF; background-color: #0284C7; border-radius: 6px; text-decoration: none; font-weight: bold;">Auto-Tailor</a>
                         </td>
                     </tr>
                 </table>
@@ -214,7 +214,7 @@ async def process_and_send_user_digest(user: dict, bypass_time_check: bool = Fal
     html_digest = f"""
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #E2E8F0; border-radius: 16px; background-color: #FAFAFA; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
         <div style="text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 3rem;">📬</span>
+            <span style="font-size: 3rem;"></span>
             <h2 style="color: #0284C7; margin: 10px 0 5px; font-weight: 800; font-size: 1.5rem;">Daily Job Matches Digest</h2>
             <p style="color: #334155; font-size: 0.98rem; font-weight: 600; margin: 8px 0 4px;">Hi {candidate_name},</p>
             <p style="color: #64748B; font-size: 0.9rem; margin: 0;">Here are your top matching roles from the past 24 hours ({cron_location}):</p>

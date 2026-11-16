@@ -545,7 +545,7 @@ def search_reed_jobs(keyword: str, location: str = "London", timeframe: str = "2
             # Sort by post date descending (newest jobs first)
             valid_results.sort(key=lambda x: x["dt"], reverse=True)
             final_jobs = [r["job"] for r in valid_results[:40]]
-            log_ist(f"[Job Searcher] ✓ Reed API returned {len(final_jobs)} fresh jobs within {timeframe} for '{keyword}' (sorted newest first)")
+            log_ist(f"[Job Searcher] Reed API returned {len(final_jobs)} fresh jobs within {timeframe} for '{keyword}' (sorted newest first)")
             return final_jobs
     except Exception as e:
         log_ist(f"[Job Searcher] Reed API search error: {e}")
@@ -683,7 +683,7 @@ async def search_targetjobs_uk(keyword: str, location: str = "Remote", timeframe
             if len(results) >= 5:
                 break
 
-        log_ist(f"[Job Searcher] ✓ TargetJobs API returned {len(results)} active graduate tech jobs for '{keyword}'")
+        log_ist(f"[Job Searcher] TargetJobs API returned {len(results)} active graduate tech jobs for '{keyword}'")
     except Exception as te:
         log_ist(f"[Job Searcher] TargetJobs search error for '{keyword}': {te}")
 
@@ -920,7 +920,7 @@ async def search_jobserve_jobs(keyword: str, location: str = "London", timeframe
         enriched_results = await asyncio.gather(*[_enrich_jobserve_item(item) for item in candidate_items[:25]])
         results = [r for r in enriched_results if r is not None]
 
-        log_ist(f"[Job Searcher] ✓ Jobserve returned {len(results)} active tech listings for '{keyword}'")
+        log_ist(f"[Job Searcher] Jobserve returned {len(results)} active tech listings for '{keyword}'")
     except Exception as e:
         log_ist(f"[Job Searcher] Jobserve Playwright search error for '{keyword}': {e}")
     finally:
@@ -1649,7 +1649,7 @@ async def find_matching_jobs(
                 )
                 if not platform_filter_active or any(tp in p_obj.platform.lower() for tp in target_plats):
                     portal_jobs_raw.append(p_obj)
-            portal_done_msg = f"✓ Found {gh_cnt} Greenhouse, {ash_cnt} Ashby, {lev_cnt} Lever, {bam_cnt} BambooHR & {wd_cnt} Workday direct portal postings ({len(portal_jobs_raw)} total)"
+            portal_done_msg = f"Found {gh_cnt} Greenhouse, {ash_cnt} Ashby, {lev_cnt} Lever, {bam_cnt} BambooHR & {wd_cnt} Workday direct portal postings ({len(portal_jobs_raw)} total)"
             log_ist(portal_done_msg)
             yield json.dumps({"type": "log", "message": portal_done_msg}) + " " * 2048 + "\n"
         except asyncio.TimeoutError:
@@ -1714,7 +1714,7 @@ async def find_matching_jobs(
         indeed_jobs_for_est.extend(ind_jobs)
         ats_cnt_str = f", {len(ats_jobs)} Direct ATS" if ats_jobs else ""
         js_cnt_str = f", {len(js_jobs)} Jobserve" if js_jobs else ""
-        res_msg = f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed, {len(reed_jobs)} Reed.co.uk{js_cnt_str}{ats_cnt_str} & {len(tj_jobs)} TargetJobs postings for '{q}'" if target_country == "GB" else f"✓ Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed{js_cnt_str}{ats_cnt_str} postings for '{q}'"
+        res_msg = f"Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed, {len(reed_jobs)} Reed.co.uk{js_cnt_str}{ats_cnt_str} & {len(tj_jobs)} TargetJobs postings for '{q}'" if target_country == "GB" else f"Found {len(li_jobs)} LinkedIn, {len(ind_jobs)} Indeed{js_cnt_str}{ats_cnt_str} postings for '{q}'"
         log_ist(res_msg)
         yield json.dumps({"type": "log", "message": res_msg}) + " " * 2048 + "\n"
 
@@ -1861,7 +1861,7 @@ async def find_matching_jobs(
                 # Guaranteed heartbeat ping payload (forces proxy buffer flush)
                 yield "{\"type\":\"ping\"}" + " " * 2048 + "\n"
             if r is not None:
-                log_msg = f"✓ Scored match: {r['title']} @ {r['company']} ({r['score']}% Match)"
+                log_msg = f"Scored match: {r['title']} @ {r['company']} ({r['score']}% Match)"
                 yield json.dumps({"type": "log", "message": log_msg}) + " " * 2048 + "\n"
                 scored_jobs.append(r)
                 yield json.dumps({"type": "partial_result", "job": r}) + "\n"

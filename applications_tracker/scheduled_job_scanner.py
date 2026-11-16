@@ -221,7 +221,7 @@ def find_master_resume_with_mac_tags() -> str:
                                 res = subprocess.run(["mdls", "-name", "kMDItemUserTags", full_p], capture_output=True, text=True)
                                 out = res.stdout or ""
                                 if "red" in out.lower():
-                                    print(f"[Master Resume] 🏷️ Found Red-tagged master resume: {full_p}")
+                                    print(f"[Master Resume] Found Red-tagged master resume: {full_p}")
                                     return full_p
                             except Exception:
                                 pass
@@ -236,7 +236,7 @@ def find_master_resume_with_mac_tags() -> str:
     # Secondary fallback to repository master resume or local output
     repo_fallback = _get_default_resume_path()
     if repo_fallback and os.path.exists(repo_fallback):
-        print(f"[Master Resume] 📄 Using detected resume: {repo_fallback}")
+        print(f"[Master Resume] Using detected resume: {repo_fallback}")
         return repo_fallback
 
     return repo_fallback or ""
@@ -362,7 +362,7 @@ async def record_to_supabase_or_csv(record_data: dict):
                 if inserted:
                     supabase_synced = True
         except Exception as se:
-            print(f"[Supabase] ⚠️ Synced error: {se}. Falling back to CSV.")
+            print(f"[Supabase] Synced error: {se}. Falling back to CSV.")
 
     # Record to local CSV ledger
     try:
@@ -402,7 +402,7 @@ async def record_to_supabase_or_csv(record_data: dict):
             ])
 
         dest = "Supabase + CSV" if supabase_synced else "CSV Tracker"
-        print(f"   💾 Recorded to: {dest} (Status: {record_data.get('status')})")
+        print(f"   Recorded to: {dest} (Status: {record_data.get('status')})")
     except Exception as ce:
         print(f"[CSV Tracker] Error saving application: {ce}")
 
@@ -511,7 +511,7 @@ def notify_user_of_failed_applications(failed_jobs: list, to_email: Optional[str
     </div>
     """
 
-    print(f"\n[Email Alert] 📧 Sending 'User Review Needed' email for {len(failed_jobs)} failed application(s) to {recipient}...")
+    print(f"\n[Email Alert] Sending 'User Review Needed' email for {len(failed_jobs)} failed application(s) to {recipient}...")
     try:
         sent = send_notification_email(
             to_email=recipient,
@@ -520,12 +520,12 @@ def notify_user_of_failed_applications(failed_jobs: list, to_email: Optional[str
             html_body=html_body
         )
         if sent:
-            print(f"[Email Alert] ✅ Notification email sent successfully to {recipient}!")
+            print(f"[Email Alert] Notification email sent successfully to {recipient}!")
         else:
-            print(f"[Email Alert] ⚠️ Failed to send notification email to {recipient}.")
+            print(f"[Email Alert] Failed to send notification email to {recipient}.")
         return sent
     except Exception as ee:
-        print(f"[Email Alert] ❌ Error sending notification email: {ee}")
+        print(f"[Email Alert] Error sending notification email: {ee}")
         return False
 
 
@@ -601,7 +601,7 @@ def notify_user_of_applied_applications(applied_jobs: list, to_email: Optional[s
     </div>
     """
 
-    print(f"\n[Email Alert] 📧 Sending 'Application Submitted' email for {len(applied_jobs)} applied role(s) to {recipient}...")
+    print(f"\n[Email Alert] Sending 'Application Submitted' email for {len(applied_jobs)} applied role(s) to {recipient}...")
     try:
         sent = send_notification_email(
             to_email=recipient,
@@ -610,12 +610,12 @@ def notify_user_of_applied_applications(applied_jobs: list, to_email: Optional[s
             html_body=html_body
         )
         if sent:
-            print(f"[Email Alert] ✅ Applied confirmation email sent successfully to {recipient}!")
+            print(f"[Email Alert] Applied confirmation email sent successfully to {recipient}!")
         else:
-            print(f"[Email Alert] ⚠️ Failed to send applied confirmation email to {recipient}.")
+            print(f"[Email Alert] Failed to send applied confirmation email to {recipient}.")
         return sent
     except Exception as ee:
-        print(f"[Email Alert] ❌ Error sending applied confirmation email: {ee}")
+        print(f"[Email Alert] Error sending applied confirmation email: {ee}")
         return False
 
 
@@ -669,10 +669,10 @@ async def apply_to_job(
     model_name: Optional[str] = None,
     headless_override: Optional[bool] = None
 ):
-    print(f"\n[Browser-Use] 🌐 Launching browser autofill for: {title} @ {company}")
-    print(f"[Browser-Use] 🔗 URL: {url}")
-    print(f"[Browser-Use] 📄 Resume: {resume_path}")
-    print(f"[Browser-Use] ⚡ Guardrails: {'Disabled (Auto-Submit Enabled)' if (auto_submit or os.getenv('BROWSER_USE_DISABLE_GUARDRAILS') in ('1', 'true', 'True')) else 'Enabled (Preview Mode)'}")
+    print(f"\n[Browser-Use] Launching browser autofill for: {title} @ {company}")
+    print(f"[Browser-Use] URL: {url}")
+    print(f"[Browser-Use] Resume: {resume_path}")
+    print(f"[Browser-Use] Guardrails: {'Disabled (Auto-Submit Enabled)' if (auto_submit or os.getenv('BROWSER_USE_DISABLE_GUARDRAILS') in ('1', 'true', 'True')) else 'Enabled (Preview Mode)'}")
     headless = headless_override if headless_override is not None else (os.getenv("BROWSER_USE_HEADLESS", "false").lower() in ("1", "true", "yes"))
     from config.constants import get_best_flash_lite_model
     selected_model = model_name or get_best_flash_lite_model()
@@ -696,7 +696,7 @@ async def apply_to_job(
         return res
     except (KeyboardInterrupt, asyncio.CancelledError):
         skip_msg = "User skipped application via Ctrl+C."
-        print(f"\n[Browser-Use] ⏭️ Skip signal (Ctrl+C) received! Aborting application for {company} and advancing to next role...")
+        print(f"\n[Browser-Use] ⏭Skip signal (Ctrl+C) received! Aborting application for {company} and advancing to next role...")
         return {
             "status": "failed",
             "job_url": url,
@@ -705,7 +705,7 @@ async def apply_to_job(
         }
     except asyncio.TimeoutError:
         err_msg = f"Job application autofill timed out after {int(active_timeout)}s."
-        print(f"[Browser-Use] ⏱️ {err_msg}")
+        print(f"[Browser-Use] ⏱{err_msg}")
         return {
             "status": "failed",
             "job_url": url,
@@ -713,7 +713,7 @@ async def apply_to_job(
             "final_result": f"SUBMISSION_FAILED: {err_msg}"
         }
     except Exception as be:
-        print(f"[Browser-Use] ❌ Autofill error: {be}")
+        print(f"[Browser-Use] Autofill error: {be}")
         return {
             "status": "failed",
             "job_url": url,
@@ -757,7 +757,7 @@ async def run_pipeline(
 
     # Mode A: Direct application to single job URL passed via CLI
     if target_url:
-        print(f"[2026-09-10] 🎯 Targeting single job URL: {target_url}")
+        print(f"[2026-09-10] Targeting single job URL: {target_url}")
         res = await apply_to_job(
             url=target_url,
             candidate=candidate,
@@ -810,7 +810,7 @@ async def run_pipeline(
     max_applications = max_apps if max_apps is not None else (int(max_apps_env) if max_apps_env.isdigit() else 0)
     max_apps_str = "No limit (unlimited)" if max_applications <= 0 else str(max_applications)
 
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 🚀 Starting scheduled unified scan...")
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting scheduled unified scan...")
     print(f"Target roles: {keywords}")
     print(f"Location: {location} | Timeframe: {timeframe}")
     if sponsor_only:
@@ -827,7 +827,7 @@ async def run_pipeline(
     merged_count = 0
 
     if top_applicant_only:
-        print("[Scanner] 🌟 Running in LinkedIn Top Applicant Only mode...")
+        print("[Scanner] Running in LinkedIn Top Applicant Only mode...")
         try:
             from applications_tracker.linkedin_top_applicant_scanner import scan_linkedin_for_top_applicant_jobs
         except ImportError:
@@ -871,7 +871,7 @@ async def run_pipeline(
 
         excluded_list = list(dict.fromkeys(excluded_list)) if excluded_list else None
         if excluded_list:
-            print(f"[Scanner] 🚫 Skipping excluded portal(s): {', '.join(excluded_list)}")
+            print(f"[Scanner] Skipping excluded portal(s): {', '.join(excluded_list)}")
         search_res = await handle_search_jobs({
             "keywords": keywords,
             "location": location,
@@ -911,10 +911,10 @@ async def run_pipeline(
         except Exception as comm_err:
             print(f"[Scanner] Note: Community unlisted job search skipped: {comm_err}")
 
-    print(f"\n[Scanner] 📊 Total unique postings discovered and queued: {len(jobs)} ({len(jobs) - merged_count} primary scored + {merged_count} from Indeed/EST)")
+    print(f"\n[Scanner] Total unique postings discovered and queued: {len(jobs)} ({len(jobs) - merged_count} primary scored + {merged_count} from Indeed/EST)")
 
     existing_urls = get_existing_tracked_urls()
-    print(f"[Scanner] 🔍 Found {len(existing_urls)} previously tracked/applied job URLs across Supabase and CSV.")
+    print(f"[Scanner] Found {len(existing_urls)} previously tracked/applied job URLs across Supabase and CSV.")
     new_jobs_added = 0
     tailored_count = 0
     direct_applied_count = 0
@@ -958,7 +958,7 @@ async def run_pipeline(
             "store manager", "receptionist", "hairdresser", "security officer", "call center"
         )
         if any(bad in title_lower for bad in irrelevant_keywords):
-            print(f"[{idx}/{len(jobs)}] ⏭️ Skipping irrelevant non-technical posting: {title} @ {company}")
+            print(f"[{idx}/{len(jobs)}] ⏭Skipping irrelevant non-technical posting: {title} @ {company}")
             continue
 
         # Check UK visa sponsorship status from official Home Office register
@@ -971,13 +971,13 @@ async def run_pipeline(
             if is_uk_sponsor:
                 sponsor_badge_log = " [🇬🇧 UK Visa Sponsor]"
             else:
-                sponsor_badge_log = " [⚠️ Not on UK Sponsor Register]"
+                sponsor_badge_log = " [Not on UK Sponsor Register]"
         except Exception:
             pass
 
         # If --sponsor-only flag is set, strictly skip companies not found in the sponsor database
         if sponsor_only and not is_uk_sponsor:
-            print(f"[{idx}/{len(jobs)}] ⏭️ Skipping non-sponsor role (--sponsor-only active): {title} @ {company}")
+            print(f"[{idx}/{len(jobs)}] ⏭Skipping non-sponsor role (--sponsor-only active): {title} @ {company}")
             continue
 
         # Decide Application & Tailoring Strategy
@@ -997,7 +997,7 @@ async def run_pipeline(
         )
 
         if is_top_applicant:
-            # 🌟 LINKEDIN TOP APPLICANT DIRECT APPLY
+            # LINKEDIN TOP APPLICANT DIRECT APPLY
             # Bypass JD scraping, ATS scoring, and tailoring completely
             status = "Top Applicant - Direct Apply"
             score = 95
@@ -1009,14 +1009,14 @@ async def run_pipeline(
             job["role_fit_score"] = 95
             pdf_to_submit = master_resume_pdf
             direct_applied_count += 1
-            print(f"\n[{idx}/{len(jobs)}] 🌟 LINKEDIN TOP APPLICANT MATCH: {title} @ {company}")
-            print(f"   ⚡ Bypassing JD scoring & tailoring — applying directly with Master Resume ({os.path.basename(pdf_to_submit)}).")
+            print(f"\n[{idx}/{len(jobs)}] LINKEDIN TOP APPLICANT MATCH: {title} @ {company}")
+            print(f"   Bypassing JD scoring & tailoring — applying directly with Master Resume ({os.path.basename(pdf_to_submit)}).")
         else:
             # If job description is missing or a brief placeholder (common for Indeed RSS / title-heuristic jobs),
             # fetch the real JD on-demand via the scraper so ATS scoring & tailoring have 100% full content.
             if (not jd_text or len(jd_text.strip()) < 100 or job.get("estimated", False)) and url:
                 try:
-                    print(f"[{idx}/{len(jobs)}] 📥 Fetching live JD on-demand for {title} @ {company} ({platform})...")
+                    print(f"[{idx}/{len(jobs)}] Fetching live JD on-demand for {title} @ {company} ({platform})...")
                     # Bound live scraping to a safe 30s timeout
                     live_scraped = await asyncio.wait_for(scrape_job_description(url), timeout=30.0)
 
@@ -1027,7 +1027,7 @@ async def run_pipeline(
                     # If bot-blocked or empty, and running locally, attempt browser-use fallback to solve Turnstile
                     is_cloud = any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")) or os.getenv("ENVIRONMENT") == "production"
                     if (is_blocked or not scraped_jd or len(scraped_jd) < 100) and not is_cloud:
-                        print(f"[{idx}/{len(jobs)}] 🛡️ Cloudflare verification detected on Indeed. Activating local browser-use agent to solve Turnstile...")
+                        print(f"[{idx}/{len(jobs)}] Cloudflare verification detected on Indeed. Activating local browser-use agent to solve Turnstile...")
                         try:
                             from services.browser_use_agent import extract_jd_with_browser_use
                             # Bound browser-use JD extraction to a safe 60s timeout
@@ -1036,9 +1036,9 @@ async def run_pipeline(
                                 live_scraped = bu_res
                                 scraped_jd = bu_res["description"].strip()
                                 is_blocked = False
-                                print(f"[{idx}/{len(jobs)}] ⚡ browser-use successfully solved Turnstile and retrieved JD!")
+                                print(f"[{idx}/{len(jobs)}] browser-use successfully solved Turnstile and retrieved JD!")
                         except asyncio.TimeoutError:
-                            print(f"[{idx}/{len(jobs)}] ⏱️ browser-use JD extraction timed out after 60s, keeping original listing info.")
+                            print(f"[{idx}/{len(jobs)}] ⏱browser-use JD extraction timed out after 60s, keeping original listing info.")
                         except Exception as bu_err:
                             print(f"[{idx}/{len(jobs)}] browser-use JD extraction note: {bu_err}")
 
@@ -1079,23 +1079,23 @@ async def run_pipeline(
                         job["exp_score"] = ats_res.experience_score
                         job["role_fit_score"] = rf_res
                         job["estimated"] = False
-                        print(f"   ✓ Successfully retrieved JD ({len(jd_text)} chars). Recomputed ATS Score: {score}% (Skills: {ats_res.skills_score}%, Exp: {ats_res.experience_score}%)")
+                        print(f"   Successfully retrieved JD ({len(jd_text)} chars). Recomputed ATS Score: {score}% (Skills: {ats_res.skills_score}%, Exp: {ats_res.experience_score}%)")
                     else:
-                        print(f"   ℹ️ Live JD blocked or incomplete, keeping original title '{title}' and estimate ({score}%).")
+                        print(f"   ℹLive JD blocked or incomplete, keeping original title '{title}' and estimate ({score}%).")
                 except Exception as jd_err:
-                    print(f"   ⚠️ Could not fetch live JD on-demand ({jd_err}), using current score ({score}%).")
+                    print(f"   Could not fetch live JD on-demand ({jd_err}), using current score ({score}%).")
 
             if score >= DIRECT_APPLY_ATS_THRESHOLD:
-                # 🎯 DIRECT APPLY (>= 80% ATS match)
+                # DIRECT APPLY (>= 80% ATS match)
                 status = "Ready to Apply"
-                print(f"\n[{idx}/{len(jobs)}] 🌟 EXCELLENT MATCH ({score}% >= {DIRECT_APPLY_ATS_THRESHOLD}%): {title} @ {company}{sponsor_badge_log}")
-                print(f"   ⚡ Direct Apply mode: Using master resume (no tailoring needed)")
+                print(f"\n[{idx}/{len(jobs)}] EXCELLENT MATCH ({score}% >= {DIRECT_APPLY_ATS_THRESHOLD}%): {title} @ {company}{sponsor_badge_log}")
+                print(f"   Direct Apply mode: Using master resume (no tailoring needed)")
                 direct_applied_count += 1
             elif score >= min_ats_score:
-                # 🛠️ TAILOR & APPLY (65% - 79% ATS match)
+                # TAILOR & APPLY (65% - 79% ATS match)
                 status = "Tailored & Ready"
-                print(f"\n[{idx}/{len(jobs)}] 🎯 QUALIFIED MATCH ({score}% ATS): {title} @ {company}{sponsor_badge_log}")
-                print(f"   📝 Tailoring 1-page LaTeX resume for keyword & skills alignment...")
+                print(f"\n[{idx}/{len(jobs)}] QUALIFIED MATCH ({score}% ATS): {title} @ {company}{sponsor_badge_log}")
+                print(f"   Tailoring 1-page LaTeX resume for keyword & skills alignment...")
                 if jd_text:
                     try:
                         job_missing = job.get("missing_skills") or []
@@ -1117,24 +1117,24 @@ async def run_pipeline(
                             # Apples-to-apples: score the master PDF using the identical PDF text evaluator if exists, else fallback to score
                             master_pdf_score = evaluate_pdf_ats(master_resume_pdf, jd_text, candidate) if (master_resume_pdf and os.path.exists(master_resume_pdf)) else score
                             master_ats = master_pdf_score or score
-                            print(f"   📊 ATS Score Comparison: Tailored PDF = {tailored_ats}% vs Master PDF = {master_ats}%")
+                            print(f"   ATS Score Comparison: Tailored PDF = {tailored_ats}% vs Master PDF = {master_ats}%")
                             if tailored_ats >= master_ats:
                                 pdf_to_submit = pdf_res
                                 tex_path = pdf_res.replace(".pdf", ".tex")
                                 score = tailored_ats
                                 tailored_count += 1
-                                print(f"   ✓ Tailored PDF outperforms master ({tailored_ats}% >= {master_ats}%). Selected: {os.path.basename(pdf_to_submit)}")
+                                print(f"   Tailored PDF outperforms master ({tailored_ats}% >= {master_ats}%). Selected: {os.path.basename(pdf_to_submit)}")
                             else:
                                 pdf_to_submit = master_resume_pdf
-                                print(f"   ℹ️ Master resume scored higher ({master_ats}% > {tailored_ats}%). Keeping master resume: {os.path.basename(pdf_to_submit)}")
+                                print(f"   ℹMaster resume scored higher ({master_ats}% > {tailored_ats}%). Keeping master resume: {os.path.basename(pdf_to_submit)}")
                     except asyncio.TimeoutError:
-                        print(f"   ⏱️ Resume tailoring timed out after 90s. Falling back to master resume.")
+                        print(f"   ⏱Resume tailoring timed out after 90s. Falling back to master resume.")
                         pdf_to_submit = master_resume_pdf
                     except Exception as te:
-                        print(f"   ⚠️ Tailoring error: {te}. Falling back to master resume.")
+                        print(f"   Tailoring error: {te}. Falling back to master resume.")
             else:
                 status = "Saved & Scored"
-                print(f"[{idx}/{len(jobs)}] ℹ️ Below threshold: {title} @ {company} ({score}% < {min_ats_score}%) - Saved.")
+                print(f"[{idx}/{len(jobs)}] ℹBelow threshold: {title} @ {company} ({score}% < {min_ats_score}%) - Saved.")
 
         # Record to Supabase (and CSV fallback)
         record_payload = {
@@ -1166,11 +1166,11 @@ async def run_pipeline(
         # Autofill application if Top Applicant or score meets minimum threshold
         if (is_top_applicant or score >= min_ats_score) and url:
             if max_applications > 0 and applied_attempts >= max_applications:
-                print(f"[Scanner] ⏸️ Reached maximum application limit ({max_applications}) for this run. Remaining qualified matches are saved to tracker.")
+                print(f"[Scanner] ⏸Reached maximum application limit ({max_applications}) for this run. Remaining qualified matches are saved to tracker.")
             else:
                 applied_attempts += 1
                 disp_total = str(max_applications) if max_applications > 0 else "∞"
-                print(f"[Scanner] 🚀 Dispatching application ({applied_attempts}/{disp_total})...")
+                print(f"[Scanner] Dispatching application ({applied_attempts}/{disp_total})...")
                 res = await apply_to_job(
                     url=url,
                     candidate=candidate,
@@ -1190,7 +1190,7 @@ async def run_pipeline(
 
                 if disable_guardrails:
                     if res_status == "success":
-                        print(f"   ✅ Application verified & submitted successfully for {title} @ {company}")
+                        print(f"   Application verified & submitted successfully for {title} @ {company}")
                         await update_application_status(url, "applied")
                         app_record = {
                             "title": title,
@@ -1202,7 +1202,7 @@ async def run_pipeline(
                         batch_applied_buffer.append(app_record)
                     else:
                         fail_reason = final_res or "Form validation error or unconfirmed submission"
-                        print(f"   ⚠️ Submission verification failed for {title} @ {company}: {fail_reason}")
+                        print(f"   Submission verification failed for {title} @ {company}: {fail_reason}")
                         await update_application_status(url, "Needs Review (Unsubmitted)")
                         fail_record = {
                             "title": title,
@@ -1226,7 +1226,7 @@ async def run_pipeline(
                 # Batch notification check: Every 20 processed jobs, dispatch intermediate email and continue
                 total_in_batch = len(batch_applied_buffer) + len(batch_failed_buffer)
                 if total_in_batch >= EMAIL_BATCH_SIZE:
-                    print(f"\n[Scanner] 📧 Processed {total_in_batch} jobs in current batch (limit: {EMAIL_BATCH_SIZE}). Dispatching progress email before continuing...")
+                    print(f"\n[Scanner] Processed {total_in_batch} jobs in current batch (limit: {EMAIL_BATCH_SIZE}). Dispatching progress email before continuing...")
                     try:
                         if batch_applied_buffer:
                             notify_user_of_applied_applications(list(batch_applied_buffer), to_email=cand_email)
@@ -1237,7 +1237,7 @@ async def run_pipeline(
                     except Exception as b_mail_err:
                         print(f"[Scanner] Note: Batch notification error: {b_mail_err}")
 
-    print(f"\n[Scanner] ✅ Scan complete! Discovered & processed {new_jobs_added} new postings ({direct_applied_count} direct applied, {tailored_count} tailored).")
+    print(f"\n[Scanner] Scan complete! Discovered & processed {new_jobs_added} new postings ({direct_applied_count} direct applied, {tailored_count} tailored).")
 
     cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
 

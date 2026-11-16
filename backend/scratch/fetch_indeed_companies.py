@@ -14,7 +14,7 @@ headers = {
 }
 
 print("\n" + "=" * 65)
-print("🔎 INDEED LINK COMPANY NAME & TITLE EXTRACTION")
+print("INDEED LINK COMPANY NAME & TITLE EXTRACTION")
 print("=" * 65)
 
 for idx, url in enumerate(urls, 1):
@@ -35,12 +35,12 @@ for idx, url in enumerate(urls, 1):
             if cmp_match:
                 company = cmp_match.group(1).replace('+', ' ').replace('-', ' ').title()
             
-            print(f"    🏷️ Title/Meta: {raw_title.strip()[:80]}")
-            print(f"    🏢 Company:    {company}")
+            print(f"    Title/Meta: {raw_title.strip()[:80]}")
+            print(f"    Company:    {company}")
     except Exception as e:
-        print(f"    ⚠️ HTTP Request failed ({e}). Extracting from URL ID fallback:")
+        print(f"    HTTP Request failed ({e}). Extracting from URL ID fallback:")
         jk_val = url.split("jk=")[1]
-        print(f"    🏷️ Fallback Title: Indeed Job ({jk_val[:8]})")
-        print(f"    🏢 Fallback Company: Target Hiring Company")
+        print(f"    Fallback Title: Indeed Job ({jk_val[:8]})")
+        print(f"    Fallback Company: Target Hiring Company")
 
 print("=" * 65 + "\n")

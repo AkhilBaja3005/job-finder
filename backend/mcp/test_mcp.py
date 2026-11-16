@@ -16,13 +16,13 @@ async def test_mcp_endpoints():
     init_req = {"jsonrpc": "2.0", "id": 1, "method": "initialize"}
     init_res = await process_mcp_request(init_req)
     assert init_res["result"]["serverInfo"]["name"] == "job-finder-career-engine"
-    print("✓ initialize passed.")
+    print("initialize passed.")
 
     print("Testing MCP tools/list...")
     list_req = {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
     list_res = await process_mcp_request(list_req)
     tool_names = [t["name"] for t in list_res["result"]["tools"]]
-    print(f"✓ Registered {len(tool_names)} tools: {', '.join(tool_names)}")
+    print(f"Registered {len(tool_names)} tools: {', '.join(tool_names)}")
     assert len(tool_names) == 21
 
     print("Testing MCP calculate_ats_score tool execution...")
@@ -50,7 +50,7 @@ async def test_mcp_endpoints():
     }
     call_res = await process_mcp_request(call_req)
     content = json.loads(call_res["result"]["content"][0]["text"])
-    print(f"✓ ATS Calculation Result: Overall={content['overall_score']}%, Skills={content['skills_score']}%, Matched={content['matched_skills']}")
+    print(f"ATS Calculation Result: Overall={content['overall_score']}%, Skills={content['skills_score']}%, Matched={content['matched_skills']}")
     assert content["overall_score"] > 0
     assert "fastapi" in [s.lower() for s in content["matched_skills"]]
 
@@ -69,10 +69,10 @@ async def test_mcp_endpoints():
     }
     sal_res = await process_mcp_request(sal_call)
     sal_content = json.loads(sal_res["result"]["content"][0]["text"])
-    print(f"✓ Seniority/Salary result: Seniority={sal_content['seniority']}, Salary={sal_content['salary']}")
+    print(f"Seniority/Salary result: Seniority={sal_content['seniority']}, Salary={sal_content['salary']}")
     assert sal_content["seniority"] == "Lead"
 
-    print("\n🎉 ALL MCP AUTOMATED TESTS PASSED SUCCESSFULLY!")
+    print("\nALL MCP AUTOMATED TESTS PASSED SUCCESSFULLY!")
 
 if __name__ == "__main__":
     asyncio.run(test_mcp_endpoints())

@@ -30,10 +30,10 @@ async def main():
         if not chrome_path:
             chrome_path = shutil.which("chrome") or shutil.which("google-chrome") or shutil.which("chromium") or "chrome"
 
-    print(f"🚀 Launching clean persistent Chrome window ({chrome_path})...")
-    print(f"👉 Target Profile: {profile_dir}")
-    print(f"👉 TIP: You can sign in using your LinkedIn email/password or 'Sign in with Google'.")
-    print(f"👉 Once signed in and you reach your feed, this window will automatically detect it and save.\n")
+    print(f"Launching clean persistent Chrome window ({chrome_path})...")
+    print(f"Target Profile: {profile_dir}")
+    print(f"TIP: You can sign in using your LinkedIn email/password or 'Sign in with Google'.")
+    print(f"Once signed in and you reach your feed, this window will automatically detect it and save.\n")
 
     async with async_playwright() as p:
         ctx = await p.chromium.launch_persistent_context(
@@ -63,11 +63,11 @@ async def main():
         try:
             # Wait up to 3 minutes for you to complete sign-in
             await page.wait_for_url("**/feed/**", timeout=180000)
-            print("\n🎉 Detected LinkedIn login success! Saving session state...")
+            print("\nDetected LinkedIn login success! Saving session state...")
             await asyncio.sleep(4)
-            print("✅ Session saved permanently for both scanner and auto-fill!")
+            print("Session saved permanently for both scanner and auto-fill!")
         except Exception:
-            print("\nℹ️ Helper closed or session timed out.")
+            print("\nℹHelper closed or session timed out.")
         finally:
             await ctx.close()
 

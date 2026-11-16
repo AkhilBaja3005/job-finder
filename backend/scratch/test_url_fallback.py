@@ -12,7 +12,7 @@ def test_url_parser():
     print("Testing URL parsing for Indeed /cmp/ link:", url)
     
     company = _extract_company_from_jd("Failed to retrieve full job details automatically.", url)
-    print("✓ Extracted Company from /cmp/ link:", company)
+    print("Extracted Company from /cmp/ link:", company)
 
 if __name__ == "__main__":
     test_url_parser()

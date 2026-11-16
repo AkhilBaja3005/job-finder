@@ -20,7 +20,7 @@ import fitz  # PyMuPDF
 
 def validate_resume_tailoring():
     print("=" * 60)
-    print("🚀 RUNNING RESUME TAILORING VALIDATION TEST")
+    print("RUNNING RESUME TAILORING VALIDATION TEST")
     print("=" * 60)
 
     # 1. Sample Master LaTeX template
@@ -130,7 +130,7 @@ AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML a
     ]
     missing_skills = ["PySpark", "GCP", "A/B Testing"]
 
-    print("\n1️⃣  Running LLM Tailor + Sanitizer...")
+    print("\n1⃣  Running LLM Tailor + Sanitizer...")
     t0 = time.time()
     tailored_latex = tailor_latex_code(master_latex, job_title, jd_text, suggested_updates, missing_skills, None, "", on_log=None)
     print(f"   Done in {time.time() - t0:.2f}s")
@@ -148,7 +148,7 @@ AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML a
     print(f"pdf-path: {pdf_path}")
     print(f"latex-path: {tex_path}")
 
-    print("\n2️⃣  Applying Multi-Pass Single-Page Optimization...")
+    print("\n2⃣  Applying Multi-Pass Single-Page Optimization...")
     pages, _ = compile_and_check_page_metrics(tailored_latex, 1.0, 1.0, master_latex)
     opt_scale, opt_ls = 1.0, 1.0
     if pages > 1:
@@ -172,7 +172,7 @@ AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML a
     from services.session_store import _ensure_resume_cls
     _ensure_resume_cls(output_dir)
 
-    print("\n3️⃣  Compiling LaTeX PDF via Tectonic...")
+    print("\n3⃣  Compiling LaTeX PDF via Tectonic...")
     res = subprocess.run(
         ["tectonic", tex_path, "--outdir", output_dir],
         cwd=output_dir,
@@ -180,25 +180,25 @@ AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML a
         text=True
     )
     if res.returncode != 0:
-        print(f"❌ Compilation Failed: {res.stderr}")
+        print(f"Compilation Failed: {res.stderr}")
         sys.exit(1)
 
     print("   Compilation successful!")
 
-    print("\n4️⃣  VERIFYING TEST RESULTS...")
+    print("\n4⃣  VERIFYING TEST RESULTS...")
     doc = fitz.open(pdf_path)
     page_count = doc.page_count
 
     # Check 1: Single Page Verification
-    print(f"\n   📄 [CHECK 1: PAGE COUNT]")
+    print(f"\n   [CHECK 1: PAGE COUNT]")
     print(f"      Total Pages: {page_count}")
     if page_count == 1:
-        print("      ✅ PASS: Resume is strictly 1 page!")
+        print("      PASS: Resume is strictly 1 page!")
     else:
-        print(f"      ❌ FAIL: Resume spilled onto {page_count} pages!")
+        print(f"      FAIL: Resume spilled onto {page_count} pages!")
 
     # Check 2: Bold Text Verification
-    print(f"\n   🔦 [CHECK 2: BOLD CHARACTERS]")
+    print(f"\n   [CHECK 2: BOLD CHARACTERS]")
     page = doc[0]
     page_dict: Any = page.get_text("dict")
     blocks = page_dict.get("blocks", []) if isinstance(page_dict, dict) else []
@@ -216,15 +216,15 @@ AI/ML Engineer with 3+ years of experience building production-grade GenAI, ML a
     print(f"      Found {len(bold_spans)} bold text spans in PDF.")
     if bold_spans:
         print(f"      Sample Bold Spans: {bold_spans[:8]}")
-        print("      ✅ PASS: Bold characters are present and rendering correctly!")
+        print("      PASS: Bold characters are present and rendering correctly!")
     else:
-        print("      ❌ FAIL: No bold text detected in compiled PDF!")
+        print("      FAIL: No bold text detected in compiled PDF!")
 
     print("\n" + "=" * 60)
     if page_count == 1 and bold_spans:
-        print("🎉 ALL VALIDATION TESTS PASSED PERFECTLY!")
+        print("ALL VALIDATION TESTS PASSED PERFECTLY!")
     else:
-        print("⚠️  VALIDATION FAILED — CHECK LOGS ABOVE")
+        print(" VALIDATION FAILED — CHECK LOGS ABOVE")
     print("=" * 60)
 
 if __name__ == "__main__":

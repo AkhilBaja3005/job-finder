@@ -159,7 +159,7 @@ async def run_stdio_server():
     """Runs the MCP server over standard input/output for CLI agents."""
     if sys.stdin.isatty():
         sys.stderr.write(
-            "🟢 Job Finder MCP Server is running over STDIO (JSON-RPC 2.0).\n"
+            "Job Finder MCP Server is running over STDIO (JSON-RPC 2.0).\n"
             "Waiting for JSON-RPC messages from Cursor, Claude Code, Gemini CLI, or Antigravity.\n"
             "Press Ctrl+C to stop.\n"
         )

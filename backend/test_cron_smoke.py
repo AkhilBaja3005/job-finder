@@ -26,17 +26,17 @@ def run_cron_smoke_test():
         with urllib.request.urlopen(req) as response:
             res_body = json.loads(response.read().decode('utf-8'))
             if res_body.get("status") == "success":
-                print("✅ /user/subscription API works!")
+                print("/user/subscription API works!")
             else:
-                print("❌ /user/subscription API failed", res_body)
+                print("/user/subscription API failed", res_body)
     except urllib.error.HTTPError as e:
         # Expected if token is guest (Supabase request will return [] in auth.py)
         if e.code == 401 or e.code == 400 or e.code == 404:
-             print("✅ /user/subscription endpoint exists and behaves correctly under authentication restrictions.")
+             print("/user/subscription endpoint exists and behaves correctly under authentication restrictions.")
         else:
-             print(f"❌ /user/subscription returned HTTP Error {e.code}")
+             print(f"/user/subscription returned HTTP Error {e.code}")
     except Exception as e:
-        print(f"❌ /user/subscription connection failed: {e}")
+        print(f"/user/subscription connection failed: {e}")
 
 if __name__ == "__main__":
     run_cron_smoke_test()

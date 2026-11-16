@@ -11,7 +11,7 @@ from mcp.tools.profile_tools import load_profile_data
 
 async def run_profile_yield_benchmark():
     print("=" * 70)
-    print("⏱️ PROFILING LIVE END-TO-END SEARCH: 48h | UK | CANDIDATE PROFILE")
+    print("⏱PROFILING LIVE END-TO-END SEARCH: 48h | UK | CANDIDATE PROFILE")
     print("=" * 70)
 
     prof = load_profile_data() or {}
@@ -37,8 +37,8 @@ async def run_profile_yield_benchmark():
     all_jobs = []
     logs = []
 
-    print(f"\n🚀 Initiating stream with queries: {', '.join(target_roles[:3])}")
-    print(f"📍 Location: UK | ⏳ Timeframe: 48h\n")
+    print(f"\nInitiating stream with queries: {', '.join(target_roles[:3])}")
+    print(f"Location: UK | ⏳ Timeframe: 48h\n")
 
     try:
         async for chunk in find_matching_jobs(
@@ -50,7 +50,7 @@ async def run_profile_yield_benchmark():
         ):
             if first_chunk_time is None:
                 first_chunk_time = time.time()
-                print(f"⚡ Time to First Stream Event: {round(first_chunk_time - start_time, 2)}s")
+                print(f"Time to First Stream Event: {round(first_chunk_time - start_time, 2)}s")
 
             try:
                 msg = json.loads(chunk.strip())
@@ -65,10 +65,10 @@ async def run_profile_yield_benchmark():
 
         total_elapsed = time.time() - start_time
         print("\n" + "=" * 70)
-        print("🏁 SEARCH & ATS SCORING COMPLETE")
+        print("SEARCH & ATS SCORING COMPLETE")
         print("=" * 70)
-        print(f"⏱️ Total Time Elapsed: {round(total_elapsed, 2)} seconds")
-        print(f"📊 Total Appropriate Jobs Found: {len(all_jobs)}")
+        print(f"⏱Total Time Elapsed: {round(total_elapsed, 2)} seconds")
+        print(f"Total Appropriate Jobs Found: {len(all_jobs)}")
         
         # Group by platform
         plat_counts = {}
@@ -76,11 +76,11 @@ async def run_profile_yield_benchmark():
             p = j.get("platform", "Other")
             plat_counts[p] = plat_counts.get(p, 0) + 1
         
-        print("\n📈 Jobs Grouped by Platform:")
+        print("\nJobs Grouped by Platform:")
         for p, count in plat_counts.items():
             print(f"  • {p:<15}: {count:>4} jobs")
 
-        print("\n🌟 TOP 10 HIGHEST ATS RANKED JOBS FOR YOUR PROFILE:")
+        print("\nTOP 10 HIGHEST ATS RANKED JOBS FOR YOUR PROFILE:")
         for idx, j in enumerate(all_jobs[:10], 1):
             title = j.get("title", "Untitled")
             comp = j.get("company", "Unknown")
@@ -89,12 +89,12 @@ async def run_profile_yield_benchmark():
             score = j.get("ats_score", 0)
             skills = j.get("matched_skills", [])
             print(f"\n{idx}. [{score}% Match] {title} @ {comp}")
-            print(f"   📍 {loc} | Platform: {j.get('platform')}")
-            print(f"   🎯 Key Skills: {', '.join(skills[:4]) if skills else 'Relevant Experience'}")
-            print(f"   🔗 {url}")
+            print(f"   {loc} | Platform: {j.get('platform')}")
+            print(f"   Key Skills: {', '.join(skills[:4]) if skills else 'Relevant Experience'}")
+            print(f"   {url}")
 
     except Exception as e:
-        print(f"❌ Error during execution: {e}")
+        print(f"Error during execution: {e}")
 
 if __name__ == "__main__":
     asyncio.run(run_profile_yield_benchmark())

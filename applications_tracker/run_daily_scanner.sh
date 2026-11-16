@@ -16,7 +16,7 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/scanner_$(date +'%Y-%m-%d').log"
 
 echo "================================================================" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🚀 Starting Daily Scheduled Job Scanner & Auto-Apply Pipeline" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting Daily Scheduled Job Scanner & Auto-Apply Pipeline" >> "$LOG_FILE"
 echo "================================================================" >> "$LOG_FILE"
 
 # Load environment variables from backend/.env if present
@@ -31,13 +31,13 @@ export BROWSER_USE_DISABLE_GUARDRAILS="1"
 export BROWSER_USE_HEADLESS="false"
 
 # Phase 1: Run the scheduled ATS portal scanner
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🔍 [Phase 1] Running Scheduled ATS Portal Scanner..." >> "$LOG_FILE"
-"$VENV_PYTHON" "$SCANNER_SCRIPT" >> "$LOG_FILE" 2>&1 || echo "⚠️ ATS Scanner completed with non-zero exit code" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [Phase 1] Running Scheduled ATS Portal Scanner..." >> "$LOG_FILE"
+"$VENV_PYTHON" "$SCANNER_SCRIPT" >> "$LOG_FILE" 2>&1 || echo "ATS Scanner completed with non-zero exit code" >> "$LOG_FILE"
 
 # Phase 2: Run LinkedIn Top Applicant Scanner & Auto-Apply
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🌟 [Phase 2] Running LinkedIn 'Top Applicant' Scanner & Auto-Apply..." >> "$LOG_FILE"
-"$VENV_PYTHON" "$LINKEDIN_SCANNER_SCRIPT" --limit 10 --auto-submit >> "$LOG_FILE" 2>&1 || echo "⚠️ LinkedIn Top Applicant Scanner completed with non-zero exit code" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] [Phase 2] Running LinkedIn 'Top Applicant' Scanner & Auto-Apply..." >> "$LOG_FILE"
+"$VENV_PYTHON" "$LINKEDIN_SCANNER_SCRIPT" --limit 10 --auto-submit >> "$LOG_FILE" 2>&1 || echo "LinkedIn Top Applicant Scanner completed with non-zero exit code" >> "$LOG_FILE"
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🏁 Daily Pipeline Completed Successfully" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Daily Pipeline Completed Successfully" >> "$LOG_FILE"
 echo "" >> "$LOG_FILE"
 exit 0

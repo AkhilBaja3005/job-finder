@@ -534,7 +534,7 @@
       return "No";
     }
 
-    console.log(`%c[Job Finder AI] ❓ Extracted Question: "${question}"`, "color: #38bdf8; font-weight: bold;");
+    console.log(`%c[Job Finder AI] Extracted Question: "${question}"`, "color: #38bdf8; font-weight: bold;");
 
     try {
       const res = await fetch(`${baseUrl}/answer_question`, {
@@ -554,7 +554,7 @@
       if (res.ok) {
         const data = await res.json();
         if (data.answer) {
-          console.log(`%c[Job Finder AI] 💡 Generated Answer: "${data.answer}"`, "color: #34d399; font-weight: bold;");
+          console.log(`%c[Job Finder AI] Generated Answer: "${data.answer}"`, "color: #34d399; font-weight: bold;");
           return data.answer;
         }
       }
@@ -572,7 +572,7 @@
     } else {
       fallbackAns = `Excited to bring my technical experience in AI engineering and scalable systems to ${jobInfo.company || "the team"}.`;
     }
-    console.log(`%c[Job Finder AI] 💡 Fallback Answer: "${fallbackAns}"`, "color: #facc15; font-weight: bold;");
+    console.log(`%c[Job Finder AI] Fallback Answer: "${fallbackAns}"`, "color: #facc15; font-weight: bold;");
     return fallbackAns;
   }
 
@@ -620,7 +620,7 @@
     return false;
   }
 
-  // ── Inject Inline "✨ AI Answer" Buttons Beside Question Boxes ────────
+  // ── Inject Inline "AI Answer" Buttons Beside Question Boxes ────────
   function injectInlineAIButtons() {
     if (!isJobOrCareerPage()) return;
 
@@ -642,7 +642,7 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "jf-inline-ai-btn";
-      btn.innerHTML = "✨ AI Answer";
+      btn.innerHTML = "AI Answer";
       btn.title = "Generate tailored answer with AI";
       Object.assign(btn.style, {
         position: "absolute",
@@ -679,7 +679,7 @@
         e.stopPropagation();
 
         if (!isRuntimeValid()) {
-          showToast("⚠️ Extension was updated. Please refresh page (Cmd+R).");
+          showToast("Extension was updated. Please refresh page (Cmd+R).");
           return;
         }
 
@@ -689,7 +689,7 @@
         try {
           chrome.storage.local.get(["userToken", "resumeData", "backendUrl", "noticePeriod", "salaryExpectations"], async (storage) => {
             if (chrome.runtime.lastError || !storage) {
-              btn.innerHTML = "⚠️ Refresh Page";
+              btn.innerHTML = "Refresh Page";
               btn.disabled = false;
               return;
             }
@@ -704,20 +704,20 @@
               setNativeValue(el, answer);
               el.style.outline = "2px solid #10b981";
               el.style.background = "rgba(16, 185, 129, 0.05)";
-              btn.innerHTML = "✅ Filled";
-              showToast("✨ AI Answer Generated!");
+              btn.innerHTML = "Filled";
+              showToast("AI Answer Generated!");
             } else {
-              btn.innerHTML = "⚠️ Retry";
+              btn.innerHTML = "Retry";
             }
             setTimeout(() => {
-              btn.innerHTML = "✨ AI Answer";
+              btn.innerHTML = "AI Answer";
               btn.disabled = false;
             }, 2000);
           });
         } catch (err) {
-          btn.innerHTML = "⚠️ Refresh Page";
+          btn.innerHTML = "Refresh Page";
           btn.disabled = false;
-          showToast("⚠️ Extension reloaded. Please refresh the page.");
+          showToast("Extension reloaded. Please refresh the page.");
         }
       });
 
@@ -735,7 +735,7 @@
   // ── Comprehensive AutoFill Master Function ────────────────────────────
   async function runAutofill() {
     if (!isRuntimeValid()) {
-      showToast("⚠️ Extension was updated. Please refresh the page (Cmd+R).");
+      showToast("Extension was updated. Please refresh the page (Cmd+R).");
       return;
     }
     showToast("⏳ Auto-filling application & generating AI answers...");
@@ -743,7 +743,7 @@
     try {
       chrome.storage.local.get(["userToken", "resumeData", "eeoProfile", "backendUrl", "noticePeriod", "salaryExpectations"], async (storage) => {
         if (chrome.runtime.lastError || !storage) {
-          showToast("⚠️ Extension was reloaded. Please refresh the page.");
+          showToast("Extension was reloaded. Please refresh the page.");
           return;
         }
       let resume = storage.resumeData || {};
@@ -1032,7 +1032,7 @@
         // ── 4. AI Screening Question Generator for Open Textareas & Inputs ─
         if (!isProfileField && !val) {
           if (qText && qText.length > 3 && (el.tagName === "TEXTAREA" || el.getAttribute("contenteditable") === "true" || type === "text" || !type)) {
-            logMsg(`🤖 Generating AI answer for question: "${qText.slice(0, 60)}..."`);
+            logMsg(`Generating AI answer for question: "${qText.slice(0, 60)}..."`);
             val = await generateAIAnswer(qText, resume, jobInfo, baseUrl, token);
             aiQuestionsAnswered++;
           }
@@ -1055,11 +1055,11 @@
       // Inject / refresh inline AI buttons
       injectInlineAIButtons();
 
-      logMsg(`⚡ Auto-filled ${filledCount} field${filledCount !== 1 ? "s" : ""} (${aiQuestionsAnswered} AI answers generated).`);
-      showToast(`✨ Auto-filled ${filledCount} fields (${aiQuestionsAnswered} AI answers generated)!`);
+      logMsg(`Auto-filled ${filledCount} field${filledCount !== 1 ? "s" : ""} (${aiQuestionsAnswered} AI answers generated).`);
+      showToast(`Auto-filled ${filledCount} fields (${aiQuestionsAnswered} AI answers generated)!`);
     });
     } catch (err) {
-      showToast("⚠️ Extension was updated. Please refresh the page.");
+      showToast("Extension was updated. Please refresh the page.");
     }
   }
 
@@ -1128,7 +1128,7 @@
       }
 
       if (!targetInput) {
-        showToast("⚠️ Could not find a resume file upload input on this page.");
+        showToast("Could not find a resume file upload input on this page.");
         return false;
       }
 
@@ -1149,12 +1149,12 @@
         parentContainer.dispatchEvent(dropEvent);
       }
 
-      logMsg(`📎 Attached tailored PDF (${fileName}) into ATS file input!`);
-      showToast(`📎 ✅ Tailored resume (${fileName}) attached!`);
+      logMsg(`Attached tailored PDF (${fileName}) into ATS file input!`);
+      showToast(`Tailored resume (${fileName}) attached!`);
       return true;
     } catch (e) {
-      logMsg(`❌ File attachment failed: ${e.message}`);
-      showToast(`❌ Failed to attach PDF: ${e.message}`);
+      logMsg(`File attachment failed: ${e.message}`);
+      showToast(`Failed to attach PDF: ${e.message}`);
       return false;
     }
   }
@@ -1202,7 +1202,7 @@
     overlay.innerHTML = `
       <div class="jf-sponsor-modal" role="dialog" aria-modal="true">
         <div class="jf-sponsor-modal-header">
-          <span class="jf-sponsor-modal-icon">⚠️</span>
+          <span class="jf-sponsor-modal-icon"></span>
           <div>
             <h3 class="jf-sponsor-modal-title">${escapeHtml(title)}</h3>
             <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">UK Home Office Register of Licensed Sponsors</div>
@@ -1212,7 +1212,7 @@
           ${escapeHtml(desc)}
         </div>
         <div class="jf-sponsor-modal-advice">
-          <strong>💡 Guidance:</strong><br/>
+          <strong>Guidance:</strong><br/>
           ${escapeHtml(advice)}
         </div>
         <div class="jf-sponsor-modal-footer">
@@ -1270,7 +1270,7 @@
 
           const badge = document.createElement("span");
           badge.className = `jf-sponsor-badge ${res.is_sponsor ? "sponsor-yes" : "sponsor-no"}`;
-          badge.textContent = res.is_sponsor ? "✓ UK Visa Sponsor" : "✗ Not on sponsor";
+          badge.textContent = res.is_sponsor ? "UK Visa Sponsor" : "Not on sponsor";
           badge.title = res.is_sponsor
             ? `Verified UK Sponsor: ${res.matched_name || rawCompany}`
             : "Click to view UK visa sponsorship guidance notice";
@@ -1281,7 +1281,7 @@
             if (!res.is_sponsor) {
               showSponsorNoticeModal(rawCompany, res.notice);
             } else {
-              showToast(`🟢 ${rawCompany} is a verified UK Visa Sponsor!`);
+              showToast(`${rawCompany} is a verified UK Visa Sponsor!`);
             }
           });
 
@@ -1305,7 +1305,7 @@
 
           const badge = document.createElement("span");
           badge.className = `jf-sponsor-badge ${res.is_sponsor ? "sponsor-yes" : "sponsor-no"}`;
-          badge.textContent = res.is_sponsor ? "✓ UK Visa Sponsor" : "✗ Not on sponsor";
+          badge.textContent = res.is_sponsor ? "UK Visa Sponsor" : "Not on sponsor";
           badge.addEventListener("click", (e) => {
             e.stopPropagation();
             e.preventDefault();

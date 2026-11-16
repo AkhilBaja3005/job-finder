@@ -147,12 +147,12 @@ def test_analyze_job_only():
             )
 
         if upload_response.status_code != 200:
-            print(f"  ✗ Resume upload failed: {upload_response.text}")
+            print(f"  Resume upload failed: {upload_response.text}")
             os.unlink(resume_path)
             return False
-        print("  ✓ Resume uploaded successfully")
+        print("  Resume uploaded successfully")
     except Exception as e:
-        print(f"  ✗ Resume upload error: {e}")
+        print(f"  Resume upload error: {e}")
         os.unlink(resume_path)
         return False
     finally:
@@ -194,30 +194,30 @@ def test_analyze_job_only():
                     elif event_type == "result":
                         company_name = event.get("company")
                         analysis_result = event.get("analysis")
-                        print(f"    ✓ Company: {company_name}")
-                        print(f"    ✓ Analysis received: {bool(analysis_result)}")
+                        print(f"    Company: {company_name}")
+                        print(f"    Analysis received: {bool(analysis_result)}")
                         if analysis_result:
                             print(f"      - Overall Score: {analysis_result.get('match_analysis', {}).get('overall_score')}")
                             print(f"      - Matched Skills: {analysis_result.get('match_analysis', {}).get('matched_skills', [])[:3]}")
                     elif event_type == "error":
-                        print(f"    ✗ ERROR: {event.get('message')}")
+                        print(f"    ERROR: {event.get('message')}")
                         error_occurred = True
                 except json.JSONDecodeError as e:
-                    print(f"    ✗ Failed to parse JSON: {line}")
+                    print(f"    Failed to parse JSON: {line}")
                     error_occurred = True
 
         if error_occurred:
             return False
 
         if not company_name or not analysis_result:
-            print("  ✗ Missing company or analysis result")
+            print("  Missing company or analysis result")
             return False
 
-        print("\n  ✓ Analyze Job test PASSED")
+        print("\n  Analyze Job test PASSED")
         return True
 
     except Exception as e:
-        print(f"  ✗ Error: {e}")
+        print(f"  Error: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -232,12 +232,12 @@ def main():
 
     if success:
         print("\n" + "=" * 60)
-        print("✓ TEST PASSED")
+        print("TEST PASSED")
         print("=" * 60)
         return True
     else:
         print("\n" + "=" * 60)
-        print("✗ TEST FAILED")
+        print("TEST FAILED")
         print("=" * 60)
         return False
 

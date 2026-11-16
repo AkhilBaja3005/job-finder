@@ -50,7 +50,7 @@ async def run_jev_ultrafast_autofill(
     """
     # 1. Check for native Jev driver
     if HAS_JEV:
-        print(f"[jev-ultrafast] ⚡ Initiating Tier 1 native Jev System 1 model for {job_url}...")
+        print(f"[jev-ultrafast] Initiating Tier 1 native Jev System 1 model for {job_url}...")
         try:
             await asyncio.sleep(0.05)
             return {
@@ -64,7 +64,7 @@ async def run_jev_ultrafast_autofill(
             logger.warning(f"[jev-ultrafast] Jev execution error: {jev_err}, cascading to Laya.")
 
     # 2. Primary Fallback: Laya Decision Engine
-    print(f"[laya-engine] 🧠 Jev offline/absent. Activating Laya as Primary System 1 Fallback (<10ms on-device intelligence)...")
+    print(f"[laya-engine] Jev offline/absent. Activating Laya as Primary System 1 Fallback (<10ms on-device intelligence)...")
     try:
         router = get_laya_router()
         # Verify Laya router is ready for candidate profile bindings

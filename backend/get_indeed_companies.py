@@ -40,20 +40,20 @@ Return ONLY valid JSON."""
         title = info.get("title", title)
         company = info.get("company", company)
     except Exception as e:
-        print(f"    ⚠️ AI extraction notice for {jk_key}: {e}")
+        print(f"    AI extraction notice for {jk_key}: {e}")
 
     return {"title": title, "company": company}
 
 def main():
     print("\n" + "=" * 70)
-    print("🚀 LIVE ON-THE-FLY METADATA SCRAPER (100% DYNAMIC, NO HARDCODING)")
+    print("LIVE ON-THE-FLY METADATA SCRAPER (100% DYNAMIC, NO HARDCODING)")
     print("=" * 70)
 
     for idx, url in enumerate(TEST_URLS, 1):
         info = fetch_live_indeed_info_on_the_fly(url)
         print(f"\n[{idx}] URL: {url}")
-        print(f"    🏷️ Job Title: {info['title']}")
-        print(f"    🏢 Company:   {info['company']}")
+        print(f"    Job Title: {info['title']}")
+        print(f"    Company:   {info['company']}")
 
     print("\n" + "=" * 70 + "\n")
 

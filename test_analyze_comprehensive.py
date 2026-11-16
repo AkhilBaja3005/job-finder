@@ -82,10 +82,10 @@ def test_step(step_name, func):
     print('='*60)
     try:
         result = func()
-        print(f"✓ {step_name} PASSED")
+        print(f"{step_name} PASSED")
         return result
     except Exception as e:
-        print(f"✗ {step_name} FAILED")
+        print(f"{step_name} FAILED")
         print(f"Error: {e}")
         import traceback
         traceback.print_exc()
@@ -178,17 +178,17 @@ def step_analyze_job():
                 elif event_type == "result":
                     company_name = event.get("company")
                     analysis_result = event.get("analysis")
-                    print(f"  ✓ Company: {company_name}")
-                    print(f"  ✓ Analysis received: {bool(analysis_result)}")
+                    print(f"  Company: {company_name}")
+                    print(f"  Analysis received: {bool(analysis_result)}")
                     if analysis_result:
                         print(f"    - Overall Score: {analysis_result.get('match_analysis', {}).get('overall_score')}")
                         print(f"    - Matched Skills: {analysis_result.get('match_analysis', {}).get('matched_skills', [])[:3]}")
                 elif event_type == "error":
-                    print(f"  ✗ ERROR: {event.get('message')}")
+                    print(f"  ERROR: {event.get('message')}")
                     error_occurred = True
                     raise Exception(f"Backend error: {event.get('message')}")
             except json.JSONDecodeError as e:
-                print(f"  ✗ Failed to parse JSON: {line}")
+                print(f"  Failed to parse JSON: {line}")
                 error_occurred = True
                 raise Exception(f"JSON parse error: {e}")
 
@@ -215,17 +215,17 @@ def main():
     # Step 1: Upload resume
     upload_result = test_step("Upload Resume", step_upload_resume)
     if not upload_result:
-        print("\n✗ FAILED: Could not upload resume")
+        print("\nFAILED: Could not upload resume")
         return False
 
     # Step 2: Analyze job
     analyze_result = test_step("Analyze Job", step_analyze_job)
     if not analyze_result:
-        print("\n✗ FAILED: Could not analyze job")
+        print("\nFAILED: Could not analyze job")
         return False
 
     print("\n" + "="*60)
-    print("✓ ALL TESTS PASSED")
+    print("ALL TESTS PASSED")
     print("="*60)
     return True
 

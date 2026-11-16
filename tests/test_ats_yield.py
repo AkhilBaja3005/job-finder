@@ -12,7 +12,7 @@ from services.job_searcher import search_jobserve_jobs
 
 async def validate_ats_yield():
     print("=" * 70)
-    print("🔍 VALIDATING LIVE JOB YIELD GROUPED BY ATS PLATFORM")
+    print("VALIDATING LIVE JOB YIELD GROUPED BY ATS PLATFORM")
     print("=" * 70)
 
     scanner = PortalScanner()
@@ -24,7 +24,7 @@ async def validate_ats_yield():
     sample_jobs_by_platform = defaultdict(list)
 
     for plat in platforms_to_test:
-        print(f"\n📡 Scanning live active boards for [{plat.upper()}] (Location: UK)...")
+        print(f"\nScanning live active boards for [{plat.upper()}] (Location: UK)...")
         try:
             jobs = await asyncio.wait_for(
                 scanner.scan_all_portals(
@@ -37,12 +37,12 @@ async def validate_ats_yield():
             )
             counts_by_platform[plat] = len(jobs)
             sample_jobs_by_platform[plat] = jobs[:3]
-            print(f"  ✓ {plat.upper()}: {len(jobs)} active matching UK jobs found!")
+            print(f"  {plat.upper()}: {len(jobs)} active matching UK jobs found!")
         except Exception as e:
-            print(f"  ❌ {plat.upper()} error: {e}")
+            print(f"  {plat.upper()} error: {e}")
 
     # 2. Test Jobserve
-    print("\n📡 Testing Jobserve Live Engine...")
+    print("\nTesting Jobserve Live Engine...")
     try:
         js_jobs = await search_jobserve_jobs(
             keyword="Software Engineer",
@@ -51,12 +51,12 @@ async def validate_ats_yield():
         )
         counts_by_platform["jobserve"] = len(js_jobs)
         sample_jobs_by_platform["jobserve"] = js_jobs[:3]
-        print(f"  ✓ JOBSERVE: {len(js_jobs)} active matching jobs found!")
+        print(f"  JOBSERVE: {len(js_jobs)} active matching jobs found!")
     except Exception as e:
-        print(f"  ❌ JOBSERVE error: {e}")
+        print(f"  JOBSERVE error: {e}")
 
     print("\n" + "=" * 70)
-    print("📊 FINAL SUMMARY: ACTIVE JOBS GROUPED BY PLATFORM")
+    print("FINAL SUMMARY: ACTIVE JOBS GROUPED BY PLATFORM")
     print("=" * 70)
     total_jobs = 0
     for plat, count in counts_by_platform.items():
@@ -65,7 +65,7 @@ async def validate_ats_yield():
     print(f"  • {'TOTAL':<12}: {total_jobs:>5} jobs")
     print("=" * 70)
 
-    print("\n📋 SAMPLES BY PLATFORM:")
+    print("\nSAMPLES BY PLATFORM:")
     for plat, samples in sample_jobs_by_platform.items():
         print(f"\n--- {plat.upper()} ---")
         for j in samples:

@@ -22,7 +22,7 @@ def test_reed_api(api_key: str, keywords: str = "Data Scientist", location: str 
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, context=ssl_ctx, timeout=10) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            print(f"✓ Reed API Success! Total Results: {data.get('totalResults', 0)}")
+            print(f"Reed API Success! Total Results: {data.get('totalResults', 0)}")
             for idx, job in enumerate(data.get("results", [])[:5], 1):
                 print(f"[{idx}] {job.get('jobTitle')} at {job.get('employerName')} ({job.get('locationName')})")
                 print(f"    URL: {job.get('jobUrl')}")

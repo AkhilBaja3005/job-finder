@@ -164,12 +164,12 @@ async function getSponsorRegisterStats() {
 
 async function checkCompanySponsorLocal(company) {
   if (!company || !company.trim()) {
-    return { is_sponsor: false, badge: "✗ Not on sponsor", badge_color: "red" };
+    return { is_sponsor: false, badge: "Not on sponsor", badge_color: "red" };
   }
 
   const norm = normalizeCompanyNameLocal(company);
   if (!norm || norm.length < 2) {
-    return { is_sponsor: false, badge: "✗ Not on sponsor", badge_color: "red" };
+    return { is_sponsor: false, badge: "Not on sponsor", badge_color: "red" };
   }
 
   return new Promise((resolve) => {
@@ -180,7 +180,7 @@ async function checkCompanySponsorLocal(company) {
         fetch(`${BACKEND_URL}/api/sponsor/check?company=${encodeURIComponent(company)}`)
           .then((r) => r.json())
           .then((data) => resolve(data))
-          .catch(() => resolve({ is_sponsor: false, badge: "✗ Not on sponsor", badge_color: "red" }));
+          .catch(() => resolve({ is_sponsor: false, badge: "Not on sponsor", badge_color: "red" }));
         return;
       }
 
@@ -189,7 +189,7 @@ async function checkCompanySponsorLocal(company) {
       if (nameSet.has(norm)) {
         resolve({
           is_sponsor: true,
-          badge: "✓ UK Visa Sponsor",
+          badge: "UK Visa Sponsor",
           badge_color: "green",
           matched_name: norm
         });
@@ -202,7 +202,7 @@ async function checkCompanySponsorLocal(company) {
       if (foundPrefix) {
         resolve({
           is_sponsor: true,
-          badge: "✓ UK Visa Sponsor",
+          badge: "UK Visa Sponsor",
           badge_color: "green",
           matched_name: foundPrefix
         });
@@ -215,7 +215,7 @@ async function checkCompanySponsorLocal(company) {
         if (foundSub) {
           resolve({
             is_sponsor: true,
-            badge: "✓ UK Visa Sponsor",
+            badge: "UK Visa Sponsor",
             badge_color: "green",
             matched_name: foundSub
           });
@@ -225,7 +225,7 @@ async function checkCompanySponsorLocal(company) {
 
       resolve({
         is_sponsor: false,
-        badge: "✗ Not on sponsor",
+        badge: "Not on sponsor",
         badge_color: "red",
         company_name: company,
         notice: {

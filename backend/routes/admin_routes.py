@@ -66,7 +66,7 @@ async def admin_logs_dashboard(key: Optional[str] = None):
     </head>
     <body>
         <h2>
-            <span>🚀 Live Server Logs (Real-time Stream)</span>
+            <span>Live Server Logs (Real-time Stream)</span>
             <button class="btn" onclick="document.getElementById('logs').innerText=''">Clear Screen</button>
         </h2>
         <div id="logs">Connecting to live server log stream...</div>
@@ -96,7 +96,7 @@ async def admin_logs_stream(key: Optional[str] = None):
         raise HTTPException(status_code=403, detail="Unauthorized Admin Access")
 
     async def generate_logs():
-        yield "data: 🟢 Connected to Live Admin Log Stream\n\n"
+        yield "data: Connected to Live Admin Log Stream\n\n"
         while True:
             msgs = LLMClientLogQueue.get_all()
             if msgs:
@@ -130,7 +130,7 @@ async def user_logs_stream(request: Request):
         raise HTTPException(status_code=401, detail="Invalid or expired session token")
 
     async def generate_user_logs():
-        yield "data: 🟢 Connected to Live Log Stream\n\n"
+        yield "data: Connected to Live Log Stream\n\n"
         while True:
             if await request.is_disconnected():
                 break

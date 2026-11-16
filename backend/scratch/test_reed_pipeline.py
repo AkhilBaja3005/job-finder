@@ -14,7 +14,7 @@ from services.scraper import scrape_job_description
 
 async def test_reed_pipeline():
     print("=" * 75)
-    print("🔎 TESTING REED.CO.UK JOB SEARCH & REAL JD ATS SCORING PIPELINE")
+    print("TESTING REED.CO.UK JOB SEARCH & REAL JD ATS SCORING PIPELINE")
     print("=" * 75)
 
     # Dummy resume data for candidate matching
@@ -30,10 +30,10 @@ async def test_reed_pipeline():
     print("\n[Step 1] Executing Reed Search API for 'Data Scientist' in 'London' (timeframe: 48h)...")
     reed_jobs = search_reed_jobs("Data Scientist", "London", timeframe="48h")
     
-    print(f"\n✓ Found {len(reed_jobs)} fresh pre-screened Reed jobs (sorted newest first):\n")
+    print(f"\nFound {len(reed_jobs)} fresh pre-screened Reed jobs (sorted newest first):\n")
 
     if not reed_jobs:
-        print("❌ No Reed jobs returned. Verify API Key and Internet connectivity.")
+        print("No Reed jobs returned. Verify API Key and Internet connectivity.")
         return
 
     # 2. Test Real JD ATS Scoring via _score_job_with_real_jd
@@ -47,17 +47,17 @@ async def test_reed_pipeline():
         scored_result = await _score_job_with_real_jd(job, sample_resume, browser=None, semaphore=semaphore)
         if scored_result:
             print(f"  [{idx}] {scored_result['title']}")
-            print(f"      🏢 Company: {scored_result['company']}")
-            print(f"      📍 Location: {scored_result['location']}")
-            print(f"      🎯 Real ATS Overall Score: {scored_result['score']}%")
-            print(f"      📊 Skills Match: {scored_result['skills_score']}% | Exp Score: {scored_result['experience_score']}%")
-            print(f"      ✅ Matched Skills: {', '.join(scored_result['matched_skills']) if scored_result['matched_skills'] else 'None'}")
-            print(f"      ⚠️ Missing Skills: {', '.join(scored_result['missing_skills']) if scored_result['missing_skills'] else 'None'}")
-            print(f"      🔗 URL: {scored_result['url']}\n")
+            print(f"      Company: {scored_result['company']}")
+            print(f"      Location: {scored_result['location']}")
+            print(f"      Real ATS Overall Score: {scored_result['score']}%")
+            print(f"      Skills Match: {scored_result['skills_score']}% | Exp Score: {scored_result['experience_score']}%")
+            print(f"      Matched Skills: {', '.join(scored_result['matched_skills']) if scored_result['matched_skills'] else 'None'}")
+            print(f"      Missing Skills: {', '.join(scored_result['missing_skills']) if scored_result['missing_skills'] else 'None'}")
+            print(f"      URL: {scored_result['url']}\n")
         else:
             print(f"  [{idx}] {job.title} — Rejected by JD ATS eligibility or spam filter.\n")
 
-    print("\n✅ Reed API Job Search & Real JD ATS Scoring Test Passed Successfully!\n")
+    print("\nReed API Job Search & Real JD ATS Scoring Test Passed Successfully!\n")
 
 if __name__ == "__main__":
     asyncio.run(test_reed_pipeline())

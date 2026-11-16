@@ -89,7 +89,7 @@ from scheduled_job_scanner import (
 def load_jobs_from_csv(csv_path: str, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
     """Reads job entries from a CSV file."""
     if not os.path.exists(csv_path):
-        print(f"[Ad-hoc Filler] ❌ CSV file not found: {csv_path}")
+        print(f"[Ad-hoc Filler] CSV file not found: {csv_path}")
         return []
 
     jobs = []
@@ -121,7 +121,7 @@ def load_jobs_from_csv(csv_path: str, status_filter: Optional[str] = None) -> Li
 def load_jobs_from_excel(excel_path: str, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
     """Reads job entries from an Excel (.xlsx / .xls) file."""
     if not os.path.exists(excel_path):
-        print(f"[Ad-hoc Filler] ❌ Excel file not found: {excel_path}")
+        print(f"[Ad-hoc Filler] Excel file not found: {excel_path}")
         return []
 
     try:
@@ -155,10 +155,10 @@ def load_jobs_from_excel(excel_path: str, status_filter: Optional[str] = None) -
             })
         return jobs
     except ImportError:
-        print("[Ad-hoc Filler] ⚠️ pandas/openpyxl not installed. Please install pandas & openpyxl or supply a CSV file.")
+        print("[Ad-hoc Filler] pandas/openpyxl not installed. Please install pandas & openpyxl or supply a CSV file.")
         return []
     except Exception as e:
-        print(f"[Ad-hoc Filler] ❌ Error parsing Excel file: {e}")
+        print(f"[Ad-hoc Filler] Error parsing Excel file: {e}")
         return []
 
 
@@ -175,10 +175,10 @@ async def apply_job_adhoc(
     url = job.get("url", "")
 
     print(f"\n===========================================================")
-    print(f"🚀 [Ad-hoc Apply] {title} @ {company}")
-    print(f"🔗 URL: {url}")
-    print(f"📄 Resume: {resume_path} (Master Resume - No Tailoring)")
-    print(f"⚡ Mode: {'Auto-Submit (Guardrails OFF)' if auto_submit else 'Review / Preview (Guardrails ON)'}")
+    print(f"[Ad-hoc Apply] {title} @ {company}")
+    print(f"URL: {url}")
+    print(f"Resume: {resume_path} (Master Resume - No Tailoring)")
+    print(f"Mode: {'Auto-Submit (Guardrails OFF)' if auto_submit else 'Review / Preview (Guardrails ON)'}")
     print(f"===========================================================")
 
     from config.constants import get_best_flash_lite_model
@@ -220,12 +220,12 @@ async def main():
     # Determine master resume
     if args.resume and os.path.exists(args.resume):
         master_resume = args.resume
-        print(f"[Master Resume] 📄 Using explicitly specified resume: {master_resume}")
+        print(f"[Master Resume] Using explicitly specified resume: {master_resume}")
     else:
         master_resume = find_master_resume_with_mac_tags()
 
     if not master_resume or not os.path.exists(master_resume):
-        print(f"[Master Resume] ❌ Master resume not found at {master_resume}. Please verify file path.")
+        print(f"[Master Resume] Master resume not found at {master_resume}. Please verify file path.")
         return
 
     # Check guardrails env or CLI flag
@@ -249,7 +249,7 @@ async def main():
 
         # Deduplicate while preserving order
         unique_ids = list(dict.fromkeys(raw_ids))
-        print(f"[Ad-hoc Filler] 🎯 Received {len(unique_ids)} LinkedIn Job ID(s): {', '.join(unique_ids)}")
+        print(f"[Ad-hoc Filler] Received {len(unique_ids)} LinkedIn Job ID(s): {', '.join(unique_ids)}")
         for jid in unique_ids:
             job_url = f"https://www.linkedin.com/jobs/view/{jid}/"
             jobs_to_process.append({
@@ -280,7 +280,7 @@ async def main():
         jobs_to_process = load_jobs_from_csv(csv_target, status_filter=args.filter)
 
     if not jobs_to_process:
-        print("[Ad-hoc Filler] ℹ️ No jobs found matching the criteria.")
+        print("[Ad-hoc Filler] ℹNo jobs found matching the criteria.")
         return
 
     # Filter out duplicates if requested
@@ -289,12 +289,12 @@ async def main():
     for j in jobs_to_process:
         norm = j["url"].strip().split("?")[0].rstrip("/").lower()
         if not args.skip_duplicate_check and norm in existing_urls and j.get("status") == "applied":
-            print(f"[Ad-hoc Filler] ⏭️ Skipping already applied URL: {j['title']} @ {j['company']} ({j['url']})")
+            print(f"[Ad-hoc Filler] ⏭Skipping already applied URL: {j['title']} @ {j['company']} ({j['url']})")
             continue
         filtered_jobs.append(j)
 
     total_to_run = min(len(filtered_jobs), args.limit)
-    print(f"\n[Ad-hoc Filler] 📋 Found {len(jobs_to_process)} jobs ({len(filtered_jobs)} actionable). Processing top {total_to_run} jobs.")
+    print(f"\n[Ad-hoc Filler] Found {len(jobs_to_process)} jobs ({len(filtered_jobs)} actionable). Processing top {total_to_run} jobs.")
 
     completed = 0
     failed_applications = []
@@ -315,11 +315,11 @@ async def main():
         if auto_submit:
             if res_status == "success":
                 new_status = "applied"
-                print(f"   ✅ Application verified & submitted successfully for {job['title']} @ {job['company']}")
+                print(f"   Application verified & submitted successfully for {job['title']} @ {job['company']}")
             else:
                 new_status = "Needs Review (Unsubmitted)"
                 fail_reason = final_res or "Form validation error or unconfirmed submission"
-                print(f"   ⚠️ Submission verification failed for {job['title']} @ {job['company']}: {fail_reason}")
+                print(f"   Submission verification failed for {job['title']} @ {job['company']}: {fail_reason}")
                 failed_applications.append({
                     "title": job.get("title", "Role"),
                     "company": job.get("company", "Company"),
@@ -353,7 +353,7 @@ async def main():
         await record_to_supabase_or_csv(record_payload)
         completed += 1
 
-    print(f"\n✨ [Ad-hoc Filler] Completed processing {completed} applications!")
+    print(f"\n[Ad-hoc Filler] Completed processing {completed} applications!")
 
     # Alert user via email if any applications failed/need review
     if failed_applications:

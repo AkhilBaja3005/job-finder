@@ -98,7 +98,7 @@ class ResourceMonitor:
 
 async def run_stress_test():
     print("\n" + "=" * 65)
-    print("🚀 JOB FINDER SYSTEM STRESS TEST & RESOURCE PROFILER")
+    print("JOB FINDER SYSTEM STRESS TEST & RESOURCE PROFILER")
     print("=" * 65)
     print("Testing Playwright Chromium Scraper, Tectonic LaTeX Compilations,")
     print("and Concurrent Job Search pipelines on your Mac...\n")
@@ -108,7 +108,7 @@ async def run_stress_test():
     # -------------------------------------------------------------
     # TEST 1: Tectonic LaTeX Compilations Load Test
     # -------------------------------------------------------------
-    print("1️⃣ [Test 1] Running 10 Concurrent Tectonic LaTeX Compilations...")
+    print("1⃣ [Test 1] Running 10 Concurrent Tectonic LaTeX Compilations...")
     monitor.start()
     t0 = time.time()
     
@@ -119,12 +119,12 @@ async def run_stress_test():
     dur1 = time.time() - t0
     stats1 = monitor.stop()
     
-    print(f"   ⏱️ Time Taken: {dur1:.2f}s | Peak RAM: {stats1['peak_ram_mb']} MB (Avg: {stats1['avg_ram_mb']} MB)\n")
+    print(f"   ⏱Time Taken: {dur1:.2f}s | Peak RAM: {stats1['peak_ram_mb']} MB (Avg: {stats1['avg_ram_mb']} MB)\n")
 
     # -------------------------------------------------------------
     # TEST 2: Playwright Stealth Browser Scraping Load Test
     # -------------------------------------------------------------
-    print("2️⃣ [Test 2] Launching Playwright Stealth Chromium Browser & Scraping 3 Jobs...")
+    print("2⃣ [Test 2] Launching Playwright Stealth Chromium Browser & Scraping 3 Jobs...")
     monitor.start()
     t0 = time.time()
     
@@ -144,15 +144,15 @@ async def run_stress_test():
             await browser.close()
         dur2 = time.time() - t0
         stats2 = monitor.stop()
-        print(f"   ⏱️ Time Taken: {dur2:.2f}s | Peak RAM: {stats2['peak_ram_mb']} MB (Avg: {stats2['avg_ram_mb']} MB)\n")
+        print(f"   ⏱Time Taken: {dur2:.2f}s | Peak RAM: {stats2['peak_ram_mb']} MB (Avg: {stats2['avg_ram_mb']} MB)\n")
     except Exception as pw_err:
         monitor.stop()
-        print(f"   ⚠️ Playwright sandbox execution skipped (Chromium sandboxed on terminal subshell): {pw_err}\n")
+        print(f"   Playwright sandbox execution skipped (Chromium sandboxed on terminal subshell): {pw_err}\n")
 
     # -------------------------------------------------------------
     # TEST 3: Heavy Concurrent Workload (Simulating 25 Concurrent LaTeX Compilations)
     # -------------------------------------------------------------
-    print("3️⃣ [Test 3] Heavy Concurrent Workload (Simulating 25 Parallel Tectonic LaTeX Compilations)...")
+    print("3⃣ [Test 3] Heavy Concurrent Workload (Simulating 25 Parallel Tectonic LaTeX Compilations)...")
     monitor.start()
     t0 = time.time()
 
@@ -160,12 +160,12 @@ async def run_stress_test():
     dur3 = time.time() - t0
     stats3 = monitor.stop()
 
-    print(f"   ⏱️ Time Taken: {dur3:.2f}s | Peak RAM: {stats3['peak_ram_mb']} MB (Avg: {stats3['avg_ram_mb']} MB)\n")
+    print(f"   ⏱Time Taken: {dur3:.2f}s | Peak RAM: {stats3['peak_ram_mb']} MB (Avg: {stats3['avg_ram_mb']} MB)\n")
 
     # -------------------------------------------------------------
     # TEST 4: Full End-to-End User Application Pipeline (Scrape -> Analyze -> Tailor -> Compile -> Recruiter Extract)
     # -------------------------------------------------------------
-    print("4️⃣ [Test 4] Full End-to-End User Pipeline Simulation...")
+    print("4⃣ [Test 4] Full End-to-End User Pipeline Simulation...")
     monitor.start()
     t0 = time.time()
 
@@ -193,12 +193,12 @@ async def run_stress_test():
     dur4 = time.time() - t0
     stats4 = monitor.stop()
 
-    print(f"   ⏱️ Time Taken: {dur4:.2f}s | Peak RAM: {stats4['peak_ram_mb']} MB (Avg: {stats4['avg_ram_mb']} MB)\n")
+    print(f"   ⏱Time Taken: {dur4:.2f}s | Peak RAM: {stats4['peak_ram_mb']} MB (Avg: {stats4['avg_ram_mb']} MB)\n")
 
     # -------------------------------------------------------------
     # TEST 5: 20 Parallel User Connections & 20 Parallel JD Fetching/Tailoring Pipelines
     # -------------------------------------------------------------
-    print("5️⃣ [Test 5] Extreme Load Test: 20 Parallel User Connections (20 Parallel JD Fetches & Compilations)...")
+    print("5⃣ [Test 5] Extreme Load Test: 20 Parallel User Connections (20 Parallel JD Fetches & Compilations)...")
     monitor.start()
     t0 = time.time()
 
@@ -217,7 +217,7 @@ async def run_stress_test():
     dur5 = time.time() - t0
     stats5 = monitor.stop()
 
-    print(f"   ⏱️ Time Taken: {dur5:.2f}s | Peak RAM: {stats5['peak_ram_mb']} MB (Avg: {stats5['avg_ram_mb']} MB)\n")
+    print(f"   ⏱Time Taken: {dur5:.2f}s | Peak RAM: {stats5['peak_ram_mb']} MB (Avg: {stats5['avg_ram_mb']} MB)\n")
 
     # -------------------------------------------------------------
     # FINAL RECOMMENDATION REPORT
@@ -225,7 +225,7 @@ async def run_stress_test():
     all_peak_ram = max(stats1['peak_ram_mb'], stats2['peak_ram_mb'], stats3['peak_ram_mb'], stats4['peak_ram_mb'], stats5['peak_ram_mb'])
 
     print("=" * 65)
-    print("📊 STRESS TEST RESULTS & CLOUD PLAN RECOMMENDATION")
+    print("STRESS TEST RESULTS & CLOUD PLAN RECOMMENDATION")
     print("=" * 65)
     print(f"• Peak Memory (RAM) Used under 20 Parallel Users: {all_peak_ram:.1f} MB (~{all_peak_ram / 1024:.2f} GB)")
     print("-" * 65)
@@ -237,8 +237,8 @@ async def run_stress_test():
         recommended_plan = "Hetzner CPX31 ($13.00/mo) - 8GB RAM / 4 vCPU"
         reason = "Your application memory reached higher spikes under load. An 8GB RAM plan ensures 100% smooth execution for heavy concurrent tailoring."
 
-    print(f"🎯 RECOMMENDED CLOUD PLAN: {recommended_plan}")
-    print(f"💡 REASONING: {reason}")
+    print(f"RECOMMENDED CLOUD PLAN: {recommended_plan}")
+    print(f"REASONING: {reason}")
     print("=" * 65 + "\n")
 
 if __name__ == "__main__":

@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI):
             if os.path.exists(target_dir):
                 await asyncio.to_thread(migrate_storage_directory_to_encrypted, target_dir)
     except Exception as enc_mig_err:
-        print(f"ℹ️ Storage encryption auto-migration notice: {enc_mig_err}")
+        print(f"ℹStorage encryption auto-migration notice: {enc_mig_err}")
 
     # Ensure UK sponsor database is initialized/synced in background without blocking startup
     async def _auto_sync_sponsors():
@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
             # Run in worker thread to prevent blocking event loop
             await asyncio.to_thread(sync_uk_sponsors, force=False)
         except Exception as e:
-            print(f"ℹ️ Background sponsor sync skipped: {e}")
+            print(f"ℹBackground sponsor sync skipped: {e}")
 
     asyncio.create_task(_auto_sync_sponsors())
 
@@ -111,7 +111,7 @@ async def lifespan(app: FastAPI):
             if browser:
                 app.state.browser = browser
                 app.state.playwright = playwright
-                print("🟢 Headless browser pool initialized successfully.")
+                print("Headless browser pool initialized successfully.")
             else:
                 app.state.browser = None
                 app.state.playwright = None
@@ -121,9 +121,9 @@ async def lifespan(app: FastAPI):
                     except Exception:
                         pass
                     playwright = None
-                print("ℹ️ Playwright browser pool skipped (using high-speed direct API discovery).")
+                print("ℹPlaywright browser pool skipped (using high-speed direct API discovery).")
         except Exception as e:
-            print(f"ℹ️ Playwright background pool skipped: {e}")
+            print(f"ℹPlaywright background pool skipped: {e}")
             app.state.browser = None
             app.state.playwright = None
 
@@ -219,7 +219,7 @@ if frontend_dist and os.path.exists(frontend_dist):
         index_file = os.path.join(dist_path, "index.html") if dist_path else ""
         if index_file and os.path.exists(index_file):
             return FileResponse(index_file)
-        return HTMLResponse("<h1>Job Finder Backend is Running 🟢</h1><p>Frontend assets not found.</p>", status_code=200)
+        return HTMLResponse("<h1>Job Finder Backend is Running </h1><p>Frontend assets not found.</p>", status_code=200)
 
 
 

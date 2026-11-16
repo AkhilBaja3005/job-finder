@@ -326,7 +326,7 @@ async def fetch_jobserve_100_jobs(target_count: int = 100, timeframe: str = "1w"
                             "description": description,
                             "platform": "Jobserve"
                         }
-                        print(f"    ✓ [{len(collected_jobs)}/{target_count}] {title[:42]} | {company[:20]} | {rate}")
+                        print(f"    [{len(collected_jobs)}/{target_count}] {title[:42]} | {company[:20]} | {rate}")
 
                     # Attempt pagination to next page if target not yet reached
                     if len(collected_jobs) < target_count:
@@ -374,7 +374,7 @@ def score_and_shortlist(jobs: List[Dict[str, Any]], candidate_profile: Dict[str,
                 "missing_skills": missing,
                 "candidate_years": ats_res.candidate_years,
                 "required_years": ats_res.required_years,
-                "fit_tier": "🔥 Top Tier (>=75%)" if overall >= 75 else ("⚡ High Fit (65-74%)" if overall >= 65 else "📋 Moderate (<65%)")
+                "fit_tier": "Top Tier (>=75%)" if overall >= 75 else ("High Fit (65-74%)" if overall >= 65 else "Moderate (<65%)")
             })
         except Exception as e:
             print(f"  Scoring failed for '{title}': {e}")
@@ -386,10 +386,10 @@ def score_and_shortlist(jobs: List[Dict[str, Any]], candidate_profile: Dict[str,
 def generate_shortlist_report(ranked_jobs: List[Dict[str, Any]], top_n: int = 20) -> str:
     """Generates a Markdown artifact report for the shortlisted jobs."""
     report = []
-    report.append("# 🎯 Jobserve Top 100 Ingestion & Shortlist Report\n")
+    report.append("# Jobserve Top 100 Ingestion & Shortlist Report\n")
     report.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M')} | **Total Ingested:** {len(ranked_jobs)} Jobs\n")
     report.append("--- \n")
-    report.append("## 🏆 Top Shortlisted Opportunities\n")
+    report.append("## Top Shortlisted Opportunities\n")
     report.append("| Rank | Overall ATS | Skills Fit | Rate / Salary | Role & Location | Direct Link |")
     report.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
 
@@ -398,7 +398,7 @@ def generate_shortlist_report(ranked_jobs: List[Dict[str, Any]], top_n: int = 20
         report.append(f"| **#{idx}** | **{j['overall_score']}%** | {j['skills_score']}% | `{rate}` | **{j['title']}** <br>_{j['company']}_ ({j['location']}) | [View Job]({j['url']}) |")
 
     report.append("\n---\n")
-    report.append("## 📋 Detailed Breakdown of Top Candidates\n")
+    report.append("## Detailed Breakdown of Top Candidates\n")
 
     for idx, j in enumerate(ranked_jobs[:top_n], 1):
         report.append(f"### #{idx}. {j['title']}")
@@ -430,7 +430,7 @@ async def main():
     jobs = await fetch_jobserve_100_jobs(target_count=100, timeframe="1w")
 
     if not jobs:
-        print("✕ Could not retrieve jobs from Jobserve.")
+        print("Could not retrieve jobs from Jobserve.")
         return
 
     # Score and shortlist
@@ -440,13 +440,13 @@ async def main():
     output_json = "jobserve_top100_results.json"
     with open(output_json, "w", encoding="utf-8") as f:
         json.dump(ranked_jobs, f, indent=2)
-    print(f"\n✓ Saved all {len(ranked_jobs)} scored jobs to {output_json}")
+    print(f"\nSaved all {len(ranked_jobs)} scored jobs to {output_json}")
 
     # Generate Report
     report_md = generate_shortlist_report(ranked_jobs, top_n=20)
     with open("jobserve_shortlist_report.md", "w", encoding="utf-8") as f:
         f.write(report_md)
-    print(f"✓ Saved Shortlist Report to jobserve_shortlist_report.md")
+    print(f"Saved Shortlist Report to jobserve_shortlist_report.md")
 
     # Print Summary Table
     print("\n" + "=" * 90)

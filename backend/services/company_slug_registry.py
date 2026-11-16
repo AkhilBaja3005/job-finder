@@ -274,7 +274,7 @@ async def validate_all_unverified_slugs(ats_filter: Optional[str] = None, limit:
     if not rows:
         return {"verified": 0, "active": 0}
         
-    print(f"🔍 Validating {len(rows)} unverified slugs against live ATS endpoints...")
+    print(f"Validating {len(rows)} unverified slugs against live ATS endpoints...")
     
     semaphores = {
         ats: asyncio.Semaphore(cfg["max_concurrency"])
@@ -297,5 +297,5 @@ async def validate_all_unverified_slugs(ats_filter: Optional[str] = None, limit:
             if is_active:
                 active_count += 1
                 
-    print(f"✅ Live validation completed: {active_count}/{len(rows)} slugs confirmed active!")
+    print(f"Live validation completed: {active_count}/{len(rows)} slugs confirmed active!")
     return {"verified": len(rows), "active": active_count}

@@ -226,7 +226,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                     cursor: 'pointer'
                   }}
                 >
-                  {copiedKey ? '✓ Copied' : 'Copy'}
+                  {copiedKey ? 'Copied' : 'Copy'}
                 </button>
               </div>
               <div style={{ fontSize: '0.72rem', color: '#64748b', wordBreak: 'break-all' }}>
@@ -403,7 +403,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                     cursor: 'pointer'
                   }}
                 >
-                  {copiedKey ? '✓ Copied to Clipboard' : 'Copy Sync Key'}
+                  {copiedKey ? 'Copied to Clipboard' : 'Copy Sync Key'}
                 </button>
               </div>
 
@@ -486,19 +486,19 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
                 <div>
-                  <h4 style={{ color: '#10b981', margin: '0 0 8px', fontSize: '1rem' }}>✓ Interactive Keyword Pill Matrix</h4>
+                  <h4 style={{ color: '#10b981', margin: '0 0 8px', fontSize: '1rem' }}>Interactive Keyword Pill Matrix</h4>
                   <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                     Matched keywords render as soft emerald pills with checkmarks. Missing keywords render as dashed amber badges with a <code>+ Add to LaTeX</code> action that immediately recalculates the projected ATS score in real-time.
                   </p>
                 </div>
                 <div>
-                  <h4 style={{ color: '#38bdf8', margin: '0 0 8px', fontSize: '1rem' }}>✓ Multi-Pass Page Budgeting</h4>
+                  <h4 style={{ color: '#38bdf8', margin: '0 0 8px', fontSize: '1rem' }}>Multi-Pass Page Budgeting</h4>
                   <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                     If a tailored resume spills onto 2 pages, the backend dynamically calculates linespread scaling (0.95 down to 0.78) and section spacing to guarantee a strictly 1-page PDF.
                   </p>
                 </div>
                 <div>
-                  <h4 style={{ color: '#818cf8', margin: '0 0 8px', fontSize: '1rem' }}>✓ Deterministic Keyword Matching</h4>
+                  <h4 style={{ color: '#818cf8', margin: '0 0 8px', fontSize: '1rem' }}>Deterministic Keyword Matching</h4>
                   <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: 1.6, margin: 0 }}>
                     Identifies hard technical requirements, preferred qualifications, seniority levels, and calculates timeline flattening to prevent duplicate date inflation.
                   </p>
@@ -812,7 +812,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
                         cursor: 'pointer'
                       }}
                     >
-                      {copiedUrl ? '✓ Copied' : 'Copy'}
+                      {copiedUrl ? 'Copied' : 'Copy'}
                     </button>
                   </div>
                 </div>
@@ -923,7 +923,7 @@ SMTP_PASSWORD="your-app-password"`}
                     fontWeight: 600
                   }}
                 >
-                  ✉️ akhilbaja.work@gmail.com
+                  akhilbaja.work@gmail.com
                 </a>
                 <a
                   href="https://linkedin.com/in/akhilbaja"

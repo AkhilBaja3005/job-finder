@@ -392,7 +392,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
                 </p>
               </div>
               <div style={{ marginTop: '16px', fontSize: '0.75rem', color: '#94A3B8', fontFamily: 'var(--font-mono)' }}>
-                ✓ Strategy: Balanced (Recommended)
+                Strategy: Balanced (Recommended)
               </div>
             </div>
           </div>
@@ -402,7 +402,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
           <div style={{ background: '#0B101C', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
               <span style={{ padding: '4px 10px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#10B981', border: '1px solid rgba(16, 185, 129, 0.3)', fontSize: '0.76rem', fontWeight: 700 }}>
-                ✓ GOV.UK Licensed Visa Sponsor
+                GOV.UK Licensed Visa Sponsor
               </span>
               <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Tier 2 / Skilled Worker Route Verified</span>
             </div>

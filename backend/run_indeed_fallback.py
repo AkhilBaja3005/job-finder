@@ -18,7 +18,7 @@ except ImportError:
 
 def fetch_live_indeed_fallback_jobs(keyword: str = "Data Scientist", location: str = "UK"):
     print("\n" + "=" * 75)
-    print(f"🔎 RUNNING LIVE INDEED SEARCH FALLBACK FOR: '{keyword}' in '{location}'")
+    print(f"RUNNING LIVE INDEED SEARCH FALLBACK FOR: '{keyword}' in '{location}'")
     print("=" * 75)
 
     headers = {
@@ -61,11 +61,11 @@ def fetch_live_indeed_fallback_jobs(keyword: str = "Data Scientist", location: s
             seen.add(r["url"])
             unique_results.append(r)
 
-    print(f"\n✓ Found {len(unique_results)} Indeed Job Postings via Search Index:\n")
+    print(f"\nFound {len(unique_results)} Indeed Job Postings via Search Index:\n")
     for idx, job in enumerate(unique_results[:10], 1):
-        print(f"[{idx}] 🏷️ Title:   {job['title']}")
-        print(f"    🏢 Company: {job['company']}")
-        print(f"    🔗 URL:     {job['url']}\n")
+        print(f"[{idx}] Title:   {job['title']}")
+        print(f"    Company: {job['company']}")
+        print(f"    URL:     {job['url']}\n")
 
     print("=" * 75 + "\n")
 

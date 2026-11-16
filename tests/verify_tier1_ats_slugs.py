@@ -69,7 +69,7 @@ async def run_platform(ats: str, slugs: List[str], db_path: str):
     cfg = PLATFORMS[ats]
     total = len(slugs)
     print(f"\n{'=' * 65}")
-    print(f"🚀 Exhaustively validating all {total} [{ats.upper()}] slugs (Concurrency={cfg['concurrency']})...")
+    print(f"Exhaustively validating all {total} [{ats.upper()}] slugs (Concurrency={cfg['concurrency']})...")
     print(f"{'=' * 65}")
 
     sem = asyncio.Semaphore(cfg["concurrency"])
@@ -109,7 +109,7 @@ async def run_platform(ats: str, slugs: List[str], db_path: str):
             print(f"  [{ats.upper()}] [{pct:>3}%] {processed:>5}/{total} processed — Confirmed Active so far: {active_count}")
 
     conn.close()
-    print(f"✓ [{ats.upper()}] All {total} slugs validated! Total Confirmed Active: {active_count}\n")
+    print(f"[{ats.upper()}] All {total} slugs validated! Total Confirmed Active: {active_count}\n")
 
 
 async def main():
@@ -129,7 +129,7 @@ async def main():
     conn.close()
 
     print("=" * 65)
-    print(" 🏁 FINAL DIRECT ATS VERIFIED SLUG TOTALS")
+    print(" FINAL DIRECT ATS VERIFIED SLUG TOTALS")
     print("=" * 65)
     for ats, is_act, count in rows:
         status = "ACTIVE (Verified)" if is_act == 1 else "Inactive / Stale"

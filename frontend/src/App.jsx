@@ -2246,7 +2246,7 @@ function App() {
                 style={{ padding: '6px 14px', fontSize: '0.82rem' }}
                 onClick={() => setShowReviewModal(false)}
               >
-                ✕ Close Review
+                Close Review
               </button>
             </div>
 
@@ -2495,7 +2495,7 @@ function App() {
                   setStatusMessage('');
                 }}
               >
-                ✕ Close
+                Close
               </button>
             </div>
 
@@ -3060,7 +3060,7 @@ function App() {
                 onClick={() => setConfigStepActive(false)}
                 title="Exit configuration modal"
               >
-                ✕
+                
               </button>
             </div>
 
@@ -4639,7 +4639,7 @@ function App() {
                             color: arch.name === activeArchetype ? '#38bdf8' : 'var(--text-muted)'
                           }}
                         >
-                          <span>{arch.name === activeArchetype ? '✓' : '•'}</span>
+                          <span>{arch.name === activeArchetype ? '' : '•'}</span>
                           <span>{arch.name}</span>
                           {arch.skills_count ? <span style={{ opacity: 0.6, fontSize: '0.7rem' }}>({arch.skills_count} skills)</span> : null}
                         </button>
@@ -4662,7 +4662,7 @@ function App() {
                             onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
                             onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
                           >
-                            ✕
+                            
                           </button>
                         )}
                       </div>
@@ -5141,7 +5141,7 @@ function App() {
                             }}
                             title="Clear score filter"
                           >
-                            ✕
+                            
                           </button>
                         )}
                       </div>
@@ -5626,7 +5626,7 @@ function App() {
                         const msg = typeof entry === 'string' ? entry : entry.message;
                         const ts = typeof entry === 'object' ? entry.ts : '';
                         let cls = 'log-entry-msg log-default';
-                        if (msg.includes('Scanned') || msg.includes('Finished') || msg.includes('Success') || msg.includes('completed') || msg.includes('✓')) cls = 'log-entry-msg log-ok';
+                        if (msg.includes('Scanned') || msg.includes('Finished') || msg.includes('Success') || msg.includes('completed') || msg.includes('')) cls = 'log-entry-msg log-ok';
                         else if (msg.includes('Scanning') || msg.includes('Fetching') || msg.includes('Analyzing')) cls = 'log-entry-msg log-ai';
                         else if (msg.includes('Error') || msg.includes('failed') || msg.includes('Warning')) cls = 'log-entry-msg log-warn';
                         return (
@@ -5722,7 +5722,7 @@ function App() {
                               background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.75rem', padding: '2px'
                             }}
                           >
-                            ✕
+                            
                           </button>
                         )}
                       </div>
@@ -5762,8 +5762,8 @@ function App() {
                       <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
                         {[
                           { id: 'all', label: 'All Sponsors' },
-                          { id: 'sponsored', label: '✓ Sponsor' },
-                          { id: 'not_sponsored', label: '✗ Not on sponsor' },
+                          { id: 'sponsored', label: 'Sponsor' },
+                          { id: 'not_sponsored', label: 'Not on sponsor' },
                         ].map(tab => {
                           const isActive = sponsorFilter === tab.id;
                           let activeBg = 'rgba(56,189,248,0.2)';
@@ -5961,7 +5961,7 @@ function App() {
                                             }}
                                             title="Employer is confirmed on the official UK Home Office Register of Licensed Sponsors"
                                           >
-                                            ✓ Licensed Sponsor
+                                            Licensed Sponsor
                                           </span>
                                         )}
                                         {job.is_uk_sponsor === false && (
@@ -5986,7 +5986,7 @@ function App() {
                                             }}
                                             title="Click to view UK sponsorship guidance advice"
                                           >
-                                            ✗ Unlisted Sponsor
+                                            Unlisted Sponsor
                                           </span>
                                         )}
                                         {/* Company Size / Scale Badge */}
@@ -6065,18 +6065,18 @@ function App() {
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                     {(job.matched_skills || []).slice(0, 4).map((s, i) => (
                                       <span key={i} style={{ padding: '3px 9px', borderRadius: '6px', background: 'rgba(16,185,129,0.12)', color: '#34d399', border: '1px solid rgba(16,185,129,0.25)', fontSize: '0.72rem', fontWeight: 600 }}>
-                                        ✓ {s}
+                                        {s}
                                       </span>
                                     ))}
                                     {(job.missing_skills || []).slice(0, 2).map((s, i) => (
                                       <span key={i} style={{ padding: '3px 9px', borderRadius: '6px', background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', fontSize: '0.72rem', fontWeight: 600 }}>
-                                        ✕ {s}
+                                        {s}
                                       </span>
                                     ))}
                                   </div>
 
                                   <div style={{ fontSize: '0.74rem', color: '#34d399', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <span>✓ Skills Matched:</span>
+                                    <span>Skills Matched:</span>
                                     <strong style={{ color: '#FFFFFF' }}>{job.matched_skills?.length || 0}/{(job.matched_skills?.length || 0) + (job.missing_skills?.length || 0)}</strong>
                                   </div>
                                 </div>
@@ -6299,7 +6299,7 @@ function App() {
                                             transition: 'all 0.15s ease'
                                           }}
                                         >
-                                          {isApplied ? '✓ Applied' : '+ Mark Applied'}
+                                          {isApplied ? 'Applied' : '+ Mark Applied'}
                                         </button>
                                       </div>
                                     );
@@ -6994,7 +6994,7 @@ function App() {
                             color: (analysisResult?.recruiter_scrutiny?.satisfied ?? true) ? '#34D399' : '#FBBF24',
                             border: `1px solid ${(analysisResult?.recruiter_scrutiny?.satisfied ?? true) ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
                           }}>
-                            {(analysisResult?.recruiter_scrutiny?.pass_number === 2) ? '✓ Passed (2nd Scrutiny Pass)' : '✓ Approved on 1st Pass'}
+                            {(analysisResult?.recruiter_scrutiny?.pass_number === 2) ? 'Passed (2nd Scrutiny Pass)' : 'Approved on 1st Pass'}
                           </span>
                         </div>
 
@@ -7002,19 +7002,19 @@ function App() {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', marginTop: '10px' }}>
                           <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem' }}>
                             <span style={{ color: 'var(--text-muted)' }}>Truthfulness: </span>
-                            <span style={{ color: '#34D399', fontWeight: 700 }}>✓ Verified Ground Truth</span>
+                            <span style={{ color: '#34D399', fontWeight: 700 }}>Verified Ground Truth</span>
                           </div>
                           <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem' }}>
                             <span style={{ color: 'var(--text-muted)' }}>Metrics & Impact: </span>
-                            <span style={{ color: '#34D399', fontWeight: 700 }}>✓ Quantified</span>
+                            <span style={{ color: '#34D399', fontWeight: 700 }}>Quantified</span>
                           </div>
                           <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem' }}>
                             <span style={{ color: 'var(--text-muted)' }}>Formatting & Length: </span>
-                            <span style={{ color: '#34D399', fontWeight: 700 }}>✓ 1-Page Enforced</span>
+                            <span style={{ color: '#34D399', fontWeight: 700 }}>1-Page Enforced</span>
                           </div>
                           <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '6px 10px', borderRadius: '6px', fontSize: '0.75rem' }}>
                             <span style={{ color: 'var(--text-muted)' }}>Keywords: </span>
-                            <span style={{ color: '#38BDF8', fontWeight: 700 }}>✓ Context-Integrated</span>
+                            <span style={{ color: '#38BDF8', fontWeight: 700 }}>Context-Integrated</span>
                           </div>
                         </div>
 
@@ -7730,7 +7730,7 @@ function App() {
                 onClick={closeKeyboardHelp}
                 aria-label="Close keyboard shortcuts help"
               >
-                ✕
+                
               </button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '0.88rem' }}>
@@ -7791,7 +7791,7 @@ function App() {
                   {prepJobInfo.jobTitle} at {prepJobInfo.company}
                 </p>
               </div>
-              <button className="modal-close" onClick={closePrepModal}>✕</button>
+              <button className="modal-close" onClick={closePrepModal}></button>
             </div>
 
             {/* Role Info Chip */}
@@ -7852,7 +7852,7 @@ function App() {
                   {coverLetterJobInfo.jobTitle} at {coverLetterJobInfo.company}
                 </p>
               </div>
-              <button className="modal-close" onClick={() => setCoverLetterModalOpen(false)}>✕</button>
+              <button className="modal-close" onClick={() => setCoverLetterModalOpen(false)}></button>
             </div>
 
             {/* Role Info Chip */}
@@ -8001,7 +8001,7 @@ function App() {
                 style={{ padding: '4px 10px', fontSize: '0.78rem' }}
                 onClick={() => setShowExtensionGuide(false)}
               >
-                ✕ Close
+                Close
               </button>
             </div>
 
@@ -8109,7 +8109,7 @@ function App() {
                 onClick={() => setTelemetryModalOpen(false)}
                 style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }}
               >
-                ✕
+                
               </button>
             </div>
 

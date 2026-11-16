@@ -212,13 +212,13 @@ document.addEventListener("DOMContentLoaded", () => {
           statusBadge.style.color = "#34d399";
           checkVersionUpdate();
         } else {
-          statusBadge.innerHTML = '<span>Offline 🔴</span>';
+          statusBadge.innerHTML = '<span>Offline </span>';
           statusBadge.style.color = "#f87171";
           if (extUpdateBanner) extUpdateBanner.style.display = "none";
         }
       })
       .catch(() => {
-        statusBadge.innerHTML = '<span>Offline 🔴</span>';
+        statusBadge.innerHTML = '<span>Offline </span>';
         statusBadge.style.color = "#f87171";
         if (extUpdateBanner) extUpdateBanner.style.display = "none";
       });
@@ -227,7 +227,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function fetchUserInfo(syncKey, showAlert = false) {
     const key = (syncKey || getAuthToken()).trim().toUpperCase();
     if (!key) {
-      if (showAlert) showToast("⚠️ Set your 6-digit Sync Key in Settings first!");
+      if (showAlert) showToast("Set your 6-digit Sync Key in Settings first!");
       return;
     }
 
@@ -299,7 +299,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   body: JSON.stringify({ archetype_name: selectedName })
                 });
                 if (swRes.ok) {
-                  showToast(`✓ Switched to ${selectedName}`);
+                  showToast(`Switched to ${selectedName}`);
                   fetchUserInfo(key, false);
                 }
               } catch (err) {}
@@ -309,19 +309,19 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (e) {}
 
       const displayName = userName || (userEmail ? userEmail.split("@")[0] : "Candidate Profile");
-      if (userNameDisplay) userNameDisplay.textContent = `👤 Synced: ${displayName}`;
-      if (userEmailDisplay && userEmail) userEmailDisplay.textContent = `📧 ${userEmail}`;
+      if (userNameDisplay) userNameDisplay.textContent = `Synced: ${displayName}`;
+      if (userEmailDisplay && userEmail) userEmailDisplay.textContent = `${userEmail}`;
       if (userInfoCard) userInfoCard.style.display = "flex";
 
       if (resume) {
         populateProfileUI(resume, true);
         chrome.storage.local.set({ resumeData: resume, userToken: key });
-        if (showAlert) showToast("⚡ Synced profile & resume from web app!");
+        if (showAlert) showToast("Synced profile & resume from web app!");
       } else {
-        if (showAlert) showToast("⚡ Connected! No resume uploaded yet in web app.");
+        if (showAlert) showToast("Connected! No resume uploaded yet in web app.");
       }
     } catch (e) {
-      if (showAlert) showToast("❌ Could not connect to backend server");
+      if (showAlert) showToast("Could not connect to backend server");
     }
   }
 
@@ -541,7 +541,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!chrome.runtime.lastError && res && activeSponsorBadge) {
           activeSponsorBadge.style.display = "inline-flex";
           activeSponsorBadge.className = `jf-sponsor-badge ${res.is_sponsor ? "sponsor-yes" : "sponsor-no"}`;
-          activeSponsorBadge.textContent = res.is_sponsor ? "✓ UK Visa Sponsor" : "✗ Not on sponsor";
+          activeSponsorBadge.textContent = res.is_sponsor ? "UK Visa Sponsor" : "Not on sponsor";
 
           if (!res.is_sponsor && activeSponsorNotice) {
             activeSponsorNotice.style.display = "block";
@@ -687,7 +687,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     window.selectedUserSkills = window.selectedUserSkills || new Set();
                     missingSkillsContainer.innerHTML = missing.slice(0, 8).map((s) => {
                       const isSelected = window.selectedUserSkills.has(s);
-                      return `<span class="skill-chip ${isSelected ? "selected" : ""}" data-skill="${s}">${isSelected ? "✓ " : "+ "}${s}</span>`;
+                      return `<span class="skill-chip ${isSelected ? "selected" : ""}" data-skill="${s}">${isSelected ? "" : "+ "}${s}</span>`;
                     }).join("");
                     missingSkillsSection.style.display = "block";
 
@@ -702,7 +702,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         } else {
                           window.selectedUserSkills.add(sk);
                           chip.classList.add("selected");
-                          chip.textContent = "✓ " + sk;
+                          chip.textContent = "" + sk;
                         }
                         const skillWeights = (ev.analysis && ev.analysis.match_analysis && ev.analysis.match_analysis.score_breakdown && ev.analysis.match_analysis.score_breakdown.skill_weights) || {};
                         let totalBoost = 0;
@@ -736,7 +736,7 @@ document.addEventListener("DOMContentLoaded", () => {
               const curClean = getCleanUrl(details.url);
               if (cached && cachedClean && curClean && cachedClean === curClean && cached.fit_score) {
                 scoreCircle.textContent = `${cached.fit_score}%`;
-                scoreSub.textContent = "⚡ Offline Cached Score";
+                scoreSub.textContent = "Offline Cached Score";
                 if (atsVerdictBadge) {
                   atsVerdictBadge.textContent = "Offline Cache";
                   atsVerdictBadge.style.color = "#f59e0b";
@@ -744,7 +744,7 @@ document.addEventListener("DOMContentLoaded", () => {
                   atsVerdictBadge.style.borderColor = "rgba(245, 158, 11, 0.35)";
                 }
               } else {
-                scoreCircle.textContent = "⚠️";
+                scoreCircle.textContent = "";
                 scoreSub.textContent = "Offline / Server non-responsive";
               }
             });
@@ -885,7 +885,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const desc = (customJdText?.value || "").trim();
 
       if (!desc || desc.length < 20) {
-        showToast("⚠️ Please paste the job description text!");
+        showToast("Please paste the job description text!");
         return;
       }
 
@@ -912,7 +912,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
 
-      showToast("🎯 Analyzing & re-scoring with pasted JD...");
+      showToast("Analyzing & re-scoring with pasted JD...");
       handleJobDetails(updatedDetails);
     });
   }
@@ -920,17 +920,17 @@ document.addEventListener("DOMContentLoaded", () => {
   // Single-Page Auto-Fill Trigger
   if (btnFill) {
     btnFill.addEventListener("click", () => {
-      btnFill.textContent = "⚡ Filling Active Form...";
+      btnFill.textContent = "Filling Active Form...";
       getActiveTab((activeTab) => {
         if (!activeTab || !activeTab.id) {
-          btnFill.textContent = "⚡ Fill Active Application";
+          btnFill.textContent = "Fill Active Application";
           return;
         }
         const activeTabId = activeTab.id;
         const url = activeTab.url || "";
         if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) {
-          showToast("⚠️ Open a job application page first!");
-          btnFill.textContent = "⚡ Fill Active Application";
+          showToast("Open a job application page first!");
+          btnFill.textContent = "Fill Active Application";
           return;
         }
 
@@ -948,20 +948,20 @@ document.addEventListener("DOMContentLoaded", () => {
                   setTimeout(() => {
                     chrome.tabs.sendMessage(activeTabId, { action: "TRIGGER_AUTOFILL" }, () => {
                       const err3 = chrome.runtime.lastError;
-                      setTimeout(() => { btnFill.textContent = "⚡ Fill Active Application"; }, 1400);
+                      setTimeout(() => { btnFill.textContent = "Fill Active Application"; }, 1400);
                     });
                   }, 200);
                 } else {
-                  showToast("⚠️ Please reload the job page and retry.");
-                  btnFill.textContent = "⚡ Fill Active Application";
+                  showToast("Please reload the job page and retry.");
+                  btnFill.textContent = "Fill Active Application";
                 }
               });
             } catch (e) {
-              showToast("⚠️ Please reload the job page and retry.");
-              btnFill.textContent = "⚡ Fill Active Application";
+              showToast("Please reload the job page and retry.");
+              btnFill.textContent = "Fill Active Application";
             }
           } else {
-            setTimeout(() => { btnFill.textContent = "⚡ Fill Active Application"; }, 1400);
+            setTimeout(() => { btnFill.textContent = "Fill Active Application"; }, 1400);
           }
         });
       });
@@ -972,7 +972,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnAutoAttach) {
     btnAutoAttach.addEventListener("click", () => {
       if (!currentJobInfo) {
-        showToast("⚠️ Open a job page first!");
+        showToast("Open a job page first!");
         return;
       }
       chrome.storage.local.get(["userToken", "resumeData", "candidateProfile"], (items) => {
@@ -1052,13 +1052,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 }, (resp) => {
                   const err = chrome.runtime.lastError;
                   if (err) {
-                    showToast("⚠️ Please reload the job application page to enable file auto-attach.");
+                    showToast("Please reload the job application page to enable file auto-attach.");
                   }
                 });
               }
             });
           })
-          .catch((err) => showToast("❌ Auto-attach failed: " + err.message))
+          .catch((err) => showToast("Auto-attach failed: " + err.message))
           .finally(() => { btnAutoAttach.disabled = false; });
       });
     });
@@ -1067,7 +1067,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // 1-Click Tailor & Download PDF Logic
   function triggerTailorResume(triggerBtn) {
     if (!currentJobInfo) {
-      showToast("⚠️ Open a job page first!");
+      showToast("Open a job page first!");
       return;
     }
     chrome.storage.local.get(["userToken"], (items) => {
@@ -1114,16 +1114,16 @@ document.addEventListener("DOMContentLoaded", () => {
                     openedPdf = true;
                     const pdfUrl = ev.download_pdf_url.startsWith("http") ? ev.download_pdf_url : `${API_BASE_URL}${ev.download_pdf_url}`;
                     chrome.tabs.create({ url: pdfUrl });
-                    showToast("📄 ✅ Tailored PDF generated & opened!");
+                    showToast("Tailored PDF generated & opened!");
                   } else {
-                    showToast(`📄 ✅ Resume tailored! (Fit score: ${ev.fit_score || 85}%)`);
+                    showToast(`Resume tailored! (Fit score: ${ev.fit_score || 85}%)`);
                   }
                 }
               } catch (e) {}
             }
           }
         })
-        .catch((err) => showToast("❌ Tailoring failed: " + err.message))
+        .catch((err) => showToast("Tailoring failed: " + err.message))
         .finally(() => { if (triggerBtn) triggerBtn.disabled = false; });
     });
   }
@@ -1148,7 +1148,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnEmailTailor) {
     btnEmailTailor.addEventListener("click", () => {
       if (!currentJobInfo) {
-        showToast("⚠️ Open a job page first!");
+        showToast("Open a job page first!");
         return;
       }
       chrome.storage.local.get(["userToken", "resumeData", "candidateProfile"], (items) => {
@@ -1192,13 +1192,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 try {
                   const ev = JSON.parse(line);
                   if (ev.type === "result") {
-                    showToast("📧 ✅ Tailored package emailed seamlessly to your inbox!");
+                    showToast("Tailored package emailed seamlessly to your inbox!");
                   }
                 } catch (e) {}
               }
             }
           })
-          .catch((err) => showToast("❌ Email dispatch failed: " + err.message))
+          .catch((err) => showToast("Email dispatch failed: " + err.message))
           .finally(() => { btnEmailTailor.disabled = false; });
       });
     });
@@ -1227,20 +1227,20 @@ document.addEventListener("DOMContentLoaded", () => {
           .then((data) => {
             if (data.cover_letter) {
               activePreviewText = data.cover_letter;
-              previewTitle.textContent = "📝 Generated Cover Letter";
+              previewTitle.textContent = "Generated Cover Letter";
               previewContent.textContent = data.cover_letter;
               previewWrapper.style.display = "block";
               chrome.storage.local.set({
                 lastPreviewState: {
                   text: data.cover_letter,
-                  title: "📝 Generated Cover Letter",
+                  title: "Generated Cover Letter",
                   url: currentJobInfo.url || ""
                 }
               });
-              showToast("📝 Cover letter generated! Preview below.");
+              showToast("Cover letter generated! Preview below.");
             }
           })
-          .catch((err) => showToast("❌ Error: " + err.message));
+          .catch((err) => showToast("Error: " + err.message));
       });
     });
   }
@@ -1249,7 +1249,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnCompanyBrief) {
     btnCompanyBrief.addEventListener("click", () => {
       if (!currentJobInfo || !currentJobInfo.company) {
-        showToast("⚠️ Open a job page first!");
+        showToast("Open a job page first!");
         return;
       }
       showToast("⏳ Fetching Agent-Reach community culture brief...");
@@ -1265,22 +1265,22 @@ document.addEventListener("DOMContentLoaded", () => {
         .then((data) => {
           if (data.brief_markdown) {
             activePreviewText = data.brief_markdown;
-            previewTitle.textContent = `🏢 ${currentJobInfo.company} Culture Brief`;
+            previewTitle.textContent = `${currentJobInfo.company} Culture Brief`;
             previewContent.textContent = data.brief_markdown;
             previewWrapper.style.display = "block";
             chrome.storage.local.set({
               lastPreviewState: {
                 text: data.brief_markdown,
-                title: `🏢 ${currentJobInfo.company} Culture Brief`,
+                title: `${currentJobInfo.company} Culture Brief`,
                 url: currentJobInfo.url || ""
               }
             });
-            showToast("🏢 Culture brief generated! Preview below.");
+            showToast("Culture brief generated! Preview below.");
           } else {
-            showToast("⚠️ Brief generation failed.");
+            showToast("Brief generation failed.");
           }
         })
-        .catch((err) => showToast("❌ Error: " + err.message));
+        .catch((err) => showToast("Error: " + err.message));
     });
   }
 
@@ -1313,19 +1313,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
             activePreviewText = inmailMsg;
             if (outreachTextBox) outreachTextBox.textContent = inmailMsg;
-            previewTitle.textContent = "✉️ Generated Outreach Message";
+            previewTitle.textContent = "Generated Outreach Message";
             previewContent.textContent = inmailMsg;
             previewWrapper.style.display = "block";
             chrome.storage.local.set({
               lastPreviewState: {
                 text: inmailMsg,
-                title: "✉️ Generated Outreach Message",
+                title: "Generated Outreach Message",
                 url: currentJobInfo.url || ""
               }
             });
-            showToast("✉️ Outreach generated! Available in 1-Click Drawer.");
+            showToast("Outreach generated! Available in 1-Click Drawer.");
           })
-          .catch((err) => showToast("❌ Error: " + err.message));
+          .catch((err) => showToast("Error: " + err.message));
       });
     });
   }
@@ -1364,10 +1364,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const textToCopy = outreachTextBox ? outreachTextBox.textContent : "";
       if (textToCopy && !textToCopy.startsWith("Click")) {
         navigator.clipboard.writeText(textToCopy);
-        btnCopyOutreach.textContent = "✅ Copied!";
-        setTimeout(() => { btnCopyOutreach.textContent = "📋 Copy Outreach"; }, 2000);
+        btnCopyOutreach.textContent = "Copied!";
+        setTimeout(() => { btnCopyOutreach.textContent = "Copy Outreach"; }, 2000);
       } else {
-        showToast("⚠️ Generate outreach first!");
+        showToast("Generate outreach first!");
       }
     });
   }
@@ -1383,8 +1383,8 @@ document.addEventListener("DOMContentLoaded", () => {
     btnCopyPreview.addEventListener("click", () => {
       if (previewContent && previewContent.textContent) {
         navigator.clipboard.writeText(previewContent.textContent);
-        btnCopyPreview.textContent = "✅ Copied!";
-        setTimeout(() => { btnCopyPreview.textContent = "📋 Copy to Clipboard"; }, 2000);
+        btnCopyPreview.textContent = "Copied!";
+        setTimeout(() => { btnCopyPreview.textContent = "Copy to Clipboard"; }, 2000);
       }
     });
   }
@@ -1433,7 +1433,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       chrome.storage.local.set({ resumeData, eeoProfile, noticePeriod, salaryExpectations }, () => {
         if (profSummary) profSummary.value = JSON.stringify(resumeData, null, 2);
-        showToast("💾 Saved locally! Syncing to cloud...");
+        showToast("Saved locally! Syncing to cloud...");
 
         // Cloud sync to Supabase backend
         chrome.storage.local.get(["userToken"], (items) => {
@@ -1463,13 +1463,13 @@ document.addEventListener("DOMContentLoaded", () => {
           })
             .then((res) => {
               if (res.ok) {
-                showToast("☁️ ✅ Profile & Preferences Synced to Cloud!");
+                showToast("Profile & Preferences Synced to Cloud!");
               } else {
-                showToast("✅ Profile Saved locally!");
+                showToast("Profile Saved locally!");
               }
             })
             .catch(() => {
-              showToast("✅ Profile Saved locally!");
+              showToast("Profile Saved locally!");
             });
         });
       });
@@ -1487,7 +1487,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnGenerateQaAns.addEventListener("click", () => {
       const qText = (customQaQuestion?.value || "").trim();
       if (!qText) {
-        showToast("⚠️ Please enter or paste a question first!");
+        showToast("Please enter or paste a question first!");
         return;
       }
       btnGenerateQaAns.textContent = "⌛ Generating Tailored Answer...";
@@ -1521,17 +1521,17 @@ document.addEventListener("DOMContentLoaded", () => {
             if (data.answer) {
               if (qaResultText) qaResultText.textContent = data.answer;
               if (qaResultBox) qaResultBox.style.display = "block";
-              showToast("✨ Company-Tailored Answer Ready!");
+              showToast("Company-Tailored Answer Ready!");
             } else {
-              showToast("⚠️ Backend returned empty answer.");
+              showToast("Backend returned empty answer.");
             }
           } else {
-            showToast("❌ Backend failed to generate answer.");
+            showToast("Backend failed to generate answer.");
           }
         } catch (e) {
-          showToast("❌ Error connecting to backend server.");
+          showToast("Error connecting to backend server.");
         } finally {
-          btnGenerateQaAns.textContent = "💡 Generate Tailored Answer";
+          btnGenerateQaAns.textContent = "Generate Tailored Answer";
           btnGenerateQaAns.disabled = false;
         }
       });
@@ -1543,7 +1543,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const txt = (qaResultText?.textContent || "").trim();
       if (txt) {
         navigator.clipboard.writeText(txt).then(() => {
-          showToast("📋 Answer Copied to Clipboard!");
+          showToast("Answer Copied to Clipboard!");
         });
       }
     });
@@ -1564,7 +1564,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnRefreshTab) {
     btnRefreshTab.addEventListener("click", (e) => {
       e.preventDefault();
-      showToast("🔄 Rescanning active tab...");
+      showToast("Rescanning active tab...");
       chrome.storage.local.remove(["customJdState"], () => {
         scanActiveTab(true);
       });
@@ -1583,7 +1583,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!chrome.runtime.lastError && res) {
         if (sponsorCacheCount) {
           sponsorCacheCount.textContent = res.total_sponsors
-            ? `✓ ${res.total_sponsors.toLocaleString()} organisations indexed`
+            ? `${res.total_sponsors.toLocaleString()} organisations indexed`
             : "0 sponsors cached";
         }
         if (sponsorCacheDate) {
@@ -1599,13 +1599,13 @@ document.addEventListener("DOMContentLoaded", () => {
       btnSyncSponsors.disabled = true;
       showToast("⏳ Downloading latest Home Office register...");
       chrome.runtime.sendMessage({ action: "REFRESH_SPONSORS" }, (res) => {
-        btnSyncSponsors.textContent = "🔄 Refresh";
+        btnSyncSponsors.textContent = "Refresh";
         btnSyncSponsors.disabled = false;
         if (!chrome.runtime.lastError && res && res.status === "success") {
-          showToast(`✅ Updated! ${res.count?.toLocaleString()} UK sponsors ready.`);
+          showToast(`Updated! ${res.count?.toLocaleString()} UK sponsors ready.`);
           refreshSponsorStatsUI();
         } else {
-          showToast("⚠️ Sync completed (reused cached register).");
+          showToast("Sync completed (reused cached register).");
           refreshSponsorStatsUI();
         }
       });
@@ -1636,7 +1636,7 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.runtime.onMessage.addListener((msg) => {
       if (msg && msg.action === "PROFILE_UPDATED" && msg.resumeData) {
         populateProfileUI(msg.resumeData, true);
-        showToast("⚡ Master profile live-updated from web dashboard!");
+        showToast("Master profile live-updated from web dashboard!");
       }
     });
   }

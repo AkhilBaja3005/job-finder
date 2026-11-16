@@ -204,13 +204,13 @@ def tailor_latex_code(
             )
             if slotted_latex and "\\begin{document}" in slotted_latex and "\\documentclass" in slotted_latex:
                 if on_log:
-                    on_log("⚡ Applied precision slot replacement directly on Master LaTeX layout.")
+                    on_log("Applied precision slot replacement directly on Master LaTeX layout.")
                 return slotted_latex
     except Exception as slot_err:
         print(f"[tailor_latex_code] Slot replacement fallback to LLM generation: {slot_err}")
 
     feedback_str = (
-        f"\n⚠️  CRITICAL REVIEWER FEEDBACK — You MUST fix EVERY point listed below before returning:\n{reviewer_feedback}\n"
+        f"\n CRITICAL REVIEWER FEEDBACK — You MUST fix EVERY point listed below before returning:\n{reviewer_feedback}\n"
         if reviewer_feedback else ""
     )
 

@@ -19,19 +19,19 @@ from mcp.tools.profile_tools import load_profile_data, PROFILE_CONFIG_PATH
 def show_profile():
     data = load_profile_data()
     if not data:
-        print("❌ No profile found. Run `cli_profile.py interactive` to set up your profile.")
+        print("No profile found. Run `cli_profile.py interactive` to set up your profile.")
         return
     print("\n================ ACTIVE CANDIDATE CONFIG ================")
     cand = data.get("candidate", {})
     prefs = data.get("search_preferences", {})
-    print(f"👤 Name:       {cand.get('name', 'N/A')}")
-    print(f"📧 Email:      {cand.get('email', 'N/A')}")
-    print(f"📍 Location:   {cand.get('location', 'N/A')}")
-    print(f"🎯 Roles:      {', '.join(prefs.get('target_roles', []))}")
-    print(f"🌍 Locations:  {', '.join(prefs.get('target_locations', []))}")
-    print(f"⏱️  Timeframe:  {prefs.get('timeframe', 'N/A')}")
-    print(f"📊 Min ATS:    {prefs.get('min_ats_score_threshold', 'N/A')}%")
-    print(f"📁 Config:     {PROFILE_CONFIG_PATH}")
+    print(f"Name:       {cand.get('name', 'N/A')}")
+    print(f"Email:      {cand.get('email', 'N/A')}")
+    print(f"Location:   {cand.get('location', 'N/A')}")
+    print(f"Roles:      {', '.join(prefs.get('target_roles', []))}")
+    print(f"Locations:  {', '.join(prefs.get('target_locations', []))}")
+    print(f"⏱ Timeframe:  {prefs.get('timeframe', 'N/A')}")
+    print(f"Min ATS:    {prefs.get('min_ats_score_threshold', 'N/A')}%")
+    print(f"Config:     {PROFILE_CONFIG_PATH}")
     print("=========================================================\n")
 
 def set_profile(args):
@@ -50,7 +50,7 @@ def set_profile(args):
     os.makedirs(os.path.dirname(PROFILE_CONFIG_PATH), exist_ok=True)
     with open(PROFILE_CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    print("✅ Profile and preferences successfully updated!")
+    print("Profile and preferences successfully updated!")
     show_profile()
 
 def main():
@@ -82,11 +82,11 @@ def main():
         from mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
         res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": args.resume_path}))
         if res.get("success"):
-            print(f"✅ {res.get('message')}")
-            print(f"📊 Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
+            print(f"{res.get('message')}")
+            print(f"Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
             show_profile()
         else:
-            print(f"❌ Sync failed: {res.get('error')}")
+            print(f"Sync failed: {res.get('error')}")
 
 if __name__ == "__main__":
     main()

@@ -136,7 +136,7 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
                         continue
                     elif is_prefilled:
                         # If already has a file and we don't have a new resume path, keep it
-                        print(f"[autofill] ⏭️ Leaving pre-filled file input: '{question_text}'")
+                        print(f"[autofill] ⏭Leaving pre-filled file input: '{question_text}'")
                         await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
                         session_filled_questions.add(question_text)
                         continue
@@ -194,7 +194,7 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
             # If we have an authoritative value from candidate profile, ALWAYS fill it (clearing any outdated text)
             if candidate_value is not None and str(candidate_value).strip() != "":
                 if is_prefilled:
-                    print(f"[autofill] 🔄 Replacing outdated pre-filled value for '{question_text}' with candidate profile data: '{candidate_value}'")
+                    print(f"[autofill] Replacing outdated pre-filled value for '{question_text}' with candidate profile data: '{candidate_value}'")
                 
                 # Check if it is a SELECT element
                 if await inp.evaluate("el => el.tagName") == "SELECT":
@@ -262,7 +262,7 @@ async def fill_visible_fields(page, resume_data: dict, resume_pdf_path: str, ses
 
             # If the field is already pre-filled and we do NOT have candidate profile data for it, leave it as-is
             if is_prefilled:
-                print(f"[autofill] ⏭️ Preserving pre-filled field with no profile override: '{question_text}'")
+                print(f"[autofill] ⏭Preserving pre-filled field with no profile override: '{question_text}'")
                 await inp.evaluate("el => el.setAttribute('data-autofilled', 'true')")
                 session_filled_questions.add(question_text)
                 continue
@@ -364,7 +364,7 @@ async def autofill_job_application(url: str, resume_data: dict, resume_pdf_path:
                             req_name = await ureq.get_attribute("name") or ""
                             label_el = await page.query_selector(f"label[for='{req_id}']") if req_id else None
                             req_label = await label_el.inner_text() if label_el else (req_name or "Required Field")
-                            print(f"[Autofill Agent] 🛠️ Self-correcting unfilled required field: {req_label}")
+                            print(f"[Autofill Agent] Self-correcting unfilled required field: {req_label}")
                             ans = get_answer_from_llm(req_label, req_name, resume_data, custom_api_key)
                             if ans:
                                 await ureq.fill(ans)

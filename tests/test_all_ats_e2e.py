@@ -53,7 +53,7 @@ async def test_workday_url_and_cxs_extraction():
         assert "Aig" in res["company"] or "AIG" in res["company"].upper()
         # Verify canonical URL is clean without duplicate tenant
         assert "/en-US/aig/early_careers" not in res["url"], f"URL still contains duplicate tenant: {res['url']}"
-        print(f"✓ Workday Success ({len(desc)} chars, clean markdown): {res['title']} -> {res['url']}")
+        print(f"Workday Success ({len(desc)} chars, clean markdown): {res['title']} -> {res['url']}")
 
 
 @pytest.mark.asyncio
@@ -66,7 +66,7 @@ async def test_lever_full_jd_assembly():
     desc = res["description"]
     assert len(desc) > 1500, f"Lever JD too short: {len(desc)} chars"
     assert_clean_text(desc, "Lever")
-    print(f"✓ Lever Success ({len(desc)} chars, clean markdown): {res['title']} ({res['company']})")
+    print(f"Lever Success ({len(desc)} chars, clean markdown): {res['title']} ({res['company']})")
 
 
 @pytest.mark.asyncio
@@ -82,7 +82,7 @@ async def test_bamboohr_detail_and_enrichment():
     desc = res["description"]
     assert len(desc) > 3000, f"BambooHR JD too short: {len(desc)} chars"
     assert_clean_text(desc, "BambooHR")
-    print(f"✓ BambooHR Live Detail Success ({len(desc)} chars, clean markdown): {res['title']}")
+    print(f"BambooHR Live Detail Success ({len(desc)} chars, clean markdown): {res['title']}")
 
     # 2. Test word-boundary filtering against Automotive Detailer vs AI Engineer
     mock_jobs = [
@@ -123,7 +123,7 @@ async def test_bamboohr_detail_and_enrichment():
     matched_titles = [j["title"] for j in matched_jobs]
     assert "Automotive Detailer" not in matched_titles, "Regex boundary failed: Automotive Detailer was falsely matched!"
     assert "Senior Backend (AI / Machine Learning) Engineer" in matched_titles, "Failed to match real AI Engineer!"
-    print("✓ BambooHR Keyword Filtering Success: Automotive Detailer cleanly rejected, AI Engineer accepted")
+    print("BambooHR Keyword Filtering Success: Automotive Detailer cleanly rejected, AI Engineer accepted")
 
 
 @pytest.mark.asyncio
@@ -135,7 +135,7 @@ async def test_greenhouse_single_job_api():
     desc = res["description"]
     assert len(desc) > 1000, f"Greenhouse JD too short: {len(desc)} chars"
     assert_clean_text(desc, "Greenhouse")
-    print(f"✓ Greenhouse Success ({len(desc)} chars, clean markdown): {res['title']}")
+    print(f"Greenhouse Success ({len(desc)} chars, clean markdown): {res['title']}")
 
 
 @pytest.mark.asyncio
@@ -149,7 +149,7 @@ async def test_ashby_clean_markdown():
     desc = first["description"]
     assert len(desc) > 500, f"Ashby JD too short: {len(desc)} chars"
     assert_clean_text(desc, "Ashby")
-    print(f"✓ Ashby Success ({len(desc)} chars, clean markdown): {first['title']}")
+    print(f"Ashby Success ({len(desc)} chars, clean markdown): {first['title']}")
 
 
 @pytest.mark.asyncio
@@ -157,7 +157,7 @@ async def test_jobserve_direct_and_search():
     """Test Jobserve mobile API parsing and title cleaning."""
     from services.job_searcher import search_jobserve_jobs
     jobs = await search_jobserve_jobs("Python Engineer", "London", timeframe="48h")
-    print(f"✓ Jobserve Search Success: found {len(jobs)} jobs in 48h")
+    print(f"Jobserve Search Success: found {len(jobs)} jobs in 48h")
     if jobs:
         first = jobs[0]
         assert first.title, "Job title missing"
@@ -165,7 +165,7 @@ async def test_jobserve_direct_and_search():
         if hasattr(first, "full_description") and first.full_description:
             assert len(first.full_description) > 100, f"Jobserve JD too short: {len(first.full_description)}"
             assert_clean_text(first.full_description, "Jobserve")
-            print(f"✓ Jobserve Full JD ({len(first.full_description)} chars): {first.title}")
+            print(f"Jobserve Full JD ({len(first.full_description)} chars): {first.title}")
 
 
 if __name__ == "__main__":

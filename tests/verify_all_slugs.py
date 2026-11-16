@@ -87,7 +87,7 @@ async def validate_platform_slugs(ats: str, slugs: List[str], db_path: str):
     sem = asyncio.Semaphore(cfg["concurrency"])
     
     total = len(slugs)
-    print(f"\n🚀 Validating {total} candidate slugs for [{ats.upper()}] (Concurrency={cfg['concurrency']})...")
+    print(f"\nValidating {total} candidate slugs for [{ats.upper()}] (Concurrency={cfg['concurrency']})...")
 
     headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) JobFinderValidator/2.0"}
     limits = httpx.Limits(max_keepalive_connections=50, max_connections=cfg["concurrency"] + 10)
@@ -125,7 +125,7 @@ async def validate_platform_slugs(ats: str, slugs: List[str], db_path: str):
             print(f"  [{ats.upper()}] Progress: {processed}/{total} checked ({active_found} active confirmed so far)")
 
     conn.close()
-    print(f"✓ [{ats.upper()}] Completed! Total Active Confirmed: {active_found}/{total}")
+    print(f"[{ats.upper()}] Completed! Total Active Confirmed: {active_found}/{total}")
 
 
 async def main():
@@ -144,7 +144,7 @@ async def main():
         grouped.setdefault(ats, []).append(slug)
 
     print("=" * 65)
-    print(" 🔍 STARTING MASS ATS SLUG VALIDATION")
+    print(" STARTING MASS ATS SLUG VALIDATION")
     print("=" * 65)
     for ats, slugs in grouped.items():
         print(f"  • {ats.capitalize():<12}: {len(slugs):>6} unverified candidates")
@@ -166,12 +166,12 @@ async def main():
     conn.close()
 
     print("\n" + "=" * 65)
-    print(" 🏁 FINAL VERIFIED SLUG REGISTRY STATS")
+    print(" FINAL VERIFIED SLUG REGISTRY STATS")
     print("=" * 65)
     for ats, is_act, count in stats:
         status_label = "ACTIVE (Verified)" if is_act == 1 else "Inactive / Stale"
         print(f"  • {ats.capitalize():<12} | {status_label:<18} | {count:>6} boards")
-    print(f"\n  🎯 TOTAL ACTIVE VERIFIED BOARDS: {total_active}+")
+    print(f"\n  TOTAL ACTIVE VERIFIED BOARDS: {total_active}+")
     print("=" * 65)
 
 

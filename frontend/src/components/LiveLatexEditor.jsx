@@ -466,7 +466,7 @@ export default function LiveLatexEditor({
             onClick={() => setCompileError(null)}
             style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: 0 }}
           >
-            ✕
+            
           </button>
         </div>
       )}

@@ -444,7 +444,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                         yield json.dumps({"type": "log", "percent": 85, "message": "Recruiter Agent approved refined resume after scrutiny."}) + "\n"
                         print("[analyze_job] Recruiter agent approved refined resume on secondary scrutiny.")
                     else:
-                        yield json.dumps({"type": "log", "percent": 85, "message": f"ℹ️ Recruiter scrutiny noted minor points ({second_review.feedback[:80]}...); proceeding to compile."}) + "\n"
+                        yield json.dumps({"type": "log", "percent": 85, "message": f"ℹRecruiter scrutiny noted minor points ({second_review.feedback[:80]}...); proceeding to compile."}) + "\n"
                         print(f"[analyze_job] Recruiter secondary scrutiny feedback: {second_review.feedback}")
                 else:
                     yield json.dumps({"type": "log", "percent": 83, "message": "Recruiter Agent approved resume quality & truthfulness on first pass."}) + "\n"
@@ -532,7 +532,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                                 f"Your Master Resume already achieves a superior match ({baseline_score}% vs tailored {tailored_final_score}%) "
                                 "with authentic, uncompromised metrics. The system preserved your Master Resume as the primary document."
                             )
-                            print(f"[analyze_job] 🛡️ Guardrail triggered: Master resume score ({baseline_score}%) exceeds tailored score ({tailored_final_score}%). Preserving Master version.")
+                            print(f"[analyze_job] Guardrail triggered: Master resume score ({baseline_score}%) exceeds tailored score ({tailored_final_score}%). Preserving Master version.")
                             final_latex = master_latex
                             # Recompile PDF with Master LaTeX
                             with open(tex_path, "w", encoding="utf-8") as f:
@@ -562,7 +562,7 @@ async def analyze_job(request: JobAnalysisRequest, http_request: Request, author
                 print(f"[analyze_job] Post-tailoring ATS re-score notice: {rescore_err}")
 
             if is_master_superior and reversion_notice:
-                yield json.dumps({"type": "log", "percent": 90, "message": f"⭐ {reversion_notice}"}) + "\n"
+                yield json.dumps({"type": "log", "percent": 90, "message": f"{reversion_notice}"}) + "\n"
 
             candidate_name = session_resume_data.get("name", "") if isinstance(session_resume_data, dict) else ""
             extracted_company = request.company if (request.company and request.company not in ['Target Company', 'Hiring Company']) else await asyncio.to_thread(_extract_company_from_jd, jd_text or "", request.job_url)

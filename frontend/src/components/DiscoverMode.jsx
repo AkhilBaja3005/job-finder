@@ -72,7 +72,7 @@ const DiscoverMode = ({
             workday: byPlat.workday || 0
           }
         });
-        setHarvestMsg(`✓ Ready: ${activeCount} active boards confirmed!`);
+        setHarvestMsg(`Ready: ${activeCount} active boards confirmed!`);
         setTimeout(() => setHarvestMsg(''), 4000);
       } else {
         setHarvestMsg('Sync completed');

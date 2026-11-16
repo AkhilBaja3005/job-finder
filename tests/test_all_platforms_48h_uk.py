@@ -12,7 +12,7 @@ from mcp.tools.profile_tools import load_profile_data
 
 async def check_all_platforms_48h_uk():
     print("=" * 70)
-    print("🌐 UNIFIED 48H UK SCAN: ASHBY, GREENHOUSE, LEVER, BAMBOOHR, WORKDAY, JOBSERVE")
+    print("UNIFIED 48H UK SCAN: ASHBY, GREENHOUSE, LEVER, BAMBOOHR, WORKDAY, JOBSERVE")
     print("=" * 70)
 
     prof = load_profile_data() or {}
@@ -21,8 +21,8 @@ async def check_all_platforms_48h_uk():
     ])
     keywords = ["AI", "Machine Learning", "ML", "GenAI", "LLM", "Data Engineer", "Software Engineer", "Systems", "Developer"]
 
-    print(f"🎯 Target Profile Roles: {', '.join(target_roles)}")
-    print("⏳ Timeframe: 48h | 📍 Location: UK\n")
+    print(f"Target Profile Roles: {', '.join(target_roles)}")
+    print("⏳ Timeframe: 48h | Location: UK\n")
 
     scanner = PortalScanner()
     counts = defaultdict(int)
@@ -31,7 +31,7 @@ async def check_all_platforms_48h_uk():
     # 1. Direct ATS Platforms
     ats_platforms = ["ashby", "greenhouse", "lever", "bamboohr", "workday"]
     for plat in ats_platforms:
-        print(f"📡 Scanning [{plat.upper()}] (48h window, Location: UK)...")
+        print(f"Scanning [{plat.upper()}] (48h window, Location: UK)...")
         try:
             jobs = await scanner.scan_all_portals(
                 target_keywords=keywords,
@@ -41,12 +41,12 @@ async def check_all_platforms_48h_uk():
             )
             counts[plat] = len(jobs)
             samples[plat] = jobs[:3]
-            print(f"  ✓ {plat.upper():<12}: {len(jobs)} active matching jobs")
+            print(f"  {plat.upper():<12}: {len(jobs)} active matching jobs")
         except Exception as e:
-            print(f"  ❌ {plat.upper()} error: {e}")
+            print(f"  {plat.upper()} error: {e}")
 
     # 2. Jobserve
-    print("\n📡 Scanning [JOBSERVE] (48h window, Location: UK)...")
+    print("\nScanning [JOBSERVE] (48h window, Location: UK)...")
     try:
         js_total = []
         for role in target_roles[:3]:
@@ -65,13 +65,13 @@ async def check_all_platforms_48h_uk():
                 unique_js.append(j)
         counts["jobserve"] = len(unique_js)
         samples["jobserve"] = unique_js[:3]
-        print(f"  ✓ JOBSERVE    : {len(unique_js)} active matching jobs")
+        print(f"  JOBSERVE    : {len(unique_js)} active matching jobs")
     except Exception as e:
-        print(f"  ❌ JOBSERVE error: {e}")
+        print(f"  JOBSERVE error: {e}")
 
     # Final Combined Output
     print("\n" + "=" * 70)
-    print("📊 48H UK POSTINGS SUMMARY (ALL 6 PLATFORMS)")
+    print("48H UK POSTINGS SUMMARY (ALL 6 PLATFORMS)")
     print("=" * 70)
     total_48h = 0
     for plat in ["ashby", "greenhouse", "lever", "bamboohr", "workday", "jobserve"]:
@@ -82,7 +82,7 @@ async def check_all_platforms_48h_uk():
     print(f"  • {'TOTAL 48H UK':<14}: {total_48h:>5} Verified Matching Postings")
     print("=" * 70)
 
-    print("\n📋 LIVE SAMPLES ACROSS PLATFORMS:")
+    print("\nLIVE SAMPLES ACROSS PLATFORMS:")
     for plat in ["ashby", "greenhouse", "lever", "bamboohr", "workday", "jobserve"]:
         if samples[plat]:
             print(f"\n--- {plat.upper()} ---")
@@ -93,7 +93,7 @@ async def check_all_platforms_48h_uk():
                 url = j.get("url") if isinstance(j, dict) else j.url
                 age = j.get("age") if isinstance(j, dict) else j.post_date_raw
                 print(f"  • [{comp}] {title} ({loc}) - {age}")
-                print(f"    🔗 {url}")
+                print(f"    {url}")
 
 if __name__ == "__main__":
     asyncio.run(check_all_platforms_48h_uk())

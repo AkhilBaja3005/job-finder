@@ -79,7 +79,7 @@ def check_for_updates():
                 # If checked within 24h (86400s), reuse cached latest version
                 if now - last_check < 86400 and latest:
                     if _parse_ver(latest) > _parse_ver(current_ver):
-                        print(f"💡 Update available: v{current_ver} → v{latest}. Run 'pip install --upgrade job-finder-ai' to update.\n")
+                        print(f"Update available: v{current_ver} → v{latest}. Run 'pip install --upgrade job-finder-ai' to update.\n")
                     return
             except Exception:
                 pass
@@ -94,7 +94,7 @@ def check_for_updates():
             json.dump({"latest_version": latest_ver, "last_check": now}, f)
 
         if _parse_ver(latest_ver) > _parse_ver(current_ver):
-            print(f"💡 Update available: v{current_ver} → v{latest_ver}. Run 'pip install --upgrade job-finder-ai' to update.\n")
+            print(f"Update available: v{current_ver} → v{latest_ver}. Run 'pip install --upgrade job-finder-ai' to update.\n")
     except Exception:
         pass
 
@@ -319,7 +319,7 @@ def main():
                 asyncio.run(validate_all_unverified_slugs(limit=50))
                 active = get_active_slugs()
                 total_active = sum(len(slugs) for slugs in active.values())
-                print(f"  ✓ Active ATS boards ready: {total_active} companies across Ashby, Greenhouse, Lever\n")
+                print(f"  Active ATS boards ready: {total_active} companies across Ashby, Greenhouse, Lever\n")
         except Exception as he:
             logger.debug(f"Harvester init note: {he}")
 
@@ -409,7 +409,7 @@ def main():
                     unapplied_urls.append(u)
 
             if skipped_count > 0:
-                print(f"[Tracker] ⏭️ Skipped {skipped_count} URL(s) that were already applied/tracked in database.")
+                print(f"[Tracker] ⏭Skipped {skipped_count} URL(s) that were already applied/tracked in database.")
             urls_to_process = unapplied_urls
         except Exception as te:
             print(f"[Tracker] Note: Tracker duplicate check skipped: {te}")
@@ -529,7 +529,7 @@ def main():
         if failed_jobs:
             print(f"\nFailed Application Details:")
             for f_item in failed_jobs:
-                print(f"  ❌ {f_item['url']}")
+                print(f"  {f_item['url']}")
                 print(f"     Reason: {f_item['reason']}")
         print(f"========================================================\n")
 
@@ -550,10 +550,10 @@ def main():
             resume_arg = None if args.sync == "AUTO" else args.sync
             res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": resume_arg}))
             if res.get("success"):
-                print(f"✅ {res.get('message')}")
+                print(f"{res.get('message')}")
                 print(f"Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
             else:
-                print(f"❌ Sync failed: {res.get('error')}")
+                print(f"Sync failed: {res.get('error')}")
             return
 
         from backend.mcp.tools.profile_tools import get_profile_config_path, load_profile_data
@@ -569,15 +569,15 @@ def main():
         from backend.mcp.tools.profile_tools import load_profile_data, get_profile_config_path
         from applications_tracker.scheduled_job_scanner import find_master_resume_with_mac_tags
 
-        print("\n🔍 ========================================================")
+        print("\n========================================================")
         print("        JOB FINDER AI SYSTEM HEALTH & STATUS")
         print("========================================================")
         g_key = os.getenv("GEMINI_API_KEY")
-        masked_key = f"{g_key[:4]}...{g_key[-4:]}" if (g_key and len(g_key) > 8) else ("Configured ✅" if g_key else "Missing ❌")
+        masked_key = f"{g_key[:4]}...{g_key[-4:]}" if (g_key and len(g_key) > 8) else ("Configured " if g_key else "Missing ")
         print(f"  • Gemini API Key    : {masked_key}")
 
         master_resume = find_master_resume_with_mac_tags()
-        resume_status = f"{master_resume} (Exists ✅)" if (master_resume and os.path.exists(master_resume)) else "Not set (Run `job-finder setup`)"
+        resume_status = f"{master_resume} (Exists )" if (master_resume and os.path.exists(master_resume)) else "Not set (Run `job-finder setup`)"
         print(f"  • Master Resume     : {resume_status}")
 
         prof_path = get_profile_config_path()
@@ -601,7 +601,7 @@ def main():
         target_data = None
         if args.resume and os.path.exists(args.resume):
             from backend.services.resume_parser import parse_resume
-            print(f"📄 Parsing resume file: {args.resume}")
+            print(f"Parsing resume file: {args.resume}")
             structured = parse_resume(args.resume)
             target_data = structured.model_dump()
         else:
@@ -609,7 +609,7 @@ def main():
             target_data = prof_data.get("candidate", {}) if prof_data else {}
 
         if not target_data:
-            print("❌ No resume or candidate profile available to evaluate. Run `job-finder setup` first.")
+            print("No resume or candidate profile available to evaluate. Run `job-finder setup` first.")
             return
 
         ats_eval = evaluate_master_resume(target_data)
@@ -624,7 +624,7 @@ def main():
         print(f"  • Estimated Tenure: {ats_eval.get('candidate_years')} years relevant experience")
 
         if suggestions:
-            print("\n💡 Key ATS Improvement Tips:")
+            print("\nKey ATS Improvement Tips:")
             for tip in suggestions:
                 print(f"  • {tip}")
 
@@ -649,24 +649,24 @@ def main():
                 f"Core Skills: {skills_str}\n"
                 "Return ONLY the plain optimized summary text without any markdown commentary or quotes."
             )
-            print("\n✨ Generating AI-Optimized Summary...")
+            print("\nGenerating AI-Optimized Summary...")
             new_summary = generate_content_with_fallback(prompt)
             if new_summary:
                 cand["experience_summary"] = new_summary.strip().strip('"')
                 prof_data["candidate"] = cand
                 save_profile_data(prof_data)
-                print(f"✅ Auto-Optimized Summary Saved:\n  \"{cand['experience_summary']}\"")
+                print(f"Auto-Optimized Summary Saved:\n  \"{cand['experience_summary']}\"")
                 
                 # Re-evaluate ATS health score after optimization
                 post_eval = evaluate_master_resume(cand)
                 post_score = post_eval.get("ats_score", 80)
-                print(f"📈 Updated Master Resume ATS Health Score: {post_score}/100 ({post_eval.get('skills_count')} taxonomy keywords matched)\n")
+                print(f"Updated Master Resume ATS Health Score: {post_score}/100 ({post_eval.get('skills_count')} taxonomy keywords matched)\n")
 
     elif args.subcommand == "tracker":
         from backend.services.application_tracker import list_applications
         apps = list_applications()
         if not apps:
-            print("ℹ️ No tracked job applications found.")
+            print("ℹNo tracked job applications found.")
             return
 
         status_filter = args.status.lower()
@@ -674,7 +674,7 @@ def main():
             apps = [a for a in apps if a.get("status", "").lower() == status_filter]
 
         apps = apps[:args.limit]
-        print(f"\n📋 Tracker Pipeline ({len(apps)} entries):")
+        print(f"\nTracker Pipeline ({len(apps)} entries):")
         print(f"{'STATUS':<12} {'ATS':<6} {'COMPANY':<20} {'ROLE':<25} {'DATE':<12}")
         print("-" * 78)
         for a in apps:
@@ -691,12 +691,12 @@ def main():
         print(f"⏳ Fetching Agent-Reach community culture brief for '{args.name}'...")
         res = generate_enhanced_company_brief(args.name, args.role)
         if res.get("status") == "success":
-            print(f"\n🏢 ========================================================")
+            print(f"\n========================================================")
             print(f"    AGENT-REACH COMPANY BRIEF: {args.name.upper()} ({args.role})")
             print("========================================================\n")
             print(res.get("brief_markdown", ""))
         else:
-            print(f"❌ Could not fetch company brief: {res.get('message')}")
+            print(f"Could not fetch company brief: {res.get('message')}")
 
     elif args.subcommand == "interview":
         from backend.services.session_store import get_session_data
@@ -708,11 +708,11 @@ def main():
         
         yt_transcript = ""
         if args.youtube:
-            print(f"📹 Parsing YouTube interview transcript from: {args.youtube}...")
+            print(f"Parsing YouTube interview transcript from: {args.youtube}...")
             yt_res = extract_youtube_transcript(args.youtube)
             if yt_res.get("status") == "success":
                 yt_transcript = yt_res.get("transcript", "")
-                print(f"✅ Extracted {len(yt_transcript)} chars of technical interview transcript via {yt_res.get('source')}.")
+                print(f"Extracted {len(yt_transcript)} chars of technical interview transcript via {yt_res.get('source')}.")
 
         prompt = f"""You are a professional Interview Coach.
 Generate a custom Interview Prep Pack for candidate applying to '{args.role}' at '{args.company}'.
@@ -728,9 +728,9 @@ Output Markdown with 4 sections:
 3. Tough Questions ('Why this company?')
 4. Smart Questions to Ask Interviewers"""
 
-        print(f"🧠 Generating Interview Prep Pack for {args.company}...")
+        print(f"Generating Interview Prep Pack for {args.company}...")
         prep_md = generate_content_with_fallback(prompt, model_tier="lite")
-        print(f"\n🎯 ========================================================")
+        print(f"\n========================================================")
         print(f"    INTERVIEW PREP PACK: {args.company.upper()} ({args.role})")
         print("========================================================\n")
         print(prep_md)
@@ -978,7 +978,7 @@ Output Markdown with 4 sections:
         from backend.services.outreach_generator import generate_outreach_message
         from backend.mcp.tools.profile_tools import load_profile_data
 
-        print("\n📬 ========================================================")
+        print("\n========================================================")
         print("  RECRUITER 3-DAY FOLLOW-UP & PROFILE VIEW ENGINE")
         print("========================================================\n")
 
@@ -987,7 +987,7 @@ Output Markdown with 4 sections:
         cand = profile_data.get("candidate", {})
 
         if not apps:
-            print("ℹ️ No tracked applications found to follow up on.\n")
+            print("ℹNo tracked applications found to follow up on.\n")
         else:
             min_days = args.min_days
             print(f"Scanning applications submitted >= {min_days} days ago without response...\n")
@@ -1028,7 +1028,7 @@ Output Markdown with 4 sections:
                     print(f"    \"{inmail_text}\"\n")
 
             if followup_count == 0:
-                print(f"ℹ️ No pending applications older than {min_days} days require follow-up at this time.\n")
+                print(f"ℹNo pending applications older than {min_days} days require follow-up at this time.\n")
 
     elif args.subcommand == "harvest-slugs":
         import asyncio
@@ -1042,7 +1042,7 @@ Output Markdown with 4 sections:
             asyncio.run(validate_all_unverified_slugs(ats_filter=args.ats, limit=args.limit))
 
         active = get_active_slugs(ats=args.ats)
-        print("\n📊 Active Company Board Registry Summary:")
+        print("\nActive Company Board Registry Summary:")
         for platform, slugs in active.items():
             print(f"  • {platform.capitalize():<12}: {len(slugs)} active board slugs")
 
@@ -1057,10 +1057,10 @@ Output Markdown with 4 sections:
             print("\n⏳ Downloading latest Home Office Register of Licensed Sponsors CSV from GOV.UK...")
             res = sync_uk_sponsors(force=True)
             if res.get("status") == "success":
-                print(f"✅ Successfully synced {res.get('total_sponsors'):,} UK sponsors!")
+                print(f"Successfully synced {res.get('total_sponsors'):,} UK sponsors!")
                 print(f"   Updated: {res.get('last_updated')}\n")
             else:
-                print(f"⚠️ Sync note: {res.get('message', 'Completed')}\n")
+                print(f"Sync note: {res.get('message', 'Completed')}\n")
 
         if args.stats or (not args.company and not args.sync):
             stats = get_sponsor_stats()
@@ -1075,14 +1075,14 @@ Output Markdown with 4 sections:
 
         if args.company:
             comp_name = args.company.strip()
-            print(f"\n🔍 Verifying UK visa sponsorship for: '{comp_name}'...")
+            print(f"\nVerifying UK visa sponsorship for: '{comp_name}'...")
             res = check_uk_sponsor(comp_name)
             is_sponsor = res.get("is_sponsor")
             print("\n--------------------------------------------------------")
             if is_sponsor:
                 matched = res.get("matched_name") or comp_name
                 dt = res.get("details") or {}
-                print(f"🟢 {res.get('badge', '✓ UK Visa Sponsor')}")
+                print(f"{res.get('badge', 'UK Visa Sponsor')}")
                 print(f"   Registered Entity : {matched}")
                 if dt.get("city"):
                     print(f"   Location          : {dt.get('city')}")
@@ -1091,16 +1091,16 @@ Output Markdown with 4 sections:
                 print("--------------------------------------------------------\n")
             else:
                 notice = res.get("notice") or {}
-                print(f"🔴 {res.get('badge', '✗ Not on sponsor')}")
-                print(f"\n⚠️  {notice.get('title', 'Company Could Not Be Found in Sponsor Database')}")
+                print(f"{res.get('badge', 'Not on sponsor')}")
+                print(f"\n {notice.get('title', 'Company Could Not Be Found in Sponsor Database')}")
                 print(f"   {notice.get('description', f'{comp_name} is not currently registered as a visa sponsor with the UK government.')}\n")
-                print(f"💡 Guidance:")
+                print(f"Guidance:")
                 print(f"   {notice.get('advice', 'Consider reaching out directly to ask about their sponsorship policy or future plans.')}")
                 print("--------------------------------------------------------\n")
 
 
     elif args.subcommand == "setup":
-        print("\n🚀 ========================================================")
+        print("\n========================================================")
         print("          JOB FINDER AI - QUICK SETUP WIZARD")
         print("========================================================\n")
         from backend.config.constants import resolve_workspace_root
@@ -1132,7 +1132,7 @@ Output Markdown with 4 sections:
             if example_env and os.path.exists(example_env):
                 import shutil
                 shutil.copy2(example_env, env_path)
-                print(f"📄 Initialized .env configuration from template: {env_path}")
+                print(f"Initialized .env configuration from template: {env_path}")
             else:
                 with open(env_path, "w", encoding="utf-8") as f:
                     f.write(
@@ -1145,10 +1145,10 @@ Output Markdown with 4 sections:
                         "SMTP_PASSWORD=\n"
                         "EMAIL_FROM=\n"
                     )
-                print(f"📄 Created initial .env configuration file: {env_path}")
+                print(f"Created initial .env configuration file: {env_path}")
 
         else:
-            print(f"✓ Found existing .env at {env_path}")
+            print(f"Found existing .env at {env_path}")
 
         # Ensure baseline keys are present in .env
         with open(env_path, "r", encoding="utf-8") as ef:
@@ -1174,10 +1174,10 @@ Output Markdown with 4 sections:
             with open(env_path, "a", encoding="utf-8") as f:
                 f.write(f"\nGEMINI_API_KEY={args.api_key}\n")
             os.environ["GEMINI_API_KEY"] = args.api_key
-            print("🔑 Configured GEMINI_API_KEY into .env")
+            print("Configured GEMINI_API_KEY into .env")
         elif not existing_key:
             if sys.stdin.isatty():
-                print("\n🔑 Gemini API Key is required for resume parsing, ATS scoring & browser automation.")
+                print("\nGemini API Key is required for resume parsing, ATS scoring & browser automation.")
                 print("   (Get a free key at https://aistudio.google.com/)")
                 try:
                     user_key = input("  Enter your GEMINI_API_KEY: ").strip()
@@ -1185,20 +1185,20 @@ Output Markdown with 4 sections:
                         with open(env_path, "a", encoding="utf-8") as f:
                             f.write(f"\nGEMINI_API_KEY={user_key}\n")
                         os.environ["GEMINI_API_KEY"] = user_key
-                        print("✅ GEMINI_API_KEY saved to .env")
+                        print("GEMINI_API_KEY saved to .env")
                 except (EOFError, KeyboardInterrupt):
                     print("\nSkipping API key prompt.")
             else:
-                print("⚠️  GEMINI_API_KEY is not set in environment or .env. You can pass it via `job-finder setup --api-key <KEY>`")
+                print(" GEMINI_API_KEY is not set in environment or .env. You can pass it via `job-finder setup --api-key <KEY>`")
         else:
             masked = existing_key[:4] + "..." + existing_key[-4:] if len(existing_key) > 8 else "***"
-            print(f"🔑 Gemini API Key configured ({masked})")
+            print(f"Gemini API Key configured ({masked})")
 
         # Configure SMTP Notifications (Optional)
         existing_smtp_user = os.getenv("SMTP_USER")
         if sys.stdin.isatty():
             if not existing_smtp_user:
-                print("\n📧 Email Notifications for Applied & Review Alerts (Optional)")
+                print("\nEmail Notifications for Applied & Review Alerts (Optional)")
                 try:
                     enable_smtp = input("  Would you like to configure email alerts for submitted & failed jobs? (y/N): ").strip().lower()
                     if enable_smtp in ("y", "yes"):
@@ -1223,7 +1223,7 @@ Output Markdown with 4 sections:
                             os.environ["SMTP_USER"] = smtp_user
                             os.environ["SMTP_PASSWORD"] = smtp_pass
                             os.environ["EMAIL_FROM"] = smtp_user
-                            print("✅ SMTP email notifications configured in .env")
+                            print("SMTP email notifications configured in .env")
                 except (EOFError, KeyboardInterrupt):
                     print("\nSkipping email configuration.")
 
@@ -1232,9 +1232,9 @@ Output Markdown with 4 sections:
             import shutil
             os.makedirs(os.path.dirname(profile_path), exist_ok=True)
             shutil.copy2(example_profile, profile_path)
-            print(f"👤 Initialized candidate_profile.json in workspace: {profile_path}")
+            print(f"Initialized candidate_profile.json in workspace: {profile_path}")
         elif os.path.exists(profile_path):
-            print(f"✓ Found existing candidate profile at: {profile_path}")
+            print(f"Found existing candidate profile at: {profile_path}")
 
 
         # 3. Master Resume Path Configuration & Profile Sync
@@ -1244,7 +1244,7 @@ Output Markdown with 4 sections:
         if resume_target:
             resume_target = os.path.abspath(os.path.expanduser(resume_target.strip('\'"')))
         elif sys.stdin.isatty():
-            print("\n📄 ========================================================")
+            print("\n========================================================")
             print("             MASTER RESUME CONFIGURATION")
             print("========================================================")
             detected_resume = existing_master
@@ -1290,16 +1290,16 @@ Output Markdown with 4 sections:
                 with open(env_path, "w", encoding="utf-8") as ef:
                     ef.writelines(new_lines)
                 os.environ["MASTER_RESUME_PATH"] = resume_target
-                print(f"✅ Saved MASTER_RESUME_PATH in .env: {resume_target}")
+                print(f"Saved MASTER_RESUME_PATH in .env: {resume_target}")
             except Exception as env_err:
-                print(f"⚠️ Could not write MASTER_RESUME_PATH to .env: {env_err}")
+                print(f"Could not write MASTER_RESUME_PATH to .env: {env_err}")
 
-            print(f"📄 Syncing candidate profile from resume: {resume_target}")
+            print(f"Syncing candidate profile from resume: {resume_target}")
             import asyncio
             from backend.mcp.tools.profile_tools import handle_sync_candidate_profile_from_resume
             res = asyncio.run(handle_sync_candidate_profile_from_resume({"resume_path": resume_target}))
             if res.get("success"):
-                print(f"✅ Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
+                print(f"Extracted: {res.get('skills_count')} skills, {res.get('experience_count')} work experiences, {res.get('education_count')} education entries.")
                 
                 # Run ATS Health Audit & Display Improvement Tips
                 try:
@@ -1310,7 +1310,7 @@ Output Markdown with 4 sections:
                     ats_score = ats_eval.get("ats_score", 80)
                     suggestions = ats_eval.get("suggestions", [])
 
-                    print("\n📊 ========================================================")
+                    print("\n========================================================")
                     print(f"           MASTER RESUME ATS HEALTH SCORE: {ats_score}/100")
                     print("========================================================")
                     print(f"  • Skill Keywords  : {ats_eval.get('skills_count')} core taxonomy matches")
@@ -1318,14 +1318,14 @@ Output Markdown with 4 sections:
                     print(f"  • Estimated Tenure: {ats_eval.get('candidate_years')} years relevant experience")
 
                     if suggestions:
-                        print("\n💡 Key ATS Improvement Tips:")
+                        print("\nKey ATS Improvement Tips:")
                         for tip in suggestions:
                             print(f"  • {tip}")
 
                     # Interactive prompt to auto-enhance summary if suggestions exist
                     if sys.stdin.isatty() and suggestions:
                         try:
-                            print("\n✨ Would you like AI to auto-optimize your summary to improve ATS conversion? [Y/n]: ", end="")
+                            print("\nWould you like AI to auto-optimize your summary to improve ATS conversion? [Y/n]: ", end="")
                             opt_choice = input().strip().lower()
                             if opt_choice in ("y", "yes", ""):
                                 from backend.services.gemini_client import generate_content_with_fallback
@@ -1345,18 +1345,18 @@ Output Markdown with 4 sections:
                                     cand["experience_summary"] = new_summary.strip().strip('"')
                                     profile_data["candidate"] = cand
                                     save_profile_data(profile_data)
-                                    print(f"\n✅ Auto-Optimized Summary Saved:\n  \"{cand['experience_summary']}\"")
+                                    print(f"\nAuto-Optimized Summary Saved:\n  \"{cand['experience_summary']}\"")
                         except (EOFError, KeyboardInterrupt):
                             print("\nSkipping summary optimization.")
                 except Exception as ats_err:
-                    print(f"ℹ️ Could not compute ATS baseline: {ats_err}")
+                    print(f"ℹCould not compute ATS baseline: {ats_err}")
             else:
-                print(f"ℹ️ Could not auto-parse resume: {res.get('error')}")
+                print(f"ℹCould not auto-parse resume: {res.get('error')}")
         elif resume_target and not os.path.exists(resume_target):
-            print(f"⚠️ Provided resume file does not exist: {resume_target}")
-            print("ℹ️ Tip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
+            print(f"Provided resume file does not exist: {resume_target}")
+            print("ℹTip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
         else:
-            print("ℹ️ Tip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
+            print("ℹTip: Run `job-finder profile --sync /path/to/resume.pdf` anytime to import your full resume.")
 
         # 4. Review Candidate Profile Completeness (Demographics, Location, Portals Password)
         profile_to_check = profile_path if (profile_path and os.path.exists(profile_path)) else example_profile
@@ -1392,25 +1392,25 @@ Output Markdown with 4 sections:
                         # Fields typically not on a standard resume, merged from defaults
                         default_derived_fields.append((key, label, str(val)))
 
-                print("\n📋 ========================================================")
+                print("\n========================================================")
                 print("     CANDIDATE PROFILE DATA PROVENANCE & REVIEW")
                 print("========================================================")
-                print("  📄 From Resume : Name, Contact Info, Work Experience, Education & Skills")
-                print("  ⚙️ From Template: Demographic & compliance fields not present on standard resumes")
+                print("  From Resume : Name, Contact Info, Work Experience, Education & Skills")
+                print("  From Template: Demographic & compliance fields not present on standard resumes")
                 if default_derived_fields:
                     print("\n  The following fields were initialized from defaults. Please verify them:")
                     for k, lbl, cur in default_derived_fields:
                         print(f"    • {lbl} ({k}): {cur}")
 
                 if unfilled_fields:
-                    print("\n⚠️  The following fields are EMPTY or PLACEHOLDERS and require your input:")
+                    print("\n The following fields are EMPTY or PLACEHOLDERS and require your input:")
                     for k, lbl, _ in unfilled_fields:
                         print(f"    • {lbl} ({k})")
 
                 # If interactive terminal session, prompt user to review or update
                 fields_to_prompt = unfilled_fields + default_derived_fields
                 if sys.stdin.isatty():
-                    print("\n📝 Would you like to review or update any of these fields now?")
+                    print("\nWould you like to review or update any of these fields now?")
                     print("   (Press Enter to keep current value, or type new value to update):")
                     updated = False
                     for key, label, cur_val in fields_to_prompt:
@@ -1431,15 +1431,15 @@ Output Markdown with 4 sections:
                         prof_data["candidate"] = cand
                         with open(profile_path, "w", encoding="utf-8") as f:
                             json.dump(prof_data, f, indent=2)
-                        print(f"\n✅ Updated candidate profile saved to: {profile_path}")
+                        print(f"\nUpdated candidate profile saved to: {profile_path}")
                 else:
-                    print(f"\n💡 Note: Review or edit these anytime in `{profile_path}` or run `job-finder profile`.")
+                    print(f"\nNote: Review or edit these anytime in `{profile_path}` or run `job-finder profile`.")
             except Exception as pe:
-                print(f"ℹ️ Could not inspect candidate profile: {pe}")
+                print(f"ℹCould not inspect candidate profile: {pe}")
 
         # 5. Interactive Dedicated Browser Setup for One-Time Login (LinkedIn, Indeed, Gmail)
         if sys.stdin.isatty():
-            print("\n🌐 ========================================================")
+            print("\n========================================================")
             print("         DEDICATED AUTOMATION BROWSER SETUP")
             print("========================================================")
             print("  Job Finder uses a dedicated Chrome profile (`browser_use_chrome_session`)")
@@ -1450,7 +1450,7 @@ Output Markdown with 4 sections:
                 if open_browser_setup in ("y", "yes", ""):
                     try:
                         from backend.services.browser_use_agent import ensure_persistent_browser, CDP_PORT
-                        print("\n🌐 Launching dedicated automation browser...")
+                        print("\nLaunching dedicated automation browser...")
                         cdp_url = ensure_persistent_browser(headless=False)
                         
                         import urllib.request
@@ -1483,17 +1483,17 @@ Output Markdown with 4 sections:
                             except Exception:
                                 pass
 
-                        print("\n✅ Dedicated Automation Browser window opened!")
-                        print("   👉 Look for the Google Chrome window that opened LinkedIn, Indeed, and Gmail.")
-                        print("   👉 (This window runs on a dedicated profile so it won't affect your personal browser).")
+                        print("\nDedicated Automation Browser window opened!")
+                        print("   Look for the Google Chrome window that opened LinkedIn, Indeed, and Gmail.")
+                        print("   (This window runs on a dedicated profile so it won't affect your personal browser).")
                         input("   Press [Enter] when you have finished logging in to proceed... ")
                     except Exception as b_err:
-                        print(f"⚠️ Could not launch automation browser automatically: {b_err}")
+                        print(f"Could not launch automation browser automatically: {b_err}")
 
             except (EOFError, KeyboardInterrupt):
                 print("\nSkipping browser login setup.")
 
-        print("\n✅ Setup complete! You're ready to run:")
+        print("\nSetup complete! You're ready to run:")
         print("   - `job-finder profile --show` : Review your parsed candidate profile")
         print("   - `job-finder scan`           : Run autonomous job search and ATS tailoring")
         print("   - `job-finder server`         : Start web dashboard on http://localhost:8000")

@@ -142,7 +142,7 @@ async def search_jobserve(
                 age_select = page.locator("#selAge, select[name*='selAge'], #ddcl-selAge").first
                 if await age_select.count() > 0:
                     await age_select.select_option(value=age_val)
-                    print(f"  ✓ Selected timeframe filter: {timeframe} ({age_val} days)")
+                    print(f"  Selected timeframe filter: {timeframe} ({age_val} days)")
             except Exception as age_err:
                 print(f"  (Note: could not set age selector: {age_err})")
 
@@ -171,7 +171,7 @@ async def search_jobserve(
                 return items;
             }''')
 
-            print(f"  ✓ Discovered {len(raw_job_items)} jobs in Jobserve search results for '{timeframe}'.")
+            print(f"  Discovered {len(raw_job_items)} jobs in Jobserve search results for '{timeframe}'.")
 
             # Iterate and click each job item to trigger detail loading in the preview pane
             limit = min(len(raw_job_items), max_jobs)
@@ -249,7 +249,7 @@ async def search_jobserve(
                 })
 
         except Exception as e:
-            print(f"  ✕ Search error: {e}")
+            print(f"  Search error: {e}")
         finally:
             await browser.close()
 
@@ -351,13 +351,13 @@ async def main():
     )
 
     if not jobs:
-        print("\n✕ No jobs extracted. Retrying with broad search...")
+        print("\nNo jobs extracted. Retrying with broad search...")
         jobs = await search_jobserve(keyword=args.keyword, location="", timeframe=args.timeframe, max_jobs=args.max)
 
     if jobs:
         run_ats_scoring_suite(jobs, profile)
     else:
-        print("\n✕ Could not retrieve listings for the specified criteria.")
+        print("\nCould not retrieve listings for the specified criteria.")
 
 
 if __name__ == "__main__":

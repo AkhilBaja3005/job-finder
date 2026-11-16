@@ -51,7 +51,7 @@ def test_rss_feed(keyword: str = "Python", location: str = "London"):
                 if "<item>" in content:
                     soup = BeautifulSoup(content, "xml") if "xml" in BeautifulSoup.builder_registry.builders else BeautifulSoup(content, "html.parser")
                     items = soup.find_all("item")
-                    print(f"  ✓ Found {len(items)} jobs via RSS!")
+                    print(f"  Found {len(items)} jobs via RSS!")
                     for idx, it in enumerate(items[:3], 1):
                         title = it.find("title").get_text(strip=True) if it.find("title") else "N/A"
                         link = it.find("link").get_text(strip=True) if it.find("link") else "N/A"
@@ -59,7 +59,7 @@ def test_rss_feed(keyword: str = "Python", location: str = "London"):
                         print(f"    {idx}. {title} | {pub_date}\n       URL: {link}")
                     return True
         except Exception as e:
-            print(f"  ✕ RSS error on {url}: {e}")
+            print(f"  RSS error on {url}: {e}")
     return False
 
 
@@ -96,7 +96,7 @@ def test_http_search(keyword: str = "Python", location: str = "London"):
                         print(f"    Link: {l}")
                     return True
         except Exception as e:
-            print(f"  ✕ HTTP Search error on {url}: {e}")
+            print(f"  HTTP Search error on {url}: {e}")
     return False
 
 
@@ -106,7 +106,7 @@ async def test_playwright_discovery_and_scrape(keyword: str = "Python Developer"
     try:
         from playwright.async_api import async_playwright
     except ImportError:
-        print("  ✕ Playwright not installed. Skipping Playwright test.")
+        print("  Playwright not installed. Skipping Playwright test.")
         return
 
     async with async_playwright() as p:
@@ -123,7 +123,7 @@ async def test_playwright_discovery_and_scrape(keyword: str = "Python Developer"
         # Intercept AJAX / XHR responses to catch any JSON/XML search data
         async def handle_response(response):
             if "retrievejobs" in response.url.lower():
-                print(f"\n  [★ XHR Hit] {response.request.method} {response.url}")
+                print(f"\n  [XHR Hit] {response.request.method} {response.url}")
                 try:
                     data = await response.json()
                     if isinstance(data, dict) and "d" in data:
@@ -139,12 +139,12 @@ async def test_playwright_discovery_and_scrape(keyword: str = "Python Developer"
                 except Exception as ex:
                     print(f"  Could not parse JSON from RetrieveJobs: {ex}")
             elif "retrievesinglejobdetail" in response.url.lower():
-                print(f"\n  [★ XHR Hit] {response.request.method} {response.url}")
+                print(f"\n  [XHR Hit] {response.request.method} {response.url}")
                 try:
                     data = await response.json()
-                    print(f"  ✓ RetrieveSingleJobDetail Keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+                    print(f"  RetrieveSingleJobDetail Keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
                     if isinstance(data, dict) and "d" in data:
-                        print(f"  ✓ Sample Job Detail excerpt:\n{json.dumps(data['d'], indent=2)[:600]}")
+                        print(f"  Sample Job Detail excerpt:\n{json.dumps(data['d'], indent=2)[:600]}")
                 except Exception as ex:
                     print(f"  Could not parse JSON from RetrieveSingleJobDetail: {ex}")
         page.on("response", handle_response)
@@ -160,7 +160,7 @@ async def test_playwright_discovery_and_scrape(keyword: str = "Python Developer"
                 cookie_accept = page.locator("a:has-text('Accept All'), button:has-text('Accept'), #onetrust-accept-btn-handler, #btnAccept, a.cookieConsentOK")
                 if await cookie_accept.count() > 0:
                     await cookie_accept.first.click()
-                    print("  ✓ Clicked Cookie consent banner")
+                    print("  Clicked Cookie consent banner")
                     await page.wait_for_timeout(1000)
             except Exception:
                 pass
@@ -178,18 +178,18 @@ async def test_playwright_discovery_and_scrape(keyword: str = "Python Developer"
             kw_input = page.locator("#txtKey, input[name*='txtKey'], input[placeholder*='Skills'], input[placeholder*='Keywords'], #keywords").first
             if await kw_input.count() > 0:
                 await kw_input.fill(keyword)
-                print(f"  ✓ Filled Keywords: '{keyword}'")
+                print(f"  Filled Keywords: '{keyword}'")
 
             # Fill Location
             loc_input = page.locator("#txtLoc, input[name*='txtLoc'], input[placeholder*='Location'], #location").first
             if await loc_input.count() > 0:
                 await loc_input.fill(location)
-                print(f"  ✓ Filled Location: '{location}'")
+                print(f"  Filled Location: '{location}'")
 
             # Click Search
             search_btn = page.locator("#btnSearch, input[value='Search'], button:has-text('Search'), #btnSearchJobs, input[type='submit']").first
             if await search_btn.count() > 0:
-                print("  ✓ Clicking Search Button...")
+                print("  Clicking Search Button...")
                 await search_btn.click()
                 await page.wait_for_timeout(4000)
             else:
@@ -241,13 +241,13 @@ async def test_playwright_discovery_and_scrape(keyword: str = "Python Developer"
                 return results;
             }''')
             
-            print(f"\n  ✓ Found {len(cards_data)} job elements in live DOM via evaluate!")
+            print(f"\n  Found {len(cards_data)} job elements in live DOM via evaluate!")
             for idx, c in enumerate(cards_data[:5], 1):
                 print(f"    {idx}. Title: {c.get('title')}\n       Info: {c.get('company')} | {c.get('location')} | {c.get('rate')}\n       HTML snippet: {c.get('html')[:200]}")
 
 
         except Exception as e:
-            print(f"  ✕ Playwright error: {e}")
+            print(f"  Playwright error: {e}")
             import traceback
             traceback.print_exc()
         finally:

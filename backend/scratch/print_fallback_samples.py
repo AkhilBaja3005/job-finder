@@ -17,7 +17,7 @@ def test_indeed_fallback_live():
     ssl_ctx = ssl._create_unverified_context()
     
     print("\n" + "=" * 70)
-    print("🔎 LIVE TEST: INDEED SEARCH FALLBACK RESULTS")
+    print("LIVE TEST: INDEED SEARCH FALLBACK RESULTS")
     print("=" * 70)
     
     try:
@@ -47,9 +47,9 @@ def test_indeed_fallback_live():
             
             print(f"\nFound {len(results)} Indeed Jobs:\n")
             for idx, job in enumerate(results[:10], 1):
-                print(f"[{idx}] 🏷️ Title:   {job['title']}")
-                print(f"    🏢 Company: {job['company']}")
-                print(f"    🔗 URL:     {job['url']}\n")
+                print(f"[{idx}] Title:   {job['title']}")
+                print(f"    Company: {job['company']}")
+                print(f"    URL:     {job['url']}\n")
     except Exception as e:
         print(f"Error fetching live fallback results: {e}")
 

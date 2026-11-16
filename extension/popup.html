@@ -8,7 +8,7 @@
 <body>
   <!-- Brand & Status Header Bar -->
   <div class="header-bar">
-    <h2 class="brand-title"><span>🎯</span> Job Finder ATS Tailor</h2>
+    <h2 class="brand-title"><span></span> Job Finder ATS Tailor</h2>
     <span id="backend-status" class="status-pill">
       <span class="status-dot"></span>
       <span>Connected</span>
@@ -18,7 +18,7 @@
   <!-- Optional Extension Update Available Notification -->
   <div id="ext-update-banner" class="update-banner">
     <div>
-      <strong>⚠️ Update Available:</strong>
+      <strong>Update Available:</strong>
       <span id="ext-update-text">Newer version available on server.</span>
     </div>
     <a id="ext-update-btn" href="#" target="_blank">Download ZIP ⤓</a>
@@ -26,9 +26,9 @@
 
   <!-- Top Navigation Tabs (3 Sections) -->
   <div class="nav-tabs">
-    <button class="nav-tab active" data-target="tab-ats">🎯 ATS & Apply</button>
-    <button class="nav-tab" data-target="tab-profile">👤 Profile</button>
-    <button class="nav-tab" data-target="tab-settings">⚙️ Settings</button>
+    <button class="nav-tab active" data-target="tab-ats">ATS & Apply</button>
+    <button class="nav-tab" data-target="tab-profile">Profile</button>
+    <button class="nav-tab" data-target="tab-settings">Settings</button>
   </div>
 
   <!-- ======================================================== -->
@@ -40,8 +40,8 @@
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
         <span style="font-size: 9.5px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;">Detected Active Job:</span>
         <div style="display: flex; gap: 8px; align-items: center;">
-          <a id="btn-refresh-tab" href="#" title="Rescan current open tab" style="font-size: 9.5px; color: #34d399; text-decoration: none; font-weight: 700; cursor: pointer;">🔄 Rescan Tab</a>
-          <a id="link-edit-jd" href="#" style="font-size: 9.5px; color: #38bdf8; text-decoration: none; font-weight: 700;">✏️ Edit / Paste JD</a>
+          <a id="btn-refresh-tab" href="#" title="Rescan current open tab" style="font-size: 9.5px; color: #34d399; text-decoration: none; font-weight: 700; cursor: pointer;">Rescan Tab</a>
+          <a id="link-edit-jd" href="#" style="font-size: 9.5px; color: #38bdf8; text-decoration: none; font-weight: 700;">Edit / Paste JD</a>
         </div>
       </div>
       <div id="active-role-title" style="font-size: 12.5px; font-weight: 700; color: #fff; line-height: 1.35;">Detecting job page...</div>
@@ -50,7 +50,7 @@
         <div id="active-sponsor-badge" style="display: none;"></div>
       </div>
       <div id="active-sponsor-notice" style="display: none; margin-top: 8px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 6px 8px; font-size: 9.5px; line-height: 1.4;">
-        <div style="color: #fca5a5; font-weight: 700; margin-bottom: 2px;">⚠️ Company Could Not Be Found in Sponsor Database</div>
+        <div style="color: #fca5a5; font-weight: 700; margin-bottom: 2px;">Company Could Not Be Found in Sponsor Database</div>
         <div id="active-sponsor-desc" style="color: #cbd5e1;">Not currently registered as a visa sponsor with the UK government.</div>
         <div style="color: #94a3b8; font-style: italic; margin-top: 3px;">This doesn't necessarily mean they can't sponsor - they may be able to apply for a sponsor license. Consider reaching out directly.</div>
       </div>
@@ -59,8 +59,8 @@
     <!-- Alert prompt when JD is short or missing -->
     <div id="jd-missing-alert" style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px;">
       <div style="font-size: 10px; font-weight: 700; color: #fbbf24; display: flex; justify-content: space-between; align-items: center;">
-        <span>⚠️ Job description text missing or incomplete</span>
-        <button id="btn-toggle-custom-jd" style="background: #f59e0b; color: #000; border: none; border-radius: 4px; padding: 3px 8px; font-size: 9px; font-weight: 700; cursor: pointer;">📝 Paste JD</button>
+        <span>Job description text missing or incomplete</span>
+        <button id="btn-toggle-custom-jd" style="background: #f59e0b; color: #000; border: none; border-radius: 4px; padding: 3px 8px; font-size: 9px; font-weight: 700; cursor: pointer;">Paste JD</button>
       </div>
       <div style="font-size: 9px; color: #cbd5e1; margin-top: 3px;">Paste the full job posting to get an accurate 100% ATS score and tailored package.</div>
     </div>
@@ -68,8 +68,8 @@
     <!-- Collapsible / Editable Custom JD Card -->
     <div id="custom-jd-box" style="display: none; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 10px; margin-bottom: 10px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-        <span style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase;">📝 Paste / Edit Job Description</span>
-        <button id="btn-close-custom-jd" style="background: transparent; border: none; color: #94a3b8; font-size: 11px; cursor: pointer;">✕</button>
+        <span style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase;">Paste / Edit Job Description</span>
+        <button id="btn-close-custom-jd" style="background: transparent; border: none; color: #94a3b8; font-size: 11px; cursor: pointer;"></button>
       </div>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px;">
         <div>
@@ -85,7 +85,7 @@
         <label style="font-size: 9px; color: #94a3b8; font-weight: 600;">Full Job Description Text:</label>
         <textarea id="custom-jd-text" class="form-control" rows="4" placeholder="Paste the complete job description, requirements, and responsibilities here..." style="font-size: 10px; padding: 6px;"></textarea>
       </div>
-      <button id="btn-submit-custom-jd" class="btn btn-primary" style="margin-top: 6px;">🎯 Analyze & Re-Score Pasted JD</button>
+      <button id="btn-submit-custom-jd" class="btn btn-primary" style="margin-top: 6px;">Analyze & Re-Score Pasted JD</button>
     </div>
 
     <!-- ATS Match Score Section -->
@@ -103,28 +103,28 @@
     <!-- Quick Analysis Action Row (Direct parity with web app decision bar) -->
     <div class="quick-actions-row">
       <button id="btn-quick-tailor" class="quick-action-btn quick-action-tailor" title="Tailor LaTeX resume & download PDF">
-        <span>⚡</span> Tailor Resume
+        <span></span> Tailor Resume
       </button>
       <button id="btn-quick-outreach" class="quick-action-btn quick-action-outreach" title="Generate personalized recruiter InMail & outreach">
-        <span>✉️</span> Generate Outreach
+        <span></span> Generate Outreach
       </button>
     </div>
 
     <!-- Career-Ops Alignment Rubric Breakdown -->
     <div id="alignment-report-card" class="alignment-card">
-      <div style="font-size: 9px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">📊 Career-Ops Strategic Alignment:</div>
+      <div style="font-size: 9px; font-weight: 800; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Career-Ops Strategic Alignment:</div>
       <div class="alignment-grid">
         <div class="alignment-item">
-          <span style="color: #94a3b8; font-weight: 600;">🎓 Level:</span> <span id="align-seniority" style="color: #f8fafc; font-weight: 700;">Matching</span>
+          <span style="color: #94a3b8; font-weight: 600;">Level:</span> <span id="align-seniority" style="color: #f8fafc; font-weight: 700;">Matching</span>
         </div>
         <div class="alignment-item">
-          <span style="color: #94a3b8; font-weight: 600;">🏢 Domain:</span> <span id="align-domain" style="color: #f8fafc; font-weight: 700;">Direct</span>
+          <span style="color: #94a3b8; font-weight: 600;">Domain:</span> <span id="align-domain" style="color: #f8fafc; font-weight: 700;">Direct</span>
         </div>
         <div id="align-flags-box" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); padding: 4px 6px; border-radius: 5px; grid-column: span 2; display: none;">
-          <span style="color: #fca5a5; font-weight: 700;">🚩 Gap / Constraint:</span> <span id="align-flags" style="color: #fecaca; font-weight: 600;">None</span>
+          <span style="color: #fca5a5; font-weight: 700;">Gap / Constraint:</span> <span id="align-flags" style="color: #fecaca; font-weight: 600;">None</span>
         </div>
         <div class="alignment-item full-width">
-          <span style="color: #94a3b8; font-weight: 600;">⚡ Strategic Verdict:</span> <span id="align-verdict" style="color: #34d399; font-weight: 800;">Strong Fit</span>
+          <span style="color: #94a3b8; font-weight: 600;">Strategic Verdict:</span> <span id="align-verdict" style="color: #34d399; font-weight: 800;">Strong Fit</span>
         </div>
       </div>
     </div>
@@ -139,7 +139,7 @@
     <div id="text-preview-wrapper" style="display: none;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <span id="preview-title" style="font-size: 10.5px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.05em;">Preview Generated Content</span>
-        <button id="btn-copy-preview" style="background: #0284c7; border: none; color: #fff; padding: 3px 8px; border-radius: 4px; font-size: 9.5px; font-weight: 700; cursor: pointer;">📋 Copy to Clipboard</button>
+        <button id="btn-copy-preview" style="background: #0284c7; border: none; color: #fff; padding: 3px 8px; border-radius: 4px; font-size: 9.5px; font-weight: 700; cursor: pointer;">Copy to Clipboard</button>
       </div>
       <div id="text-preview-content" class="preview-box"></div>
     </div>
@@ -147,7 +147,7 @@
     <!-- 1-Click Outreach Drawer (InMail & Cold Email) -->
     <div id="outreach-drawer" style="margin-top: 8px; margin-bottom: 8px; background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 10px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-        <span style="font-size: 10px; font-weight: 800; color: #38bdf8; text-transform: uppercase;">✉️ 1-Click Recruiter Outreach Drawer</span>
+        <span style="font-size: 10px; font-weight: 800; color: #38bdf8; text-transform: uppercase;">1-Click Recruiter Outreach Drawer</span>
         <div style="display: flex; gap: 4px;">
           <button id="btn-outreach-inmail" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; padding: 2px 7px; border-radius: 4px; font-size: 9px; font-weight: 700; cursor: pointer;">InMail</button>
           <button id="btn-outreach-email" style="background: transparent; border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; padding: 2px 7px; border-radius: 4px; font-size: 9px; font-weight: 700; cursor: pointer;">Email</button>
@@ -155,8 +155,8 @@
       </div>
       <div id="outreach-text-box" class="preview-box" style="margin-bottom: 6px; max-height: 100px; font-size: 10px;">Click &ldquo;Generate &amp; Preview Recruiter Outreach&rdquo; to draft outreach with extracted hiring manager details.</div>
       <div style="display: flex; gap: 6px;">
-        <button id="btn-copy-outreach" class="btn btn-secondary" style="margin-top: 0; padding: 5px; font-size: 10px; flex: 1;">📋 Copy Outreach</button>
-        <button id="btn-quick-inmail" class="btn btn-primary" style="margin-top: 0; padding: 5px; font-size: 10px; flex: 1;">🚀 Open LinkedIn</button>
+        <button id="btn-copy-outreach" class="btn btn-secondary" style="margin-top: 0; padding: 5px; font-size: 10px; flex: 1;">Copy Outreach</button>
+        <button id="btn-quick-inmail" class="btn btn-primary" style="margin-top: 0; padding: 5px; font-size: 10px; flex: 1;">Open LinkedIn</button>
       </div>
     </div>
 
@@ -165,9 +165,9 @@
       <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 6px 8px;">
         <span style="font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; display: block; margin-bottom: 3px;">Intensity:</span>
         <select id="sel-tailoring-intensity" style="width: 100%; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; font-size: 10px; font-weight: 700; border-radius: 6px; padding: 4px; cursor: pointer;">
-          <option value="balanced" selected>⚖️ Balanced</option>
-          <option value="conservative">🛡️ Conservative</option>
-          <option value="impact">🚀 Impact-Driven</option>
+          <option value="balanced" selected>Balanced</option>
+          <option value="conservative">Conservative</option>
+          <option value="impact">Impact-Driven</option>
         </select>
       </div>
       <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 6px 8px;">
@@ -180,30 +180,30 @@
 
     <!-- Extension Action Buttons -->
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
-      <button id="btn-autofill" class="btn btn-primary" style="margin-top: 0;">⚡ Auto-Fill Form</button>
-      <button id="btn-auto-attach" class="btn btn-success" style="margin-top: 0;">📎 Attach PDF</button>
+      <button id="btn-autofill" class="btn btn-primary" style="margin-top: 0;">Auto-Fill Form</button>
+      <button id="btn-auto-attach" class="btn btn-success" style="margin-top: 0;">Attach PDF</button>
     </div>
-    <button id="btn-email-tailor" class="btn btn-email">📧 1-Click Email Tailored Package</button>
-    <button id="btn-cover-letter" class="btn btn-secondary">📝 Generate & Preview Cover Letter</button>
-    <button id="btn-company-brief" class="btn btn-secondary">🏢 Generate Company & Culture Brief</button>
-    <button id="btn-outreach" class="btn btn-secondary">✉️ Generate & Preview Recruiter Outreach</button>
+    <button id="btn-email-tailor" class="btn btn-email">1-Click Email Tailored Package</button>
+    <button id="btn-cover-letter" class="btn btn-secondary">Generate & Preview Cover Letter</button>
+    <button id="btn-company-brief" class="btn btn-secondary">Generate Company & Culture Brief</button>
+    <button id="btn-outreach" class="btn btn-secondary">Generate & Preview Recruiter Outreach</button>
 
     <!-- Interactive AI Q&A Copilot (For custom/unfilled questions e.g. "Why do you want to work at X?") -->
     <div id="ai-qa-box" style="margin-top: 10px; background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 10px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-        <span style="font-size: 10px; font-weight: 800; color: #38bdf8; text-transform: uppercase;">❓ Custom AI Q&A Copilot</span>
+        <span style="font-size: 10px; font-weight: 800; color: #38bdf8; text-transform: uppercase;">Custom AI Q&A Copilot</span>
         <span style="font-size: 8.5px; color: #94a3b8; font-weight: 600;">Company-Tailored</span>
       </div>
       <div style="font-size: 9px; color: #cbd5e1; margin-bottom: 6px;">
         Autofill missed a question? Type or paste any custom question (e.g. <em>"Why do you want to work at this company?"</em>) to get a company & profile tailored answer:
       </div>
       <input type="text" id="custom-qa-question" class="form-control" placeholder="e.g. Why do you want to join this company?" style="padding: 6px; font-size: 10.5px; margin-bottom: 6px;">
-      <button id="btn-generate-qa-ans" class="btn btn-primary" style="margin-top: 0; padding: 6px; font-size: 10.5px;">💡 Generate Tailored Answer</button>
+      <button id="btn-generate-qa-ans" class="btn btn-primary" style="margin-top: 0; padding: 6px; font-size: 10.5px;">Generate Tailored Answer</button>
       
       <div id="qa-result-box" style="display: none; margin-top: 8px; background: rgba(15, 23, 42, 0.8); border: 1px dashed rgba(52, 211, 153, 0.4); border-radius: 6px; padding: 8px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-          <span style="font-size: 9px; font-weight: 700; color: #34d399;">✨ Company-Specific AI Answer:</span>
-          <button id="btn-copy-qa-ans" style="background: #10b981; color: #000; border: none; padding: 2px 7px; border-radius: 4px; font-size: 9px; font-weight: 700; cursor: pointer;">📋 Copy Answer</button>
+          <span style="font-size: 9px; font-weight: 700; color: #34d399;">Company-Specific AI Answer:</span>
+          <button id="btn-copy-qa-ans" style="background: #10b981; color: #000; border: none; padding: 2px 7px; border-radius: 4px; font-size: 9px; font-weight: 700; cursor: pointer;">Copy Answer</button>
         </div>
         <div id="qa-result-text" style="font-size: 10px; color: #f8fafc; line-height: 1.4; white-space: pre-wrap; word-break: break-word;"></div>
       </div>
@@ -216,7 +216,7 @@
   <div id="tab-profile" class="tab-pane">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
       <span style="font-size: 11px; font-weight: 700; color: #38bdf8;">Candidate Details</span>
-      <button id="btn-sync-backend-now" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; padding: 4px 10px; border-radius: 5px; font-size: 10.5px; font-weight: 700; cursor: pointer;">⚡ Sync from Web App</button>
+      <button id="btn-sync-backend-now" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; padding: 4px 10px; border-radius: 5px; font-size: 10.5px; font-weight: 700; cursor: pointer;">Sync from Web App</button>
     </div>
 
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
@@ -300,7 +300,7 @@
       <textarea id="prof-summary" class="form-control" rows="3" placeholder="Paste your resume summary or parsed text for AI answers..."></textarea>
     </div>
 
-    <button id="btn-save-profile" class="btn btn-primary">💾 Save Profile & Preferences</button>
+    <button id="btn-save-profile" class="btn btn-primary">Save Profile & Preferences</button>
   </div>
 
   <!-- ======================================================== -->
@@ -308,18 +308,18 @@
   <!-- ======================================================== -->
   <div id="tab-settings" class="tab-pane">
     <div class="card">
-      <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px;">🔑 Extension Sync Key:</div>
+      <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px;">Extension Sync Key:</div>
       <input type="text" id="user-token" class="form-control" style="font-weight: 700; color: #38bdf8; text-transform: uppercase;" placeholder="Paste Sync Key from Dashboard (e.g. GABY48)">
       <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">Copy your 6-digit Sync Code from the web dashboard header.</div>
 
       <div id="user-info-card" style="display: none; flex-direction: column; gap: 2px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 6px 10px; margin-top: 8px;">
-        <div id="user-name-display" style="font-size: 11px; font-weight: 800; color: #34d399;">✓ AUTHENTICATED USER</div>
-        <div id="user-email-display" style="font-size: 10px; color: #94a3b8;">📧 user@example.com</div>
+        <div id="user-name-display" style="font-size: 11px; font-weight: 800; color: #34d399;">AUTHENTICATED USER</div>
+        <div id="user-email-display" style="font-size: 10px; color: #94a3b8;">user@example.com</div>
       </div>
     </div>
 
     <div class="card">
-      <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px;">🌐 Server Endpoint Base URL:</div>
+      <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px;">Server Endpoint Base URL:</div>
       <input type="text" id="backend-url-input" class="form-control" placeholder="http://127.0.0.1:8000 or https://www.job-finder.space">
     </div>
 
@@ -327,7 +327,7 @@
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
         <span style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase;">🇬🇧 UK Sponsor Register Cache:</span>
-        <button id="btn-sync-sponsors" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 4px; padding: 2px 7px; font-size: 9.5px; font-weight: 700; cursor: pointer;">🔄 Refresh</button>
+        <button id="btn-sync-sponsors" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 4px; padding: 2px 7px; font-size: 9.5px; font-weight: 700; cursor: pointer;">Refresh</button>
       </div>
       <div style="font-size: 10px; color: #f8fafc; font-weight: 600;">
         <span id="sponsor-cache-count">Checking register...</span>
@@ -336,7 +336,7 @@
       <div style="font-size: 8.5px; color: #64748b; margin-top: 4px; line-height: 1.35;">Auto-syncs daily with official GOV.UK Home Office register (~140k licensed sponsors).</div>
     </div>
 
-    <button id="btn-save-settings" class="btn btn-primary">💾 Save Settings & Test Connection</button>
+    <button id="btn-save-settings" class="btn btn-primary">Save Settings & Test Connection</button>
   </div>
 
   <div id="popup-toast" class="toast"></div>

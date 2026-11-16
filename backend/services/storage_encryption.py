@@ -258,7 +258,7 @@ def migrate_storage_directory_to_encrypted(base_user_data_dir: str) -> int:
         print(f"[StorageEncryption] Error scanning storage directory {base_user_data_dir}: {e}")
 
     if migrated_count > 0:
-        print(f"[StorageEncryption] ✓ Successfully migrated {migrated_count} legacy plaintext files to AES-256-GCM zero-knowledge ciphertext.")
+        print(f"[StorageEncryption] Successfully migrated {migrated_count} legacy plaintext files to AES-256-GCM zero-knowledge ciphertext.")
 
     return migrated_count
 

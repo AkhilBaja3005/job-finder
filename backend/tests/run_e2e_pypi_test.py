@@ -28,7 +28,7 @@ import urllib.error
 
 def run_test():
     print("==================================================")
-    print("🚀 RUNNING E2E TEST SUITE FOR PIP JOB-FINDER-AI")
+    print("RUNNING E2E TEST SUITE FOR PIP JOB-FINDER-AI")
     print("==================================================")
 
     py_exe = sys.executable
@@ -40,12 +40,12 @@ def run_test():
     import backend
     import backend.main
     from backend.main import app
-    print("  ✓ job_finder, backend, backend.main, and FastAPI app imported cleanly!")
+    print("  job_finder, backend, backend.main, and FastAPI app imported cleanly!")
 
     # 2. Inspect OpenAPI endpoints
     openapi = app.openapi()
     paths = openapi.get("paths", {})
-    print(f"  ✓ Total OpenAPI endpoints registered: {len(paths)}")
+    print(f"  Total OpenAPI endpoints registered: {len(paths)}")
     assert len(paths) >= 60, f"Expected >= 60 routes, got {len(paths)}"
 
     # 3. Boot server on test port
@@ -79,7 +79,7 @@ def run_test():
             out, err = server_proc.communicate(timeout=3)
             raise RuntimeError(f"Server failed to start:\nStdout:\n{out}\nStderr:\n{err}")
 
-        print("  ✓ Server is ONLINE and responding!")
+        print("  Server is ONLINE and responding!")
 
         # 4. Test REST Endpoints
         print("\n[3/5] Testing HTTP Endpoints...")
@@ -89,21 +89,21 @@ def run_test():
             assert resp.status == 200
             data = json.loads(resp.read().decode("utf-8"))
             assert data["status"] == "ok"
-            print("  ✓ GET /healthz -> status ok")
+            print("  GET /healthz -> status ok")
 
         # Test /health
         with urllib.request.urlopen(f"{base_url}/health", timeout=5.0) as resp:
             assert resp.status == 200
             data = json.loads(resp.read().decode("utf-8"))
             assert data["status"] == "ok"
-            print("  ✓ GET /health -> status ok")
+            print("  GET /health -> status ok")
 
         # Test /auth/url
         with urllib.request.urlopen(f"{base_url}/auth/url", timeout=5.0) as resp:
             assert resp.status == 200
             data = json.loads(resp.read().decode("utf-8"))
             assert "url" in data
-            print("  ✓ GET /auth/url -> returns oauth url")
+            print("  GET /auth/url -> returns oauth url")
 
         # Test /mcp/tools
         with urllib.request.urlopen(f"{base_url}/mcp/tools", timeout=5.0) as resp:
@@ -112,7 +112,7 @@ def run_test():
             assert "tools" in data
             tools = data["tools"]
             assert len(tools) >= 15
-            print(f"  ✓ GET /mcp/tools -> returns {len(tools)} tools")
+            print(f"  GET /mcp/tools -> returns {len(tools)} tools")
 
         # Test /mcp/messages (JSON-RPC tools/list)
         rpc_req = json.dumps({
@@ -127,7 +127,7 @@ def run_test():
             rpc_res = json.loads(resp.read().decode("utf-8"))
             assert "result" in rpc_res
             assert "tools" in rpc_res["result"]
-            print(f"  ✓ POST /mcp/messages (tools/list) -> returns {len(rpc_res['result']['tools'])} tools via JSON-RPC 2.0")
+            print(f"  POST /mcp/messages (tools/list) -> returns {len(rpc_res['result']['tools'])} tools via JSON-RPC 2.0")
 
         # Test /answer_question
         ans_req = json.dumps({
@@ -140,7 +140,7 @@ def run_test():
             ans_res = json.loads(resp.read().decode("utf-8"))
             assert ans_res["status"] == "success"
             assert "Available immediately" in ans_res["answer"]
-            print(f"  ✓ POST /answer_question -> deterministic fast fallback returned successfully")
+            print(f"  POST /answer_question -> deterministic fast fallback returned successfully")
 
         # Test /extension/parse_job_details
         parse_req = json.dumps({
@@ -152,7 +152,7 @@ def run_test():
             assert resp.status == 200
             parse_res = json.loads(resp.read().decode("utf-8"))
             assert "job_title" in parse_res
-            print(f"  ✓ POST /extension/parse_job_details -> parsed title '{parse_res.get('job_title')}'")
+            print(f"  POST /extension/parse_job_details -> parsed title '{parse_res.get('job_title')}'")
 
     finally:
         server_proc.terminate()
@@ -160,7 +160,7 @@ def run_test():
             server_proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             server_proc.kill()
-        print("  ✓ Test server terminated cleanly.")
+        print("  Test server terminated cleanly.")
 
     # 5. Test CLI Subcommands
     print("\n[4/5] Testing CLI subcommands...")
@@ -171,39 +171,39 @@ def run_test():
         res = subprocess.run([jf_bin, "--help"], capture_output=True, text=True)
         assert res.returncode == 0
         assert "scan" in res.stdout
-        print("  ✓ `job-finder --help` executed successfully")
+        print("  `job-finder --help` executed successfully")
 
         res = subprocess.run([jf_bin, "scan", "--help"], capture_output=True, text=True)
         assert res.returncode == 0
-        print("  ✓ `job-finder scan --help` executed successfully")
+        print("  `job-finder scan --help` executed successfully")
 
         res = subprocess.run([jf_bin, "server", "--help"], capture_output=True, text=True)
         assert res.returncode == 0
-        print("  ✓ `job-finder server --help` executed successfully")
+        print("  `job-finder server --help` executed successfully")
 
         res = subprocess.run([jf_bin, "apply", "--help"], capture_output=True, text=True)
         assert res.returncode == 0
         assert "--submit" in res.stdout
-        print("  ✓ `job-finder apply --help` executed successfully")
+        print("  `job-finder apply --help` executed successfully")
 
         res = subprocess.run([jf_bin, "status"], capture_output=True, text=True)
         assert res.returncode == 0
         assert "JOB FINDER AI SYSTEM HEALTH" in res.stdout
-        print("  ✓ `job-finder status` executed successfully")
+        print("  `job-finder status` executed successfully")
 
         res = subprocess.run([jf_bin, "ats"], capture_output=True, text=True)
         assert res.returncode == 0
         assert "MASTER RESUME ATS HEALTH AUDIT" in res.stdout
-        print("  ✓ `job-finder ats` executed successfully")
+        print("  `job-finder ats` executed successfully")
 
         res = subprocess.run([jf_bin, "tracker"], capture_output=True, text=True)
         assert res.returncode == 0
-        print("  ✓ `job-finder tracker` executed successfully")
+        print("  `job-finder tracker` executed successfully")
 
         res = subprocess.run([jf_bin, "profile", "--show"], capture_output=True, text=True)
         assert res.returncode == 0
         assert "Profile:" in res.stdout
-        print("  ✓ `job-finder profile --show` executed successfully")
+        print("  `job-finder profile --show` executed successfully")
 
         # Test MCP Stdio
         p = subprocess.Popen(
@@ -216,7 +216,7 @@ def run_test():
         msg = json.dumps({"jsonrpc": "2.0", "id": 42, "method": "tools/list"}) + "\n"
         stdout_data, _ = p.communicate(input=msg, timeout=5)
         assert "calculate_ats_score" in stdout_data
-        print("  ✓ `job-finder mcp` stdio JSON-RPC executed successfully")
+        print("  `job-finder mcp` stdio JSON-RPC executed successfully")
     else:
         print(f"  Note: {jf_bin} not found in this env, skipping binary entrypoint check.")
 
@@ -231,7 +231,7 @@ def run_test():
         from dotenv import load_dotenv
         load_dotenv(test_env_file, override=True)
         assert os.getenv("CLI_ENV_TEST_VAR") == "LOADED_SUCCESSFULLY"
-        print("  ✓ Automatic CLI .env resolution & environment loading verified!")
+        print("  Automatic CLI .env resolution & environment loading verified!")
     finally:
         if os.path.exists(test_env_file):
             os.remove(test_env_file)
@@ -249,10 +249,10 @@ def run_test():
     )
     assert "Notice Period / Earliest Availability: Available immediately" in test_prompt
     assert "HTML5 date input or Calendar Date-Picker" in test_prompt
-    print("  ✓ Earliest start date, notice period, and calendar date-picker rules verified in browser-use task prompt!")
+    print("  Earliest start date, notice period, and calendar date-picker rules verified in browser-use task prompt!")
 
     print("\n==================================================")
-    print("🎉 ALL ENDPOINT & FUNCTIONALITY TESTS PASSED 100%!")
+    print("ALL ENDPOINT & FUNCTIONALITY TESTS PASSED 100%!")
     print("==================================================")
 
 if __name__ == "__main__":

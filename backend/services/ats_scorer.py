@@ -906,18 +906,18 @@ def evaluate_master_resume(resume_data: dict, config: ScoringConfig = DEFAULT_SC
     
     tech_score = min(100, max(40, len(found_skills) * 8))
     if len(found_skills) < 8:
-        suggestions.append("💡 Expand Technical Skills: Found " + str(len(found_skills)) + " core ATS taxonomy keywords. Consider adding specific frameworks (e.g. PySpark, Docker, Azure OpenAI, XGBoost).")
+        suggestions.append("Expand Technical Skills: Found " + str(len(found_skills)) + " core ATS taxonomy keywords. Consider adding specific frameworks (e.g. PySpark, Docker, Azure OpenAI, XGBoost).")
 
     # 3. Summary & Positioning Check
     summary = resume_data.get("summary", "") or resume_data.get("experience_summary", "") or ""
     summary_words = len(summary.split())
     if not summary:
-        suggestions.append("📝 Add a Professional Summary: Standout positioning (AI/ML Engineer, 3+ years experience, key differentiators) increases initial recruiter scan conversion.")
+        suggestions.append("Add a Professional Summary: Standout positioning (AI/ML Engineer, 3+ years experience, key differentiators) increases initial recruiter scan conversion.")
     elif summary_words < 15 or summary_words > 70:
-        suggestions.append("🎯 Optimize Summary Length: Summary is " + str(summary_words) + " words. Master Playbook recommends 2–3 visual lines (~25–50 words).")
+        suggestions.append("Optimize Summary Length: Summary is " + str(summary_words) + " words. Master Playbook recommends 2–3 visual lines (~25–50 words).")
 
     if re.search(r'strong foundation in|passionate about|seeking an entry', summary, re.IGNORECASE):
-        suggestions.append("⚠️ Avoid weak positioning: Replace phrases like 'strong foundation in' with experienced phrasing e.g. 'AI/ML Engineer with 3+ years experience...'.")
+        suggestions.append("Avoid weak positioning: Replace phrases like 'strong foundation in' with experienced phrasing e.g. 'AI/ML Engineer with 3+ years experience...'.")
 
     # 4. Overall Baseline ATS Score Calculation
     base_ats_score = round(config.overall_skills_weight * tech_score + config.overall_exp_weight * (90 if cand_years >= 2 else 70) + config.overall_fit_weight * quant_score)

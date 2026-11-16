@@ -18,7 +18,7 @@ async def test_indeed_links():
     ]
     
     print("\n" + "=" * 65)
-    print("🔎 TESTING INDEED COMPANY NAME & TITLE EXTRACTION")
+    print("TESTING INDEED COMPANY NAME & TITLE EXTRACTION")
     print("=" * 65)
     
     # pyrefly: ignore [missing-import]
@@ -31,10 +31,10 @@ async def test_indeed_links():
                 data = await scrape_job_description(url, browser=browser)
                 title = data.get("title", "Unknown")
                 company = _extract_company_from_jd(data.get("description", ""), url)
-                print(f"    🏷️ Title:   {title}")
-                print(f"    🏢 Company: {company}")
+                print(f"    Title:   {title}")
+                print(f"    Company: {company}")
             except Exception as e:
-                print(f"    ⚠️ Error scraping {url}: {e}")
+                print(f"    Error scraping {url}: {e}")
         await browser.close()
     print("=" * 65 + "\n")
 

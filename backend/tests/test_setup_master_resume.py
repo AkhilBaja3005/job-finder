@@ -265,14 +265,14 @@ if __name__ == "__main__":
         mp = MonkeyPatch()
         try:
             test_setup_prompts_and_launches_automation_browser(fw, mp)
-            print("  ✅ test_setup_prompts_and_launches_automation_browser passed!")
+            print("  test_setup_prompts_and_launches_automation_browser passed!")
         finally:
             mp.undo()
 
         mp = MonkeyPatch()
         try:
             test_setup_browser_prompt_skipped(fw, mp)
-            print("  ✅ test_setup_browser_prompt_skipped passed!")
+            print("  test_setup_browser_prompt_skipped passed!")
         finally:
             mp.undo()
 

@@ -128,7 +128,7 @@ async def discover_job_stubs(target_count: int = 100, timeframe: str = "1w") -> 
     seen_canonical: set = set()
     seen_snippets: set = set()
 
-    print(f"\n[Phase 1] 🚀 Rapidly discovering {target_count} unique job listings on Jobserve...")
+    print(f"\n[Phase 1] Rapidly discovering {target_count} unique job listings on Jobserve...")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -144,7 +144,7 @@ async def discover_job_stubs(target_count: int = 100, timeframe: str = "1w") -> 
 
             kw = q["kw"]
             loc = q["loc"]
-            print(f"  🔍 Query [{q_idx}/{len(SEARCH_QUERIES)}]: '{kw}' in '{loc}' (Found {len(unique_stubs)}/{target_count})...")
+            print(f"  Query [{q_idx}/{len(SEARCH_QUERIES)}]: '{kw}' in '{loc}' (Found {len(unique_stubs)}/{target_count})...")
 
             try:
                 await page.goto("https://www.jobserve.com/gb/en/Job-Search/", wait_until="networkidle", timeout=15000)
@@ -254,7 +254,7 @@ async def discover_job_stubs(target_count: int = 100, timeframe: str = "1w") -> 
 
         await browser.close()
 
-    print(f"\n[Phase 1 Complete] ✓ Successfully discovered {len(unique_stubs)} strictly unique job listings.")
+    print(f"\n[Phase 1 Complete] Successfully discovered {len(unique_stubs)} strictly unique job listings.")
     return list(unique_stubs.values())
 
 
@@ -343,7 +343,7 @@ async def parallel_fetch_all_jds(stubs: List[Dict[str, Any]]) -> List[Dict[str, 
     """Phase 2: Concurrently fetches all full JDs using a browser context pool."""
     from playwright.async_api import async_playwright
 
-    print(f"\n[Phase 2] ⚡ Parallel Fetching {len(stubs)} full JDs with {CONCURRENCY_WORKERS} concurrent workers...")
+    print(f"\n[Phase 2] Parallel Fetching {len(stubs)} full JDs with {CONCURRENCY_WORKERS} concurrent workers...")
     semaphore = asyncio.Semaphore(CONCURRENCY_WORKERS)
     results = []
 
@@ -362,7 +362,7 @@ async def parallel_fetch_all_jds(stubs: List[Dict[str, Any]]) -> List[Dict[str, 
             chunk = tasks[i:i + chunk_size]
             chunk_results = await asyncio.gather(*chunk)
             results.extend(chunk_results)
-            print(f"  ✓ Fetched [{len(results)}/{len(stubs)}] job descriptions in parallel...")
+            print(f"  Fetched [{len(results)}/{len(stubs)}] job descriptions in parallel...")
 
         await browser.close()
 
@@ -371,7 +371,7 @@ async def parallel_fetch_all_jds(stubs: List[Dict[str, Any]]) -> List[Dict[str, 
 
 def score_and_rank_all_jobs(jobs: List[Dict[str, Any]], candidate_profile: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Phase 3: Runs full deterministic ATS scoring across all 100 jobs."""
-    print(f"\n[Phase 3] 🎯 ATS Scoring {len(jobs)} jobs against candidate profile...")
+    print(f"\n[Phase 3] ATS Scoring {len(jobs)} jobs against candidate profile...")
     ranked = []
 
     for job in jobs:
@@ -395,7 +395,7 @@ def score_and_rank_all_jobs(jobs: List[Dict[str, Any]], candidate_profile: Dict[
                 "role_fit_score": role_fit,
                 "matched_skills": matched,
                 "missing_skills": missing,
-                "fit_tier": "🔥 Top Tier (>=75%)" if overall >= 75 else ("⚡ High Fit (65-74%)" if overall >= 65 else "📋 Moderate (<65%)")
+                "fit_tier": "Top Tier (>=75%)" if overall >= 75 else ("High Fit (65-74%)" if overall >= 65 else "Moderate (<65%)")
             })
         except Exception as e:
             print(f"  Error scoring '{title}': {e}")
@@ -407,10 +407,10 @@ def score_and_rank_all_jobs(jobs: List[Dict[str, Any]], candidate_profile: Dict[
 def generate_shortlist_report(ranked_jobs: List[Dict[str, Any]], top_n: int = 25) -> str:
     """Generates Markdown Shortlist Report."""
     report = []
-    report.append("# 🎯 Jobserve Top 100 Ingestion & Shortlist Report\n")
+    report.append("# Jobserve Top 100 Ingestion & Shortlist Report\n")
     report.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M')} | **Total Scored:** {len(ranked_jobs)} Unique Jobs\n")
     report.append("--- \n")
-    report.append("## 🏆 Top 25 Shortlisted Opportunities\n")
+    report.append("## Top 25 Shortlisted Opportunities\n")
     report.append("| Rank | Overall ATS | Skills Fit | Rate / Salary | Role & Location | Direct Link |")
     report.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
 
@@ -419,7 +419,7 @@ def generate_shortlist_report(ranked_jobs: List[Dict[str, Any]], top_n: int = 25
         report.append(f"| **#{idx}** | **{j['overall_score']}%** | {j['skills_score']}% | `{rate}` | **{j['title']}** <br>_{j['company']}_ ({j['location']}) | [View Job]({j['url']}) |")
 
     report.append("\n---\n")
-    report.append("## 📋 Detailed Breakdown of Top Opportunities\n")
+    report.append("## Detailed Breakdown of Top Opportunities\n")
 
     for idx, j in enumerate(ranked_jobs[:top_n], 1):
         report.append(f"### #{idx}. {j['title']}")
@@ -460,12 +460,12 @@ async def main():
     output_json = "jobserve_top100_results.json"
     with open(output_json, "w", encoding="utf-8") as f:
         json.dump(ranked_jobs, f, indent=2)
-    print(f"\n✓ Saved all {len(ranked_jobs)} scored jobs to {output_json}")
+    print(f"\nSaved all {len(ranked_jobs)} scored jobs to {output_json}")
 
     report_md = generate_shortlist_report(ranked_jobs, top_n=25)
     with open("jobserve_shortlist_report.md", "w", encoding="utf-8") as f:
         f.write(report_md)
-    print(f"✓ Saved Shortlist Report to jobserve_shortlist_report.md")
+    print(f"Saved Shortlist Report to jobserve_shortlist_report.md")
 
     # Print Summary Table
     print("\n" + "=" * 90)

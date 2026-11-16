@@ -256,9 +256,9 @@ async def cached_scrape_job_description(
     cached = cache_get(url)
     if cached is not None:
         if on_log:
-            on_log(f"[jd_cache] ⚡ Cache hit: {url[:80]}")
+            on_log(f"[jd_cache] Cache hit: {url[:80]}")
         else:
-            print(f"[jd_cache] ⚡ Cache hit: {url[:80]}")
+            print(f"[jd_cache] Cache hit: {url[:80]}")
         return cached
 
     # 2. Cache miss — do the real scrape

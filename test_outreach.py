@@ -42,7 +42,7 @@ def test_analyze_job():
         from reportlab.pdfgen import canvas
         from reportlab.lib.pagesizes import letter
     except ImportError:
-        print("  ✗ reportlab not installed, trying pypdf instead...")
+        print("  reportlab not installed, trying pypdf instead...")
         # Create a minimal PDF manually
         with tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False) as f:
             # Minimal PDF structure
@@ -111,12 +111,12 @@ startxref
             )
 
         if upload_response.status_code != 200:
-            print(f"  ✗ Resume upload failed: {upload_response.text}")
+            print(f"  Resume upload failed: {upload_response.text}")
             os.unlink(resume_path)
             return None, None
-        print("  ✓ Resume uploaded")
+        print("  Resume uploaded")
     except Exception as e:
-        print(f"  ✗ Resume upload error: {e}")
+        print(f"  Resume upload error: {e}")
         os.unlink(resume_path)
         return None, None
     finally:
@@ -154,8 +154,8 @@ startxref
                 elif event_type == "result":
                     company_name = event.get("company")
                     analysis_result = event.get("analysis")
-                    print(f"  ✓ Company: {company_name}")
-                    print(f"  ✓ Analysis received: {bool(analysis_result)}")
+                    print(f"  Company: {company_name}")
+                    print(f"  Analysis received: {bool(analysis_result)}")
                 elif event_type == "error":
                     print(f"  ERROR: {event.get('message')}")
                     return None, None
@@ -163,7 +163,7 @@ startxref
         return company_name, analysis_result
 
     except Exception as e:
-        print(f"  ✗ Error: {e}")
+        print(f"  Error: {e}")
         return None, None
 
 
@@ -172,7 +172,7 @@ def test_generate_outreach(company_name):
     print("\n=== Testing Generate Outreach ===")
 
     if not company_name:
-        print("  ✗ Skipping: No company name from analysis")
+        print("  Skipping: No company name from analysis")
         return False
 
     payload = {
@@ -196,8 +196,8 @@ def test_generate_outreach(company_name):
 
         if response.status_code == 200:
             data = response.json()
-            print(f"  ✓ Recruiter Info: {data.get('recruiter_info')}")
-            print(f"  ✓ Message generated:")
+            print(f"  Recruiter Info: {data.get('recruiter_info')}")
+            print(f"  Message generated:")
             message = data.get('message', {})
             print(f"    - Why applying: {message.get('why_applying', '')[:50]}...")
             print(f"    - Why fit: {message.get('why_fit', '')[:50]}...")
@@ -205,11 +205,11 @@ def test_generate_outreach(company_name):
             print(f"    - Email subject: {message.get('email_subject', '')[:50]}...")
             return True
         else:
-            print(f"  ✗ Error: {response.text}")
+            print(f"  Error: {response.text}")
             return False
 
     except Exception as e:
-        print(f"  ✗ Error: {e}")
+        print(f"  Error: {e}")
         return False
 
 
@@ -222,7 +222,7 @@ def main():
     company_name, analysis = test_analyze_job()
 
     if not company_name:
-        print("\n✗ FAILED: Could not extract company name from job analysis")
+        print("\nFAILED: Could not extract company name from job analysis")
         return False
 
     # Test 2: Generate outreach
@@ -230,12 +230,12 @@ def main():
 
     if success:
         print("\n" + "=" * 60)
-        print("✓ ALL TESTS PASSED")
+        print("ALL TESTS PASSED")
         print("=" * 60)
         return True
     else:
         print("\n" + "=" * 60)
-        print("✗ TESTS FAILED")
+        print("TESTS FAILED")
         print("=" * 60)
         return False
 

@@ -30,7 +30,7 @@ def run_sample_tests():
 
     # 1. Check current database / cache stats
     stats = get_sponsor_stats()
-    print(f"\n📊 [1] Database Stats:")
+    print(f"\n[1] Database Stats:")
     print(f"   Total Licensed UK Sponsors: {stats.get('total_sponsors'):,}")
     print(f"   Last Register Sync Date    : {stats.get('last_sync')}")
 
@@ -62,7 +62,7 @@ def run_sample_tests():
         "Fake Company Not Sponsoring Ltd"
     ]
 
-    print("\n🔍 [2] Running Verification on Sample Companies:")
+    print("\n[2] Running Verification on Sample Companies:")
     print("-" * 70)
 
     for company in test_companies:
@@ -76,13 +76,13 @@ def run_sample_tests():
             details = res.get("details", {})
             city = details.get("city") or "UK"
             route = details.get("route") or "Skilled Worker"
-            print(f"🟢 [SPONSOR] {company}")
+            print(f"[SPONSOR] {company}")
             print(f"   Normalized   : '{norm}'")
             print(f"   Matched Entity: '{matched}' ({city}) | Route: {route}")
             print(f"   Badge Shown  : {badge}\n")
         else:
             notice = res.get("notice", {})
-            print(f"🔴 [NOT FOUND] {company}")
+            print(f"[NOT FOUND] {company}")
             print(f"   Normalized   : '{norm}'")
             print(f"   Badge Shown  : {badge}")
             print(f"   Notice Title : {notice.get('title')}")

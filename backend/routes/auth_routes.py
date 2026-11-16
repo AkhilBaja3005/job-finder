@@ -72,6 +72,11 @@ async def auth_google(request: Request, redirect_to: Optional[str] = None):
     auth_url = get_google_auth_url(redirect_uri=custom_redirect, state=state)
     if not auth_url:
         raise HTTPException(status_code=500, detail="Google OAuth client ID is not configured.")
+    # Browser navigation (e.g. the MCP consent page link) must be redirected;
+    # the SPA fetches this endpoint for JSON.
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept and "application/json" not in accept:
+        return RedirectResponse(url=auth_url, status_code=302)
     return {"url": auth_url}
 
 
@@ -100,7 +105,11 @@ async def auth_callback(code: str, request: Request, state: Optional[str] = None
             if not state.startswith("//"):
                 dest_path = state
 
-        return RedirectResponse(url=f"{frontend_url.rstrip('/')}{dest_path}?token={token}")
+        # /oauth/* pages are served by this backend, not the SPA dev server
+        if dest_path.startswith("/oauth/"):
+            frontend_url = base_url
+        sep = "&" if "?" in dest_path else "?"
+        return RedirectResponse(url=f"{frontend_url.rstrip('/')}{dest_path}{sep}token={token}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"OAuth verification failed: {str(e)}")
 
@@ -508,7 +517,7 @@ async def email_action_unsubscribe(email: str):
         supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_enabled": False})
         return HTMLResponse("""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 12px; text-align: center;">
-            <div style="font-size: 3rem; margin-bottom: 12px;">🔕</div>
+            <div style="font-size: 3rem; margin-bottom: 12px;"></div>
             <h2 style="color: #0F172A; margin: 0 0 10px;">Unsubscribed</h2>
             <p style="color: #64748B;">You have successfully disabled daily job digest emails.</p>
         </div>
@@ -583,13 +592,13 @@ async def email_action_tailor(job_url: str, email: str, title: Optional[str] = N
         target_company = company or "Company"
         return HTMLResponse(f"""
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 40px auto; padding: 32px 24px; border: 1px solid #10B981; border-radius: 16px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.06); background-color: #ffffff;">
-            <div style="font-size: 3.5rem; margin-bottom: 16px;">⚡</div>
+            <div style="font-size: 3.5rem; margin-bottom: 16px;"></div>
             <h2 style="color: #0F172A; margin: 0 0 12px; font-weight: 800;">Tailoring Completed!</h2>
             <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin-bottom: 20px;">
                 Your resume for <strong>{target_title}</strong> at <strong>{target_company}</strong> has been tailored, verified by the Senior Recruiter Agent, and compiled.
             </p>
             <div style="background-color: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 14px; margin-bottom: 24px; color: #166534; font-size: 0.9rem; font-weight: 600;">
-                📧 We've dispatched the tailored PDF directly to <strong>{email}</strong>.
+                We've dispatched the tailored PDF directly to <strong>{email}</strong>.
             </div>
             <a href="{job_url}" target="_blank" style="display: inline-block; background-color: #0284C7; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 0.92rem;">
                 Open Job & Apply Now &rarr;

@@ -130,14 +130,14 @@ async def scan_linkedin_for_top_applicant_jobs(
         # pyrefly: ignore [missing-import]
         from playwright.async_api import async_playwright
     except ImportError:
-        print("[Top Applicant Scanner] ❌ Playwright not installed in environment.")
+        print("[Top Applicant Scanner] Playwright not installed in environment.")
         return []
 
     from services.browser_use_agent import ensure_persistent_browser
     cdp_url = ensure_persistent_browser(headless=headless)
 
     async with async_playwright() as p:
-        print(f"[Top Applicant Scanner] 🌐 Connecting to persistent Chrome session via CDP ({cdp_url})...")
+        print(f"[Top Applicant Scanner] Connecting to persistent Chrome session via CDP ({cdp_url})...")
         browser = await p.chromium.connect_over_cdp(cdp_url, no_defaults=True)
         context = browser.contexts[0] if browser.contexts else await browser.new_context()
         page = await context.new_page()
@@ -150,11 +150,11 @@ async def scan_linkedin_for_top_applicant_jobs(
         tpr_sec = timeframe_hours * 3600
 
         for kw in keywords_list:
-            print(f"\n[Top Applicant Scanner] 🔍 Searching LinkedIn for: '{kw}' in '{location}' (Past {timeframe_hours}h, up to 30 matches/role)...")
+            print(f"\n[Top Applicant Scanner] Searching LinkedIn for: '{kw}' in '{location}' (Past {timeframe_hours}h, up to 30 matches/role)...")
             kw_matches = 0
             for page_idx in range(max_pages_per_keyword):
                 if kw_matches >= 30:
-                    print(f"   🎯 Reached 30 Top Applicant matches for '{kw}'. Proceeding to next role...")
+                    print(f"   Reached 30 Top Applicant matches for '{kw}'. Proceeding to next role...")
                     break
                 start_offset = page_idx * 25
                 query_params = {
@@ -168,7 +168,7 @@ async def scan_linkedin_for_top_applicant_jobs(
                 try:
                     await page.goto(search_url, wait_until="domcontentloaded", timeout=25000)
                 except Exception as ge:
-                    print(f"   ⚠️ Navigation error for '{kw}' on page {page_idx + 1}: {ge}")
+                    print(f"   Navigation error for '{kw}' on page {page_idx + 1}: {ge}")
                     continue
 
                 # Comprehensive job card selectors covering all LinkedIn desktop/guest layouts
@@ -287,10 +287,10 @@ async def scan_linkedin_for_top_applicant_jobs(
                 }""")
 
                 if not extracted_page_jobs and not cards:
-                    print(f"   📄 Page {page_idx + 1}: No cards rendered on this page.")
+                    print(f"   Page {page_idx + 1}: No cards rendered on this page.")
                     continue
 
-                print(f"   📄 Page {page_idx + 1}: Found {len(extracted_page_jobs)} job listing cards.")
+                print(f"   Page {page_idx + 1}: Found {len(extracted_page_jobs)} job listing cards.")
 
                 for j_item in extracted_page_jobs:
                     job_id = j_item.get("id")
@@ -309,7 +309,7 @@ async def scan_linkedin_for_top_applicant_jobs(
                     has_badge = j_item.get("isTopApplicant", False)
 
                     if has_badge:
-                        print(f"   🌟 Top Applicant Match found: {title} @ {company} (ID: {job_id})")
+                        print(f"   Top Applicant Match found: {title} @ {company} (ID: {job_id})")
                         found_jobs.append({
                             "id": job_id,
                             "url": canonical_url,
@@ -322,12 +322,12 @@ async def scan_linkedin_for_top_applicant_jobs(
                         })
                         kw_matches += 1
                         if kw_matches >= 30:
-                            print(f"   🎯 Reached 30 Top Applicant matches for '{kw}'. Skipping remaining pages...")
+                            print(f"   Reached 30 Top Applicant matches for '{kw}'. Skipping remaining pages...")
                             break
 
         await page.close()
 
-    print(f"\n[Top Applicant Scanner] 🎯 Total 'Top Applicant' matches identified: {len(found_jobs)}")
+    print(f"\n[Top Applicant Scanner] Total 'Top Applicant' matches identified: {len(found_jobs)}")
     return found_jobs
 
 
@@ -344,13 +344,13 @@ async def run_top_applicant_pipeline(
 
     master_resume_pdf = find_master_resume_with_mac_tags()
     if not master_resume_pdf or not os.path.exists(master_resume_pdf):
-        print(f"[Master Resume] ❌ Could not locate master resume: {master_resume_pdf}")
+        print(f"[Master Resume] Could not locate master resume: {master_resume_pdf}")
         return
 
     print(f"===========================================================")
-    print(f"🌟 LinkedIn 'Top Applicant' Autonomous Scanner & Auto-Apply")
-    print(f"📄 Resume: {master_resume_pdf} (Zero Tailoring)")
-    print(f"⚡ Guardrails: {'Disabled (Auto-Submit Enabled)' if auto_submit else 'Enabled (Preview Mode)'}")
+    print(f"LinkedIn 'Top Applicant' Autonomous Scanner & Auto-Apply")
+    print(f"Resume: {master_resume_pdf} (Zero Tailoring)")
+    print(f"Guardrails: {'Disabled (Auto-Submit Enabled)' if auto_submit else 'Enabled (Preview Mode)'}")
     print(f"===========================================================")
 
     # Determine target roles
@@ -368,7 +368,7 @@ async def run_top_applicant_pipeline(
     location = target_locations[0] if target_locations else "London, UK"
 
     existing_urls = get_existing_tracked_urls()
-    print(f"[Top Applicant Scanner] 🔍 Checked {len(existing_urls)} previously tracked jobs.")
+    print(f"[Top Applicant Scanner] Checked {len(existing_urls)} previously tracked jobs.")
 
     # 1. Scan LinkedIn for jobs tagged with Top Applicant badge
     top_jobs = await scan_linkedin_for_top_applicant_jobs(
@@ -380,7 +380,7 @@ async def run_top_applicant_pipeline(
     )
 
     if not top_jobs:
-        print("[Top Applicant Scanner] ℹ️ No new 'Top Applicant' jobs found in this run. Try expanding search keywords or timeframe.")
+        print("[Top Applicant Scanner] ℹNo new 'Top Applicant' jobs found in this run. Try expanding search keywords or timeframe.")
         return
 
     selected_model = get_best_flash_lite_model()
@@ -390,7 +390,7 @@ async def run_top_applicant_pipeline(
     # Determine target jobs list based on limit (None or <= 0 means NO LIMIT / process all)
     jobs_to_process = top_jobs if (limit is None or limit <= 0) else top_jobs[:limit]
     total_to_process = len(jobs_to_process)
-    print(f"\n[Top Applicant Scanner] 🚀 Processing {total_to_process} jobs ({'No limit' if (limit is None or limit <= 0) else f'Limit: {limit}'})...")
+    print(f"\n[Top Applicant Scanner] Processing {total_to_process} jobs ({'No limit' if (limit is None or limit <= 0) else f'Limit: {limit}'})...")
 
     # 2. Auto-apply directly without tailoring
     for idx, job in enumerate(jobs_to_process, start=1):
@@ -398,13 +398,13 @@ async def run_top_applicant_pipeline(
         job_title = job["title"]
         company = job["company"]
 
-        print(f"\n[{idx}/{total_to_process}] 🚀 Auto-applying for: {job_title} @ {company}")
-        print(f"🔗 URL: {job_url}")
+        print(f"\n[{idx}/{total_to_process}] Auto-applying for: {job_title} @ {company}")
+        print(f"URL: {job_url}")
 
         # Pre-flight check
         _, is_active, reason = preflight_check_job_url(job_url)
         if not is_active:
-            print(f"   ⚠️ Job listing appears closed or expired ({reason}). Skipping.")
+            print(f"   Job listing appears closed or expired ({reason}). Skipping.")
             continue
 
         try:
@@ -424,11 +424,11 @@ async def run_top_applicant_pipeline(
             if auto_submit:
                 if res_status == "success":
                     new_status = "applied"
-                    print(f"   ✅ Application verified & submitted successfully for {job_title} @ {company}")
+                    print(f"   Application verified & submitted successfully for {job_title} @ {company}")
                 else:
                     new_status = "Needs Review (Unsubmitted)"
                     fail_reason = final_res or "Form validation error or unconfirmed submission"
-                    print(f"   ⚠️ Submission verification failed for {job_title} @ {company}: {fail_reason}")
+                    print(f"   Submission verification failed for {job_title} @ {company}: {fail_reason}")
                     failed_applications.append({
                         "title": job_title,
                         "company": company,
@@ -462,7 +462,7 @@ async def run_top_applicant_pipeline(
             await record_to_supabase_or_csv(record_payload)
             processed_count += 1
         except (KeyboardInterrupt, asyncio.CancelledError):
-            print(f"\n[Browser-Use] ⏭️ Skip signal (Ctrl+C) received! Aborting {job_title} @ {company} and advancing to next role...")
+            print(f"\n[Browser-Use] ⏭Skip signal (Ctrl+C) received! Aborting {job_title} @ {company} and advancing to next role...")
             failed_applications.append({
                 "title": job_title,
                 "company": company,
@@ -471,9 +471,9 @@ async def run_top_applicant_pipeline(
             })
             continue
         except Exception as e:
-            print(f"   ❌ Error applying to {job_url}: {e}")
+            print(f"   Error applying to {job_url}: {e}")
 
-    print(f"\n✨ [Top Applicant Scanner] Completed processing {processed_count} top applicant jobs.")
+    print(f"\n[Top Applicant Scanner] Completed processing {processed_count} top applicant jobs.")
 
     # Alert user via email if any applications failed/need review
     if failed_applications:

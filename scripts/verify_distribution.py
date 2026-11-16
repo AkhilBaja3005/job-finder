@@ -27,11 +27,11 @@ import zipfile
 
 def banner(msg):
     print("\n" + "=" * 70, flush=True)
-    print(f"🚀 {msg}", flush=True)
+    print(f"{msg}", flush=True)
     print("=" * 70, flush=True)
 
 def step(msg):
-    print(f"\n👉 {msg}...", flush=True)
+    print(f"\n{msg}...", flush=True)
 
 def run_cmd(cmd, cwd=None, check=True, env=None, input_str=None):
     res = subprocess.run(
@@ -44,7 +44,7 @@ def run_cmd(cmd, cwd=None, check=True, env=None, input_str=None):
         text=True
     )
     if check and res.returncode != 0:
-        print(f"\n❌ Command failed: {cmd}", flush=True)
+        print(f"\nCommand failed: {cmd}", flush=True)
         print("STDOUT:", res.stdout, flush=True)
         print("STDERR:", res.stderr, flush=True)
         sys.exit(res.returncode)
@@ -66,7 +66,7 @@ def main():
 
     is_fast_mode = "--fast" in sys.argv or os.getenv("FAST_VERIFY", "0").lower() in ("1", "true", "yes")
     if is_fast_mode:
-        print("⚡ FAST MODE ENABLED: Running quick regression test suite (skipping long browser and slow integration tests)")
+        print("FAST MODE ENABLED: Running quick regression test suite (skipping long browser and slow integration tests)")
 
     # -------------------------------------------------------------------------
     # STEP 1: Leak & Git Isolation Verification
@@ -74,9 +74,9 @@ def main():
     step("1. Verifying Sensitive File Isolation (.gitignore & git tracking)")
     tracked_res = subprocess.run(["git", "ls-files", "backend/config/candidate_profile.json", ".env"], cwd=repo_root, capture_output=True, text=True)
     if tracked_res.stdout.strip():
-        print(f"❌ CRITICAL ERROR: Sensitive file is tracked in git:\n{tracked_res.stdout}")
+        print(f"CRITICAL ERROR: Sensitive file is tracked in git:\n{tracked_res.stdout}")
         sys.exit(1)
-    print("  ✅ candidate_profile.json and .env are strictly untracked!")
+    print("  candidate_profile.json and .env are strictly untracked!")
 
     # -------------------------------------------------------------------------
     # STEP 2: Pytest Test Suite
@@ -92,7 +92,7 @@ def main():
         pytest_cmd.extend(["-m", "not slow", "-k", "not (browser_use or test_comprehensive_packaging)"])
     
     res = run_cmd(pytest_cmd, cwd=repo_root)
-    print(f"  ✅ Pytest Suite Completed Successfully! (100% passed)")
+    print(f"  Pytest Suite Completed Successfully! (100% passed)")
 
     # -------------------------------------------------------------------------
     # STEP 3: Clean & Build Distribution Wheels
@@ -107,8 +107,8 @@ def main():
     sdists = [f for f in os.listdir(dist_dir) if f.endswith(".tar.gz")]
     assert len(wheels) == 1, f"Expected 1 wheel, found {wheels}"
     assert len(sdists) == 1, f"Expected 1 sdist, found {sdists}"
-    print(f"  ✅ Built: {wheels[0]}")
-    print(f"  ✅ Built: {sdists[0]}")
+    print(f"  Built: {wheels[0]}")
+    print(f"  Built: {sdists[0]}")
 
     # -------------------------------------------------------------------------
     # STEP 4: Twine Check
@@ -118,7 +118,7 @@ def main():
     if not os.path.exists(twine_bin):
         twine_bin = "twine"
     res = run_cmd([twine_bin, "check", "dist/*"], cwd=repo_root)
-    print("  ✅ Twine check PASSED: Package description and metadata are PyPI compliant.")
+    print("  Twine check PASSED: Package description and metadata are PyPI compliant.")
 
     # -------------------------------------------------------------------------
     # STEP 5: Wheel Contents Inspection (Leak Prevention)
@@ -129,12 +129,12 @@ def main():
         namelist = zf.namelist()
         for member in namelist:
             if member.endswith("candidate_profile.json"):
-                print(f"❌ CRITICAL ERROR: Found candidate_profile.json in wheel: {member}")
+                print(f"CRITICAL ERROR: Found candidate_profile.json in wheel: {member}")
                 sys.exit(1)
             if member.endswith(".env"):
-                print(f"❌ CRITICAL ERROR: Found .env in wheel: {member}")
+                print(f"CRITICAL ERROR: Found .env in wheel: {member}")
                 sys.exit(1)
-    print("  ✅ Verified: Wheel contains NO personal candidate profiles or secret .env files.")
+    print("  Verified: Wheel contains NO personal candidate profiles or secret .env files.")
 
     # -------------------------------------------------------------------------
     # STEP 6: Clean Room CLI & Entrypoints Verification
@@ -165,28 +165,28 @@ def main():
         with open(env_created, "r", encoding="utf-8") as f:
             env_txt = f.read()
         assert "AIzaSyTestSandboxKey12345" in env_txt
-        print("  ✓ `job-finder setup` generated valid .env and candidate_profile.json")
+        print("  `job-finder setup` generated valid .env and candidate_profile.json")
 
         # Test B: job-finder profile --show
         res = run_cmd([venv_py, "-m", "job_finder.cli", "profile", "--show"], cwd=tmp_dir, env=setup_env)
         assert res.returncode == 0
-        print("  ✓ `job-finder profile --show` executed cleanly")
+        print("  `job-finder profile --show` executed cleanly")
 
         # Test C: job-finder scan --help
         res = run_cmd([venv_py, "-m", "job_finder.cli", "scan", "--help"], cwd=tmp_dir, env=setup_env)
         assert "--min-ats" in res.stdout
         assert "--auto-apply" in res.stdout
-        print("  ✓ `job-finder scan --help` executed cleanly")
+        print("  `job-finder scan --help` executed cleanly")
 
         # Test D: job-finder apply --help
         res = run_cmd([venv_py, "-m", "job_finder.cli", "apply", "--help"], cwd=tmp_dir, env=setup_env)
         assert "--submit" in res.stdout
-        print("  ✓ `job-finder apply --help` executed cleanly")
+        print("  `job-finder apply --help` executed cleanly")
 
         # Test E: job-finder server --help
         res = run_cmd([venv_py, "-m", "job_finder.cli", "server", "--help"], cwd=tmp_dir, env=setup_env)
         assert "--port" in res.stdout
-        print("  ✓ `job-finder server --help` executed cleanly")
+        print("  `job-finder server --help` executed cleanly")
 
         # Test F: job-finder mcp (stdio jsonrpc tools/list)
         p = subprocess.Popen(
@@ -201,9 +201,9 @@ def main():
         out, _ = p.communicate(input=msg, timeout=10)
         assert "calculate_ats_score" in out
         assert "tailor_resume_latex" in out
-        print("  ✓ `job-finder mcp` stdio JSON-RPC passed tool discovery")
+        print("  `job-finder mcp` stdio JSON-RPC passed tool discovery")
 
-    banner("🎉 ALL PRE-PUBLISH DISTRIBUTION CHECKS PASSED 100%!")
+    banner("ALL PRE-PUBLISH DISTRIBUTION CHECKS PASSED 100%!")
     print("Ready to publish to TestPyPI / PyPI with complete confidence.\n")
 
 if __name__ == "__main__":
