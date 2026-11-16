@@ -205,6 +205,13 @@ def tailor_latex_code(
             if slotted_latex and "\\begin{document}" in slotted_latex and "\\documentclass" in slotted_latex:
                 if on_log:
                     on_log("Applied precision slot replacement directly on Master LaTeX layout.")
+                    try:
+                        from services.resume_checks import find_unsupported_numbers
+                        extra = find_unsupported_numbers(master_latex, slotted_latex)
+                        if extra:
+                            on_log("Warning: tailored resume contains numbers not found in the master resume: " + ", ".join(extra[:6]) + ". Verify these before sending.")
+                    except Exception:
+                        pass
                 return slotted_latex
     except Exception as slot_err:
         print(f"[tailor_latex_code] Slot replacement fallback to LLM generation: {slot_err}")
@@ -261,8 +268,8 @@ RULE 2 — GPA / CPI / GRADES & EDUCATION HIGHLIGHTS (ZERO TOLERANCE):
 RULE 3 — SECTION & CONTENT COMPLETENESS & FACTUAL PRESERVATION (ZERO TOLERANCE):
   • Preserve EVERY school, job, and project. Do NOT delete, rename, or merge any.
   • PRESERVE ORIGINAL FACTUAL ACCOMPLISHMENTS & METRICS: 
-    - The candidate's original work experience bullets contain real quantified achievements and proprietary metrics (e.g. AST-based dependency extraction across Java/Python/C++, 46% accuracy boost, RabbitMQ async queues, 84% deployment failure cut, Isolation Forest £30M+ portfolio loss exposure, Dynamic Risk Rating).
-    - NEVER replace these specific technical achievements with vague generic summaries (e.g., do NOT turn "Isolation Forest anomaly detection model for Gold Loans flagging branch-level risk £30M+" into generic "Built anomaly detection models").
+    - The candidate's original work experience bullets contain real quantified achievements, named technologies and proprietary metrics. Use ONLY the facts, numbers and technologies that appear in the MASTER resume below. NEVER invent a metric, employer, tool or outcome.
+    - NEVER replace specific technical achievements with vague generic summaries (e.g., do NOT turn "Built an Isolation Forest anomaly detection model flagging branch-level risk across a £30M portfolio" into "Built anomaly detection models"; keep the exact numbers and named technologies from the master).
     - Tailoring means emphasizing relevant technologies and naturally aligning terminology to the target role while KEEPING the specific facts, metrics, awards, and technical depths intact!
   • ABSOLUTE CRITICAL FOR SUB-PROJECTS (e.g. Quartz, DMAP, Argus): When a company experience entry has sub-projects/modules (e.g. "Quartz (Context-as-a-Service & LLM Engineering):"), NEVER duplicate the parent title on multiple \\item bullets!
   • You MUST render sub-projects using a nested itemize structure with dot bullets (e.g. \\begin{{itemize}}[label=\\textbullet]):

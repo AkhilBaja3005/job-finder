@@ -1018,6 +1018,35 @@ def compile_and_check_page_metrics(latex_code: str, spacing_scale: float = 1.0, 
         return 999, 0.0
 
 
+_LATEX_SPECIALS = {
+    "&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#", "_": r"\_",
+    "~": r"\textasciitilde{}", "^": r"\textasciicircum{}",
+}
+_SAFE_EMAIL_RE = re.compile(r"^[^\s{}\\%#]+@[^\s{}\\%#]+$")
+
+
+def _escape_plain(text: str) -> str:
+    return "".join(_LATEX_SPECIALS.get(ch, ch) for ch in text)
+
+
+def escape_latex_text(text: str) -> str:
+    """
+    Make untrusted text (LLM output, user data) safe to place inside a LaTeX document.
+    Keeps **bold** (and \\textbf{...}) as \\textbf, escapes special characters, and removes any other
+    backslash command and braces so injected text cannot run \\input, \\write, \\def and the like.
+    """
+    t = str(text or "")
+    t = re.sub(r"\\textbf\{([^{}]*)\}", r"**\1**", t)       # keep intentional bold
+    t = re.sub(r"\\([&%$#_])", r"\1", t)                   # undo escapes the model already added
+    t = re.sub(r"\\[a-zA-Z]+\*?", "", t)                   # drop remaining commands
+    t = t.replace("\\", "").replace("{", "").replace("}", "")
+    out = []
+    for part in re.split(r"(\*\*[^*]+\*\*)", t):
+        m = re.fullmatch(r"\*\*([^*]+)\*\*", part)
+        out.append("\\textbf{" + _escape_plain(m.group(1)) + "}" if m else _escape_plain(part))
+    return "".join(out)
+
+
 def inject_tailored_slots(
     master_latex: str,
     summary: Optional[str] = None,
@@ -1043,15 +1072,16 @@ def inject_tailored_slots(
         portfolio = candidate_info.get("portfolio") or candidate_info.get("website")
 
         if name:
-            result = re.sub(r'\\name\{[^}]*\}', f"\\\\name{{{name}}}", result)
+            safe_name = escape_latex_text(name)
+            result = re.sub(r'\\name\{[^}]*\}', lambda _m: "\\name{" + safe_name + "}", result)
 
         addr_match = re.search(r'\\address\{(\\begin\{minipage\}.*?\\end\{minipage\})\}', result, re.DOTALL)
         if addr_match:
             parts = []
-            if email:
-                parts.append(f"\\href{{mailto:{email}}}{{{email}}}")
+            if email and _SAFE_EMAIL_RE.match(str(email)):
+                parts.append(f"\\href{{mailto:{email}}}{{{escape_latex_text(email)}}}")
             if phone:
-                parts.append(phone)
+                parts.append(escape_latex_text(phone))
             if linkedin:
                 li_user = linkedin.split("/in/")[-1].rstrip("/") if "/in/" in linkedin else linkedin
                 parts.append(f"\\href{{{linkedin}}}{{linkedin.com/in/{li_user}}}")
@@ -1065,10 +1095,9 @@ def inject_tailored_slots(
     # 1. Professional Summary slot
     if summary and summary.strip():
         sum_pat = r'(\\begin\{rSection\}\{Professional Summary\}).*?(\\end\{rSection\})'
-        clean_sum = summary.strip()
-        # Clean markdown bold if LLM emitted it
-        clean_sum = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', clean_sum)
-        result = re.sub(sum_pat, rf'\1\n{clean_sum}\n\2', result, flags=re.DOTALL)
+        clean_sum = escape_latex_text(summary.strip())
+        # Lambda replacement: a plain template would turn "\t" in "\textbf" into a TAB character
+        result = re.sub(sum_pat, lambda m: m.group(1) + "\n" + clean_sum + "\n" + m.group(2), result, flags=re.DOTALL)
 
     # 2. Work Experience bullets slot (preserve company, role, dates, tech stack headers)
     if experience_bullets and len(experience_bullets) > 0:
@@ -1083,7 +1112,7 @@ def inject_tailored_slots(
                     spacing_str = spacing_m.group(1) if spacing_m else "\\setlength{\\itemsep}{-0.35em}\n    \\setlength{\\parsep}{0em}"
                     new_items_list = []
                     for b in job_bullets:
-                        b_clean = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', b.strip())
+                        b_clean = escape_latex_text(b.strip())
                         new_items_list.append(f"    \\item {b_clean}")
                     new_items = "\n".join(new_items_list)
                     new_itemize = f"\\begin{{itemize}}\n    {spacing_str}\n{new_items}\n\\end{{itemize}}"
@@ -1092,7 +1121,7 @@ def inject_tailored_slots(
 
     # 3. Technical Skills slot (inject approved skills)
     if user_selected_skills and len(user_selected_skills) > 0:
-        clean_user_skills = [s.strip() for s in user_selected_skills if s and s.strip()]
+        clean_user_skills = [escape_latex_text(s.strip()) for s in user_selected_skills if s and s.strip()]
         skill_m = re.search(r'(\\begin\{rSection\}\{Technical Skills\}.*?\\end\{rSection\})', result, re.DOTALL)
         if skill_m and clean_user_skills:
             skills_text = skill_m.group(1)
@@ -1100,11 +1129,11 @@ def inject_tailored_slots(
                 if s.lower() not in skills_text.lower():
                     # Place in AI/ML line if AI/LLM related, else Systems or Data/Platforms
                     if any(w in s.lower() for w in ["ai", "llm", "rag", "langchain", "prompt", "agent", "pytorch", "vllm", "llama", "triton", "eval"]):
-                        skills_text = re.sub(r'(\\textbf\{AI/ML[^:]*:.*?)(?=\s*\\\\|\s*\\end\{rSection\})', rf'\1, {s}', skills_text)
+                        skills_text = re.sub(r'(\\textbf\{AI/ML[^:]*:.*?)(?=\s*\\\\|\s*\\end\{rSection\})', lambda m, s=s: m.group(1) + ", " + s, skills_text)
                     elif any(w in s.lower() for w in ["cloud", "docker", "k8s", "linux", "ci", "git", "jenkins"]):
-                        skills_text = re.sub(r'(\\textbf\{Systems[^:]*:.*?)(?=\s*\\\\|\s*\\end\{rSection\})', rf'\1, {s}', skills_text)
+                        skills_text = re.sub(r'(\\textbf\{Systems[^:]*:.*?)(?=\s*\\\\|\s*\\end\{rSection\})', lambda m, s=s: m.group(1) + ", " + s, skills_text)
                     else:
-                        skills_text = re.sub(r'(\\textbf\{Data[^:]*:.*?)(?=\s*\\\\|\s*\\end\{rSection\})', rf'\1, {s}', skills_text)
+                        skills_text = re.sub(r'(\\textbf\{Data[^:]*:.*?)(?=\s*\\\\|\s*\\end\{rSection\})', lambda m, s=s: m.group(1) + ", " + s, skills_text)
             result = result[:skill_m.start(1)] + skills_text + result[skill_m.end(1):]
 
     # 4. Projects slot (preserves Title, Technologies, and Open source: URLs while updating description)
@@ -1123,7 +1152,7 @@ def inject_tailored_slots(
                         opensource_line = lines[1] if has_opensource else ""
                         
                         desc_bullets = p_bullets if isinstance(p_bullets, list) else [str(p_bullets)]
-                        clean_bullets = [re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', b.strip()) for b in desc_bullets if b.strip()]
+                        clean_bullets = [escape_latex_text(b.strip()) for b in desc_bullets if b.strip()]
                         # If the first bullet repeated the technologies, discard it
                         if len(clean_bullets) > 1 and not any(v in clean_bullets[0].lower() for v in ["built", "designed", "developed", "engineered", "enhanced", "cloud"]) and len(clean_bullets[0].split(",")) >= 2:
                             clean_bullets = clean_bullets[1:]
@@ -1143,10 +1172,15 @@ def inject_tailored_slots(
     if ach_bullets and len(ach_bullets) > 0:
         ach_m = re.search(r'(\\begin\{rSection\}\{(?:Achievements|Awards|Leadership)[^}]*\}.*?\\end\{rSection\})', result, re.DOTALL)
         if ach_m:
-            ach_lines = []
-            for a in ach_bullets:
-                if a and a.strip():
-                    a_clean = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', a.strip())
+            sec = ach_m.group(1)
+            clean_items = [f"    \\item {escape_latex_text(a)}" for a in ach_bullets if isinstance(a, str) and a.strip()]
+            it_m = re.search(r'(\\begin\{itemize\}.*?\\end\{itemize\})', sec, re.DOTALL)
+            if it_m and clean_items:
+                sp_m = re.search(r'\\setlength\{\\itemsep\}\{[^}]*\}\s*\\setlength\{\\parsep\}\{[^}]*\}', it_m.group(1))
+                spacing = f"    {sp_m.group(0)}\n" if sp_m else ""
+                new_it = "\\begin{itemize}\n" + spacing + "\n".join(clean_items) + "\n\\end{itemize}"
+                sec = sec[:it_m.start(1)] + new_it + sec[it_m.end(1):]
+                result = result[:ach_m.start(1)] + sec + result[ach_m.end(1):]
     return result
 
 
