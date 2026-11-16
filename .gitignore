@@ -42,3 +42,4 @@ data/
 # Local reports and scratch outputs
 bandit_report.txt
 /jobserve_*.json
+/applications_tracker/screenshots/

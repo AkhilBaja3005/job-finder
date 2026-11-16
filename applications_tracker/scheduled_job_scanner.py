@@ -1212,6 +1212,18 @@ async def run_pipeline(
                         }
                         failed_applications.append(fail_record)
                         batch_failed_buffer.append(fail_record)
+                elif isinstance(res, dict) and res.get("blocker"):
+                    blocker = res.get("blocker")
+                    print(f"   Human-only blocker ({blocker}) for {title} @ {company}; needs manual completion.")
+                    await update_application_status(url, f"Needs Review (Blocked: {blocker})")
+                    blocked_record = {
+                        "title": title,
+                        "company": company,
+                        "url": url,
+                        "reason": f"Blocked by {blocker}. " + (final_res[:120] if final_res else "")
+                    }
+                    failed_applications.append(blocked_record)
+                    batch_failed_buffer.append(blocked_record)
                 else:
                     await update_application_status(url, "Ready to Apply (Reviewed)")
                     preview_record = {
