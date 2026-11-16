@@ -121,6 +121,7 @@ Repository = "https://github.com/AkhilBaja3005/job-finder.git"
 [tool.setuptools]
 packages = [
     "job_finder",
+    "job_finder.commands",
     "backend",
     "backend.assets",
     "backend.config",
