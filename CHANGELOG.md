@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.7.0
+
+### Changed
+- ATS scoring: unrelated jobs no longer score about 60. A job description with no preferred skills no longer
+  grants free preferred-skill points, and when the skills match is low (below 40) the overall score is capped
+  at `skills * 1.5 + 20`. Relevant roles keep their high scores. Scores for poor matches are now much lower, so
+  a profile's minimum ATS threshold filters more strictly.
+- `job_finder/cli.py` was split into modules: `cli_parser.py`, `updates.py` and one module per subcommand under
+  `job_finder/commands/`. Behavior and flags are unchanged.
+- `scan` prints an end-of-run summary table, including jobs blocked or needing review.
+
+### Fixed
+- `job-finder ats --json` no longer mixes log lines into its JSON output.
+- Modals for the cover letter and the extension guide close on Escape and expose dialog roles.
+- Leftover empty icon markup from the emoji cleanup was removed from the extension popup and two pages.
+
+### Added
+- The ATS golden set grew from 4 to 12 cases. Run `python scripts/eval_ats.py` to see the results.
+- Regression test that `job-finder setup` creates `.env` and `candidate_profile.json` in a fresh workspace.
+- The MCP harness guide lists all 21 tools.
+
 ## 1.6.1
 
 ### Fixed

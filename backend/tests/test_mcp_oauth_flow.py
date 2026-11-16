@@ -233,6 +233,8 @@ def test_client_registration_survives_restart(client):
 
 def test_tampered_client_id_rejected_with_invalid_client(client):
     cid = _register(client)
-    res = client.get(f"/oauth/authorize?response_type=code&client_id={cid[:-1]}0&redirect_uri=https://claude.ai/oauth/callback&code_challenge=abc&code_challenge_method=S256")
+    # Always change the last signature character (a fixed "0" would be a no-op 1 time in 16)
+    tampered = cid[:-1] + ("1" if cid[-1] == "0" else "0")
+    res = client.get(f"/oauth/authorize?response_type=code&client_id={tampered}&redirect_uri=https://claude.ai/oauth/callback&code_challenge=abc&code_challenge_method=S256")
     assert res.status_code == 400
     assert res.json()["error"] == "invalid_client"
