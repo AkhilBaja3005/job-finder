@@ -33,6 +33,8 @@ applications_tracker/company_slugs.db
 
 *.log
 *.json
+# Test fixtures are data the tests need; keep them tracked
+!backend/tests/fixtures/*.json
 /.agents
 /brag-output
 brag-plan.md

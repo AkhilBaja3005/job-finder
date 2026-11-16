@@ -1,0 +1,25 @@
+{
+  "resume": {
+    "name": "Test Candidate",
+    "location": "London, UK",
+    "requires_sponsorship": false,
+    "skills": ["Python", "PyTorch", "SQL", "AWS", "Docker", "machine learning", "LLM", "RAG", "FastAPI"],
+    "experience": [
+      {"role": "Machine Learning Engineer", "company": "Acme", "start_date": "Jan 2021", "end_date": "Present",
+       "description": ["Built RAG pipelines with Python and FastAPI", "Trained PyTorch models and deployed with Docker on AWS", "Optimised SQL feature queries"]},
+      {"role": "Data Analyst", "company": "Beta", "start_date": "Jan 2018", "end_date": "Dec 2020",
+       "description": ["Built dashboards with SQL and Python"]}
+    ],
+    "education": [{"degree": "MSc Computer Science", "end_date": "2018"}]
+  },
+  "cases": [
+    {"name": "strong_ml_match", "min": 70, "max": 100,
+     "jd": "Machine Learning Engineer\nAcme AI\nRequirements:\n- 4+ years of experience building machine learning systems\n- Python, PyTorch and SQL\n- Experience with LLM and RAG applications\n- Docker and AWS\nNice to have: FastAPI"},
+    {"name": "partial_match", "min": 40, "max": 85,
+     "jd": "Backend Engineer\nWidgets Ltd\nRequirements:\n- 3 years of experience\n- Java, Kubernetes, Kafka and Terraform\n- Python is a plus"},
+    {"name": "unrelated_sales_role", "min": 0, "max": 65,
+     "jd": "Account Executive\nSalesCo\nRequirements:\n- 5 years of experience in B2B sales\n- Salesforce, CRM, lead generation and negotiation\n- cold outreach"},
+    {"name": "mid_role_mentions_director_is_not_executive", "min": 60, "max": 100,
+     "jd": "Machine Learning Engineer\nAcme AI\nYou will report to the Director of Engineering and work with senior engineers.\nRequirements:\n- Python, PyTorch, SQL\n- 3 years of experience"}
+  ]
+}
