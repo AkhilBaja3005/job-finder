@@ -1158,6 +1158,11 @@ textarea:focus-visible {
   }
 }
 
+/* Laptop suggestion shown only on phones, only inside the Platform workspace */
+.desktop-hint {
+  display: none;
+}
+
 /* ─── Phones: compact header, readable chips, touch-friendly targets ──────── */
 @media (max-width: 768px) {
   header.app-header {
@@ -1254,6 +1259,31 @@ textarea:focus-visible {
   }
   .footer-shortcuts {
     display: none !important; /* keyboard shortcuts do not apply to touch */
+  }
+
+  .desktop-hint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    background: rgba(56, 189, 248, 0.08);
+    color: #cbd5e1;
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+  .desktop-hint button {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    background: transparent;
+    color: #38bdf8;
+    font-weight: 600;
+    cursor: pointer;
   }
 
   /* Keep content clear of the iPhone home indicator */

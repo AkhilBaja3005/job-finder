@@ -267,6 +267,14 @@ function App() {
   const [user, setUser] = useState(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [showExtensionGuide, setShowExtensionGuide] = useState(false);
+  // The Platform workspace (resume editor, diffs, LaTeX) is dense; on phones we suggest a laptop once per session.
+  const [desktopHintDismissed, setDesktopHintDismissed] = useState(() => {
+    try { return sessionStorage.getItem('jf_desktop_hint') === '1'; } catch { return false; }
+  });
+  const dismissDesktopHint = useCallback(() => {
+    setDesktopHintDismissed(true);
+    try { sessionStorage.setItem('jf_desktop_hint', '1'); } catch { /* storage unavailable: hint returns next load */ }
+  }, []);
   const [authToken, setAuthToken] = useState(localStorage.getItem('auth_token') || '');
   const [mockEmail, setMockEmail] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
@@ -2813,6 +2821,16 @@ function App() {
           )}
         </div>
       </header>
+
+      {!desktopHintDismissed && dashboardMode !== 'intro' && dashboardMode !== 'docs' && dashboardMode !== 'contact' && (
+        <div className="desktop-hint" role="note">
+          <span>
+            The Platform workspace works best on a laptop or desktop. You can use it on your phone, but resume
+            editing and PDF previews are cramped.
+          </span>
+          <button type="button" onClick={dismissDesktopHint} aria-label="Dismiss this notice">Got it</button>
+        </div>
+      )}
 
       {dashboardMode === 'intro' ? (
         <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Introduction...</div>}>

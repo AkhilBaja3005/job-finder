@@ -23,10 +23,10 @@ def test_viewport_meta_allows_zoom():
 def test_phone_breakpoints_and_header_classes_exist():
     css = _read("frontend", "src", "index.css")
     assert "@media (max-width: 768px)" in css and "@media (max-width: 480px)" in css
-    for cls in (".app-header-tagline", ".app-header-nav", ".app-header-actions", ".footer-shortcuts"):
+    for cls in (".app-header-tagline", ".app-header-nav", ".app-header-actions", ".footer-shortcuts", ".desktop-hint"):
         assert cls in css, f"missing mobile rule for {cls}"
     jsx = _read("frontend", "src", "App.jsx")
-    for cls in ("app-header-tagline", "app-header-nav", "app-header-actions", "footer-shortcuts"):
+    for cls in ("app-header-tagline", "app-header-nav", "app-header-actions", "footer-shortcuts", "desktop-hint"):
         assert cls in jsx, f"App.jsx no longer uses {cls}"
 
 
