@@ -27,13 +27,16 @@ def overall(resume, jd):
 
 @pytest.mark.parametrize("case", GOLDEN["cases"], ids=[c["name"] for c in GOLDEN["cases"]])
 def test_golden_case_in_expected_band(case):
-    score = overall(GOLDEN["resume"], case["jd"])
+    resume = {**GOLDEN["resume"], **case.get("resume_overrides", {})}
+    score = overall(resume, case["jd"])
     assert case["min"] <= score <= case["max"], f"{case['name']}: {score} not in [{case['min']}, {case['max']}]"
 
 
 def test_scores_rank_matches_correctly():
-    scores = {c["name"]: overall(GOLDEN["resume"], c["jd"]) for c in GOLDEN["cases"]}
+    scores = {c["name"]: overall({**GOLDEN["resume"], **c.get("resume_overrides", {})}, c["jd"]) for c in GOLDEN["cases"]}
     assert scores["strong_ml_match"] > scores["partial_match"] > scores["unrelated_sales_role"]
+    assert scores["mlops_engineer"] > scores["devops_sre_low"]
+    assert scores["strong_ml_match"] > max(scores["product_manager_unrelated"], scores["frontend_react_unrelated"], scores["security_engineer_unrelated"])
 
 
 def test_header_decides_required_tier_not_body():

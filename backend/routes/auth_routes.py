@@ -519,7 +519,6 @@ async def email_action_unsubscribe(email: str):
         supabase_request(f"users?id=eq.{user_id}", "PATCH", {"cron_enabled": False})
         return HTMLResponse("""
         <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 30px; border: 1px solid #E2E8F0; border-radius: 12px; text-align: center;">
-            <div style="font-size: 3rem; margin-bottom: 12px;"></div>
             <h2 style="color: #0F172A; margin: 0 0 10px;">Unsubscribed</h2>
             <p style="color: #64748B;">You have successfully disabled daily job digest emails.</p>
         </div>
@@ -594,7 +593,6 @@ async def email_action_tailor(job_url: str, email: str, title: Optional[str] = N
         target_company = company or "Company"
         return HTMLResponse(f"""
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 40px auto; padding: 32px 24px; border: 1px solid #10B981; border-radius: 16px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.06); background-color: #ffffff;">
-            <div style="font-size: 3.5rem; margin-bottom: 16px;"></div>
             <h2 style="color: #0F172A; margin: 0 0 12px; font-weight: 800;">Tailoring Completed!</h2>
             <p style="color: #475569; font-size: 0.95rem; line-height: 1.6; margin-bottom: 20px;">
                 Your resume for <strong>{target_title}</strong> at <strong>{target_company}</strong> has been tailored, verified by the Senior Recruiter Agent, and compiled.

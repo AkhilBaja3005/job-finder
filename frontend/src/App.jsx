@@ -316,6 +316,10 @@ function App() {
   const keyboardHelpModalRef = useModalA11y(showKeyboardHelp, closeKeyboardHelp);
   const closePrepModal = useCallback(() => setPrepModalOpen(false), []);
   const prepModalRef = useModalA11y(prepModalOpen, closePrepModal);
+  const closeCoverLetterModal = useCallback(() => setCoverLetterModalOpen(false), []);
+  const coverLetterModalRef = useModalA11y(coverLetterModalOpen, closeCoverLetterModal);
+  const closeExtensionGuide = useCallback(() => setShowExtensionGuide(false), []);
+  const extensionGuideModalRef = useModalA11y(showExtensionGuide, closeExtensionGuide);
 
   // Cron Job Match Mailer Subscription states
   const [cronEnabled, setCronEnabled] = useState(false);
@@ -7836,6 +7840,7 @@ function App() {
       {coverLetterModalOpen && (
         <div className="modal-overlay" onClick={() => setCoverLetterModalOpen(false)} style={{ pointerEvents: 'auto', zIndex: 10000 }}>
           <div
+            ref={coverLetterModalRef}
             className="modal-content outreach-modal"
             role="dialog"
             aria-modal="true"
@@ -7987,7 +7992,7 @@ function App() {
       {/* Extension Installation Setup Guide Modal */}
       {showExtensionGuide && (
         <div className="modal-overlay" style={{ pointerEvents: 'auto' }}>
-          <div className="card" style={{
+          <div ref={extensionGuideModalRef} role="dialog" aria-modal="true" aria-label="Chrome extension setup guide" tabIndex={-1} className="card" style={{
             maxWidth: '540px', width: '100%', border: '1px solid rgba(56, 189, 248, 0.4)',
             padding: '28px', background: '#0F172A', boxShadow: '0 25px 60px rgba(0,0,0,0.85)',
             display: 'flex', flexDirection: 'column', gap: '18px', borderRadius: '20px'

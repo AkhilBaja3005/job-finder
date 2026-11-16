@@ -17,8 +17,9 @@ def main() -> int:
     bad = 0
     print(f"{'case':<48}{'score':>6}  band      result")
     for case in golden["cases"]:
-        res = compute_ats_score(golden["resume"], case["jd"])
-        score = 0 if not res.eligible else compute_overall_score(res.skills_score, res.experience_score, estimate_role_fit_score(golden["resume"], case["jd"]))
+        resume = {**golden["resume"], **case.get("resume_overrides", {})}
+        res = compute_ats_score(resume, case["jd"])
+        score = 0 if not res.eligible else compute_overall_score(res.skills_score, res.experience_score, estimate_role_fit_score(resume, case["jd"]))
         ok = case["min"] <= score <= case["max"]
         bad += 0 if ok else 1
         print(f"{case['name']:<48}{score:>6}  {case['min']}-{case['max']:<5}  {'ok' if ok else 'OUT OF BAND'}")

@@ -1257,6 +1257,25 @@ async def run_pipeline(
 
     print(f"\n[Scanner] Scan complete! Discovered & processed {new_jobs_added} new postings ({direct_applied_count} direct applied, {tailored_count} tailored).")
 
+    # End-of-run summary table (skipped when run standalone without the job_finder package)
+    try:
+        from job_finder import ui as _ui
+        _ui.key_values("Scan summary", {
+            "New postings processed": new_jobs_added,
+            "Applied (submitted)": len(applied_applications),
+            "Direct (master resume)": direct_applied_count,
+            "Tailored resume": tailored_count,
+            "Needs attention": len(failed_applications),
+        })
+        if failed_applications:
+            _ui.print_table(
+                "Needs attention (blocked, unsubmitted or ready for review)",
+                ["Company", "Role", "Reason"],
+                [[str(f.get("company", ""))[:26], str(f.get("title", ""))[:40], str(f.get("reason", ""))[:70]] for f in failed_applications],
+            )
+    except ImportError:
+        pass
+
     cand_email = candidate.get("email") or os.getenv("NOTIFY_EMAIL", "")
 
     # Send final summary alerts for any remaining unnotified jobs in the buffers (or overall totals if none sent yet)

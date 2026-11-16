@@ -757,7 +757,9 @@ def compute_skills_score(
             missing_pref.append(s)
 
     req_score = weighted_req_strength * config.skill_mandatory_weight
-    pref_score = (total_pref_strength / len(preferred_skills)) * config.skill_preferred_weight if preferred_skills else config.skill_preferred_weight
+    # With no preferred skills in the JD, the preferred share mirrors the required match instead of
+    # being a free 15 points (an unrelated job must not collect them).
+    pref_score = (total_pref_strength / len(preferred_skills)) * config.skill_preferred_weight if preferred_skills else config.skill_preferred_weight * weighted_req_strength
     final_skills_score = min(100, max(0, round(req_score + pref_score)))
     
     detail = f"Required Match Strength: {len(matched_req)}/{len(required_skills)} (Weighted importance). Section weights: Mandatory: {round(req_score)}/{round(config.skill_mandatory_weight)}"
@@ -850,8 +852,17 @@ def compute_ats_score(resume_data: dict, jd_text: str, config: ScoringConfig = D
     )
 
 def compute_overall_score(skills: int, experience: int, role_fit: int, config: ScoringConfig = DEFAULT_SCORING_CONFIG) -> int:
-    """Calculates final combined ATS score matching recruiter weights."""
-    return round(config.overall_skills_weight * skills + config.overall_exp_weight * experience + config.overall_fit_weight * role_fit)
+    """
+    Calculates final combined ATS score matching recruiter weights.
+
+    Years of experience and seniority are domain-agnostic, so a job in an unrelated field would otherwise
+    score about 60 from those alone. When the skills match is low, the overall score is capped
+    (skills * 1.5 + 20, applied below skills 40) so poor skill overlap cannot be rescued by experience.
+    """
+    overall = round(config.overall_skills_weight * skills + config.overall_exp_weight * experience + config.overall_fit_weight * role_fit)
+    if skills < 40:
+        overall = min(overall, round(skills * 1.5 + 20))
+    return overall
 
 
 def estimate_role_fit_score(resume_data: dict, jd_text: str) -> int:
