@@ -427,8 +427,13 @@ def main():
         failed_jobs = []
         successful_jobs = []
 
+        batch_applied_buffer = []
+        batch_failed_buffer = []
+        BATCH_SIZE = int(os.getenv("JOB_FINDER_EMAIL_BATCH_SIZE", "20"))
+        cand_email = cand.get("email") or "akhilbaja.work@gmail.com"
+
         async def _batch_apply():
-            nonlocal failed_jobs, successful_jobs
+            nonlocal failed_jobs, successful_jobs, batch_applied_buffer, batch_failed_buffer
             from mcp.tools.tracking_tools import handle_track_application
 
             for idx, url in enumerate(urls_to_process, 1):
@@ -456,21 +461,25 @@ def main():
                     if "submitted" in res_status or "confirmed" in final_res.lower() or "applied" in final_res.lower():
                         status = "applied"
                         successful_jobs.append(url)
+                        batch_applied_buffer.append({"url": url, "title": "Target Role", "company": "Company"})
                         print(f"[{idx}/{len(urls_to_process)} Success] Application completed for: {url}")
                     else:
                         status = "failed"
                         err_text = res.get("error") or final_res or "Autofill incomplete"
                         failed_jobs.append({"url": url, "reason": err_text})
+                        batch_failed_buffer.append({"url": url, "title": "Target Role", "company": "Company", "reason": err_text})
                         print(f"[{idx}/{len(urls_to_process)} Failed] {err_text}")
                 except asyncio.TimeoutError:
                     err_text = f"Application timed out after {int(args.timeout)}s"
                     status = "failed"
                     failed_jobs.append({"url": url, "reason": err_text})
+                    batch_failed_buffer.append({"url": url, "title": "Target Role", "company": "Company", "reason": err_text})
                     print(f"[{idx}/{len(urls_to_process)} Error] {err_text}")
                 except Exception as ex:
                     err_text = str(ex)
                     status = "failed"
                     failed_jobs.append({"url": url, "reason": err_text})
+                    batch_failed_buffer.append({"url": url, "title": "Target Role", "company": "Company", "reason": err_text})
                     print(f"[{idx}/{len(urls_to_process)} Error] Failed to process {url}: {ex}")
 
                 # Formally record the application state (failed or applied) into the database & CSV tracker
@@ -485,17 +494,29 @@ def main():
                 except Exception as trk_err:
                     print(f"[Tracker] Note: Could not record application state: {trk_err}")
 
+                # Intermediate batch notification: dispatch email every 20 jobs
+                if (len(batch_applied_buffer) + len(batch_failed_buffer)) >= BATCH_SIZE:
+                    print(f"\n[Email Alert] Processed {BATCH_SIZE} jobs in batch. Dispatching intermediate email alert...")
+                    try:
+                        from applications_tracker.scheduled_job_scanner import notify_user_of_failed_applications, notify_user_of_applied_applications
+                        if batch_applied_buffer:
+                            notify_user_of_applied_applications(list(batch_applied_buffer), to_email=cand_email)
+                            batch_applied_buffer.clear()
+                        if batch_failed_buffer:
+                            notify_user_of_failed_applications(list(batch_failed_buffer), to_email=cand_email)
+                            batch_failed_buffer.clear()
+                    except Exception as b_mail_err:
+                        print(f"[Email Alert] Note: Batch notification error: {b_mail_err}")
+
         asyncio.run(_batch_apply())
 
-        # Trigger email alerts for failed and successful applications
+        # Trigger final email alerts for any remaining unnotified jobs
         try:
             from applications_tracker.scheduled_job_scanner import notify_user_of_failed_applications, notify_user_of_applied_applications
-            if failed_jobs:
-                formatted_failed = [{"url": f["url"], "title": "Target Role", "company": "Company", "reason": f["reason"]} for f in failed_jobs]
-                notify_user_of_failed_applications(formatted_failed)
-            if successful_jobs:
-                formatted_applied = [{"url": u, "title": "Target Role", "company": "Company"} for u in successful_jobs]
-                notify_user_of_applied_applications(formatted_applied)
+            if batch_failed_buffer:
+                notify_user_of_failed_applications(batch_failed_buffer, to_email=cand_email)
+            if batch_applied_buffer:
+                notify_user_of_applied_applications(batch_applied_buffer, to_email=cand_email)
         except Exception as mail_err:
             print(f"[Email Alert] Note: Could not send summary email alert: {mail_err}")
 

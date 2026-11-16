@@ -921,6 +921,10 @@ async def run_pipeline(
     applied_attempts = 0
     failed_applications = []
     applied_applications = []
+    batch_applied_buffer = []
+    batch_failed_buffer = []
+    cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
+    EMAIL_BATCH_SIZE = int(os.getenv("JOB_FINDER_EMAIL_BATCH_SIZE", "20"))
 
     for idx, job in enumerate(jobs, start=1):
         title = job.get("title", "Role")
@@ -1188,41 +1192,64 @@ async def run_pipeline(
                     if res_status == "success":
                         print(f"   ✅ Application verified & submitted successfully for {title} @ {company}")
                         await update_application_status(url, "applied")
-                        applied_applications.append({
+                        app_record = {
                             "title": title,
                             "company": company,
                             "url": url,
                             "ats_score": score
-                        })
+                        }
+                        applied_applications.append(app_record)
+                        batch_applied_buffer.append(app_record)
                     else:
                         fail_reason = final_res or "Form validation error or unconfirmed submission"
                         print(f"   ⚠️ Submission verification failed for {title} @ {company}: {fail_reason}")
                         await update_application_status(url, "Needs Review (Unsubmitted)")
-                        failed_applications.append({
+                        fail_record = {
                             "title": title,
                             "company": company,
                             "url": url,
                             "reason": fail_reason[:150]
-                        })
+                        }
+                        failed_applications.append(fail_record)
+                        batch_failed_buffer.append(fail_record)
                 else:
                     await update_application_status(url, "Ready to Apply (Reviewed)")
-                    failed_applications.append({
+                    preview_record = {
                         "title": title,
                         "company": company,
                         "url": url,
                         "reason": "Preview Mode (Guardrails Enabled) — Filled form & ready to submit"
-                    })
+                    }
+                    failed_applications.append(preview_record)
+                    batch_failed_buffer.append(preview_record)
+
+                # Batch notification check: Every 20 processed jobs, dispatch intermediate email and continue
+                total_in_batch = len(batch_applied_buffer) + len(batch_failed_buffer)
+                if total_in_batch >= EMAIL_BATCH_SIZE:
+                    print(f"\n[Scanner] 📧 Processed {total_in_batch} jobs in current batch (limit: {EMAIL_BATCH_SIZE}). Dispatching progress email before continuing...")
+                    try:
+                        if batch_applied_buffer:
+                            notify_user_of_applied_applications(list(batch_applied_buffer), to_email=cand_email)
+                            batch_applied_buffer.clear()
+                        if batch_failed_buffer:
+                            notify_user_of_failed_applications(list(batch_failed_buffer), to_email=cand_email)
+                            batch_failed_buffer.clear()
+                    except Exception as b_mail_err:
+                        print(f"[Scanner] Note: Batch notification error: {b_mail_err}")
 
     print(f"\n[Scanner] ✅ Scan complete! Discovered & processed {new_jobs_added} new postings ({direct_applied_count} direct applied, {tailored_count} tailored).")
 
     cand_email = candidate.get("email") or "akhilbaja.work@gmail.com"
 
-    # 1. Send separate confirmation email alert for successfully submitted applications
-    if applied_applications:
+    # Send final summary alerts for any remaining unnotified jobs in the buffers (or overall totals if none sent yet)
+    if batch_applied_buffer:
+        notify_user_of_applied_applications(batch_applied_buffer, to_email=cand_email)
+    elif not (len(applied_applications) > len(batch_applied_buffer)) and applied_applications:
         notify_user_of_applied_applications(applied_applications, to_email=cand_email)
 
-    # 2. Send summary email alert if any applications failed/need review/previewed
-    if failed_applications:
+    if batch_failed_buffer:
+        notify_user_of_failed_applications(batch_failed_buffer, to_email=cand_email)
+    elif not (len(failed_applications) > len(batch_failed_buffer)) and failed_applications:
         notify_user_of_failed_applications(failed_applications, to_email=cand_email)
 
 

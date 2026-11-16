@@ -726,11 +726,11 @@ def open_new_chrome_window_via_cdp(cdp_url: str, url: str = "about:blank") -> bo
         return False
 
 
-def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 30) -> None:
+def cleanup_stale_chrome_tabs(cdp_url: str, max_tabs_to_keep: int = 20) -> None:
     """
     Manages Chrome tabs across application sessions.
     Keeps all application tabs and windows open so the candidate can inspect, validate, and submit them.
-    When open page tabs in the current window reach or exceed max_tabs_to_keep (default 30),
+    When open page tabs reach or exceed max_tabs_to_keep (default 20),
     opens a fresh independent Chrome window via CDP without closing ANY active tabs or windows.
     """
     try:
@@ -764,7 +764,7 @@ def get_or_create_browser_session(headless: bool = False):
     # pyrefly: ignore [missing-import]
     from browser_use import BrowserSession
     cdp_url = ensure_persistent_browser(headless=headless)
-    cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=30)
+    cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=20)
     return BrowserSession(
         cdp_url=cdp_url,
         minimum_wait_page_load_time=0.1,             # Cut from 0.25s to 0.1s
