@@ -1,6 +1,7 @@
 """`job-finder ats` command."""
 
 import argparse
+import contextlib
 import json
 import logging
 import os
@@ -38,7 +39,9 @@ def run(args: argparse.Namespace):
             sys.exit(1)
         sys.exit(ats_view.render(ats_view.score_against_jd(target_data, jd_text), as_json=args.json))
 
-    ats_eval = evaluate_master_resume(target_data)
+    # The scorer prints progress lines; keep them off stdout so --json stays machine-readable
+    with contextlib.redirect_stdout(sys.stderr if args.json else sys.stdout):
+        ats_eval = evaluate_master_resume(target_data)
     if args.json and not args.optimize:
         ui.print_json(ats_eval)
         return

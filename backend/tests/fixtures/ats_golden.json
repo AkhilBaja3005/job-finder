@@ -3,23 +3,121 @@
     "name": "Test Candidate",
     "location": "London, UK",
     "requires_sponsorship": false,
-    "skills": ["Python", "PyTorch", "SQL", "AWS", "Docker", "machine learning", "LLM", "RAG", "FastAPI"],
-    "experience": [
-      {"role": "Machine Learning Engineer", "company": "Acme", "start_date": "Jan 2021", "end_date": "Present",
-       "description": ["Built RAG pipelines with Python and FastAPI", "Trained PyTorch models and deployed with Docker on AWS", "Optimised SQL feature queries"]},
-      {"role": "Data Analyst", "company": "Beta", "start_date": "Jan 2018", "end_date": "Dec 2020",
-       "description": ["Built dashboards with SQL and Python"]}
+    "skills": [
+      "Python",
+      "PyTorch",
+      "SQL",
+      "AWS",
+      "Docker",
+      "machine learning",
+      "LLM",
+      "RAG",
+      "FastAPI"
     ],
-    "education": [{"degree": "MSc Computer Science", "end_date": "2018"}]
+    "experience": [
+      {
+        "role": "Machine Learning Engineer",
+        "company": "Acme",
+        "start_date": "Jan 2021",
+        "end_date": "Present",
+        "description": [
+          "Built RAG pipelines with Python and FastAPI",
+          "Trained PyTorch models and deployed with Docker on AWS",
+          "Optimised SQL feature queries"
+        ]
+      },
+      {
+        "role": "Data Analyst",
+        "company": "Beta",
+        "start_date": "Jan 2018",
+        "end_date": "Dec 2020",
+        "description": [
+          "Built dashboards with SQL and Python"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "degree": "MSc Computer Science",
+        "end_date": "2018"
+      }
+    ]
   },
   "cases": [
-    {"name": "strong_ml_match", "min": 70, "max": 100,
-     "jd": "Machine Learning Engineer\nAcme AI\nRequirements:\n- 4+ years of experience building machine learning systems\n- Python, PyTorch and SQL\n- Experience with LLM and RAG applications\n- Docker and AWS\nNice to have: FastAPI"},
-    {"name": "partial_match", "min": 40, "max": 85,
-     "jd": "Backend Engineer\nWidgets Ltd\nRequirements:\n- 3 years of experience\n- Java, Kubernetes, Kafka and Terraform\n- Python is a plus"},
-    {"name": "unrelated_sales_role", "min": 0, "max": 65,
-     "jd": "Account Executive\nSalesCo\nRequirements:\n- 5 years of experience in B2B sales\n- Salesforce, CRM, lead generation and negotiation\n- cold outreach"},
-    {"name": "mid_role_mentions_director_is_not_executive", "min": 60, "max": 100,
-     "jd": "Machine Learning Engineer\nAcme AI\nYou will report to the Director of Engineering and work with senior engineers.\nRequirements:\n- Python, PyTorch, SQL\n- 3 years of experience"}
+    {
+      "name": "strong_ml_match",
+      "min": 70,
+      "max": 100,
+      "jd": "Machine Learning Engineer\nAcme AI\nRequirements:\n- 4+ years of experience building machine learning systems\n- Python, PyTorch and SQL\n- Experience with LLM and RAG applications\n- Docker and AWS\nNice to have: FastAPI"
+    },
+    {
+      "name": "partial_match",
+      "min": 30,
+      "max": 65,
+      "jd": "Backend Engineer\nWidgets Ltd\nRequirements:\n- 3 years of experience\n- Java, Kubernetes, Kafka and Terraform\n- Python is a plus"
+    },
+    {
+      "name": "unrelated_sales_role",
+      "min": 0,
+      "max": 40,
+      "jd": "Account Executive\nSalesCo\nRequirements:\n- 5 years of experience in B2B sales\n- Salesforce, CRM, lead generation and negotiation\n- cold outreach"
+    },
+    {
+      "name": "mid_role_mentions_director_is_not_executive",
+      "min": 60,
+      "max": 100,
+      "jd": "Machine Learning Engineer\nAcme AI\nYou will report to the Director of Engineering and work with senior engineers.\nRequirements:\n- Python, PyTorch, SQL\n- 3 years of experience"
+    },
+    {
+      "name": "mlops_engineer",
+      "min": 60,
+      "max": 100,
+      "jd": "MLOps Engineer\nCloudAI\nRequirements:\n- 3 years of experience\n- Python, Docker and AWS\n- PyTorch model deployment and machine learning pipelines\n- SQL\nNice to have: MLflow"
+    },
+    {
+      "name": "data_engineer_partial",
+      "min": 35,
+      "max": 85,
+      "jd": "Data Engineer\nPipeCo\nRequirements:\n- 4 years of experience\n- SQL, Python and Kafka\n- Apache Spark and Airflow data pipelines\n- Snowflake"
+    },
+    {
+      "name": "devops_sre_low",
+      "min": 30,
+      "max": 65,
+      "jd": "Site Reliability Engineer\nInfraCo\nRequirements:\n- 5 years of experience\n- Kubernetes, Terraform and ci/cd\n- AWS and Linux\n- Prometheus and Grafana observability"
+    },
+    {
+      "name": "staff_role_more_years_than_candidate",
+      "min": 40,
+      "max": 88,
+      "jd": "Staff Machine Learning Engineer\nBigTech\nRequirements:\n- 9+ years of experience\n- Python, PyTorch, SQL\n- LLM and RAG systems at scale"
+    },
+    {
+      "name": "product_manager_unrelated",
+      "min": 0,
+      "max": 40,
+      "jd": "Product Manager\nAppCo\nRequirements:\n- 4 years of experience in product management\n- roadmapping, user research and a/b testing\n- jira and agile delivery"
+    },
+    {
+      "name": "frontend_react_unrelated",
+      "min": 0,
+      "max": 40,
+      "jd": "Frontend Engineer\nWebCo\nRequirements:\n- 3 years of experience\n- React, TypeScript and Next.js\n- GraphQL and design systems"
+    },
+    {
+      "name": "security_engineer_unrelated",
+      "min": 20,
+      "max": 55,
+      "jd": "Security Engineer\nSecureCo\nRequirements:\n- 5 years of experience\n- cybersecurity, penetration testing and iso 27001\n- Python scripting preferred"
+    },
+    {
+      "name": "visa_blocked_role",
+      "min": 0,
+      "max": 0,
+      "jd": "Machine Learning Engineer\nUSCo\nRequirements:\n- Python, PyTorch\nWe cannot offer sponsorship. US citizens only.",
+      "resume_overrides": {
+        "requires_sponsorship": true
+      }
+    }
   ]
 }
