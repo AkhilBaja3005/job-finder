@@ -23,7 +23,8 @@ def run(args: argparse.Namespace):
     env_path = os.path.join(ws, ".env")
     
     # Look for template .env.example
-    pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    # This module lives in job_finder/commands/, so the project root is two levels up
+    pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     example_env_candidates = [
         os.path.join(ws, ".env.example"),
         os.path.join(pkg_root, ".env.example"),
