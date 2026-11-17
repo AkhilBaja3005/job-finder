@@ -500,7 +500,8 @@ def _session_to_profile(resume_data: Dict[str, Any]) -> Dict[str, Any]:
         "requires_sponsorship": str(resume_data.get("sponsorship", "")).lower() in ("yes", "true", "required"),
         "core_skills": clean_skills(resume_data.get("skills", [])),
         "experience_summary": resume_data.get("summary", ""),
-        "work_experience": resume_data.get("work_experience") or normalize_experience(resume_data.get("experience")),
+        # `experience` is what the web app and resume tailoring store; `work_experience` is only a legacy copy.
+        "work_experience": normalize_experience(resume_data.get("experience")) or resume_data.get("work_experience") or [],
         "education": resume_data.get("education", []),
         "projects": resume_data.get("projects", []),
     }
@@ -568,8 +569,8 @@ def _profile_to_session_data(profile: Dict[str, Any], previous: Dict[str, Any]) 
     if skills:
         data["skills"] = skills
     if cand.get("work_experience") is not None:
-        data["work_experience"] = cand["work_experience"]
-        # The web app and resume tailoring read `experience`; keep both views in step.
+        # Store one copy, under the key the web app and resume tailoring read; drop the legacy duplicate.
+        data.pop("work_experience", None)
         data["experience"] = [
             {"company": e.get("company", ""), "role": e.get("role", ""),
              "start_date": (e.get("timeline", "").split("\u2013")[0] or "").strip(),

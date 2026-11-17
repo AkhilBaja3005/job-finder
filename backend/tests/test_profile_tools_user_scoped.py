@@ -81,8 +81,8 @@ def test_cloud_save_updates_only_that_users_session(cloud, tmp_path):
     }))
     assert res["success"] is True
     assert cloud["alice"]["data"]["linkedin"] == "https://www.linkedin.com/in/alice"
-    assert cloud["alice"]["data"]["work_experience"][0]["company"] == "Acme"
     assert cloud["alice"]["data"]["experience"][0]["company"] == "Acme"
+    assert "work_experience" not in cloud["alice"]["data"]  # one copy only, no drifting duplicate
     assert cloud["alice"]["data"]["name"] == "Akhil Baja"  # untouched fields survive
     assert cloud["bob"]["data"] == {"name": "Bob", "email": "bob@example.com"}
     assert not os.path.exists(tmp_path / "shared_candidate_profile.json")
@@ -127,3 +127,11 @@ def test_profile_is_never_written_to_the_example_template(monkeypatch, tmp_path)
     with pytest.raises(ValueError):
         run(pt.handle_save_candidate_profile({"name": "X"}))
     assert template.read_text() == "{}"
+
+
+def test_experience_edits_win_over_a_stale_legacy_copy(cloud):
+    data = dict(RESUME)
+    data["work_experience"] = [{"company": "Old Co", "role": "Old", "timeline": "2000", "technologies": [], "highlights": []}]
+    cloud["alice"] = {"data": data, "path": ""}
+    got = run(pt.handle_get_candidate_profile({"token": "alice"}))["profile"]["candidate"]
+    assert [e["company"] for e in got["work_experience"]] == ["Qualcomm", "Axis Bank"]
