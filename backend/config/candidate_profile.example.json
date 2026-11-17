@@ -16,7 +16,7 @@
     "requires_sponsorship": false,
     "veteran_status": "No",
     "disability_status": "No",
-    "portals_password": "YourSecurePassword123!",
+    "portals_password": "",
     "experience_summary": "Staff Software Engineer with 6+ years of experience in distributed systems, high-throughput microservices, and AI infrastructure.",
     "education": [
       {

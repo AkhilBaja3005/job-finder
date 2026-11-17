@@ -73,6 +73,10 @@ def get_supabase_client():
     key = os.getenv("SUPABASE_KEY", "")
     return url, key
 
+import threading
+_lookup_state = threading.local()
+
+
 def supabase_request(path: str, method: str = "GET", data: Optional[Dict[str, Any]] = None) -> list:
     url_base, key = get_supabase_client()
     if not url_base or not key:
@@ -98,6 +102,7 @@ def supabase_request(path: str, method: str = "GET", data: Optional[Dict[str, An
             return json.loads(resp_body)
     except Exception as e:
         print(f"Supabase request error on {method} {path}: {e}")
+        _lookup_state.failed = True
         return []
 
 def create_or_get_user(email: str, picture_url: Optional[str] = None) -> dict:
@@ -132,13 +137,16 @@ def create_session(user_id) -> str:
 
 def get_user_by_token(token: str) -> Optional[dict]:
     # Fast path for local test mocks
-    if token.startswith("test_") or token.startswith("mock_"):
+    # Test shortcut: honoured only under pytest or when explicitly enabled, never on a deployed server.
+    if token.startswith(("test_", "mock_")) and (os.getenv("PYTEST_CURRENT_TEST") or os.getenv("ALLOW_TEST_TOKENS") == "1"):
         return {"id": "test_user_id", "email": "test@example.com", "sync_code": "TEST01"}
 
     # Fast path: cache hit avoids a Supabase round-trip (~100-300ms saved)
     cached = _token_cache.get(token)
     if cached is not None:
         return cached
+
+    _lookup_state.failed = False
 
     # 1. Check if token is a 6-digit Sync Code (e.g., A7X9K2)
     clean_token = token.strip().upper()
@@ -176,6 +184,10 @@ def get_user_by_token(token: str) -> Optional[dict]:
         "sync_code": clean_token if len(clean_token) == 6 else f"G{token[:5].upper()}",
         "send_tailored_email": False
     }
+    if getattr(_lookup_state, "failed", False):
+        # Supabase was unreachable: this token may be valid. Do not cache the guest answer, and say so.
+        guest_user["lookup_failed"] = True
+        return guest_user
     _token_cache.set(token, guest_user)
     return guest_user
 

@@ -12,6 +12,23 @@ from job_finder import ui
 logger = logging.getLogger(__name__)
 
 
+def _write_env_value(env_path: str, key: str, value: str) -> None:
+    """Set KEY="value" in a .env file (replacing any existing line) and make the file owner-only."""
+    lines = []
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            lines = [ln for ln in f.readlines() if not ln.strip().startswith(f"{key}=")]
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    lines.append(f'{key}="{value}"\n')
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+    try:
+        os.chmod(env_path, 0o600)
+    except OSError:
+        pass
+
+
 def run(args: argparse.Namespace):
     print("\n========================================================")
     print("          JOB FINDER AI - QUICK SETUP WIZARD")
@@ -328,8 +345,19 @@ def run(args: argparse.Namespace):
                 print("   (Press Enter to keep current value, or type new value to update):")
                 updated = False
                 for key, label, cur_val in fields_to_prompt:
-                    default_hint = f" [{cur_val}]" if cur_val else ""
+                    default_hint = f" [{cur_val}]" if cur_val and key != "portals_password" else ""
                     try:
+                        if key == "portals_password":
+                            if os.getenv("PORTALS_PASSWORD"):
+                                continue
+                            import getpass
+                            pw = getpass.getpass(f"  Enter {label} (hidden, stored in .env): ").strip()
+                            if pw:
+                                _write_env_value(env_path, "PORTALS_PASSWORD", pw)
+                                os.environ["PORTALS_PASSWORD"] = pw
+                                cand.pop("portals_password", None)
+                                updated = True
+                            continue
                         user_input = input(f"  Enter {label}{default_hint}: ").strip()
                         if user_input:
                             if key == "requires_sponsorship":

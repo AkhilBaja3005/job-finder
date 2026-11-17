@@ -80,6 +80,14 @@ def get_profile_save_path() -> str:
 PROFILE_CONFIG_PATH = get_profile_config_path()
 
 
+def _restrict(path: str) -> None:
+    """Profile files can hold a portal password: make them readable by the owner only."""
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
 def _checked_save_path() -> str:
     """The profile save path, refusing the shipped `.example.json` template so it never holds real data."""
     path = get_profile_save_path()
@@ -316,6 +324,7 @@ def save_profile_data(data: Dict[str, Any]) -> str:
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+    _restrict(save_path)
     return save_path
 
 
@@ -458,6 +467,7 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2)
+    _restrict(save_path)
 
     return merged
 
@@ -627,6 +637,7 @@ async def handle_save_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2)
+    _restrict(save_path)
 
     return {
         "success": True,

@@ -296,11 +296,16 @@ def build_application_task_prompt(
 
     full_international_phone = f"{target_dial}{clean_mobile}"
 
+    # The environment variable (set by `job-finder setup`) wins over a value saved in a profile file.
+    # The old template placeholder is never used to create a real account.
     portals_password = (
-        resume_data.get("portals_password")
+        os.getenv("PORTALS_PASSWORD", "")
+        or resume_data.get("portals_password")
         or resume_data.get("candidate", {}).get("portals_password")
-        or os.getenv("PORTALS_PASSWORD", "")
+        or ""
     )
+    if portals_password == "YourSecurePassword123!":
+        portals_password = ""
 
     password_profile_line = f"- Account Creation / Portal Password: {portals_password}\n" if portals_password else ""
 
