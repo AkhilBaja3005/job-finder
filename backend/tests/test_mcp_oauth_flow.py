@@ -238,3 +238,77 @@ def test_tampered_client_id_rejected_with_invalid_client(client):
     res = client.get(f"/oauth/authorize?response_type=code&client_id={tampered}&redirect_uri=https://claude.ai/oauth/callback&code_challenge=abc&code_challenge_method=S256")
     assert res.status_code == 400
     assert res.json()["error"] == "invalid_client"
+
+
+# --- Client ID Metadata Documents (clients that use an HTTPS URL as client_id) ---------------------
+
+CLAUDE_CLIENT_ID = "https://claude.ai/oauth/mcp-oauth-client-metadata"
+CLAUDE_DOC = {
+    "client_id": CLAUDE_CLIENT_ID, "client_name": "Claude", "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+}
+
+
+def _authorize_url(client_id, redirect="https://claude.ai/api/mcp/auth_callback"):
+    from urllib.parse import quote
+    return (f"/oauth/authorize?response_type=code&client_id={quote(client_id, safe='')}&redirect_uri={quote(redirect, safe='')}"
+            "&code_challenge=abc&code_challenge_method=S256&scope=mcp%3Atools")
+
+
+def test_metadata_document_client_is_accepted(client, monkeypatch):
+    from routes import oauth_routes
+    oauth_routes._CIMD_CACHE.clear()
+    monkeypatch.setattr(oauth_routes, "_fetch_client_metadata", lambda url: dict(CLAUDE_DOC) if url == CLAUDE_CLIENT_ID else None)
+    res = client.get(_authorize_url(CLAUDE_CLIENT_ID))
+    assert res.status_code == 200 and "Connect Claude to Job Finder" in res.text
+
+
+def test_metadata_document_redirect_uri_must_match(client, monkeypatch):
+    from routes import oauth_routes
+    oauth_routes._CIMD_CACHE.clear()
+    monkeypatch.setattr(oauth_routes, "_fetch_client_metadata", lambda url: dict(CLAUDE_DOC))
+    res = client.get(_authorize_url(CLAUDE_CLIENT_ID, redirect="https://evil.example/cb"))
+    assert res.status_code == 400
+
+
+def test_unlisted_metadata_host_is_rejected_without_fetching(client):
+    from routes import oauth_routes
+    oauth_routes._CIMD_CACHE.clear()
+    assert oauth_routes._fetch_client_metadata("https://evil.example/client.json") is None
+    assert oauth_routes._fetch_client_metadata("http://claude.ai/oauth/mcp-oauth-client-metadata") is None
+    assert oauth_routes._fetch_client_metadata("https://claude.ai:8443/x") is None
+    assert oauth_routes._fetch_client_metadata("https://user:pw@claude.ai/x") is None
+    res = client.get(_authorize_url("https://evil.example/client.json"))
+    assert res.status_code == 400 and res.json()["error"] == "invalid_client"
+
+
+def test_metadata_document_must_name_itself(monkeypatch):
+    from routes import oauth_routes
+    import io, json as _json
+
+    class FakeResp(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    class FakeOpener:
+        def __init__(self, body): self.body = body
+        def open(self, request, timeout=5): return FakeResp(self.body)
+
+    monkeypatch.setattr(oauth_routes.socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("160.79.104.10", 443))])
+    bad = _json.dumps({"client_id": "https://claude.ai/other", "redirect_uris": ["https://claude.ai/cb"]}).encode()
+    monkeypatch.setattr(oauth_routes.urllib.request, "build_opener", lambda *h: FakeOpener(bad))
+    assert oauth_routes._fetch_client_metadata(CLAUDE_CLIENT_ID) is None
+    good = _json.dumps(CLAUDE_DOC).encode()
+    monkeypatch.setattr(oauth_routes.urllib.request, "build_opener", lambda *h: FakeOpener(good))
+    assert oauth_routes._fetch_client_metadata(CLAUDE_CLIENT_ID)["redirect_uris"] == CLAUDE_DOC["redirect_uris"]
+
+
+def test_private_addresses_are_refused(monkeypatch):
+    from routes import oauth_routes
+    monkeypatch.setattr(oauth_routes.socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("127.0.0.1", 443))])
+    assert oauth_routes._fetch_client_metadata(CLAUDE_CLIENT_ID) is None
+
+
+def test_discovery_advertises_only_supported_grants(client):
+    data = client.get("/.well-known/oauth-authorization-server").json()
+    assert data["client_id_metadata_document_supported"] is True
+    assert "refresh_token" not in data["grant_types_supported"]

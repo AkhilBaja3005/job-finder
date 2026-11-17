@@ -14,7 +14,9 @@ SKIP_PARTS = {"venv", "node_modules", "tests", "scratch", "__pycache__", "build"
 
 def _declared_packages():
     text = open(os.path.join(ROOT, "pyproject.toml"), encoding="utf-8").read()
-    block = re.search(r"\[tool\.setuptools\]\s*packages\s*=\s*\[(.*?)\]", text, re.S).group(1)
+    match = re.search(r"\[tool\.setuptools\]\s*packages\s*=\s*\[(.*?)\]", text, re.S)
+    assert match is not None, "pyproject.toml has no [tool.setuptools] packages list"
+    block = match.group(1)
     return set(re.findall(r'"([^"]+)"', block))
 
 
