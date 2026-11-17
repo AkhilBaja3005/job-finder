@@ -116,3 +116,14 @@ def test_cloud_sync_without_token_or_resume_fails_cleanly(cloud):
 
 def test_clean_skills_strips_trailing_period_but_keeps_inner_dots():
     assert pt.clean_skills(["Python", "SQL.", "Node.js", " MCP. ", ""]) == ["Python", "SQL", "Node.js", "MCP"]
+
+
+def test_profile_is_never_written_to_the_example_template(monkeypatch, tmp_path):
+    template = tmp_path / "candidate_profile.example.json"
+    template.write_text("{}")
+    monkeypatch.setenv("CANDIDATE_PROFILE_PATH", str(template))
+    monkeypatch.delenv("SPACE_ID", raising=False)
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    with pytest.raises(ValueError):
+        run(pt.handle_save_candidate_profile({"name": "X"}))
+    assert template.read_text() == "{}"

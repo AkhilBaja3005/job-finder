@@ -80,6 +80,14 @@ def get_profile_save_path() -> str:
 PROFILE_CONFIG_PATH = get_profile_config_path()
 
 
+def _checked_save_path() -> str:
+    """The profile save path, refusing the shipped `.example.json` template so it never holds real data."""
+    path = get_profile_save_path()
+    if os.path.basename(path).endswith(".example.json"):
+        raise ValueError(f"Refusing to write a candidate profile to the template file {path}")
+    return path
+
+
 def _is_cloud() -> bool:
     return bool(
         any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID"))
@@ -304,7 +312,7 @@ def load_profile_data() -> Dict[str, Any]:
 
 def save_profile_data(data: Dict[str, Any]) -> str:
     """Saves candidate profile data dict into active candidate_profile.json."""
-    save_path = get_profile_save_path()
+    save_path = _checked_save_path()
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
@@ -446,7 +454,7 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
         "networking_and_references": networking
     }
 
-    save_path = get_profile_save_path()
+    save_path = _checked_save_path()
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2)
@@ -614,7 +622,7 @@ async def handle_save_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
         "networking_and_references": current_data.get("networking_and_references", {}),
     }, args)
 
-    save_path = get_profile_save_path()
+    save_path = _checked_save_path()
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2)

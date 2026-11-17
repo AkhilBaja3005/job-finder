@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- MCP: on the cloud server `save_candidate_profile` and `sync_candidate_profile_from_resume` wrote to one shared
+  `candidate_profile.json` instead of the signed-in user's profile, so a save without a token edited someone
+  else's record. They now require a token, write only to that user's profile, and return `UNAUTHENTICATED`
+  otherwise.
+- MCP: `get_candidate_profile` always returned an empty `work_experience` and no LinkedIn or GitHub link for
+  profiles built from an uploaded resume. Both now come from the parsed resume.
+- MCP: trailing periods on skills (`SQL.`, `MCP.`) are removed; `portals_password` is no longer returned.
+- The profile tools refuse to write to `candidate_profile.example.json`.
+
+### Added
+- `save_candidate_profile` accepts `work_experience` and `skill_categories`, and no field is required.
+- Cloud `sync_candidate_profile_from_resume` rebuilds the profile from the resume you already uploaded when no
+  readable file path is given.
+- A test guard fails any test that modifies `backend/config/candidate_profile.example.json` and restores it.
+
 ## 1.7.0
 
 ### Changed
