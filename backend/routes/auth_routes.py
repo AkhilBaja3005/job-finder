@@ -436,10 +436,16 @@ async def update_user_profile(request: ProfileUpdateRequest, authorization: Opti
     except Exception as g_err:
         print(f"[update_user_profile] Warning updating guest file: {g_err}")
 
-    # Also persist telemetry updates to config/candidate_profile.json
+    # Mirror the update into the local candidate_profile.json. Only for a local install, where that file is
+    # the owner's own profile: on a deployed server it is one shared file, and writing every signed-in user's
+    # details into it leaks them to each other. Never touch the shipped *.example.json template.
     try:
-        from job_finder_mcp.tools.profile_tools import PROFILE_CONFIG_PATH
-        if os.path.exists(PROFILE_CONFIG_PATH):
+        from services.auth import _is_local_deployment
+        from job_finder_mcp.tools.profile_tools import get_profile_config_path
+        PROFILE_CONFIG_PATH = get_profile_config_path()
+        if (_is_local_deployment()
+                and not os.path.basename(PROFILE_CONFIG_PATH).endswith(".example.json")
+                and os.path.exists(PROFILE_CONFIG_PATH)):
             with open(PROFILE_CONFIG_PATH, "r", encoding="utf-8") as cf:
                 cfg_data = json.load(cf)
             cand = cfg_data.setdefault("candidate", {})

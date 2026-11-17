@@ -103,6 +103,15 @@ HANDLERS = {
 }
 
 
+def _server_icons() -> list:
+    """Icons shown by MCP clients next to the server name (served from the public site)."""
+    base = os.getenv("PUBLIC_SITE_URL", "https://www.job-finder.space").rstrip("/")
+    return [
+        {"src": f"{base}/favicon-192.png", "mimeType": "image/png", "sizes": ["192x192"]},
+        {"src": f"{base}/favicon.svg", "mimeType": "image/svg+xml", "sizes": ["any"]},
+    ]
+
+
 async def process_mcp_request(request: Dict[str, Any], user_token: Optional[str] = None) -> Optional[Dict[str, Any]]:
     req_id = request.get("id")
     method = request.get("method")
@@ -121,7 +130,9 @@ async def process_mcp_request(request: Dict[str, Any], user_token: Optional[str]
                 },
                 "serverInfo": {
                     "name": "job-finder-career-engine",
-                    "version": _server_version()
+                    "title": "Job Finder",
+                    "version": _server_version(),
+                    "icons": _server_icons(),
                 }
             }
         }
