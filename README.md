@@ -29,58 +29,58 @@ The project includes:
 
 ## Key Features
 
-### 📄 1. Multi-Format Master Resume Parsing & Category Preservation
+### 1. Multi-Format Master Resume Parsing & Category Preservation
 - Supports **PDF**, **DOCX**, and native **LaTeX (`.tex`)** uploads.
 - **Deterministic Category Preservation**: Automatically extracts and locks candidate-defined skill categories (`Languages`, `AI/ML & GenAI`, `Data & Platforms`, `Software & Infrastructure`) and protects against unwanted AI re-categorization or truncation.
 - Accurately captures multi-line wrapped text, parentheses, grades/CPI, and nested project/experience structures.
 
-### 🎯 2. Deterministic ATS Scoring & Semantic Fit Analysis
+### 2. Deterministic ATS Scoring & Semantic Fit Analysis
 - **Dual-Engine Evaluation**: Combines deterministic keyword & experience matching (`ats_scorer.py`) with semantic LLM role-fit analysis.
 - **Context Density & Time-Decay**: Weighted scoring based on skill recency, timeline flattening, and anti-keyword stuffing controls.
 - **Matched vs. Missing Keywords Breakdown**: Identifies exact hard skills and qualification gaps.
 - **Top Missing Keywords Selector**: Click missing skill chips to explicitly authorize and weave them into your tailored resume with intelligent category routing.
 
-### ✍️ 3. One-Page LaTeX Resume & Cover Letter Tailoring
+### 3. One-Page LaTeX Resume & Cover Letter Tailoring
 - **Strict One-Page Multi-Pass Budgeting**: Automatically optimizes `linespread` and `spacing_scale` via Tectonic PDF compilation to guarantee a single-page document.
 - **Automated Recruiter Review Loop**: Multi-attempt validation loop evaluating 4 criteria: ATS fit, measurable impact metrics, strict truthfulness against original experience, and conciseness.
 - **Overleaf Integration**: One-click direct export to Overleaf for both tailored and original master resumes.
 - **On-Demand Styled Email Delivery**: 1-click delivery of tailored resume PDFs with full metadata (`Target Role`, `Company`, `ATS Score`) to candidate inboxes.
 
-### ⚡ 4. Autonomous Web Autofill Engine (`browser-use` + Gemini)
+### 4. Autonomous Web Autofill Engine (`browser-use` + Gemini)
 - **Two-Phase Adaptive Execution**: Fast pure-DOM pass (`use_vision=False`, `use_thinking=False`) for sub-10s filling, with an adaptive fallback to **Vision + Deep Reasoning (`use_thinking=True`)** for custom canvas widgets or shadow DOM hurdles.
 - **Pre-Flight HTTP Probing**: Follows redirects to resolve direct ATS destinations (e.g. LinkedIn $\rightarrow$ Ashby) and exits in **~200ms** on closed/expired listings without launching Chrome.
 - **Smart Form Field Preservation & Updating**: Inspects auto-filled inputs on application portals; if candidate profile has current data, outdated browser/portal auto-filled values are cleanly cleared and replaced with verified candidate details, while preserving pre-filled fields if no candidate value exists.
 - **Workday Prompt Button & Menu Selection**: Accurately handles Workday triple-bar ("hamburger" / prompt button) multi-select menus by typing the target value followed by Enter to trigger native platform option selection (e.g., source questions, dropdowns).
 - **Persistent Chrome Instance**: Reuses a dedicated Chrome daemon on CDP port 9223 with performance flags (disabled image painting, timer throttling bypass).
 - **Safety Guardrails**: Default `REVIEW_ONLY` mode navigates through multi-step forms and pauses on the final preview step; `AUTO_SUBMIT` mode autonomously submits when enabled (`--auto-apply` or `--auto-submit`).
-- 📖 **Full Architecture Guide**: See [`docs/AUTONOMOUS_AUTOFILL_README.md`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/docs/AUTONOMOUS_AUTOFILL_README.md).
+- **Full Architecture Guide**: See [`docs/AUTONOMOUS_AUTOFILL_README.md`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/docs/AUTONOMOUS_AUTOFILL_README.md).
 
-### 🧩 5. In-Page Chrome Extension Assistant
+### 5. In-Page Chrome Extension Assistant
 - **Zero-Autofill Architecture**: Uses smart field classifiers and deterministic fallbacks for contact info, notice periods, salary expectations, and work authorizations.
 - **Embedded `<iframe>` Support**: Injects into both top-level and embedded ATS frames (Greenhouse/Lever).
 - **Open-Ended Question Engine**: Instant screening answer generation for essays like *"Why this company?"* or *"Describe a challenging project"*.
-- **Inline '✨ AI Answer' Buttons**: Directly embedded beside textareas and form inputs on live job pages.
+- **Inline 'AI Answer' Buttons**: Directly embedded beside textareas and form inputs on live job pages.
 
-### 🌐 6. Grounding with Google Search & Verified Recruiter Discovery
+### 6. Grounding with Google Search & Verified Recruiter Discovery
 - **Native Google Search Grounding**: Connects Gemini models with search tools directly to real-time web content using `tools=[{"google_search": {}}]` with citation and source link extraction.
 - **Verified Recruiter & Hiring Manager Intel**: Discovers active technical recruiters, talent sourcers, and engineering hiring managers on LinkedIn for any target role and company (`POST /jobs/find_recruiter`).
 - **7-Day TTL Smart Caching**: Normalizes corporate suffixes (e.g. `Stripe, Inc.` $\rightarrow$ `stripe`) to eliminate duplicate billing queries.
 
-### 📬 6. Automated Daily Job Matches Digest
+### 6. Automated Daily Job Matches Digest
 - **Multi-Source Daily Scanning**: Aggregates up to **20 top matching roles** from LinkedIn, Reed, Indeed, and direct ATS portals (Greenhouse, Ashby, Lever).
 - **Recruiter Cards & 1-Click Tailoring**: Direct links to recruiter LinkedIn profiles and instant 1-click LaTeX resume tailoring.
 - **Instant Trigger Endpoint**: Dispatch test digests on demand (`POST /user/cron/trigger_now`) without waiting for the scheduled delivery time.
 
 ---
 
-## 🧩 Chrome Extension (`Job Finder ATS Tailor`)
+## Chrome Extension (`Job Finder ATS Tailor`)
 
 The project includes a Manifest V3 Chrome Extension located in the `/extension` directory for instant in-page analysis while browsing job boards.
 
 ### Extension Features
 - **Chrome MV3 Persistent Side Panel**: Docks permanently to the right side of the browser, remaining open across form filling, job scrolling, and tab switching without auto-dismissing.
-- **Offline Fallback & Cached Resilience**: When offline or if the backend server is non-responsive, the extension automatically falls back to local storage and displays a cached ATS score indicator (`⚡ Offline Cached Score`).
-- **Live Tab Synchronization & 🔄 Rescan Tab**: Automatically synchronizes and extracts the active job page when switching tabs; dedicated rescan button forces fresh live extraction.
+- **Offline Fallback & Cached Resilience**: When offline or if the backend server is non-responsive, the extension automatically falls back to local storage and displays a cached ATS score indicator (`Offline Cached Score`).
+- **Live Tab Synchronization & Rescan Tab**: Automatically synchronizes and extracts the active job page when switching tabs; dedicated rescan button forces fresh live extraction.
 - **Auto-Update Detection Banner**: Notifies you directly in the side panel when an updated extension version is available with a 1-click zip download button.
 - **Zero-Config Download Package**: Pre-bakes your 6-digit Sync Key and backend server endpoint directly into the downloaded extension zip for instant zero-configuration onboarding.
 - **In-Page Job Extraction**: Auto-detects Job Title, Company Name, and Full Description on **LinkedIn**, **Indeed**, **Workday**, **Greenhouse**, **Lever**, **Ashby**, and custom career sites.
@@ -98,7 +98,7 @@ The project includes a Manifest V3 Chrome Extension located in the `/extension` 
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 Job Finder/
@@ -140,7 +140,7 @@ Job Finder/
 
 ---
 
-## ⚙️ Prerequisites
+## Prerequisites
 
 - **Python**: 3.11+
 - **Node.js**: 20+
@@ -152,7 +152,7 @@ Job Finder/
 
 ---
 
-## 🚀 Running Locally
+## Running Locally
 
 ### 1. Quick Start via Unified CLI (`job-finder`)
 Install locally in editable mode or from source:
@@ -222,7 +222,7 @@ PORT=8000
 
 ---
 
-## 🐳 Running with Docker / Hugging Face Spaces
+## Running with Docker / Hugging Face Spaces
 
 ```bash
 docker build -t job-finder .
@@ -233,7 +233,7 @@ The Docker container builds the frontend, packages the Tectonic LaTeX compiler, 
 
 ---
 
-## 🧪 Testing
+## Testing
 
 Run complete backend test suite:
 ```bash
@@ -243,16 +243,16 @@ pytest tests/ -v
 
 ---
 
-## 🤖 MCP Server & Universal Agent Skills
+## MCP Server & Universal Agent Skills
 
 Job Finder provides a production-grade **Model Context Protocol (MCP)** server and **8 Universal Agent Skills** enabling seamless integration with AI harnesses: **Antigravity**, **Claude Code**, **Claude Desktop**, **Cursor IDE**, and **Gemini CLI**.
 
-### ⚡ Low-Latency & High-Precision Architecture
+### Low-Latency & High-Precision Architecture
 - **Sub-Second Execution (`flash-lite` Prioritization)**: All search grounding and LLM tasks prioritize fast-lite models (configured dynamically via `backend/config/constants.py`), providing ultra-high RPM allowances and eliminating `429 RESOURCE_EXHAUSTED` rate limits.
 - **Zero-Latency Profile Auto-Resolution**: When resume data or keyword arguments are omitted, tools automatically read from [`backend/config/candidate_profile.json`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/backend/config/candidate_profile.json) for instant in-memory scoring in `<10ms`.
 - **Precompiled Taxonomy & Deterministic Rules**: Regex and seniority matching are fully precompiled, avoiding runtime compilation overhead.
 
-### 🛠️ 18 Production MCP Tools
+### 18 Production MCP Tools
 The MCP server exposes 18 specialized tools across the end-to-end career lifecycle:
 - **Profile & Preferences**: `save_candidate_profile`, `get_candidate_profile`
 - **Discovery**: `search_jobs` (multi-role concurrent search), `scrape_job_posting`
@@ -262,7 +262,7 @@ The MCP server exposes 18 specialized tools across the end-to-end career lifecyc
 - **Interview Prep**: `generate_interview_pack`, `company_culture_brief`
 - **CRM & Tracking**: `track_application`, `list_applications`, `check_duplicate_application`
 
-### 🧠 8 Universal Agent Skills
+### 8 Universal Agent Skills
 Located in `.agents/skills/` (with YAML frontmatter compatible across all major agent orchestrators):
 1. **`candidate-profile-config`**: Ingest and save profile, target roles, locations, 24h timeframe, and reference strategies.
 2. **`career-discovery`**: Multi-board job query orchestration with compensation & seniority filtering.
@@ -273,7 +273,7 @@ Located in `.agents/skills/` (with YAML frontmatter compatible across all major 
 7. **`interview-mastery`**: Tailored behavioral, system design, and role-specific technical question packs.
 8. **`application-tracker-crm`**: Pipeline tracking, duplicate submission prevention, and stage updates.
 
-### 💻 Profile & Preferences CLI
+### Profile & Preferences CLI
 Users can also view and configure their preferences directly via the terminal:
 ```bash
 # View active configuration
@@ -283,14 +283,14 @@ python backend/job_finder_mcp/cli_profile.py show
 python backend/job_finder_mcp/cli_profile.py set --roles "AI Engineer,LLM Engineer" --locations "London,Remote" --timeframe "past_24_hours" --ats 65
 ```
 
-### 🔌 Connecting to AI Harnesses
+### Connecting to AI Harnesses
 Pre-built configuration templates are located in [`harness_configs/`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/harness_configs/):
 
 - **Claude Desktop / Claude Code**: Copy snippet from [`harness_configs/claude_desktop_config.json`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/harness_configs/claude_desktop_config.json) into `claude_desktop_config.json`.
 - **Cursor IDE**: Place [`harness_configs/cursor_mcp.json`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/harness_configs/cursor_mcp.json) into `.cursor/mcp.json`.
 - **Antigravity / Gemini CLI**: Add snippet from [`harness_configs/gemini_mcp_config.json`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/harness_configs/gemini_mcp_config.json) into `~/.gemini/antigravity/mcp_config.json`.
 
-### 🧪 Running Comprehensive MCP Tests
+### Running Comprehensive MCP Tests
 Verify all 18 MCP tools and 8 Skills end-to-end:
 ```bash
 cd backend
@@ -299,7 +299,7 @@ python mcp/comprehensive_test.py
 
 ---
 
-## 🌐 Autonomous Job Scanner & Browser-Use Pipeline
+## Autonomous Job Scanner & Browser-Use Pipeline
 
 Job Finder includes an autonomous discovery, ATS evaluation, LaTeX resume tailoring, and browser auto-fill engine powered by **`browser-use`** with **`gemini-3.5-flash-lite`** and dual-persistence (Supabase + CSV).
 
@@ -359,7 +359,7 @@ BROWSER_USE_TIMEOUT=180 BROWSER_USE_DISABLE_GUARDRAILS=1 python applications_tra
 
 ---
 
-## ⚡ Ad-Hoc Master Resume Auto-Filler (`adhoc_auto_filler.py`)
+## Ad-Hoc Master Resume Auto-Filler (`adhoc_auto_filler.py`)
 
 When you have a list of job URLs or an existing tracker and want to **immediately auto-fill using your Master Resume** without LaTeX recompilation or tailoring overhead:
 
@@ -393,7 +393,7 @@ python applications_tracker/adhoc_auto_filler.py \
 
 ---
 
-## 💼 Jobserve.com Tech & Contract CLI (`job-finder jobserve`)
+## Jobserve.com Tech & Contract CLI (`job-finder jobserve`)
 
 Dedicated search and auto-apply command for **Jobserve.com**, extracting clean technical job specifications, real recruiters/agencies, and rates with zero banner bleed:
 
@@ -410,7 +410,7 @@ job-finder jobserve "Machine Learning Contractor" --location London --timeout 18
 
 ---
 
-## 🎓 TargetJobs UK Early Career CLI (`job-finder targetjobs`)
+## TargetJobs UK Early Career CLI (`job-finder targetjobs`)
 
 Dedicated search for **TargetJobs.co.uk** graduate and early-career IT vacancies:
 
@@ -422,7 +422,7 @@ job-finder targetjobs "Software Engineer" --location London --timeframe 48h
 job-finder targetjobs --auto-submit --limit 5
 ```
 
-## 🌟 LinkedIn 'Top Applicant' Scanner & Auto-Apply (`linkedin_top_applicant_scanner.py` & `job-finder scan --top-applicant`)
+## LinkedIn 'Top Applicant' Scanner & Auto-Apply (`linkedin_top_applicant_scanner.py` & `job-finder scan --top-applicant`)
 
 Dedicated autonomous scanner and pipeline integration that specifically targets LinkedIn postings where your profile has the **"You’d be a top applicant"** (or top 10% / top 25% / stand out / competitive applicant) badge, auto-applying with **zero job description scoring or tailoring latency** using your Master Resume.
 
