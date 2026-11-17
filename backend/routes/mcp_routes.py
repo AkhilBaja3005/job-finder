@@ -67,6 +67,12 @@ async def handle_mcp_message(request: Request):
                 )
             # A token that matches no account resolves to a throwaway guest; it must not reach the tools.
             user = await asyncio.to_thread(get_user_by_token, user_token)
+            if user and user.get("lookup_failed"):
+                return JSONResponse(
+                    status_code=503,
+                    content={"error": "temporarily_unavailable", "error_description": "Account lookup is unavailable. Try again shortly."},
+                    headers={"Retry-After": "10"},
+                )
             if not user or user.get("is_guest"):
                 return JSONResponse(
                     status_code=401,

@@ -73,6 +73,10 @@ def get_supabase_client():
     key = os.getenv("SUPABASE_KEY", "")
     return url, key
 
+import threading
+_lookup_state = threading.local()
+
+
 def supabase_request(path: str, method: str = "GET", data: Optional[Dict[str, Any]] = None) -> list:
     url_base, key = get_supabase_client()
     if not url_base or not key:
@@ -98,6 +102,7 @@ def supabase_request(path: str, method: str = "GET", data: Optional[Dict[str, An
             return json.loads(resp_body)
     except Exception as e:
         print(f"Supabase request error on {method} {path}: {e}")
+        _lookup_state.failed = True
         return []
 
 def create_or_get_user(email: str, picture_url: Optional[str] = None) -> dict:
@@ -141,6 +146,8 @@ def get_user_by_token(token: str) -> Optional[dict]:
     if cached is not None:
         return cached
 
+    _lookup_state.failed = False
+
     # 1. Check if token is a 6-digit Sync Code (e.g., A7X9K2)
     clean_token = token.strip().upper()
     if len(clean_token) == 6 and clean_token.isalnum():
@@ -177,6 +184,10 @@ def get_user_by_token(token: str) -> Optional[dict]:
         "sync_code": clean_token if len(clean_token) == 6 else f"G{token[:5].upper()}",
         "send_tailored_email": False
     }
+    if getattr(_lookup_state, "failed", False):
+        # Supabase was unreachable: this token may be valid. Do not cache the guest answer, and say so.
+        guest_user["lookup_failed"] = True
+        return guest_user
     _token_cache.set(token, guest_user)
     return guest_user
 
