@@ -80,6 +80,92 @@ def get_profile_save_path() -> str:
 PROFILE_CONFIG_PATH = get_profile_config_path()
 
 
+def _checked_save_path() -> str:
+    """The profile save path, refusing the shipped `.example.json` template so it never holds real data."""
+    path = get_profile_save_path()
+    if os.path.basename(path).endswith(".example.json"):
+        raise ValueError(f"Refusing to write a candidate profile to the template file {path}")
+    return path
+
+
+def _is_cloud() -> bool:
+    return bool(
+        any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID"))
+        or os.getenv("ENVIRONMENT") == "production"
+    )
+
+
+def _clean_skill(item: Any) -> str:
+    """Strip whitespace and the sentence-ending period a resume's skills line leaves on its last item."""
+    return str(item).strip().rstrip(".").strip()
+
+
+def clean_skills(value: Any) -> Any:
+    """Normalise skills given as a list or as {category: [skills]}; drops empties and duplicates."""
+    if isinstance(value, dict):
+        return {str(k).strip(): clean_skills(v) for k, v in value.items() if isinstance(v, (list, tuple))}
+    if isinstance(value, (list, tuple)):
+        return list(dict.fromkeys(c for c in (_clean_skill(v) for v in value) if c))
+    return value
+
+
+def _normalize_link(link: str) -> str:
+    link = str(link).strip()
+    if link and not link.lower().startswith(("http://", "https://")):
+        if link.lower().startswith(("linkedin.com", "github.com", "www.")):
+            link = "https://" + link
+        elif "." in link:
+            link = "https://" + link
+    return link
+
+
+def _apply_links(candidate: Dict[str, Any], links: Any) -> None:
+    """Map a resume's link list onto linkedin / github / portfolio, without clobbering values already set."""
+    for raw in links or []:
+        link = _normalize_link(raw)
+        low = link.lower()
+        if "linkedin.com" in low:
+            candidate["linkedin"] = link
+        elif "github.com/" in low and "github.io" not in low:
+            candidate["github"] = link
+        elif low.startswith("http"):
+            candidate["portfolio"] = link
+
+
+def normalize_experience(experience: Any) -> list:
+    """Turn parsed resume `experience` entries into the profile's `work_experience` shape."""
+    out = []
+    for exp in experience or []:
+        if not isinstance(exp, dict):
+            continue
+        raw_tech = exp.get("technologies") or []
+        if isinstance(raw_tech, str):
+            raw_tech = [t.strip() for t in raw_tech.split(",") if t.strip()]
+        desc = exp.get("description", exp.get("highlights", []))
+        if not isinstance(desc, list):
+            desc = [str(desc)] if desc else []
+        timeline = exp.get("timeline") or f"{exp.get('start_date', '')} \u2013 {exp.get('end_date', '')}".strip(" \u2013")
+        out.append({
+            "company": exp.get("company", ""),
+            "role": exp.get("role", ""),
+            "timeline": timeline,
+            "technologies": raw_tech,
+            "highlights": desc,
+        })
+    return out
+
+
+def redact_profile(profile: Any) -> Any:
+    """Return a copy of a profile that is safe to send back to a client: no stored portal password."""
+    if not isinstance(profile, dict):
+        return profile
+    out = json.loads(json.dumps(profile))
+    cand = out.get("candidate")
+    if isinstance(cand, dict) and cand.get("portals_password"):
+        cand["portals_password"] = "[stored, not shown]"
+    return out
+
+
 PROFILE_TOOLS_SPEC = [
     {
         "name": "save_candidate_profile",
@@ -130,6 +216,28 @@ PROFILE_TOOLS_SPEC = [
                     "type": "string",
                     "description": "Short bio or professional summary"
                 },
+                "skill_categories": {
+                    "type": "object",
+                    "additionalProperties": {"type": "array", "items": {"type": "string"}},
+                    "description": "Skills grouped by category, e.g. {'Languages': ['Python', 'SQL']}"
+                },
+                "work_experience": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "company": {"type": "string"},
+                            "role": {"type": "string"},
+                            "start_date": {"type": "string"},
+                            "end_date": {"type": "string"},
+                            "timeline": {"type": "string", "description": "Alternative to start_date / end_date, e.g. 'Dec 2024 - Aug 2026'"},
+                            "technologies": {"type": "array", "items": {"type": "string"}},
+                            "highlights": {"type": "array", "items": {"type": "string"}}
+                        },
+                        "required": ["company", "role"]
+                    },
+                    "description": "Work history. Replaces the saved list."
+                },
                 "references": {
                     "type": "array",
                     "items": {
@@ -146,10 +254,10 @@ PROFILE_TOOLS_SPEC = [
                 },
                 "token": {
                     "type": "string",
-                    "description": "Optional user session token or 6-digit sync code to save to specific user account."
+                    "description": "User session token or 6-digit sync code. Required on cloud servers; saves are written only to this user's own profile."
                 }
             },
-            "required": ["name", "email", "target_roles", "target_locations"]
+            "required": []
         }
     },
     {
@@ -167,13 +275,13 @@ PROFILE_TOOLS_SPEC = [
     },
     {
         "name": "sync_candidate_profile_from_resume",
-        "description": "Parses a resume file (PDF, DOCX, or LaTeX) and automatically populates candidate details, work experience, education, projects, skills, and summary in candidate_profile.json.",
+        "description": "Parses a resume file (PDF, DOCX, or LaTeX) and populates candidate details, work experience, education, projects, skills, and summary. Locally this updates candidate_profile.json; on the cloud server it updates the authenticated user's own profile, rebuilding it from the stored resume when no readable file path is given.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "resume_path": {
                     "type": "string",
-                    "description": "Path to the resume file to parse. If omitted, automatically detects the master resume."
+                    "description": "Path to the resume file to parse (must be readable by the server). If omitted, locally detects the master resume; on cloud uses the resume already uploaded for the user."
                 },
                 "token": {
                     "type": "string",
@@ -204,7 +312,7 @@ def load_profile_data() -> Dict[str, Any]:
 
 def save_profile_data(data: Dict[str, Any]) -> str:
     """Saves candidate profile data dict into active candidate_profile.json."""
-    save_path = get_profile_save_path()
+    save_path = _checked_save_path()
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
@@ -241,15 +349,7 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
         candidate["location"] = resume_dict["location"]
 
     # Links (LinkedIn, GitHub, Portfolio)
-    links = resume_dict.get("links") or []
-    for link in links:
-        link_str = str(link).strip()
-        if "linkedin.com" in link_str.lower():
-            candidate["linkedin"] = link_str
-        elif "github.com" in link_str.lower():
-            candidate["github"] = link_str
-        elif "http" in link_str.lower() or ".io" in link_str.lower():
-            candidate["portfolio"] = link_str
+    _apply_links(candidate, resume_dict.get("links"))
 
     # Summary
     if resume_dict.get("summary"):
@@ -337,7 +437,7 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
         candidate["projects"] = proj_list
 
     # Skills & Skill Categories
-    skills_val = resume_dict.get("skills")
+    skills_val = clean_skills(resume_dict.get("skills"))
     if isinstance(skills_val, dict):
         candidate["skill_categories"] = skills_val
         all_skills = []
@@ -354,71 +454,189 @@ def sync_resume_data_to_profile(resume_dict: Dict[str, Any]) -> Dict[str, Any]:
         "networking_and_references": networking
     }
 
-    save_path = get_profile_save_path()
+    save_path = _checked_save_path()
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2)
 
     return merged
 
-async def handle_save_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
-    current_data = load_profile_data()
-    candidate = current_data.get("candidate", {})
-    search_prefs = current_data.get("search_preferences", {})
-    networking = current_data.get("networking_and_references", {})
+_CANDIDATE_ARG_KEYS = (
+    "name", "email", "linkedin", "location", "gender", "ethnicity", "citizenship",
+    "work_authorization", "requires_sponsorship", "veteran_status", "disability_status",
+    "experience_summary",
+)
+_PREF_ARG_KEYS = ("target_roles", "target_locations", "timeframe", "seniority", "min_ats_score_threshold")
 
-    # Update candidate fields
-    if "name" in args: candidate["name"] = args["name"]
-    if "email" in args: candidate["email"] = args["email"]
-    if "linkedin" in args: candidate["linkedin"] = args["linkedin"]
-    if "location" in args: candidate["location"] = args["location"]
-    if "gender" in args: candidate["gender"] = args["gender"]
-    if "ethnicity" in args: candidate["ethnicity"] = args["ethnicity"]
-    if "citizenship" in args: candidate["citizenship"] = args["citizenship"]
-    if "work_authorization" in args: candidate["work_authorization"] = args["work_authorization"]
-    if "requires_sponsorship" in args: candidate["requires_sponsorship"] = args["requires_sponsorship"]
-    if "veteran_status" in args: candidate["veteran_status"] = args["veteran_status"]
-    if "disability_status" in args: candidate["disability_status"] = args["disability_status"]
-    if "core_skills" in args: candidate["core_skills"] = args["core_skills"]
-    if "experience_summary" in args: candidate["experience_summary"] = args["experience_summary"]
+_UNAUTHENTICATED = {
+    "success": False,
+    "authenticated": False,
+    "error": "UNAUTHENTICATED",
+    "message": "Authentication required on cloud MCP server. Pass your session token or 6-digit sync code via header 'Authorization: Bearer <token>' or parameter 'token'.",
+}
 
-    # Update search preferences
-    if "target_roles" in args: search_prefs["target_roles"] = args["target_roles"]
-    if "target_locations" in args: search_prefs["target_locations"] = args["target_locations"]
-    if "timeframe" in args: search_prefs["timeframe"] = args["timeframe"]
-    if "seniority" in args: search_prefs["seniority"] = args["seniority"]
-    if "min_ats_score_threshold" in args: search_prefs["min_ats_score_threshold"] = args["min_ats_score_threshold"]
 
-    # Update references
+def _session_to_profile(resume_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Turn a user's stored session data (web-app resume dict or full profile) into the profile shape."""
+    if "candidate" in resume_data:
+        prof = json.loads(json.dumps(resume_data))
+        cand = prof["candidate"]
+        if not cand.get("work_experience") and resume_data.get("experience"):
+            cand["work_experience"] = normalize_experience(resume_data["experience"])
+        cand["core_skills"] = clean_skills(cand.get("core_skills", []))
+        prof.setdefault("search_preferences", {})
+        return prof
+
+    loc = resume_data.get("location", "")
+    candidate: Dict[str, Any] = {
+        "name": resume_data.get("name", ""),
+        "email": resume_data.get("email", ""),
+        "phone": resume_data.get("phone", ""),
+        "location": loc,
+        "linkedin": resume_data.get("linkedin", ""),
+        "github": resume_data.get("github", ""),
+        "portfolio": resume_data.get("portfolio", ""),
+        "work_authorization": resume_data.get("work_auth", "Yes"),
+        "requires_sponsorship": str(resume_data.get("sponsorship", "")).lower() in ("yes", "true", "required"),
+        "core_skills": clean_skills(resume_data.get("skills", [])),
+        "experience_summary": resume_data.get("summary", ""),
+        # `experience` is what the web app and resume tailoring store; `work_experience` is only a legacy copy.
+        "work_experience": normalize_experience(resume_data.get("experience")) or resume_data.get("work_experience") or [],
+        "education": resume_data.get("education", []),
+        "projects": resume_data.get("projects", []),
+    }
+    # Links found by the parser fill gaps only; values the user saved explicitly win.
+    parsed_links: Dict[str, Any] = {}
+    _apply_links(parsed_links, resume_data.get("links"))
+    for key, val in parsed_links.items():
+        if not candidate.get(key):
+            candidate[key] = val
+    if resume_data.get("linkedin"):
+        candidate["linkedin"] = _normalize_link(resume_data["linkedin"])
+    prefs = {
+        "target_roles": resume_data.get("target_roles") or ["AI Engineer", "Software Engineer"],
+        "target_locations": resume_data.get("target_locations") or ([loc] if loc else []) + ["Remote"],
+        "timeframe": resume_data.get("timeframe", "past_24_hours"),
+    }
+    for key in ("seniority", "min_ats_score_threshold"):
+        if resume_data.get(key) is not None:
+            prefs[key] = resume_data[key]
+    return {"candidate": candidate, "search_preferences": prefs}
+
+
+def _apply_save_args(profile: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply save_candidate_profile arguments onto a {candidate, search_preferences, ...} profile."""
+    candidate = profile.setdefault("candidate", {})
+    search_prefs = profile.setdefault("search_preferences", {})
+    networking = profile.setdefault("networking_and_references", {})
+
+    for key in _CANDIDATE_ARG_KEYS:
+        if key in args:
+            candidate[key] = _normalize_link(args[key]) if key == "linkedin" and args[key] else args[key]
+    if "core_skills" in args:
+        candidate["core_skills"] = clean_skills(args["core_skills"])
+    if "skill_categories" in args:
+        cats = clean_skills(args["skill_categories"])
+        candidate["skill_categories"] = cats
+        if isinstance(cats, dict):
+            candidate["core_skills"] = list(dict.fromkeys(x for v in cats.values() for x in v))
+    if "work_experience" in args:
+        candidate["work_experience"] = normalize_experience(args["work_experience"])
+    for key in _PREF_ARG_KEYS:
+        if key in args:
+            search_prefs[key] = args[key]
     if "references" in args:
         networking["saved_references"] = args["references"]
+    return profile
 
-    merged = {
-        "candidate": candidate,
-        "search_preferences": search_prefs,
-        "networking_and_references": networking
-    }
 
-    save_path = get_profile_save_path()
+def _profile_to_session_data(profile: Dict[str, Any], previous: Dict[str, Any]) -> Dict[str, Any]:
+    """Store a profile back as the flat resume dict the web app reads, keeping fields it does not know about."""
+    data = dict(previous)
+    cand = profile.get("candidate", {})
+    prefs = profile.get("search_preferences", {})
+    for src, dst in (("name", "name"), ("email", "email"), ("phone", "phone"), ("location", "location"),
+                     ("linkedin", "linkedin"), ("github", "github"), ("portfolio", "portfolio"),
+                     ("experience_summary", "summary"), ("work_authorization", "work_auth"),
+                     ("education", "education"), ("projects", "projects"),
+                     ("gender", "gender"), ("ethnicity", "ethnicity"), ("citizenship", "citizenship"),
+                     ("veteran_status", "veteran_status"), ("disability_status", "disability_status")):
+        if src in cand:
+            data[dst] = cand[src]
+    if "requires_sponsorship" in cand:
+        data["sponsorship"] = "Yes" if cand["requires_sponsorship"] else "No"
+    skills = cand.get("skill_categories") or cand.get("core_skills")
+    if skills:
+        data["skills"] = skills
+    if cand.get("work_experience") is not None:
+        # Store one copy, under the key the web app and resume tailoring read; drop the legacy duplicate.
+        data.pop("work_experience", None)
+        data["experience"] = [
+            {"company": e.get("company", ""), "role": e.get("role", ""),
+             "start_date": (e.get("timeline", "").split("\u2013")[0] or "").strip(),
+             "end_date": (e.get("timeline", "").split("\u2013")[-1] or "").strip() if "\u2013" in e.get("timeline", "") else "",
+             "technologies": ", ".join(e.get("technologies", [])),
+             "description": e.get("highlights", [])}
+            for e in cand["work_experience"] if isinstance(e, dict)
+        ]
+    for key in _PREF_ARG_KEYS:
+        if key in prefs:
+            data[key] = prefs[key]
+    if "references" in profile.get("networking_and_references", {}) or profile.get("networking_and_references", {}).get("saved_references"):
+        data["saved_references"] = profile["networking_and_references"].get("saved_references")
+    return data
+
+
+def _save_session_profile(token: str, profile: Dict[str, Any]) -> None:
+    # pyrefly: ignore [missing-import]
+    from services.session_store import get_session_data, set_session_data
+    session = get_session_data(token)
+    data = _profile_to_session_data(profile, session.get("data") or {})
+    set_session_data(token, data, session.get("path", ""))
+
+
+async def handle_save_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
+    token = args.get("token")
+
+    # Cloud: a profile is only ever written to the authenticated user's own session.
+    if token or _is_cloud():
+        if not token:
+            return dict(_UNAUTHENTICATED)
+        # pyrefly: ignore [missing-import]
+        from services.session_store import get_session_data
+        existing = (get_session_data(token).get("data")) or {}
+        profile = _session_to_profile(existing) if existing else {"candidate": {}, "search_preferences": {}}
+        profile = _apply_save_args(profile, args)
+        _save_session_profile(token, profile)
+        return {
+            "success": True,
+            "authenticated": True,
+            "message": f"Successfully saved candidate profile and preferences for {profile['candidate'].get('name')}.",
+            "profile": redact_profile(profile),
+        }
+
+    # Local: edit the workspace candidate_profile.json.
+    current_data = load_profile_data()
+    merged = _apply_save_args({
+        "candidate": current_data.get("candidate", {}),
+        "search_preferences": current_data.get("search_preferences", {}),
+        "networking_and_references": current_data.get("networking_and_references", {}),
+    }, args)
+
+    save_path = _checked_save_path()
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w", encoding="utf-8") as f:
         json.dump(merged, f, indent=2)
 
-
     return {
         "success": True,
-        "message": f"Successfully saved candidate profile and preferences for {candidate.get('name')}.",
-        "profile": merged
+        "message": f"Successfully saved candidate profile and preferences for {merged['candidate'].get('name')}.",
+        "profile": redact_profile(merged),
     }
 
 async def handle_get_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
     token = args.get("token") or os.getenv("JOB_FINDER_USER_TOKEN")
-
-    # In cloud environments (Hugging Face Spaces, Railway, Render, production)
-    is_cloud = bool(
-        any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID"))
-        or os.getenv("ENVIRONMENT") == "production"
-    )
+    is_cloud = _is_cloud()
 
     # 1. If token is provided, resolve authenticated user-specific profile
     if token:
@@ -427,41 +645,13 @@ async def handle_get_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
             from services.session_store import get_session_data
             session = get_session_data(token)
             resume_data = session.get("data")
-            if resume_data and (resume_data.get("name") or resume_data.get("email") or resume_data.get("education") or resume_data.get("skills")):
-                # Wrap into candidate structure if raw dict
-                if "candidate" not in resume_data and "name" in resume_data:
-                    structured_profile = {
-                        "candidate": {
-                            "name": resume_data.get("name", ""),
-                            "email": resume_data.get("email", ""),
-                            "phone": resume_data.get("phone", ""),
-                            "location": resume_data.get("location", ""),
-                            "linkedin": resume_data.get("linkedin", ""),
-                            "github": resume_data.get("github", ""),
-                            "portfolio": resume_data.get("portfolio", ""),
-                            "work_authorization": resume_data.get("work_auth", "Yes"),
-                            "requires_sponsorship": resume_data.get("sponsorship", "").lower() in ("yes", "true", "required"),
-                            "core_skills": resume_data.get("skills", []),
-                            "experience_summary": resume_data.get("summary", ""),
-                            "work_experience": resume_data.get("work_experience", []),
-                            "education": resume_data.get("education", []),
-                            "projects": resume_data.get("projects", [])
-                        },
-                        "search_preferences": {
-                            "target_roles": resume_data.get("target_roles", ["AI Engineer", "Software Engineer"]),
-                            "target_locations": [resume_data.get("location", "London, UK"), "Remote"],
-                            "timeframe": "past_24_hours"
-                        }
-                    }
-                    return {"found": True, "profile": structured_profile, "authenticated": True}
-                return {"found": True, "profile": resume_data, "authenticated": True}
-            else:
-                # Token was provided but no candidate session data exists for this specific token
-                return {
-                    "found": False,
-                    "authenticated": True,
-                    "message": f"No candidate profile found for the provided session token '{token}'. Please upload or sync a resume first."
-                }
+            if resume_data and (resume_data.get("name") or resume_data.get("email") or resume_data.get("education") or resume_data.get("skills") or resume_data.get("candidate")):
+                return {"found": True, "profile": redact_profile(_session_to_profile(resume_data)), "authenticated": True}
+            return {
+                "found": False,
+                "authenticated": True,
+                "message": "No candidate profile found for the provided session token. Please upload or sync a resume first."
+            }
         except Exception as e:
             print(f"[handle_get_candidate_profile] User token session resolution notice: {e}")
 
@@ -483,16 +673,72 @@ async def handle_get_candidate_profile(args: Dict[str, Any]) -> Dict[str, Any]:
         }
     return {
         "found": True,
-        "profile": data,
+        "profile": redact_profile(data),
         "authenticated": bool(token)
     }
 
 async def handle_sync_candidate_profile_from_resume(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Parses resume file and writes structured sections into candidate_profile.json."""
+    """Parses a resume and writes structured sections into the profile (the user's own session on cloud)."""
     # pyrefly: ignore [missing-import]
     from services.resume_parser import parse_resume
 
+    token = args.get("token")
+    cloud_mode = bool(token) or _is_cloud()
+    if cloud_mode and not token:
+        return dict(_UNAUTHENTICATED)
+
     resume_path = args.get("resume_path")
+
+    if cloud_mode:
+        # pyrefly: ignore [missing-import]
+        from services.session_store import get_session_data
+        session = get_session_data(token)
+        stored = session.get("data") or {}
+        if resume_path and os.path.exists(resume_path):
+            resume_dict = parse_resume(resume_path).model_dump()
+            source = resume_path
+        elif stored:
+            # No readable file on the server: rebuild the profile from the resume already stored for this user.
+            resume_dict = dict(stored.get("candidate") or stored)
+            if "experience" not in resume_dict and resume_dict.get("work_experience"):
+                resume_dict["experience"] = resume_dict["work_experience"]
+            source = "your stored resume"
+        else:
+            return {
+                "success": False,
+                "error": "No resume available. Upload your resume in the web app first; a file path on your own computer is not readable by the cloud server.",
+            }
+        profile = _session_to_profile(stored) if stored else {"candidate": {}, "search_preferences": {}}
+        cand = profile.setdefault("candidate", {})
+        for key in ("name", "email", "phone", "location"):
+            if resume_dict.get(key):
+                cand[key] = resume_dict[key]
+        _apply_links(cand, resume_dict.get("links"))
+        if resume_dict.get("summary"):
+            cand["experience_summary"] = resume_dict["summary"]
+        if resume_dict.get("education"):
+            cand["education"] = resume_dict["education"]
+        if resume_dict.get("projects"):
+            cand["projects"] = resume_dict["projects"]
+        if resume_dict.get("experience"):
+            cand["work_experience"] = normalize_experience(resume_dict["experience"])
+        skills = clean_skills(resume_dict.get("skills"))
+        if isinstance(skills, dict) and skills:
+            cand["skill_categories"] = skills
+            cand["core_skills"] = list(dict.fromkeys(x for v in skills.values() for x in v))
+        elif isinstance(skills, list) and skills:
+            cand["core_skills"] = skills
+        _save_session_profile(token, profile)
+        return {
+            "success": True,
+            "authenticated": True,
+            "message": f"Successfully synced profile from {source}.",
+            "candidate_name": cand.get("name"),
+            "skills_count": len(cand.get("core_skills") or []),
+            "experience_count": len(cand.get("work_experience") or []),
+            "education_count": len(cand.get("education") or []),
+        }
+
     if not resume_path:
         # Check master resume fallback
         try:
@@ -549,4 +795,3 @@ async def handle_sync_candidate_profile_from_resume(args: Dict[str, Any]) -> Dic
         "experience_count": len(updated_profile.get("candidate", {}).get("work_experience", [])),
         "education_count": len(updated_profile.get("candidate", {}).get("education", []))
     }
-
