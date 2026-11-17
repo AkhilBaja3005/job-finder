@@ -1,21 +1,39 @@
 # Changelog
 
-## Unreleased
+## 1.7.1
+
+### Security
+- Portal password: the profile template no longer ships a placeholder `portals_password`, and the apply agent
+  ignores the old placeholder. Before this, a user who never set a password could have real job-board accounts
+  created with a publicly known one. `PORTALS_PASSWORD` in the environment now takes priority over a value in a
+  profile file.
+- `job-finder setup` asks for the portal password with hidden input and stores it in `.env` (owner-only),
+  not in `candidate_profile.json`. Profile files written by the profile tools are chmod 600, and
+  `get_candidate_profile` no longer returns the password.
+- Cloud server: `/mcp` rejects tokens that match no account (401 `invalid_token`) instead of running tools for
+  a throwaway guest, and answers 503 with `Retry-After` when account lookup is unavailable. The `test_` and
+  `mock_` token shortcut works only under pytest. `POST /user/profile` no longer copies each user's details into
+  the server's shared profile file.
+- Cloud server: `save_candidate_profile` and `sync_candidate_profile_from_resume` wrote to one shared
+  `candidate_profile.json` instead of the signed-in user's profile. They now require a token, write only to that
+  user's profile, and return `UNAUTHENTICATED` otherwise.
 
 ### Fixed
-- MCP: on the cloud server `save_candidate_profile` and `sync_candidate_profile_from_resume` wrote to one shared
-  `candidate_profile.json` instead of the signed-in user's profile, so a save without a token edited someone
-  else's record. They now require a token, write only to that user's profile, and return `UNAUTHENTICATED`
-  otherwise.
-- MCP: `get_candidate_profile` always returned an empty `work_experience` and no LinkedIn or GitHub link for
-  profiles built from an uploaded resume. Both now come from the parsed resume.
-- MCP: trailing periods on skills (`SQL.`, `MCP.`) are removed; `portals_password` is no longer returned.
+- `get_candidate_profile` always returned an empty `work_experience` and no LinkedIn or GitHub link for
+  profiles built from an uploaded resume. Both now come from the parsed resume. Work history is stored once,
+  under `experience`.
+- Trailing periods on skills (`SQL.`, `MCP.`) are removed.
+- The wheel left out `manifest.json`, `robots.txt`, `sitemap.xml` and image files (`.ico`, `.png`) of the web app, so a
+  pip-installed server had no favicon. They are now packaged, and a test checks that every file in `frontend/public`
+  is covered.
 - The profile tools refuse to write to `candidate_profile.example.json`.
 
 ### Added
 - `save_candidate_profile` accepts `work_experience` and `skill_categories`, and no field is required.
 - Cloud `sync_candidate_profile_from_resume` rebuilds the profile from the resume you already uploaded when no
   readable file path is given.
+- The MCP server reports a title and icons, and the site serves `favicon.ico` and `favicon-192.png`, so MCP
+  clients show the Job Finder icon.
 - A test guard fails any test that modifies `backend/config/candidate_profile.example.json` and restores it.
 
 ## 1.7.0
