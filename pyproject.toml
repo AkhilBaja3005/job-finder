@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "job-finder-ai"
-version = "1.7.0"
+version = "1.7.1"
 description = "Autonomous career agent, ATS resume tailor, and job search copilot."
 readme = "README_PYPI.md"
 
@@ -137,7 +137,7 @@ packages = [
 
 
 [tool.setuptools.package-data]
-"*" = ["*.cls", "*.tex", "*.md", "*.yaml", "*.yml", "*.html", "*.css", "*.js", "*.svg", ".env.example", "candidate_profile.example.json"]
+"*" = ["*.cls", "*.tex", "*.md", "*.yaml", "*.yml", "*.html", "*.css", "*.js", "*.svg", "*.ico", "*.png", "manifest.json", "robots.txt", "sitemap.xml", ".env.example", "candidate_profile.example.json"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["candidate_profile.json", ".env", "*.csv"]
