@@ -10,7 +10,12 @@ import uuid
 import hashlib
 import hmac
 import base64
+import asyncio
+import ipaddress
+import socket
+import urllib.error
 import urllib.parse
+import urllib.request
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Request, Response, HTTPException, Form
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
@@ -85,6 +90,70 @@ def _lookup_client(client_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+# --- Client ID Metadata Documents (CIMD) ---------------------------------------------------------
+# Clients such as Claude identify themselves with an HTTPS URL as client_id; the URL serves a JSON
+# document with their redirect URIs. We fetch it only from an allowlist of hosts, over HTTPS, without
+# following redirects, with a short timeout and a size cap, and only to public IP addresses.
+CIMD_ALLOWED_HOSTS = {
+    h.strip().lower()
+    for h in os.getenv("OAUTH_CIMD_ALLOWED_HOSTS", "claude.ai,www.claude.ai").split(",")
+    if h.strip()
+}
+CIMD_TTL = 3600
+CIMD_MAX_BYTES = 65536
+_CIMD_CACHE: Dict[str, Any] = {}
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):  # a redirect could point at an internal address
+        return None
+
+
+def _is_cimd_url(client_id: str) -> bool:
+    return client_id.startswith("https://")
+
+
+def _fetch_client_metadata(url: str) -> Optional[Dict[str, Any]]:
+    """Download and validate a client metadata document. Returns None for anything unsafe or invalid."""
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https" or not host or parsed.username or parsed.password or parsed.port not in (None, 443):
+        return None
+    if host not in CIMD_ALLOWED_HOSTS:
+        return None
+    try:
+        for info in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM):
+            if not ipaddress.ip_address(info[4][0]).is_global:
+                return None
+        request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "job-finder-oauth"})
+        opener = urllib.request.build_opener(_NoRedirect)
+        with opener.open(request, timeout=5) as resp:
+            raw = resp.read(CIMD_MAX_BYTES + 1)
+        if len(raw) > CIMD_MAX_BYTES:
+            return None
+        doc = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, urllib.error.URLError):
+        return None
+    uris = doc.get("redirect_uris")
+    if doc.get("client_id") != url or not isinstance(uris, list) or not uris or not all(isinstance(u, str) for u in uris):
+        return None
+    return {"client_id": url, "client_name": str(doc.get("client_name", "")), "redirect_uris": uris}
+
+
+async def _resolve_client(client_id: str) -> Optional[Dict[str, Any]]:
+    """Resolve a client: signed registration, in-memory registration, or a trusted metadata document URL."""
+    client = _lookup_client(client_id)
+    if client or not _is_cimd_url(client_id):
+        return client
+    cached = _CIMD_CACHE.get(client_id)
+    if cached and time.time() - cached[0] < CIMD_TTL:
+        return cached[1]
+    client = await asyncio.to_thread(_fetch_client_metadata, client_id)
+    if client:
+        _CIMD_CACHE[client_id] = (time.time(), client)
+    return client
+
+
 def _prune_expired() -> None:
     """Drop expired authorize sessions and authorization codes."""
     now = time.time()
@@ -151,7 +220,7 @@ async def oauth_authorization_server_metadata(request: Request):
         "token_endpoint": f"{base}/oauth/token",
         "registration_endpoint": f"{base}/oauth/register",
         "response_types_supported": ["code"],
-        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "grant_types_supported": ["authorization_code"],
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["none", "client_secret_post"],
         "scopes_supported": ["mcp:tools"],
@@ -212,7 +281,7 @@ async def oauth_authorize(
     Renders login & authorization consent screen where the user authenticates with Job Finder.
     """
     _prune_expired()
-    client = _lookup_client(client_id)
+    client = await _resolve_client(client_id)
     if not client:
         # RFC 6749 invalid_client: lets clients discard a stale client_id and re-register
         return JSONResponse(
