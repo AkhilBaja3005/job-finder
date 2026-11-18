@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- MCP `search_jobs` returned up to 120 jobs with their full descriptions, 150,000 to 210,000 characters in
+  one result, which clients rejected as too large. It now returns at most 25 jobs by default, with descriptions
+  shortened to 300 characters and the whole result capped at 60,000 characters. A new `limit` argument (max 100)
+  controls the count, and `count` still reports how many jobs matched. Use `scrape_job_posting` for a job's full
+  text.
+
 ## 1.7.1
 
 ### Security

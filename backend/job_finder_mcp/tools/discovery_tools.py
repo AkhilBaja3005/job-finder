@@ -14,7 +14,7 @@ from services.session_store import get_session_data
 DISCOVERY_TOOLS_SPEC = [
     {
         "name": "search_jobs",
-        "description": "Searches Ashby, Greenhouse, Lever, LinkedIn, and Indeed for matching jobs and returns scored listings.",
+        "description": "Searches Ashby, Greenhouse, Lever, LinkedIn, and Indeed for matching jobs and returns scored listings. Results are compact (descriptions are shortened); call scrape_job_posting with a job's url for the full text.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -31,6 +31,13 @@ DISCOVERY_TOOLS_SPEC = [
                     "type": "string",
                     "description": "Recency timeframe ('24h', '48h', 'week', 'all'). Defaults to '48h'.",
                     "default": "48h"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum jobs to return, best scores first (default 25, max 100). Use scrape_job_posting for a job's full description.",
+                    "default": 25,
+                    "minimum": 1,
+                    "maximum": 100
                 },
                 "token": {
                     "type": "string",
@@ -58,6 +65,33 @@ DISCOVERY_TOOLS_SPEC = [
 
 
 from job_finder_mcp.tools.profile_tools import load_profile_data
+
+DEFAULT_RESULT_LIMIT = 25
+MAX_RESULT_LIMIT = 100
+MAX_TEXT_CHARS = 300          # longest text field kept per job
+MAX_PAYLOAD_CHARS = 60_000    # a tool result larger than this overflows most clients
+
+
+def _shorten(value: Any, limit: int = MAX_TEXT_CHARS) -> Any:
+    """Cut long strings (job descriptions) so one listing stays small; recurse into lists and dicts."""
+    if isinstance(value, str):
+        return value if len(value) <= limit else value[:limit].rstrip() + "\u2026"
+    if isinstance(value, list):
+        return [_shorten(v, limit) for v in value[:20]]
+    if isinstance(value, dict):
+        return {k: _shorten(v, limit) for k, v in value.items()}
+    return value
+
+
+def _compact_results(jobs: list, est_jobs: list, limit: int) -> tuple:
+    """Return at most `limit` shortened jobs, trimmed further if the JSON would still be too large."""
+    kept = [_shorten(j) for j in jobs[:limit]]
+    est = [_shorten(j) for j in est_jobs[:10]]
+    while kept and len(json.dumps({"jobs": kept, "est_jobs": est}, default=str)) > MAX_PAYLOAD_CHARS:
+        kept.pop()
+    while est and len(json.dumps({"jobs": kept, "est_jobs": est}, default=str)) > MAX_PAYLOAD_CHARS:
+        est.pop()
+    return kept, est
 
 async def handle_search_jobs(arguments: Dict[str, Any]) -> Dict[str, Any]:
     prof_data = load_profile_data()
@@ -154,17 +188,24 @@ async def handle_search_jobs(arguments: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         print(f"[handle_search_jobs] Error during job search: {e}")
 
-    is_cloud = any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")) or os.getenv("ENVIRONMENT") == "production"
-    job_slice_limit = 25 if is_cloud else 120
-    est_slice_limit = 10 if is_cloud else 50
+    try:
+        limit = int(arguments.get("limit") or DEFAULT_RESULT_LIMIT)
+    except (TypeError, ValueError):
+        limit = DEFAULT_RESULT_LIMIT
+    limit = max(1, min(limit, MAX_RESULT_LIMIT))
 
-    return {
+    kept, est = _compact_results(jobs, est_jobs, limit)
+    result = {
         "count": len(jobs),
+        "returned": len(kept),
         "location": location,
         "timeframe": timeframe,
-        "jobs": jobs[:job_slice_limit],
-        "est_jobs": est_jobs[:est_slice_limit]
+        "jobs": kept,
+        "est_jobs": est,
     }
+    if len(kept) < len(jobs):
+        result["note"] = f"Showing {len(kept)} of {len(jobs)} jobs. Pass a larger limit (max {MAX_RESULT_LIMIT}) or narrower keywords; use scrape_job_posting for full descriptions."
+    return result
 
 
 async def handle_scrape_job_posting(arguments: Dict[str, Any]) -> Dict[str, Any]:
