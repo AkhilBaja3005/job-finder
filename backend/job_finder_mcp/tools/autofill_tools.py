@@ -391,6 +391,7 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
         "keywords": keywords,
         "location": location,
         "timeframe": search_prefs.get("timeframe", "24h"),
+        "limit": 100,
         "token": token
     })
 
