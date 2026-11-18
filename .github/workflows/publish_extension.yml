@@ -17,6 +17,7 @@ on:
         default: "upload"
         type: choice
         options:
+          - check     # read-only: test credentials and show the item status, no upload
           - upload    # draft only, nothing goes to review
           - publish   # upload and submit for review
       publish_target:
@@ -78,7 +79,21 @@ jobs:
           echo "::add-mask::$tok"
           echo "token=$tok" >> "$GITHUB_OUTPUT"
 
+      - name: Check credentials and item status
+        if: inputs.target == 'check'
+        env:
+          TOKEN: ${{ steps.token.outputs.token }}
+          ITEM: ${{ secrets.CWS_EXTENSION_ID }}
+        run: |
+          code=$(curl -sS -o /tmp/item.json -w "%{http_code}" \
+            -H "Authorization: Bearer $TOKEN" -H "x-goog-api-version: 2" \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/$ITEM?projection=DRAFT")
+          echo "HTTP $code"
+          cat /tmp/item.json
+          [ "$code" = "200" ]
+
       - name: Upload to Chrome Web Store
+        if: inputs.target != 'check'
         env:
           TOKEN: ${{ steps.token.outputs.token }}
           ITEM: ${{ secrets.CWS_EXTENSION_ID }}
