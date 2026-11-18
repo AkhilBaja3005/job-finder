@@ -2,6 +2,7 @@
 
 # AI Job Finder Agent
 
+</div>
 
 <div align="center">
 
