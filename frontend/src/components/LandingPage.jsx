@@ -632,6 +632,12 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
           >
             Documentation
           </button>
+          <a
+            href="/privacy.html"
+            style={{ color: 'var(--text-muted)', textDecoration: 'none' }}
+          >
+            Privacy Policy
+          </a>
           <button
             onClick={() => {
               window.history.pushState(null, '', '/contact');
