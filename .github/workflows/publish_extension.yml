@@ -1,0 +1,105 @@
+name: Publish Chrome Extension
+
+# Manual trigger: Actions -> "Publish Chrome Extension" -> Run workflow.
+# "upload" only sends a draft to the Chrome Web Store. "publish" also submits it for review.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   CWS_EXTENSION_ID    item ID shown in the developer dashboard (create the item once by hand first)
+#   CWS_CLIENT_ID       Google Cloud OAuth client ID
+#   CWS_CLIENT_SECRET   Google Cloud OAuth client secret
+#   CWS_REFRESH_TOKEN   OAuth refresh token for the account that owns the item
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "What to do"
+        required: true
+        default: "upload"
+        type: choice
+        options:
+          - upload    # draft only, nothing goes to review
+          - publish   # upload and submit for review
+      publish_target:
+        description: "Audience when publishing"
+        required: true
+        default: "default"
+        type: choice
+        options:
+          - default         # public
+          - trustedTesters
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build and ${{ inputs.target }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate manifest
+        working-directory: extension
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          m = json.load(open("manifest.json"))
+          errs = []
+          if len(m["name"]) > 45: errs.append(f"name is {len(m['name'])} chars (max 45)")
+          if len(m["description"]) > 132: errs.append(f"description is {len(m['description'])} chars (max 132)")
+          if errs:
+              print("\n".join(errs)); sys.exit(1)
+          print("version", m["version"])
+          PY
+
+      - name: Zip extension
+        run: |
+          cd extension
+          zip -rq ../extension.zip . -x "*.DS_Store" "src/*.map"
+          unzip -l ../extension.zip | grep -q ' manifest.json$'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-zip
+          path: extension.zip
+
+      - name: Get access token
+        id: token
+        env:
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: |
+          resp=$(curl -sS https://oauth2.googleapis.com/token \
+            -d client_id="$CLIENT_ID" -d client_secret="$CLIENT_SECRET" \
+            -d refresh_token="$REFRESH_TOKEN" -d grant_type=refresh_token)
+          tok=$(echo "$resp" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("access_token",""))')
+          if [ -z "$tok" ]; then echo "token request failed"; exit 1; fi
+          echo "::add-mask::$tok"
+          echo "token=$tok" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Chrome Web Store
+        env:
+          TOKEN: ${{ steps.token.outputs.token }}
+          ITEM: ${{ secrets.CWS_EXTENSION_ID }}
+        run: |
+          resp=$(curl -sS -X PUT \
+            -H "Authorization: Bearer $TOKEN" -H "x-goog-api-version: 2" \
+            -T extension.zip \
+            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$ITEM")
+          echo "$resp"
+          echo "$resp" | python3 -c 'import sys,json; d=json.load(sys.stdin); sys.exit(0 if d.get("uploadState")=="SUCCESS" else 1)'
+
+      - name: Submit for review
+        if: inputs.target == 'publish'
+        env:
+          TOKEN: ${{ steps.token.outputs.token }}
+          ITEM: ${{ secrets.CWS_EXTENSION_ID }}
+          AUDIENCE: ${{ inputs.publish_target }}
+        run: |
+          resp=$(curl -sS -X POST \
+            -H "Authorization: Bearer $TOKEN" -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0" \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/$ITEM/publish?publishTarget=$AUDIENCE")
+          echo "$resp"
+          echo "$resp" | python3 -c 'import sys,json; d=json.load(sys.stdin); s=d.get("status",[]); sys.exit(0 if "OK" in s or "ITEM_PENDING_REVIEW" in s else 1)'
