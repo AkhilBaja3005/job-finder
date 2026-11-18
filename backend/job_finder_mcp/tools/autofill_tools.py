@@ -391,7 +391,8 @@ async def handle_pipeline_auto_apply(arguments: Dict[str, Any]) -> Dict[str, Any
         "keywords": keywords,
         "location": location,
         "timeframe": search_prefs.get("timeframe", "24h"),
-        "limit": 100,
+        # Same volume as before: 25 on a hosted server, up to 100 locally (the tool's maximum).
+        "limit": 25 if any(os.getenv(v) for v in ("RENDER", "RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "FLY_APP_NAME", "SPACE_ID", "HF_SPACE_ID")) or os.getenv("ENVIRONMENT") == "production" else 100,
         "token": token
     })
 
