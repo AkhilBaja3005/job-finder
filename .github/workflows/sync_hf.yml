@@ -32,7 +32,12 @@ jobs:
           git commit -am "chore(hf): inject Hugging Face Space metadata for container build [skip ci]" || true
 
           git remote add hf https://AkhilBaja3005:${HF_TOKEN}@huggingface.co/spaces/abaja/job-finder
-          git push hf HEAD:main --force
+          # HF rejects new binary files in pushed history, and history keeps them forever.
+          # Push a one-commit snapshot of the tree without the store listing assets.
+          git checkout --orphan hf-snapshot
+          git rm -r -q --cached docs/chrome-store || true
+          git commit -q -m "Sync from GitHub ${GITHUB_SHA} [skip ci]"
+          git push hf hf-snapshot:main --force
 
       - name: Trigger Hugging Face Factory Rebuild
         env:
