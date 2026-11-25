@@ -160,3 +160,37 @@ def test_greenhouse_cover_letter_instruction_in_task_prompt():
     assert "GREENHOUSE \"TYPE COVER LETTER\" MANDATORY ACTION" in prompt
     assert "Type Cover Letter" in prompt
     assert "tailored, compelling 3-paragraph cover letter" in prompt
+
+
+def test_rotate_chrome_instance_reuses_chrome_with_room():
+    from services import browser_use_agent as bua
+    with patch.object(bua, "_count_page_tabs", return_value=12), \
+         patch.object(bua, "ensure_persistent_browser") as mock_launch:
+        url = bua.rotate_chrome_instance(max_tabs=30)
+    assert url == f"http://127.0.0.1:{bua.CDP_PORT}"
+    mock_launch.assert_not_called()
+
+
+def test_rotate_chrome_instance_starts_new_chrome_when_full():
+    from services import browser_use_agent as bua
+    # First Chrome has 31 tabs (stays open); the next port is not running yet.
+    counts = {bua.CDP_PORT: 31}
+    def fake_count(cdp_url):
+        return counts.get(int(cdp_url.rsplit(":", 1)[1]))
+    with patch.object(bua, "_count_page_tabs", side_effect=fake_count), \
+         patch.object(bua, "_seed_chrome_profile") as mock_seed, \
+         patch.object(bua, "ensure_persistent_browser", return_value="http://127.0.0.1:9224") as mock_launch:
+        url = bua.rotate_chrome_instance(max_tabs=30)
+    assert url == "http://127.0.0.1:9224"
+    assert mock_launch.call_args.kwargs["port"] == bua.CDP_PORT + 1
+    mock_seed.assert_called_once()
+
+
+def test_open_new_chrome_window_does_not_crash_inside_running_loop():
+    import asyncio
+    from services import browser_use_agent as bua
+    async def inner():
+        # No Chrome is listening, so this returns False, but must not raise
+        # "asyncio.run() cannot be called from a running event loop".
+        return bua.open_new_chrome_window_via_cdp("http://127.0.0.1:1")
+    assert asyncio.run(inner()) is False

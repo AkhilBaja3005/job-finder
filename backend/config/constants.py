@@ -81,7 +81,6 @@ DEFAULT_FAST_LITE_MODELS: List[str] = [
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
     "gemini-3.5-flash",
-    "gemini-3.0-flash",
 ]
 
 DEFAULT_STRONG_MODELS: List[str] = [
@@ -89,7 +88,6 @@ DEFAULT_STRONG_MODELS: List[str] = [
     "gemini-3.7-flash",
     "gemini-3.6-flash",
     "gemini-3.5-flash",
-    "gemini-3.0-flash",
     "gemini-3.5-flash-lite",
 ]
 
@@ -111,7 +109,6 @@ MODEL_RPM_LIMITS: Dict[str, int] = {
     "gemini-3.7-flash": 10,
     "gemini-3.6-flash": 10,
     "gemini-3.5-flash": 10,
-    "gemini-3.0-flash": 10,
 }
 
 # ── Dynamic Model Discovery Engine ───────────────────────────────────────────────
