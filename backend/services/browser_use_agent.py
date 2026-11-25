@@ -64,7 +64,7 @@ try:
                     self._fallback_llm = next_fb
                     self._using_fallback_llm = False
                     self.logger.warning(
-                        f"429 quota reached on current key. Cascading to next Gemini API key ({getattr(next_fb, 'model', 'flash-lite')}). Remaining fallbacks: {len(self._fallback_pool)}"
+                        f"LLM call failed ({str(error)[:60]}). Cascading to next fallback ({getattr(next_fb, 'model', 'unknown')}). Remaining fallbacks: {len(self._fallback_pool)}"
                     )
                 else:
                     return False
@@ -143,6 +143,32 @@ def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[
     to the next available key and model tier without crashing the scan.
     """
     fallback_instances: List[Any] = []
+
+    # 0. Claude Haiku first: Gemini 503 (overload) hits the whole model, so rotating Gemini keys
+    #    cannot help. A different provider can.
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        try:
+            from browser_use import ChatAnthropic  # pyright: ignore[reportAttributeAccessIssue]
+            fallback_instances.append(ChatAnthropic(
+                model=os.getenv("BROWSER_USE_ANTHROPIC_MODEL", "claude-haiku-5-5"),
+                api_key=anthropic_key,
+            ))
+        except Exception:
+            pass
+
+    # 0b. OpenAI next, if a key is set (model override: BROWSER_USE_OPENAI_MODEL)
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key:
+        try:
+            from browser_use import ChatOpenAI  # pyright: ignore[reportAttributeAccessIssue]
+            fallback_instances.append(ChatOpenAI(
+                model=os.getenv("BROWSER_USE_OPENAI_MODEL", "gpt-4o-mini"),
+                api_key=openai_key,
+            ))
+        except Exception:
+            pass
+
     try:
         # pyrefly: ignore [missing-import]
         from services.gemini_client import get_gemini_api_keys
@@ -165,8 +191,8 @@ def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[
             except Exception:
                 pass
 
-    # 2. Add alternate Flash models (e.g. gemini-3.1-flash-lite, gemini-3.5-flash, gemini-3.0-flash) across keys to hedge against per-model quotas
-    alt_models = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.0-flash"]
+    # 2. Add alternate Flash models (e.g. gemini-3.1-flash-lite, gemini-3.5-flash) across keys to hedge against per-model quotas
+    alt_models = ["gemini-3.1-flash-lite", "gemini-3.5-flash"]
     for alt_m in alt_models:
         if alt_m != target_model:
             for key in all_keys[:3]:
@@ -591,13 +617,16 @@ def find_browser_executable() -> str:
     return "chrome"
 
 
-def ensure_persistent_browser(headless: bool = False) -> str:
+def ensure_persistent_browser(headless: bool = False, port: Optional[int] = None, user_data_dir: Optional[str] = None) -> str:
     """
-    Ensures a single dedicated Chrome browser process is running in the background with CDP enabled.
+    Ensures a dedicated Chrome browser process is running in the background with CDP enabled.
     Keeps one browser open across multiple script runs instead of opening/closing multiple windows.
+    `port` / `user_data_dir` default to the primary instance (CDP_PORT and the shared profile);
+    other values are used by rotate_chrome_instance() once a Chrome has too many tabs.
     """
     global _chrome_process
-    cdp_url = f"http://127.0.0.1:{CDP_PORT}"
+    port = CDP_PORT if port is None else port
+    cdp_url = f"http://127.0.0.1:{port}"
     
     # Check if already running and responding
     try:
@@ -607,7 +636,8 @@ def ensure_persistent_browser(headless: bool = False) -> str:
     except Exception:
         pass
 
-    user_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "user_data", "browser_use_chrome_session"))
+    if user_data_dir is None:
+        user_data_dir = _chrome_profile_dir(0)
     os.makedirs(user_data_dir, exist_ok=True)
 
     # Detect Chrome executable across platforms (Windows, macOS, Linux)
@@ -615,7 +645,7 @@ def ensure_persistent_browser(headless: bool = False) -> str:
 
     launch_args = [
         chrome_path,
-        f"--remote-debugging-port={CDP_PORT}",
+        f"--remote-debugging-port={port}",
         f"--user-data-dir={user_data_dir}",
         "--no-first-run",
         "--no-default-browser-check",
@@ -624,7 +654,7 @@ def ensure_persistent_browser(headless: bool = False) -> str:
     if headless:
         launch_args.append("--headless=new")
 
-    print(f"[browser-use] Launching persistent Chrome instance ({chrome_path}) on port {CDP_PORT}...")
+    print(f"[browser-use] Launching persistent Chrome instance ({chrome_path}) on port {port}...")
     popen_kwargs: Dict[str, Any] = {
         "stdin": subprocess.DEVNULL,
         "stdout": subprocess.DEVNULL,
@@ -657,6 +687,72 @@ def ensure_persistent_browser(headless: bool = False) -> str:
             continue
 
     return cdp_url
+
+
+def _chrome_profile_dir(generation: int) -> str:
+    """Profile dir for Chrome instance #generation (0 is the original shared profile)."""
+    name = "browser_use_chrome_session" if generation == 0 else f"browser_use_chrome_session_{generation}"
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "user_data", name))
+
+
+def _count_page_tabs(cdp_url: str) -> Optional[int]:
+    """Number of open page tabs in the Chrome at cdp_url, or None if it is not responding."""
+    try:
+        req = urllib.request.Request(f"{cdp_url}/json/list", headers={"User-Agent": "JobFinderCleaner"})
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            tabs = json.load(resp)
+        return len([t for t in tabs if t.get("type") == "page"])
+    except Exception:
+        return None
+
+
+def _seed_chrome_profile(src_dir: str, dst_dir: str) -> None:
+    """Best-effort copy of login state (cookies, saved logins, local storage) into a new profile."""
+    import shutil
+    if os.path.exists(os.path.join(dst_dir, "Default")) or not os.path.isdir(src_dir):
+        return
+    items = ["Local State", "Default/Preferences", "Default/Cookies", "Default/Login Data",
+             "Default/Web Data", "Default/Local Storage", "Default/Network"]
+    for rel in items:
+        src, dst = os.path.join(src_dir, rel), os.path.join(dst_dir, rel)
+        try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if os.path.isdir(src):
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            elif os.path.isfile(src):
+                shutil.copy2(src, dst)
+        except Exception:
+            continue
+
+
+def rotate_chrome_instance(headless: bool = False, max_tabs: Optional[int] = None) -> str:
+    """
+    Returns the CDP URL of a Chrome instance with room for another application tab.
+
+    Every tab stays open for review. When the current Chrome holds more than `max_tabs`
+    (default 30, env JOB_FINDER_MAX_TABS) tabs, a separate Chrome process is started on the
+    next port with its own profile (seeded with the login state of the first one). Opening
+    another window in the same Chrome does not help: browser-use sees every window's tabs
+    over one connection, and around 50 tabs it fails with "EventBus at capacity".
+    """
+    if max_tabs is None:
+        try:
+            max_tabs = int(os.getenv("JOB_FINDER_MAX_TABS", "30"))
+        except ValueError:
+            max_tabs = 30
+    max_instances = 20
+    for generation in range(max_instances):
+        port = CDP_PORT + generation
+        cdp_url = f"http://127.0.0.1:{port}"
+        tabs = _count_page_tabs(cdp_url)
+        if tabs is None:
+            if generation > 0:
+                print(f"[browser-use] Starting a new Chrome window (instance {generation + 1}, port {port}) because earlier ones hold more than {max_tabs} tabs. All existing tabs stay open.")
+                _seed_chrome_profile(_chrome_profile_dir(0), _chrome_profile_dir(generation))
+            return ensure_persistent_browser(headless=headless, port=port, user_data_dir=_chrome_profile_dir(generation))
+        if tabs <= max_tabs:
+            return cdp_url
+    return f"http://127.0.0.1:{CDP_PORT + max_instances - 1}"
 
 
 def preflight_check_job_url(url: str) -> tuple[str, bool, Optional[str]]:
@@ -730,7 +826,14 @@ def open_new_chrome_window_via_cdp(cdp_url: str, url: str = "about:blank") -> bo
                 res = json.loads(raw_res)
                 return bool(res.get("result", {}).get("targetId"))
 
-        return asyncio.run(_create_window())
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(_create_window())
+        # Already inside an event loop: run the coroutine on its own loop in a worker thread.
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+            return _pool.submit(lambda: asyncio.run(_create_window())).result(timeout=10)
     except Exception as e:
         print(f"[browser-use] Note: create new Chrome window via CDP: {e}")
         return False
@@ -773,8 +876,8 @@ def get_or_create_browser_session(headless: bool = False):
     """
     # pyrefly: ignore [missing-import]
     from browser_use import BrowserSession
-    cdp_url = ensure_persistent_browser(headless=headless)
-    cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=20)
+    cdp_url = rotate_chrome_instance(headless=headless)
+    cleanup_stale_chrome_tabs(cdp_url, max_tabs_to_keep=30)
     return BrowserSession(
         cdp_url=cdp_url,
         minimum_wait_page_load_time=0.1,             # Cut from 0.25s to 0.1s

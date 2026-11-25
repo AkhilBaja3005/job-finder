@@ -114,8 +114,11 @@ class LayaDecisionRouter:
 
         # 2. If OPENAI_API_KEY is provided, use OpenAI Decisions API (gpt-6-luna)
         # for complex or ambiguous fields (10x faster typed evaluation than completion endpoints)
+        # Opt-in: set OPENAI_DECISIONS_ENABLED=1. Off by default so OPENAI_API_KEY alone
+        # only acts as a browser-agent fallback.
         openai_key = os.getenv("OPENAI_API_KEY")
-        if openai_key and len(text) > 5:
+        decisions_on = os.getenv("OPENAI_DECISIONS_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
+        if openai_key and decisions_on and len(text) > 5:
             decisions = call_openai_decisions_api(
                 input_text=label_or_placeholder,
                 questions=[
