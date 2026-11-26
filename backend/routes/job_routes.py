@@ -491,6 +491,27 @@ async def sync_applications(request: SyncApplicationsRequest, authorization: Opt
     return {"added": added, "already": len(request.applications) - added}
 
 
+class ApplicationStatusRequest(BaseModel):
+    job_url: str = Field(..., min_length=8, max_length=2000)
+    status: str = Field(..., max_length=60)
+
+
+ALLOWED_PROGRESS_STATUSES = {"Applied (manual)", "Replied", "Interview", "Offer", "Rejected", "Skipped"}
+
+
+@router.post("/applications/status")
+async def set_application_progress(request: ApplicationStatusRequest, authorization: Optional[str] = Header(None)):
+    """Moves one of the account's applications along (reply, interview, offer ...). Only a fixed list of statuses is accepted."""
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    user = await async_get_user_by_token(token) if token else None
+    if not user or not user.get("id") or str(user["id"]).startswith("guest_"):
+        raise HTTPException(status_code=401, detail="Invalid sync code")
+    if request.status not in ALLOWED_PROGRESS_STATUSES:
+        raise HTTPException(status_code=422, detail="Unknown status")
+    changed = await asyncio.to_thread(update_application_status, token, request.job_url.strip(), request.status)
+    return {"updated": bool(changed)}
+
+
 @router.get("/applications/skills_heatmap")
 async def get_skills_heatmap(authorization: Optional[str] = Header(None)):
     """Computes an interactive ATS keyword gap & skill frequency heatmap across user applications."""

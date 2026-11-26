@@ -121,7 +121,7 @@
   }
   function renderRun() {
     const f = S.form;
-    $("#view").innerHTML = head("Run", "Find jobs, tailor your resume and fill applications.", '<span id="run-btn">' + runButton() + "</span>") +
+    $("#view").innerHTML = head("Run", "Find jobs, tailor your resume and fill applications." + usageNote(), '<span id="run-btn">' + runButton() + "</span>") +
       '<div class="scroll"><div class="stack">' + checklist() + profileCard() + '<div class="cols">' +
       '<section class="card card-pad form" aria-label="Search settings">' +
         '<div class="field"><label>Roles</label>' + tagsInput("roles", f.roles, "Add a role and press Return") + '<div class="help">One search per role.</div></div>' +
@@ -240,6 +240,11 @@
     }
     return rows;
   }
+  function usageNote() {
+    const u = S.info && S.info.usage_today; if (!u || !u.tokens) return "";
+    const t = u.tokens >= 1e6 ? (u.tokens / 1e6).toFixed(1) + "M" : u.tokens >= 1e3 ? Math.round(u.tokens / 1e3) + "K" : String(u.tokens);
+    return " Today: " + t + " AI tokens" + (u.cost ? " (about $" + u.cost.toFixed(2) + ")" : "") + ".";
+  }
   function stageSummary() {
     const st = (S.info && S.info.stages) || {}, bits = [];
     if (st.replied) bits.push(st.replied + " replied"); if (st.interview) bits.push(plural(st.interview, "interview")); if (st.offer) bits.push(plural(st.offer, "offer"));
@@ -269,7 +274,7 @@
           '<td><span class="score num">' + (r.ats ? '<span class="bar"><i style="width:' + Math.min(100, ats) + '%"></i></span>' + esc(r.ats) : "—") + "</span></td>" +
           '<td title="' + (r.synced ? "In your Supabase project" : "Only on this Mac") + '">' + icon(r.synced ? "cloud" : "cloudOff", ' class="cloud-ic' + (r.synced ? "" : " off") + '"') + "</td>" +
           "<td class=\"acts\">" + (r.url ? '<button class="btn quiet" data-url="' + esc(r.url) + '" aria-label="Open ' + esc(r.title) + '">Open</button>' : "") +
-          (r.url && k === "review" ? '<button class="btn quiet" data-detail="' + esc(r.url) + '">Why</button>' : "") +
+          (r.url && k === "review" ? '<button class="btn quiet" data-detail="' + esc(r.url) + '">Why</button><button class="btn quiet" data-review="' + esc(r.url) + '">Review</button>' : "") +
           (r.url ? '<select class="select stage" data-stage="' + esc(r.url) + '" aria-label="Update status of ' + esc(r.title) + '"><option value="">Update…</option>' + STAGES.map(([v, l]) => '<option value="' + v + '">' + l + "</option>").join("") + "</select>" : "") + "</td></tr>";
       }).join("") + "</tbody></table></div>" +
       '<div class="foot">Showing ' + shown.length + " of " + rows.length + (rows.length > shown.length ? '&nbsp;·&nbsp;<button class="btn quiet" data-act="more">Show more</button>' : "") + "</div>";
@@ -302,6 +307,7 @@
       '<div class="sect-title">About</div><section class="card">' +
         row("Job Finder " + esc(i.version), S.update && S.update.newer ? "Version " + esc(S.update.latest) + " is available." : S.update ? "You are up to date." : "Check for a newer version.", '<button class="btn" data-act="check-update">Check for updates</button>' + (S.update && S.update.newer ? '<button class="btn primary" data-url="' + esc(S.update.url) + '">Download</button>' : "")) +
         row("Guided tour", "A short walk through the fields that need filling in.", '<button class="btn" data-act="start-tour">Take the tour</button>') +
+        row("Report a problem", "Copies a short report (version, settings, recent log; keys and your folder path are removed) and opens an email to hello@job-finder.space. Nothing is sent until you press send.", '<button class="btn" data-act="report">Report…</button>') +
         row("Log files", "For troubleshooting. Each run is saved separately.", '<button class="btn" data-act="open-logs">Open</button>') +
       "</section></div></div>";
   }
@@ -355,6 +361,7 @@
     if (d.rm) { const [id, idx] = d.rm.split(":"); S.form[id].splice(Number(idx), 1); renderRun(); saveFormSoon(); return; }
     if (d.time) { S.form.timeframe = d.time; renderRun(); saveFormSoon(); return; }
     if (d.mode) { S.form.mode = d.mode; renderRun(); return; }
+    if (d.review) { toast("Opening the job in Chrome…"); const r = await call("review_in_chrome", d.review); toast(r && r.ok ? "Opened. Check the form and submit it there." : (r && r.error) || "Could not open Chrome.", r && r.ok ? undefined : "bad"); return; }
     if (d.detail) { const r = await call("review_info", d.detail); const has = r && r.screenshot;
       const ok = await dialog({ title: "Why it stopped", body: "<p>" + esc((r && r.reason) || "No reason was recorded for this job. Open the job and check the form yourself.") + "</p>", confirm: has ? "Open screenshot" : "OK" });
       if (ok && has) call("open_screenshot", d.detail); return; }
@@ -380,6 +387,7 @@
       case "build-profile": { const r = await call("choose_resume_and_build_profile"); if (r && r.ok) { go("run"); Object.assign(S.run, { running: true, started: true, offset: 0, lines: [], exit: null }); renderRunStatus(); renderLog(true); watchRun(); } return; }
       case "import-profile": { const r = await call("choose_profile_and_import"); if (r && r.ok) { toast("Profile imported" + (r.name ? " for " + r.name : "") + "."); await refreshInfo(); hydrateForm(); renderView(); } else if (r && r.error) toast(r.error, "bad"); return; }
       case "open-signin": { toast("Opening Chrome…"); const r = await call("open_signin"); toast(r && r.ok ? "Chrome is open. Sign in, then close it before a run." : (r && r.error) || "Could not open Chrome.", r && r.ok ? undefined : "bad"); return; }
+      case "report": { const r = await call("problem_report"); if (r && r.ok) { try { await navigator.clipboard.writeText(r.text); toast("Report copied. Paste it into the email."); } catch (_) { toast("Could not copy the report. Open the log files instead.", "bad"); } call("open_url", "mailto:hello@job-finder.space?subject=Job%20Finder%20problem"); } return; }
       case "start-tour": return void startTour();
       case "install-browser": await call("ensure_browser"); await refreshInfo(); renderSettings(); watchBrowser(); return;
       case "sync": { if (S.apps.syncing) return; S.apps.syncing = true; renderView(); const r = await call("sync_now"); S.apps.syncing = false;

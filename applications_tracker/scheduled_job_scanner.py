@@ -29,6 +29,12 @@ from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Optional, Dict, Any
 
+try:
+    from applications_tracker.outcomes import daily_cap, submitted_today
+except ImportError:  # run as a script from inside applications_tracker/
+    from outcomes import daily_cap, submitted_today  # type: ignore
+
+
 def format_posted_date_time(raw_post_date: Optional[str]) -> str:
     """
     Standardizes raw posted time strings into a consistent 'date; time' format (e.g. '2026-09-11; 08:30').
@@ -1184,7 +1190,10 @@ async def run_pipeline(
 
         # Autofill application if Top Applicant or score meets minimum threshold
         if (is_top_applicant or score >= min_ats_score) and url:
-            if max_applications > 0 and applied_attempts >= max_applications:
+            _day_cap = daily_cap()
+            if _day_cap > 0 and submitted_today() >= _day_cap:
+                print(f"[Scanner] Daily limit reached ({_day_cap} applications today, MAX_APPLICATIONS_PER_DAY). Remaining matches are saved to the tracker.")
+            elif max_applications > 0 and applied_attempts >= max_applications:
                 print(f"[Scanner] ⏸Reached maximum application limit ({max_applications}) for this run. Remaining qualified matches are saved to tracker.")
             else:
                 applied_attempts += 1
@@ -1218,6 +1227,7 @@ async def run_pipeline(
                     "url": url, "company": company, "title": title, "status": res_status, "blocker": _info.get("blocker"),
                     "model": _info.get("model_used"), "steps": _info.get("steps_taken"), "seconds": round(time.time() - _attempt_started),
                     "screenshot": _info.get("review_screenshot"), "final_result": final_res, "submitted_for_real": bool(disable_guardrails),
+                    "usage": _info.get("usage") or {},
                 })
 
                 if disable_guardrails:

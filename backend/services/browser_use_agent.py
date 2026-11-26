@@ -1354,8 +1354,28 @@ async def run_browser_use_autofill(
         "model_used": getattr(llm, "model", model_name),
         "steps_taken": len(history.history) if hasattr(history, "history") else 0,
         "is_done": is_done,
+        "usage": usage_summary(history),
         "final_result": final_res or "Completed application autofill run.",
     }
+
+
+def usage_summary(history: Any) -> Dict[str, Any]:
+    """Token counts (and the cost, when the library reports one) for one run. Empty when the installed browser-use cannot say."""
+    out: Dict[str, Any] = {}
+    try:
+        usage = getattr(history, "usage", None)
+        if usage is not None:
+            for key in ("total_prompt_tokens", "total_completion_tokens", "total_tokens", "total_cost"):
+                value = getattr(usage, key, None) if not isinstance(usage, dict) else usage.get(key)
+                if isinstance(value, (int, float)):
+                    out[key] = value
+        if "total_tokens" not in out and hasattr(history, "total_input_tokens"):
+            total = history.total_input_tokens()
+            if isinstance(total, (int, float)) and total:
+                out["total_tokens"] = int(total)
+    except Exception:
+        return {}
+    return out
 
 
 async def extract_jd_with_browser_use(

@@ -70,3 +70,56 @@ def test_the_command_prints_a_table_and_json(tmp_path, monkeypatch, capsys):
     assert "Greenhouse" in out and "100%" in out and "Acme: ML Intern" in out
     run(argparse.Namespace(json=True, recent=0))
     assert json.loads(capsys.readouterr().out)["attempts"] == 1
+
+
+def test_usage_today_adds_up_todays_attempts(tmp_path, monkeypatch):
+    from applications_tracker import outcomes
+    monkeypatch.setenv("JOB_FINDER_ROOT", str(tmp_path))
+    outcomes.append_outcome({"url": "https://a.example/1", "status": "success", "usage": {"total_tokens": 1200, "total_cost": 0.01}})
+    outcomes.append_outcome({"url": "https://a.example/2", "status": "failed", "usage": {"total_tokens": 800}})
+    outcomes.append_outcome({"url": "https://a.example/3", "status": "failed"})
+    assert outcomes.usage_today() == {"tokens": 2000, "cost": 0.01}
+
+
+def test_usage_summary_reads_what_the_library_offers_and_never_raises():
+    from services.browser_use_agent import usage_summary
+
+    class Usage:
+        total_prompt_tokens = 900
+        total_completion_tokens = 100
+        total_tokens = 1000
+        total_cost = 0.02
+
+    class WithUsage:
+        usage = Usage()
+
+    class Old:
+        def total_input_tokens(self):
+            return 500
+
+    class Broken:
+        @property
+        def usage(self):
+            raise RuntimeError("no")
+
+    assert usage_summary(WithUsage())["total_tokens"] == 1000
+    assert usage_summary(Old()) == {"total_tokens": 500}
+    assert usage_summary(Broken()) == {}
+    assert usage_summary(object()) == {}
+
+
+def test_daily_cap_counts_only_todays_submissions(tmp_path, monkeypatch):
+    from applications_tracker import outcomes
+    monkeypatch.setenv("JOB_FINDER_ROOT", str(tmp_path))
+    outcomes.append_outcome({"url": "https://boards.greenhouse.io/a/jobs/1", "status": "success"})
+    outcomes.append_outcome({"url": "https://boards.greenhouse.io/a/jobs/2", "status": "needs_review"})
+    outcomes.append_outcome({"url": "https://boards.greenhouse.io/a/jobs/3", "status": "failed"})
+    old = outcomes.ledger_path()
+    old.write_text(old.read_text() + '{"time": "2020-01-01T10:00:00", "outcome": "submitted"}\n')
+    assert outcomes.submitted_today() == 1
+    monkeypatch.setenv("MAX_APPLICATIONS_PER_DAY", "3")
+    assert outcomes.daily_cap() == 3
+    monkeypatch.setenv("MAX_APPLICATIONS_PER_DAY", "0")
+    assert outcomes.daily_cap() == 0
+    monkeypatch.delenv("MAX_APPLICATIONS_PER_DAY")
+    assert outcomes.daily_cap() == 25

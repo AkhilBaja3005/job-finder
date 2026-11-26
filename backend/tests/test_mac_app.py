@@ -576,3 +576,18 @@ def test_stage_counts_and_last_attempt_without_ledger(tmp_path):
     counts = scan_panel.stage_counts(scan_panel.read_tracker(ws))
     assert counts["replied"] == 1 and counts["interview"] == 0
     assert scan_panel.last_attempt(ws, "https://jobs.lever.co/beta/2") == {}
+
+
+def test_problem_report_removes_keys_and_home_folder(tmp_path, monkeypatch):
+    import scan_panel
+    monkeypatch.setenv("HOME", str(tmp_path))
+    text = scan_panel.redact(f"key sk-ant-abcdefgh12345678 and AIza{'x' * 30} and sb_secret_abcdefgh1234 at {tmp_path}/Library/x")
+    assert "sk-ant" not in text and "AIza" not in text and "sb_secret" not in text and str(tmp_path) not in text
+    assert "~/Library/x" in text
+
+
+def test_review_in_chrome_only_opens_web_addresses():
+    import scan_panel
+    api = scan_panel.Api.__new__(scan_panel.Api)
+    assert api.review_in_chrome("file:///etc/passwd")["ok"] is False
+    assert api.review_in_chrome("javascript:alert(1)")["ok"] is False

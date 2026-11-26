@@ -45,3 +45,16 @@ def test_rejects_oversized_batches_and_bad_rows(monkeypatch):
     too_many = [{**ROW, "job_url": f"https://example.com/jobs/{i}"} for i in range(501)]
     assert client.post("/applications/sync", json={"applications": too_many}, headers=headers).status_code == 422
     assert client.post("/applications/sync", json={"applications": [{**ROW, "score": 900}]}, headers=headers).status_code == 422
+
+
+def test_status_update_needs_account_and_known_status(monkeypatch):
+    changed = []
+    _patch(monkeypatch, {"id": 7})
+    monkeypatch.setattr(job_routes, "update_application_status", lambda token, url, status: changed.append((url, status)) or True)
+    H = {"Authorization": "Bearer CODE12"}
+    body = {"job_url": "https://jobs.lever.co/acme/2", "status": "Interview"}
+    assert client.post("/applications/status", json=body, headers=H).json() == {"updated": True}
+    assert client.post("/applications/status", json={**body, "status": "Hired!!"}, headers=H).status_code == 422
+    _patch(monkeypatch, None)
+    assert client.post("/applications/status", json=body, headers=H).status_code == 401
+    assert changed == [("https://jobs.lever.co/acme/2", "Interview")]
