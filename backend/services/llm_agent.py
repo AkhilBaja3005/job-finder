@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Callable, Any
 # pyrefly: ignore [missing-import]
 from services.gemini_client import generate_content_with_fallback, generate_latex_with_strong_model
 # pyrefly: ignore [missing-import]
-from services.ats_scorer import compute_ats_score, compute_overall_score, calculate_flattened_experience
+from services.ats_scorer import compute_ats_score, compute_overall_score, calculate_flattened_experience, deterministic_semantic_analysis
 
 # ─────────────────────────────────────────
 # Pydantic schemas
@@ -516,14 +516,11 @@ RULES:
     # ── Phase 2 & 3: Run LLM calls in parallel threads ─────────────────────
     import asyncio
 
+    # Semantic scoring is rule-based by default so the same resume and JD always give the
+    # same score. Set USE_LLM_SEMANTIC_SCORING=1 to get the old LLM-based role fit.
+    use_llm_semantic = os.getenv("USE_LLM_SEMANTIC_SCORING", "0") == "1"
+
     # We use asyncio.to_thread to run synchronous blocking Gemini API calls concurrently
-    semantic_task = asyncio.to_thread(
-        generate_content_with_fallback,
-        semantic_prompt,
-        _SemanticScoreResult,
-        custom_api_key,
-        on_log=on_log
-    )
     cover_task = asyncio.to_thread(
         generate_content_with_fallback,
         cover_prompt,
@@ -531,13 +528,22 @@ RULES:
         custom_api_key,
         on_log=on_log
     )
-
-    semantic_text, cover_text = await asyncio.gather(semantic_task, cover_task)
-
-    # NOTE: parsed defensively — see _parse_llm_json docstring. Non-Gemini
-    # providers in the fallback chain (Cloudflare/Groq/OpenRouter) are only
-    # prompted to emit raw JSON and can still wrap it in ```json fences.
-    semantic = _SemanticScoreResult(**_parse_llm_json(semantic_text, label="semantic scoring"))
+    if use_llm_semantic:
+        semantic_task = asyncio.to_thread(
+            generate_content_with_fallback,
+            semantic_prompt,
+            _SemanticScoreResult,
+            custom_api_key,
+            on_log=on_log
+        )
+        semantic_text, cover_text = await asyncio.gather(semantic_task, cover_task)
+        # NOTE: parsed defensively — see _parse_llm_json docstring. Non-Gemini
+        # providers in the fallback chain (Cloudflare/Groq/OpenRouter) are only
+        # prompted to emit raw JSON and can still wrap it in ```json fences.
+        semantic = _SemanticScoreResult(**_parse_llm_json(semantic_text, label="semantic scoring"))
+    else:
+        cover_text = await cover_task
+        semantic = _SemanticScoreResult(**deterministic_semantic_analysis(resume_data, jd_truncated, ats))
     role_fit = min(100, max(0, semantic.role_fit_score))
     cover_result = _CoverLetterResult(**_parse_llm_json(cover_text, label="cover letter"))
 
