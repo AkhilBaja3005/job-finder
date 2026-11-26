@@ -114,34 +114,18 @@ _PROVIDERS = ("gemini", "anthropic", "openai")
 _PROVIDER_ALIASES = {"google": "gemini", "claude": "anthropic"}
 _PROVIDER_KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
 _DEFAULT_MODELS = {"anthropic": "claude-haiku-5-5", "openai": "gpt-6-luna"}
-# Short names accepted in BROWSER_USE_ANTHROPIC_MODEL, BROWSER_USE_OPENAI_MODEL, BROWSER_USE_MODEL and --model.
-# Each short name is a model family. The newest model of that family is looked up from the provider's
-# model list (cached for an hour); the static name here is used if the lookup fails or no key is set.
-_MODEL_ALIASES = {
-    "anthropic": {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5"},
-    "openai": {"luna": "gpt-6-luna", "terra": "gpt-6.1-terra"},
-}
+# Short names (model families) accepted in BROWSER_USE_ANTHROPIC_MODEL, BROWSER_USE_OPENAI_MODEL,
+# BROWSER_USE_MODEL and --model. See config.constants.expand_model_alias for the dynamic lookup.
+from config.constants import MODEL_ALIASES as _MODEL_ALIASES, expand_model_alias as _expand
 _DEFAULT_FAMILY = {"anthropic": "haiku", "openai": "luna"}
 
 
 def _expand_model_alias(provider: str, model: Optional[str]) -> Optional[str]:
-    """
-    Turns a family name into the newest model of that family: 'haiku' -> 'claude-haiku-5-5',
-    'luna' -> 'gpt-6-luna'. A full model name passes through untouched, so a name the user set
-    explicitly is never replaced.
-    """
-    if not model:
-        return model
-    name = model.strip()
-    aliases = _MODEL_ALIASES.get(provider, {})
-    family = name.lower()
-    if family not in aliases:
-        return name
+    """A family name becomes the newest model of that family. A full model ID passes through untouched."""
     try:
-        from config.constants import discover_provider_model
-        return discover_provider_model(provider, family, os.getenv(_PROVIDER_KEY_ENV[provider]), aliases[family])
+        return _expand(provider, model)
     except Exception:
-        return aliases[family]
+        return _MODEL_ALIASES.get(provider, {}).get((model or "").strip().lower(), model)
 
 
 _MODEL_ENV = {"anthropic": "BROWSER_USE_ANTHROPIC_MODEL", "openai": "BROWSER_USE_OPENAI_MODEL"}
