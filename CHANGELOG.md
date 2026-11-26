@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Added
+- Mac app: one-click "Review" opens a job in the signed-in Chrome; status changes follow to job-finder.space
+  (`POST /applications/status`); a rough token count for the day; "Report a problem" (copies a report with keys removed);
+  a daily run through launchd (practice run by default); "Saved answers" for questions the profile cannot answer;
+  relevance rules before applying (seniority in the title, location, "no visa sponsorship" lines).
+- Daily application limit (`MAX_APPLICATIONS_PER_DAY`, default 25).
+- A fake job board and `scripts/agent_bench.py` to test the agent without a real application; `scripts/backup_supabase.py`;
+  `scripts/reencrypt_saved_keys.py`; `scripts/dev_setup.sh`; an uptime check workflow; privacy and terms drafts.
+
 - Mac app (Apple Silicon, unsigned for now) for the job search and auto-apply part: `Job Finder.app` is a native-feeling control panel
   for `job-finder scan`. A sidebar app with Run, Applications and Settings; a first-run checklist; a confirmation dialog before applying
   for real; a live activity log with counts; Mac notifications; update checks; one log file per run; a real menu bar (Cmd+C and Cmd+V work
