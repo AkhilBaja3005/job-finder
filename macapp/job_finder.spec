@@ -21,13 +21,10 @@ def data_tree(src: Path, dest: str):
 
 
 datas = data_tree(ROOT / "backend", "backend")
-datas += [(str(ROOT / "frontend" / "dist"), "backend/static_frontend"), (str(ROOT / ".env.example"), ".")]
-# The browser extension, so the app can still offer its "download the extension" ZIP.
-datas += [(str(p), str(Path("extension") / p.relative_to(ROOT / "extension").parent))
-          for p in (ROOT / "extension").rglob("*") if p.is_file() and not p.name.startswith(".")]
+datas += [(str(ROOT / ".env.example"), "."), (str(ROOT / "macapp" / "panel"), "macapp/panel")]
 
 binaries = []
-hiddenimports = []
+hiddenimports = ["scan_panel"]
 
 
 def local_modules(base: Path, prefix: str = ""):
@@ -70,7 +67,7 @@ for dist in ("browser-use", "fastapi", "uvicorn", "pydantic", "anthropic", "open
 
 a = Analysis(  # noqa: F821
     [str(ROOT / "macapp" / "job_finder_app.py")],
-    pathex=[str(ROOT), str(ROOT / "backend")],
+    pathex=[str(ROOT), str(ROOT / "backend"), str(ROOT / "macapp")],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

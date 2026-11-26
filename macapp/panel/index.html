@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Finder</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#16181d; --muted:#6a7280; --line:#e2e5ea; --accent:#2563eb; --accent-text:#fff;
+          --good:#15803d; --warn:#b45309; --bad:#b91c1c; --log-bg:#0f1115; --log-text:#d7dae0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14161a; --card:#1c1f25; --text:#eceef2; --muted:#98a0ae; --line:#2b2f37; --accent:#4f8cff; --accent-text:#0b1220;
+            --good:#4ade80; --warn:#fbbf24; --bad:#f87171; --log-bg:#0b0c0f; --log-text:#d7dae0; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+  header h1 { font-size:16px; margin:0; font-weight:650; }
+  nav { display:flex; gap:4px; }
+  nav button { background:none; border:0; color:var(--muted); padding:6px 12px; border-radius:8px; font:inherit; cursor:pointer; }
+  nav button.on { background:var(--bg); color:var(--text); font-weight:600; }
+  #status { margin-left:auto; color:var(--muted); font-size:13px; }
+  main { max-width:980px; margin:0 auto; padding:20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:16px; }
+  h2 { font-size:14px; margin:0 0 12px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:12px 0 4px; }
+  input[type=text], input[type=number], input[type=password], textarea, select {
+    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+  textarea { min-height:96px; resize:vertical; }
+  .row { display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:14px; }
+  .modes { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:6px; }
+  .mode { border:1px solid var(--line); border-radius:10px; padding:12px; cursor:pointer; }
+  .mode.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .mode b { display:block; margin-bottom:2px; } .mode span { color:var(--muted); font-size:12px; }
+  .mode.danger.on { border-color:var(--bad); box-shadow:0 0 0 1px var(--bad) inset; }
+  button.primary { background:var(--accent); color:var(--accent-text); border:0; padding:9px 18px; border-radius:9px; font:inherit; font-weight:600; cursor:pointer; }
+  button.secondary { background:none; color:var(--text); border:1px solid var(--line); padding:8px 14px; border-radius:9px; font:inherit; cursor:pointer; }
+  button.stop { background:var(--bad); color:#fff; border:0; padding:9px 18px; border-radius:9px; font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.45; cursor:default; }
+  .bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:16px; }
+  .counts { display:flex; gap:18px; margin:4px 0 10px; font-size:13px; color:var(--muted); }
+  .counts b { color:var(--text); font-size:18px; display:block; }
+  #log { background:var(--log-bg); color:var(--log-text); border-radius:10px; padding:12px; height:340px; overflow:auto; font:12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space:pre-wrap; word-break:break-word; }
+  .banner { background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; padding:10px 14px; border-radius:10px; margin-bottom:16px; }
+  @media (prefers-color-scheme: dark) { .banner { background:#2a1d10; color:#fdba74; border-color:#5a3a1a; } }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  a { color:var(--accent); cursor:pointer; text-decoration:none; }
+  .pill { padding:2px 8px; border-radius:99px; font-size:12px; background:var(--bg); }
+  .pill.applied { color:var(--good); } .pill.review { color:var(--warn); }
+  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+  .hidden { display:none; }
+  .keyrow { display:grid; grid-template-columns:130px 1fr auto; gap:10px; align-items:center; margin-top:10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Job Finder</h1>
+  <nav>
+    <button data-tab="scan" class="on">Scan</button>
+    <button data-tab="results">Results</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+  <div id="status">Idle</div>
+</header>
+
+<main>
+  <section id="tab-scan">
+    <div id="noprofile" class="banner hidden">No profile found in this folder yet. Open <b>Settings</b> and choose <i>Build profile from my resume</i>, or point the app at your existing Job Finder folder.</div>
+
+    <div class="card">
+      <h2>What to search for</h2>
+      <label>Roles (one per line)</label>
+      <textarea id="roles" placeholder="Machine Learning Engineer Intern&#10;Data Science Intern"></textarea>
+      <div class="row">
+        <div><label>Location</label><input type="text" id="location" placeholder="London, UK"></div>
+        <div><label>Posted within</label>
+          <select id="timeframe"><option>24h</option><option>48h</option><option>1w</option></select></div>
+        <div><label>Minimum ATS score</label><input type="number" id="min_ats" min="0" max="100"></div>
+        <div><label>Max applications this run (0 = no limit)</label><input type="number" id="limit" min="0" value="0"></div>
+      </div>
+      <label>Job title must contain one of (optional, comma separated)</label>
+      <input type="text" id="title_keywords" placeholder="intern, internship, placement">
+      <label>Skip these job sites (comma separated)</label>
+      <input type="text" id="skip_portals" placeholder="targetjobs, workday, reed">
+    </div>
+
+    <div class="card">
+      <h2>What the agent does with each job</h2>
+      <div class="modes">
+        <div class="mode on" data-mode="dry_run"><b>Practice run</b><span>Fills in every form but never presses Submit. You check the result in the browser.</span></div>
+        <div class="mode danger" data-mode="auto_apply"><b>Apply for real</b><span>Fills the form and submits it. Applications cannot be taken back.</span></div>
+      </div>
+      <div class="row">
+        <div><label>Main AI for the browser agent</label>
+          <select id="primary_ai"><option value="auto">Automatic (from your .env)</option><option value="gemini">Gemini</option><option value="anthropic">Claude</option><option value="openai">OpenAI</option></select></div>
+        <div><label>&nbsp;</label><label style="margin:6px 0"><input type="checkbox" id="headless"> Hide the browser window</label></div>
+      </div>
+      <div class="bar">
+        <button class="primary" id="start">Start</button>
+        <button class="stop hidden" id="stop">Stop</button>
+        <span class="hint" id="hint"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Progress</h2>
+      <div class="counts">
+        <div><b id="c-pos">0</b> of <span id="c-found">0</span> checked</div>
+        <div><b id="c-sub">0</b> submitted</div>
+        <div><b id="c-rev">0</b> need your review</div>
+        <div><b id="c-skip">0</b> skipped</div>
+      </div>
+      <div id="log">Nothing running yet.</div>
+    </div>
+  </section>
+
+  <section id="tab-results" class="hidden">
+    <div class="card">
+      <h2>Applications <button class="secondary" id="refresh" style="float:right">Refresh</button></h2>
+      <table><thead><tr><th>Company</th><th>Job</th><th>Status</th><th>ATS</th><th>Site</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+      <div class="hint" id="norows"></div>
+    </div>
+  </section>
+
+  <section id="tab-settings" class="hidden">
+    <div class="card">
+      <h2>Your folder</h2>
+      <div class="hint">Profile, settings, tracker and outputs are kept here:</div>
+      <div id="workspace" style="font-family:ui-monospace,Menlo,monospace;margin:8px 0;word-break:break-all"></div>
+      <div class="bar">
+        <button class="secondary" id="choose-ws">Use my existing Job Finder folder…</button>
+        <button class="secondary" id="default-ws">Use the app's own folder</button>
+        <button class="secondary" data-open="workspace">Show in Finder</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Profile <span id="who" class="hint"></span></h2>
+      <div class="bar" style="margin-top:0">
+        <button class="secondary" id="build-profile">Build profile from my resume…</button>
+        <button class="secondary" data-open="profile">Edit profile file</button>
+        <button class="secondary" id="doctor">Check my setup</button>
+      </div>
+      <div class="hint">Building a profile reads your resume with the AI key below and fills in your details. Output appears under Scan, Progress.</div>
+    </div>
+    <div class="card">
+      <h2>AI keys</h2>
+      <div class="hint">Stored in the .env file in your folder, readable only by you. Add at least one.</div>
+      <div class="keyrow"><span>Gemini</span><input type="password" id="key-gemini" autocomplete="off"><button class="secondary" data-save="gemini">Save</button></div>
+      <div class="keyrow"><span>Claude (Anthropic)</span><input type="password" id="key-anthropic" autocomplete="off"><button class="secondary" data-save="anthropic">Save</button></div>
+      <div class="keyrow"><span>OpenAI</span><input type="password" id="key-openai" autocomplete="off"><button class="secondary" data-save="openai">Save</button></div>
+      <div class="bar"><button class="secondary" data-open="env">Edit all settings (.env)</button></div>
+    </div>
+  </section>
+</main>
+
+<script>
+let state = null, offset = 0, mode = 'dry_run', timer = null, autoScroll = true;
+const $ = (id) => document.getElementById(id);
+const api = () => window.pywebview.api;
+
+function show(tab) {
+  for (const t of ['scan', 'results', 'settings']) $('tab-' + t).classList.toggle('hidden', t !== tab);
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  if (tab === 'results') loadResults();
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => show(b.dataset.tab));
+document.querySelectorAll('.mode').forEach(m => m.onclick = () => {
+  mode = m.dataset.mode;
+  document.querySelectorAll('.mode').forEach(x => x.classList.toggle('on', x === m));
+  $('start').textContent = mode === 'auto_apply' ? 'Start applying' : 'Start practice run';
+});
+
+function fillForm(s) {
+  const p = s.prefs;
+  $('roles').value = p.roles.join('\n'); $('location').value = p.location;
+  $('timeframe').value = ['24h', '48h', '1w'].includes(p.timeframe) ? p.timeframe : '24h';
+  $('min_ats').value = p.min_ats; $('title_keywords').value = p.title_keywords.join(', ');
+  $('skip_portals').value = p.skip_portals.join(', ');
+  $('noprofile').classList.toggle('hidden', p.profile_exists);
+  $('workspace').textContent = s.workspace;
+  $('who').textContent = p.candidate_name ? '· ' + p.candidate_name : '';
+  for (const k of ['gemini', 'anthropic', 'openai']) {
+    $('key-' + k).placeholder = s.keys[k].set ? 'Saved' + (s.keys[k].hint ? ' (ends ' + s.keys[k].hint + ')' : '') + ' — paste a new key to replace' : 'Paste key';
+  }
+}
+function formValues() {
+  return { roles: $('roles').value, location: $('location').value, timeframe: $('timeframe').value, min_ats: $('min_ats').value,
+           limit: $('limit').value, title_keywords: $('title_keywords').value, skip_portals: $('skip_portals').value,
+           primary_ai: $('primary_ai').value, headless: $('headless').checked, mode };
+}
+
+function setRunning(running) {
+  $('start').classList.toggle('hidden', running); $('stop').classList.toggle('hidden', !running);
+  $('status').textContent = running ? 'Running…' : 'Idle';
+}
+function line(text) {
+  const d = document.createElement('div'); d.textContent = text; $('log').appendChild(d);
+}
+async function tick() {
+  const r = await api().poll(offset);
+  if (offset === 0 && r.lines.length) $('log').textContent = '';
+  r.lines.forEach(line); offset = r.next;
+  if (autoScroll) $('log').scrollTop = $('log').scrollHeight;
+  const c = r.counts;
+  $('c-pos').textContent = c.position; $('c-found').textContent = c.found; $('c-sub').textContent = c.submitted;
+  $('c-rev').textContent = c.needs_review; $('c-skip').textContent = c.skipped;
+  setRunning(r.running);
+  if (!r.running && timer) {
+    clearInterval(timer); timer = null;
+    $('hint').textContent = r.exit_code === 0 ? 'Finished.' : (r.exit_code === null ? '' : 'Ended with code ' + r.exit_code + '. See the log.');
+    loadResults();
+  }
+}
+function watch() { if (!timer) timer = setInterval(tick, 800); tick(); }
+$('log').addEventListener('scroll', () => { const l = $('log'); autoScroll = l.scrollTop + l.clientHeight >= l.scrollHeight - 30; });
+
+async function begin(result) {
+  if (!result.ok) { $('hint').textContent = result.error || 'Could not start.'; return; }
+  offset = 0; $('log').textContent = 'Starting…'; $('hint').textContent = ''; setRunning(true); show('scan'); watch();
+}
+$('start').onclick = async () => {
+  if (mode === 'auto_apply' && !confirm('This will submit real job applications from your accounts. Continue?')) return;
+  begin(await api().start_scan(formValues()));
+};
+$('stop').onclick = async () => { await api().stop_scan(); setTimeout(tick, 400); };
+
+async function loadResults() {
+  const rows = await api().get_results(); const tb = $('rows'); tb.textContent = '';
+  $('norows').textContent = rows.length ? '' : 'Nothing recorded yet. Runs add a row for every job the agent looks at.';
+  for (const r of rows) {
+    const tr = document.createElement('tr');
+    const cls = /appl/i.test(r.status) ? 'applied' : (/review|fail/i.test(r.status) ? 'review' : '');
+    [r.company, r.title].forEach(t => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); });
+    const st = document.createElement('td'); const pill = document.createElement('span'); pill.className = 'pill ' + cls; pill.textContent = r.status; st.appendChild(pill); tr.appendChild(st);
+    [r.ats, r.platform].forEach(t => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); });
+    const lk = document.createElement('td');
+    if (r.url) { const a = document.createElement('a'); a.textContent = 'Open'; a.onclick = () => api().open_url(r.url); lk.appendChild(a); }
+    tr.appendChild(lk); tb.appendChild(tr);
+  }
+}
+$('refresh').onclick = loadResults;
+
+document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => api().open_path(b.dataset.open));
+document.querySelectorAll('[data-save]').forEach(b => b.onclick = async () => {
+  const k = b.dataset.save; const r = await api().save_key(k, $('key-' + k).value);
+  if (r.ok) { $('key-' + k).value = ''; state.keys = r.keys; fillForm(state); b.textContent = 'Saved'; setTimeout(() => b.textContent = 'Save', 1500); }
+  else alert(r.error);
+});
+$('choose-ws').onclick = async () => { const r = await api().choose_workspace(); if (r.ok) { state = r.state; fillForm(state); } };
+$('default-ws').onclick = async () => { const r = await api().use_default_workspace(); state = r.state; fillForm(state); };
+$('build-profile').onclick = async () => { const r = await api().choose_resume_and_build_profile(); if (r.ok) begin(r); else if (r.error) alert(r.error); };
+$('doctor').onclick = async () => begin(await api().run_command('doctor'));
+
+window.addEventListener('pywebviewready', async () => {
+  state = await api().get_state(); fillForm(state); setRunning(state.running); if (state.running) watch();
+  $('start').textContent = 'Start practice run';
+});
+</script>
+</body>
+</html>

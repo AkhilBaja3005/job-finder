@@ -28,12 +28,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: "frontend/package-lock.json"
-
       - name: Build
         run: macapp/build_mac.sh
 
@@ -41,7 +35,9 @@ jobs:
         run: |
           export JOB_FINDER_APP_HOME="$RUNNER_TEMP/jf-home"
           export JOB_FINDER_SKIP_BROWSER_INSTALL=1
-          "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --check --port 8123
+          "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli --version
+          "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli doctor || true
+          "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli scan --help | grep -q -- "--dry-run"
 
       - uses: actions/upload-artifact@v4
         with:
