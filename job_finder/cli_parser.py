@@ -65,6 +65,13 @@ def build_parser(version: str) -> argparse.ArgumentParser:
     scanner_parser.add_argument("--skip-portals", type=str, default=None, help="Comma-separated list of job portals/boards to skip (e.g. 'targetjobs,reed,indeed')")
     scanner_parser.add_argument("--harvest", action="store_true", help="Harvest and validate fresh ATS company slugs (Ashby, Greenhouse, Lever) before scanning")
 
+    outcomes_parser = subparsers.add_parser(
+        "outcomes",
+        help="Show how applications ended, with the success rate for each job site",
+    )
+    outcomes_parser.add_argument("--json", action="store_true", help="Print results as JSON")
+    outcomes_parser.add_argument("--recent", type=int, default=0, help="Also list the last N attempts with their reason and screenshot")
+
     # 2. Apply subcommand
     apply_parser = subparsers.add_parser(
         "apply",

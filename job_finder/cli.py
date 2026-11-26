@@ -123,6 +123,11 @@ def _main():
         from job_finder.commands.apply import run as _run
         _run(args)
 
+    elif args.subcommand == "outcomes":
+        load_workspace_env()
+        from job_finder.commands.outcomes import run as _run
+        _run(args)
+
     elif args.subcommand == "server":
         from job_finder.commands.server import run as _run
         _run(args)

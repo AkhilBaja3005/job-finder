@@ -24,6 +24,7 @@ import csv
 import asyncio
 import re
 import subprocess
+import time
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Optional, Dict, Any
@@ -1189,6 +1190,7 @@ async def run_pipeline(
                 applied_attempts += 1
                 disp_total = str(max_applications) if max_applications > 0 else "∞"
                 print(f"[Scanner] Dispatching application ({applied_attempts}/{disp_total})...")
+                _attempt_started = time.time()
                 res = await apply_to_job(
                     url=url,
                     candidate=candidate,
@@ -1205,6 +1207,18 @@ async def run_pipeline(
                 # Post-Submission Verification Check
                 res_status = res.get("status") if isinstance(res, dict) else ""
                 final_res = str(res.get("final_result", "")) if isinstance(res, dict) else ""
+
+                # Keep a record of how this attempt ended, for the per-site success rates (`job-finder outcomes`).
+                try:
+                    from applications_tracker.outcomes import append_outcome
+                except ImportError:
+                    from outcomes import append_outcome  # type: ignore
+                _info = res if isinstance(res, dict) else {}
+                append_outcome({
+                    "url": url, "company": company, "title": title, "status": res_status, "blocker": _info.get("blocker"),
+                    "model": _info.get("model_used"), "steps": _info.get("steps_taken"), "seconds": round(time.time() - _attempt_started),
+                    "screenshot": _info.get("review_screenshot"), "final_result": final_res, "submitted_for_real": bool(disable_guardrails),
+                })
 
                 if disable_guardrails:
                     if res_status == "success":
