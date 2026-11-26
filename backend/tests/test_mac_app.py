@@ -169,3 +169,84 @@ def test_api_only_opens_web_links(home):
     assert api.open_url("file:///etc/passwd") == {"ok": False}
     assert api.open_path("../../etc") == {"ok": False}
     assert api.run_command("rm", ["-rf", "/"])["ok"] is False
+
+
+# ── Supabase ────────────────────────────────────────────────────────────────────
+def _env(ws, **values):
+    for k, v in values.items():
+        panel.write_env_value(ws, k, v)
+
+
+def test_supabase_is_off_without_url_and_key(home):
+    ws = home / "ws"
+    assert panel.supabase_settings(ws) is None
+    _env(ws, SUPABASE_URL="https://abc.supabase.co/")
+    assert panel.supabase_settings(ws) is None  # a URL alone is not enough
+    _env(ws, SUPABASE_KEY="publishable-key")
+    assert panel.supabase_settings(ws) == {"url": "https://abc.supabase.co", "key": "publishable-key"}
+    _env(ws, SUPABASE_SERVICE_KEY="secret-key")
+    assert panel.supabase_settings(ws)["key"] == "secret-key"  # the secret key wins
+
+
+def test_status_without_supabase_is_local_only(home):
+    assert panel.supabase_status(home / "ws") == {"configured": False, "reachable": False}
+
+
+def test_merge_shows_cloud_status_and_cloud_only_rows():
+    local = [{"company": "A", "title": "x", "status": "Tailored & Ready", "ats": "80%", "platform": "LinkedIn", "url": "u1"},
+             {"company": "B", "title": "y", "status": "applied", "ats": "70%", "platform": "LinkedIn", "url": "u2"}]
+    cloud = [{"company": "A", "title": "x", "status": "applied", "ats": "80%", "platform": "LinkedIn", "url": "u1"},
+             {"company": "C", "title": "z", "status": "applied", "ats": "90%", "platform": "web", "url": "u3"}]
+    merged = panel.merge_results(local, cloud)
+    by_url = {r["url"]: r for r in merged}
+    assert by_url["u1"]["status"] == "applied" and by_url["u1"]["synced"] is True
+    assert by_url["u2"]["synced"] is False and by_url["u3"]["synced"] is True and len(merged) == 3
+
+
+def test_sync_adds_only_missing_rows(home, monkeypatch):
+    ws = home / "ws"
+    _env(ws, SUPABASE_URL="https://abc.supabase.co", SUPABASE_KEY="k")
+    (ws / "applications_tracker").mkdir(parents=True)
+    (ws / "applications_tracker" / "job_applications_tracker.csv").write_text(
+        "Company,Job Title,Platform,Overall ATS,Status,Job URL\n"
+        "Known Co,Dev,LinkedIn,70%,applied,http://known\n"
+        "New Co,ML Intern,LinkedIn,88%,Tailored & Ready,http://new\n"
+        "New Co,ML Intern,LinkedIn,88%,Tailored & Ready,http://new\n"  # a duplicate line
+        "No Url,Dev,LinkedIn,50%,saved,\n")
+    posted = []
+
+    def fake(cfg, path, method="GET", body=None, headers=None, timeout=20.0):
+        if method == "GET":
+            return [{"job_url": "http://known"}]
+        posted.extend(body or [])
+        return None
+
+    monkeypatch.setattr(panel, "_supabase_request", fake)
+    result = panel.sync_missing_to_supabase(ws)
+    assert result == {"ok": True, "pushed": 1, "already": 1}
+    assert posted[0]["job_url"] == "http://new" and posted[0]["score"] == 88 and posted[0]["user_id"] == 34
+    assert posted[0]["status"] == "Tailored & Ready" and posted[0]["company"] == "New Co"
+
+
+def test_sync_reports_a_failure_without_raising(home, monkeypatch):
+    ws = home / "ws"
+    _env(ws, SUPABASE_URL="https://abc.supabase.co", SUPABASE_KEY="k")
+    def boom(*a, **k):
+        raise OSError("offline")
+    monkeypatch.setattr(panel, "_supabase_request", boom)
+    result = panel.sync_missing_to_supabase(ws)
+    assert result["ok"] is False and "offline" in result["error"]
+    assert panel.sync_missing_to_supabase(home / "other")["ok"] is False  # not configured
+
+
+def test_results_fall_back_to_the_local_list_when_the_cloud_fails(home, monkeypatch):
+    ws = home / "ws"
+    _env(ws, SUPABASE_URL="https://abc.supabase.co", SUPABASE_KEY="k")
+    (ws / "applications_tracker").mkdir(parents=True)
+    (ws / "applications_tracker" / "job_applications_tracker.csv").write_text("Company,Job Title,Status,Job URL\nA,B,applied,http://a\n")
+    monkeypatch.setenv("JOB_FINDER_APP_HOME", str(ws))
+    def boom(*a, **k):
+        raise OSError("offline")
+    monkeypatch.setattr(panel, "_supabase_request", boom)
+    rows = panel.Api([sys.executable]).get_results()
+    assert [r["company"] for r in rows] == ["A"] and rows[0]["synced"] is False

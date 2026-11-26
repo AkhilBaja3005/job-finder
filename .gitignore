@@ -50,4 +50,3 @@ applications_tracker/*.bak*
 # Mac app build output
 .macbuild/
 dist-mac/
-macapp/icon.icns

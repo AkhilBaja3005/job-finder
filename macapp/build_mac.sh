@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds "Job Finder.app" and a .dmg on a Mac.   Usage: macapp/build_mac.sh
-# Needs Python 3.11 or 3.12 and the Xcode command line tools (hdiutil, sips, iconutil). No Node needed.
+# Needs Python 3.11 or 3.12 and the Xcode command line tools (hdiutil). No Node needed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -11,15 +11,6 @@ VENV=".macbuild/venv"
 source "$VENV/bin/activate"
 pip install -q --upgrade pip
 pip install -q -r backend/requirements.txt -r macapp/requirements-app.txt
-
-# App icon from the web app's icon (optional: skipped if the tools or the file are missing)
-if [ ! -f macapp/icon.icns ] && [ -f frontend/public/favicon-192.png ]; then
-  ICONSET=".macbuild/icon.iconset"; rm -rf "$ICONSET"; mkdir -p "$ICONSET"
-  for s in 16 32 64 128 256 512; do
-    sips -z $s $s frontend/public/favicon-192.png --out "$ICONSET/icon_${s}x${s}.png" >/dev/null 2>&1 || true
-  done
-  iconutil -c icns "$ICONSET" -o macapp/icon.icns 2>/dev/null || true
-fi
 
 rm -rf dist-mac
 pyinstaller macapp/job_finder.spec --noconfirm --distpath dist-mac --workpath .macbuild/work

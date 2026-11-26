@@ -22,16 +22,25 @@ Apple Silicon (M1 and later) only for now. Install Google Chrome first: the agen
 3. **Scan:** set the roles and limits. Leave it on **Practice run** first: the agent fills every form but never presses Submit.
 4. When the practice run looks right, switch to **Apply for real**. The app asks you to confirm before it starts.
 
-## The screens
+## The window
 
-| Screen | What it does |
-|---|---|
-| Scan | Roles, location, how recent, minimum ATS score, title keywords, sites to skip, how many applications, and which AI drives the browser. Live log and counters (checked, submitted, need your review, skipped). Stop ends the run. |
-| Results | Every job the agent recorded, newest first, with its status and ATS score. "Open" shows the job page. |
-| Settings | Your folder, your profile, and your AI keys. |
+One page, kept small:
 
-Closing the window stops a run that is still going. The browser window the agent opened stays open so you can review
-the forms it filled.
+- **Search:** roles and location, **Practice run** or **Apply for real**, and Start. **More options** holds how recent, the minimum ATS score, a limit on applications, title keywords, sites to skip, and which AI drives the browser.
+- **Progress:** appears while a run is going: checked, submitted, need review, skipped, and the live log. Stop ends the run.
+- **Applications:** every job the agent recorded, newest first. Open shows the job page.
+- **Settings** (top right): your folder, your profile, and your AI keys.
+
+Closing the window stops a run that is still going. The browser window the agent opened stays open so you can review the forms it filled.
+
+## Supabase
+
+If your folder's `.env` has `SUPABASE_URL` and a key (`SUPABASE_SERVICE_KEY`, or `SUPABASE_KEY`), the app uses your project:
+
+- The top right shows **Synced with Supabase** (or "Supabase not reachable", or "Local only" when it is not set up).
+- **Applications** shows your project's list merged with the local tracker. A cloud mark means the row is in your project.
+- Every scan already records to Supabase as it goes. When a run ends, the app also adds any local application the project does not have yet. **Sync now** does the same on demand. Sync only adds missing rows; it never changes or deletes any.
+- If the project cannot be reached, the app shows the local list and keeps working.
 
 ## Where things live
 

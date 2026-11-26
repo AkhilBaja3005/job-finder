@@ -15,6 +15,9 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import webbrowser
 from collections import deque
 from pathlib import Path
@@ -256,6 +259,10 @@ class ScanRunner:
                     self._lines.append(line)
         self._exit_code = proc.wait()
 
+    def add_line(self, text: str) -> None:
+        with self._lock:
+            self._lines.append(text)
+
     def stop(self) -> Dict[str, Any]:
         proc = self._proc
         if proc is None or proc.poll() is not None:
@@ -285,6 +292,125 @@ class ScanRunner:
         }
 
 
+# ── Supabase (optional) ──────────────────────────────────────────────────────────
+def supabase_settings(ws: Path) -> Optional[Dict[str, str]]:
+    """The project URL and key from the .env, or None when Supabase is not set up. The secret key wins if both exist."""
+    env = read_env(ws)
+    url = env.get("SUPABASE_URL", "").rstrip("/")
+    key = env.get("SUPABASE_SERVICE_KEY") or env.get("SUPABASE_SECRET_KEY") or env.get("SUPABASE_KEY", "")
+    return {"url": url, "key": key} if url and key else None
+
+
+def _supabase_request(cfg: Dict[str, str], path: str, method: str = "GET", body: Any = None, headers: Optional[Dict[str, str]] = None, timeout: float = 20.0) -> Any:
+    request = urllib.request.Request(
+        f"{cfg['url']}/rest/v1/{path}", method=method,
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={"apikey": cfg["key"], "Authorization": f"Bearer {cfg['key']}", "Content-Type": "application/json", **(headers or {})},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as resp:
+        raw = resp.read()
+    return json.loads(raw) if raw else None
+
+
+def cloud_user_id(ws: Path) -> int:
+    """The account id the scanner records applications under (the same rule the scanner uses)."""
+    try:
+        data = json.loads(profile_path(ws).read_text(encoding="utf-8"))
+        return int((data.get("candidate") or {}).get("user_id") or 34)
+    except (OSError, ValueError, TypeError):
+        return 34
+
+
+def supabase_status(ws: Path) -> Dict[str, Any]:
+    cfg = supabase_settings(ws)
+    if not cfg:
+        return {"configured": False, "reachable": False}
+    try:
+        _supabase_request(cfg, f"applications?select=id&limit=1&user_id=eq.{cloud_user_id(ws)}", timeout=6)
+        return {"configured": True, "reachable": True, "host": urllib.parse.urlparse(cfg["url"]).hostname or ""}
+    except Exception as exc:
+        return {"configured": True, "reachable": False, "host": urllib.parse.urlparse(cfg["url"]).hostname or "", "error": str(exc)[:120]}
+
+
+def read_cloud_applications(ws: Path, limit: int = 300) -> List[Dict[str, str]]:
+    cfg = supabase_settings(ws)
+    if not cfg:
+        return []
+    rows = _supabase_request(
+        cfg, f"applications?select=job_title,company,job_url,score,status,source_mode&user_id=eq.{cloud_user_id(ws)}&order=id.desc&limit={limit}",
+    ) or []
+    return [{
+        "company": r.get("company") or "", "title": r.get("job_title") or "", "status": r.get("status") or "",
+        "ats": f"{r['score']}%" if r.get("score") not in (None, "") else "", "platform": r.get("source_mode") or "", "url": r.get("job_url") or "",
+    } for r in rows]
+
+
+def _cloud_urls(cfg: Dict[str, str], user_id: int) -> set:
+    """Every job URL already stored for this account (paged, because the server caps one response)."""
+    urls: set = set()
+    start, page = 0, 1000
+    while True:
+        rows = _supabase_request(
+            cfg, f"applications?select=job_url&user_id=eq.{user_id}&order=id.asc", headers={"Range-Unit": "items", "Range": f"{start}-{start + page - 1}"},
+        ) or []
+        urls.update(r.get("job_url") for r in rows if r.get("job_url"))
+        if len(rows) < page:
+            return urls
+        start += page
+
+
+def _csv_all(ws: Path) -> List[Dict[str, str]]:
+    path = ws / "applications_tracker" / "job_applications_tracker.csv"
+    try:
+        with path.open(newline="", encoding="utf-8") as f:
+            return list(csv.DictReader(f))
+    except OSError:
+        return []
+
+
+def sync_missing_to_supabase(ws: Path) -> Dict[str, Any]:
+    """Adds the applications that are in the local tracker but not yet in the Supabase project. Never changes or deletes rows."""
+    cfg = supabase_settings(ws)
+    if not cfg:
+        return {"ok": False, "error": "Supabase is not set up in this folder's .env."}
+    user_id = cloud_user_id(ws)
+    try:
+        known = _cloud_urls(cfg, user_id)
+        missing, seen = [], set()
+        for row in _csv_all(ws):
+            url = (row.get("Job URL") or "").strip()
+            if not url or url in known or url in seen:
+                continue
+            seen.add(url)
+            try:
+                score = int(re.sub(r"[^0-9]", "", row.get("Overall ATS") or "") or 0)
+            except ValueError:
+                score = 0
+            missing.append({"user_id": user_id, "job_title": row.get("Job Title") or "Role", "company": row.get("Company") or "Company",
+                            "job_url": url, "score": score, "status": row.get("Status") or "saved", "source_mode": row.get("Platform") or "scanner"})
+        for i in range(0, len(missing), 50):
+            _supabase_request(cfg, "applications", "POST", missing[i:i + 50], headers={"Prefer": "return=minimal"})
+        return {"ok": True, "pushed": len(missing), "already": len(known)}
+    except Exception as exc:
+        return {"ok": False, "error": f"Sync failed: {str(exc)[:160]}"}
+
+
+def merge_results(local: List[Dict[str, str]], cloud: List[Dict[str, str]]) -> List[Dict[str, Any]]:
+    """One list for the Results table. A job in both shows the cloud status; `synced` says which rows are in the project."""
+    cloud_by_url = {r["url"]: r for r in cloud if r.get("url")}
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for row in local:
+        url = row.get("url", "")
+        match = cloud_by_url.get(url)
+        out.append({**row, "status": (match or row).get("status", ""), "synced": bool(match)})
+        seen.add(url)
+    for row in cloud:
+        if row.get("url") not in seen:
+            out.append({**row, "synced": True})
+    return out
+
+
 # ── results ──────────────────────────────────────────────────────────────────────
 def read_tracker(ws: Path, limit: int = 300) -> List[Dict[str, str]]:
     path = ws / "applications_tracker" / "job_applications_tracker.csv"
@@ -309,6 +435,7 @@ class Api:
     def __init__(self, launcher: List[str]):
         self._runner = ScanRunner(launcher)
         self._window: Any = None
+        self._synced_after_run = True  # nothing to sync until a run has been started
 
     def _bind(self, window: Any) -> None:
         self._window = window
@@ -317,7 +444,7 @@ class Api:
         ws = workspace_dir()
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
-            "running": self._runner.running, "version": _app_version(),
+            "running": self._runner.running, "version": _app_version(), "supabase": supabase_status(ws),
         }
 
     def save_prefs(self, form: Dict[str, Any]) -> Dict[str, Any]:
@@ -329,7 +456,9 @@ class Api:
         if not read_preferences(ws)["profile_exists"]:
             return {"ok": False, "error": "No profile yet. Open Settings and build or choose a profile first."}
         write_preferences(ws, form)
-        return self._runner.start(build_scan_args(form), build_run_env(form, ws), ws, "scan")
+        result = self._runner.start(build_scan_args(form), build_run_env(form, ws), ws, "scan")
+        self._synced_after_run = not result.get("ok")
+        return result
 
     def run_command(self, name: str, extra: Optional[List[str]] = None) -> Dict[str, Any]:
         """Runs a short CLI command (doctor, profile sync) and shows its output in the log."""
@@ -342,10 +471,33 @@ class Api:
         return self._runner.stop()
 
     def poll(self, offset: int = 0) -> Dict[str, Any]:
-        return self._runner.poll(int(offset))
+        result = self._runner.poll(int(offset))
+        if not result["running"] and not self._synced_after_run:
+            self._synced_after_run = True  # once per run
+            if supabase_settings(workspace_dir()) and result.get("title") == "scan":
+                threading.Thread(target=self._sync_and_report, daemon=True).start()
+        return result
 
-    def get_results(self) -> List[Dict[str, str]]:
-        return read_tracker(workspace_dir())
+    def _sync_and_report(self) -> None:
+        outcome = sync_missing_to_supabase(workspace_dir())
+        if outcome.get("ok"):
+            self._runner.add_line(f"Synced with your Supabase project: {outcome['pushed']} new application(s) added.")
+        else:
+            self._runner.add_line(outcome.get("error", "Sync failed."))
+
+    def get_results(self) -> List[Dict[str, Any]]:
+        ws = workspace_dir()
+        local = read_tracker(ws)
+        cloud: List[Dict[str, str]] = []
+        if supabase_settings(ws):
+            try:
+                cloud = read_cloud_applications(ws)
+            except Exception:
+                cloud = []  # offline or key rejected: show the local list
+        return merge_results(local, cloud)
+
+    def sync_now(self) -> Dict[str, Any]:
+        return sync_missing_to_supabase(workspace_dir())
 
     def save_key(self, provider: str, value: str) -> Dict[str, Any]:
         var = API_KEYS.get(provider)
