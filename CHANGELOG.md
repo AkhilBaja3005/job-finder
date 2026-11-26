@@ -15,6 +15,24 @@
 - The web app assumed the backend was on port 8000 whenever it was opened on localhost. It now uses the address it is
   served from, and only the Vite dev server points at 8000.
 
+## 1.9.2
+
+### Added
+- `job-finder outcomes`: how every application attempt ended, with a success rate per job site and the most common reason
+  for a miss (`--recent 10` lists the last attempts with their reasons and final-form screenshots). Each attempt is saved
+  as one line in `applications_tracker/run_outcomes.jsonl`.
+
+### Changed
+- The browser agent's default Claude model is now Sonnet. Haiku kept returning output the agent could not read.
+  Text generation still defaults to Haiku. Set `BROWSER_USE_ANTHROPIC_MODEL` to change either.
+- Chrome starts a new process after 6 tabs (was 30), and one application has 10 minutes (was 15). Override with
+  `JOB_FINDER_MAX_TABS` and `BROWSER_USE_TIMEOUT`.
+- A Gemini 503 ("high demand") is retried twice with a short wait before the pipeline moves to another model or provider.
+
+### Fixed
+- Resume upload failing with "Node is not a file input element" (seen on Ashby): the agent is now told how to find the real
+  file input behind the visible button.
+
 ## 1.9.1
 
 ### Fixed

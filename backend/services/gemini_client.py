@@ -371,6 +371,16 @@ def _text_provider_order(custom_api_key: Optional[str] = None) -> List[str]:
     return [n for n in order if usable(n)]
 
 
+_OVERLOAD_RETRIES = 2
+_OVERLOAD_BACKOFF = 1.5  # seconds; the wait grows with each retry
+_sleep = time.sleep
+
+
+def _is_overload(error_text: str) -> bool:
+    """True when the Gemini error text says the model is temporarily overloaded."""
+    return any(marker in error_text for marker in ("503", "unavailable", "overloaded", "high demand"))
+
+
 def _generate_with_gemini(
     prompt: str,
     model_list: list,
@@ -396,7 +406,7 @@ def _generate_with_gemini(
     for model_name in model_list:
         for key_candidate in available_keys:
             client = get_gemini_client(key_candidate)
-            for retry_attempt in range(1):  # Single attempt per key/model variant to fail fast & prevent thread starvation
+            for retry_attempt in range(1 + _OVERLOAD_RETRIES):  # one try, plus short retries only when the model reports overload (503)
                 try:
                     _throttle_for_rpm(model_name)
                     msg_llm = f"[LLM] Attempting generation with model: {model_name} (try {retry_attempt + 1})..."
@@ -436,7 +446,16 @@ def _generate_with_gemini(
                         key_hint = f"...{key_candidate[-4:]}" if len(key_candidate) >= 8 else "key"
                         log_ist(f"[LLM] Model {model_name} with key {key_hint} rate limited (429). Rotating to next API key/fallback model...")
                         break  # Break out to try next candidate key or next model
-                    break # Non-rate-limit client problems move strictly forward to downstream models
+                    if _is_overload(err_str) and retry_attempt < _OVERLOAD_RETRIES:
+                        # A 503 means the model is busy for a moment. Waiting a second or two usually works,
+                        # and is better than dropping to a weaker model or another provider on the first spike.
+                        delay = _OVERLOAD_BACKOFF * (retry_attempt + 1)
+                        # pyrefly: ignore [missing-import]
+                        from services.log_queue import log_ist
+                        log_ist(f"[LLM] Model {model_name} is overloaded (503). Retrying in {delay:g}s...")
+                        _sleep(delay)
+                        continue
+                    break # Other client problems move strictly forward to downstream models
 
     raise RuntimeError(f"All sequence pipelines and model alternatives exhausted. Final floor exception: {last_error}")
 # ─────────────────────────────────────────────────────────────────────────────
