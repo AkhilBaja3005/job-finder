@@ -243,6 +243,26 @@ function App() {
   }, []);
 
   
+  // Sends the sync key to the extension that is already installed from the Chrome Web Store. Nothing is downloaded.
+  const syncKeyToExtension = (syncCode) => {
+    const targetKey = syncCode || (user && user.sync_code) || '';
+    if (!targetKey) { showToast('Sign in first to get your sync key.', 'error'); return; }
+    let synced = false;
+    const handleResponse = (event) => {
+      if (event.data && event.data.type === 'SYNC_JOB_FINDER_KEY_SUCCESS') {
+        synced = true;
+        showToast('Extension synced. You can close this window.', 'success');
+        window.removeEventListener('message', handleResponse);
+      }
+    };
+    window.addEventListener('message', handleResponse);
+    window.postMessage({ type: 'SYNC_JOB_FINDER_KEY', syncKey: targetKey }, '*');
+    setTimeout(() => {
+      window.removeEventListener('message', handleResponse);
+      if (!synced) showToast('The extension did not answer. Install it from the Chrome Web Store, then try again.', 'error');
+    }, 2000);
+  };
+
   // 1-Click Chrome Extension Auto-Sync & Auto-Download Handler
   const handleOneClickExtensionSync = (syncCode) => {
     const targetKey = syncCode || (user && user.sync_code) || (localStorage.getItem('guest_token') ? localStorage.getItem('guest_token').replace('guest-', '').slice(0, 6).toUpperCase() : '');
@@ -2843,12 +2863,12 @@ function App() {
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer'
                     }}
                     onClick={() => {
-                      handleOneClickExtensionSync(user.sync_code);
+                      syncKeyToExtension(user.sync_code);
                       setShowExtensionGuide(true);
                       setProfileDropdownOpen(false);
                     }}
                   >
-                    <span>1-Click Auto-Sync & Download</span>
+                    <span>Sync key to extension</span>
                   </button>
 
                   <button
@@ -2932,7 +2952,6 @@ function App() {
             user={user}
             userToken={authToken}
             initialSection="quickstart"
-            onDownloadExtension={() => handleOneClickExtensionSync(user?.sync_code)}
             onNavigateMode={(mode) => {
               setDashboardMode(mode);
               window.history.pushState(null, '', '/platform');
@@ -8111,10 +8130,10 @@ function App() {
                   className="btn"
                   style={{ padding: '6px 12px', fontSize: '0.76rem', background: '#0284c7', color: '#fff' }}
                   onClick={() => {
-                    if (user && user.sync_code) handleOneClickExtensionSync(user.sync_code);
+                    if (user && user.sync_code) syncKeyToExtension(user.sync_code);
                   }}
                 >
-                  Re-Download ZIP
+                  Sync my key
                 </button>
                 {user && user.sync_code && (
                   <button
@@ -8155,35 +8174,40 @@ function App() {
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                   <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>1</span>
                   <div>
-                    <strong style={{ color: '#fff' }}>Download & Unzip</strong>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Click <strong>1-Click Auto-Sync & Download</strong> to download your pre-configured ZIP package (e.g. <code>Job_Finder_Extension_GABY48.zip</code>). Double-click to unzip the folder.</div>
+                    <strong style={{ color: '#fff' }}>Install from the Chrome Web Store</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}><a href="https://chromewebstore.google.com/detail/job-finder-ats-tailor/dogakbkhocgjcojmkenahfkggkfneeig" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Open the Job Finder page in the Chrome Web Store</a> and click <strong>Add to Chrome</strong>. It also works in Edge, Brave and Arc. Chrome keeps it up to date by itself.</div>
                   </div>
                 </div>
-
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                   <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>2</span>
                   <div>
-                    <strong style={{ color: '#fff' }}>Open Extensions Page</strong>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>In Google Chrome, open a new tab and go to <code style={{ color: '#38bdf8' }}>chrome://extensions</code></div>
+                    <strong style={{ color: '#fff' }}>Sync your key</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Make sure you are signed in on this page, then click <strong>Sync my key</strong> above. The extension picks up your key automatically; there is nothing to copy or unzip.</div>
                   </div>
                 </div>
-
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                   <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>3</span>
                   <div>
-                    <strong style={{ color: '#fff' }}>Enable Developer Mode</strong>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Toggle the <strong>Developer mode</strong> switch in the top-right corner of Chrome Extensions page.</div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                  <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>4</span>
-                  <div>
-                    <strong style={{ color: '#fff' }}>Load Unpacked Extension</strong>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Click <strong>Load unpacked</strong> button at top-left and select the unzipped <code>extension</code> folder.</div>
+                    <strong style={{ color: '#fff' }}>Open the side panel</strong>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Click the puzzle icon in the Chrome toolbar and choose <strong>Job Finder ATS Tailor</strong>. The panel stays open as you move between tabs.</div>
                   </div>
                 </div>
               </div>
+
+              <details style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                <summary style={{ cursor: 'pointer', color: '#94a3b8' }}>Advanced: install from a zip instead (developers)</summary>
+                <div style={{ marginTop: '8px', lineHeight: 1.6 }}>
+                  The zip is a copy with your key already inside. It does not update by itself.
+                  <div style={{ marginTop: '6px' }}>
+                    <button className="btn" style={{ padding: '6px 12px', fontSize: '0.76rem', background: 'transparent', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.4)' }} onClick={() => { if (user && user.sync_code) handleOneClickExtensionSync(user.sync_code); }}>Download the zip</button>
+                  </div>
+                  <ol style={{ margin: '8px 0 0', paddingLeft: '18px' }}>
+                    <li>Unzip the file to a folder.</li>
+                    <li>Open <code style={{ color: '#38bdf8' }}>chrome://extensions</code> and turn on <strong>Developer mode</strong> (top right).</li>
+                    <li>Click <strong>Load unpacked</strong> and choose the unzipped folder.</li>
+                  </ol>
+                </div>
+              </details>
             </div>
 
             <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '14px', textAlign: 'center' }}>

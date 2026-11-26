@@ -756,3 +756,73 @@ def test_check_replies_updates_matching_rows(tmp_path, monkeypatch):
     assert out["ok"] and out["updated"] == 1 and out["changes"] == [{"company": "Beta", "stage": "interview"}]
     assert [r["Status"] for r in scan_panel._csv_all(ws)] == ["Applied", "Applied", "Interview"]
     assert scan_panel.check_replies(ws)["updated"] == 0  # a second check changes nothing
+
+
+def test_saved_answers_form_goes_through_the_app_bridge(tmp_path, monkeypatch):
+    import scan_panel
+    monkeypatch.setattr(scan_panel, "workspace_dir", lambda: tmp_path)
+    api = scan_panel.Api.__new__(scan_panel.Api)
+    first = api.get_saved_answers()
+    assert first["ok"] and first["items"] == [] and first["suggestions"] and first["max_entries"] == 40
+    assert api.save_saved_answers([{"question": "Start date", "answer": "1 March"}]) == {"ok": True, "saved": 1}
+    assert api.get_saved_answers()["items"] == [{"question": "Start date", "answer": "1 March"}]
+
+
+def test_tour_covers_the_account_replies_answers_and_schedule_rows():
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[2] / "macapp" / "panel" / "app.js").read_text()
+    for selector in ('"#c-sync"', '"#c-mailbox"', "edit-answers", '"#sched-time"'):
+        assert selector in js, selector
+
+
+def test_locked_supabase_project_gets_a_clear_message(tmp_path, monkeypatch):
+    import urllib.error
+    import scan_panel
+    scan_panel.write_env_value(tmp_path, "SUPABASE_URL", "https://abc.supabase.co")
+    scan_panel.write_env_value(tmp_path, "SUPABASE_KEY", "sb_publishable_example")
+
+    def locked(*a, **k):
+        raise urllib.error.HTTPError("u", 401, "permission denied", {}, None)
+
+    monkeypatch.setattr(scan_panel, "_supabase_request", locked)
+    status = scan_panel.supabase_status(tmp_path)
+    assert status["configured"] and not status["reachable"] and status["denied"] is True
+    assert "SUPABASE_SERVICE_KEY" in status["error"] and "sync code" in status["error"]
+
+
+def test_dmg_holds_the_app_and_an_applications_shortcut():
+    from pathlib import Path
+    script = (Path(__file__).resolve().parents[2] / "macapp" / "build_mac.sh").read_text()
+    assert 'ln -s /Applications "$STAGE/Applications"' in script
+    assert 'ditto "dist-mac/Job Finder.app" "$STAGE/Job Finder.app"' in script
+    assert '-srcfolder "$STAGE"' in script  # the image is made from the staged folder, not the bare app
+
+
+# ── background processes stay out of the Dock ────────────────────────────────────
+def test_dock_helper_is_safe_everywhere(monkeypatch):
+    from utils import dock
+    assert isinstance(dock.hide_dock_icon(), bool)
+    assert dock.hide_dock_icon() == dock.hide_dock_icon()   # calling it twice is fine
+    monkeypatch.setattr(dock.sys, "platform", "linux")
+    assert dock.hide_dock_icon() is False
+
+
+def test_window_runs_its_children_through_the_console_build(tmp_path, monkeypatch):
+    import sys
+    import job_finder_app
+    gui = tmp_path / "Job Finder"
+    cli = tmp_path / "job-finder-cli"
+    gui.write_text("")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(gui))
+    assert job_finder_app.launcher_command() == [str(gui), "--cli"]            # older bundle without the console build
+    cli.write_text("")
+    assert job_finder_app.launcher_command() == [str(cli), "--cli"]
+
+
+def test_bundle_builds_a_console_program_and_ci_checks_it():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    spec = (root / "macapp" / "job_finder.spec").read_text()
+    assert 'name="job-finder-cli", console=True' in spec and "COLLECT(exe, exe_cli" in spec
+    assert "job-finder-cli" in (root / ".github" / "workflows" / "build_desktop_apps.yml").read_text()

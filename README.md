@@ -82,8 +82,8 @@ The project includes a Manifest V3 Chrome Extension located in the `/extension` 
 - **Chrome MV3 Persistent Side Panel**: Docks permanently to the right side of the browser, remaining open across form filling, job scrolling, and tab switching without auto-dismissing.
 - **Offline Fallback & Cached Resilience**: When offline or if the backend server is non-responsive, the extension automatically falls back to local storage and displays a cached ATS score indicator (`Offline Cached Score`).
 - **Live Tab Synchronization & Rescan Tab**: Automatically synchronizes and extracts the active job page when switching tabs; dedicated rescan button forces fresh live extraction.
-- **Auto-Update Detection Banner**: Notifies you directly in the side panel when an updated extension version is available with a 1-click zip download button.
-- **Zero-Config Download Package**: Pre-bakes your 6-digit Sync Key and backend server endpoint directly into the downloaded extension zip for instant zero-configuration onboarding.
+- **Automatic updates**: the Chrome Web Store version updates itself. A zip install shows a banner in the side panel when a newer version exists.
+- **One-click key sync**: the website sends your 6-digit Sync Key to the installed extension, so there is nothing to copy or unzip.
 - **In-Page Job Extraction**: Auto-detects Job Title, Company Name, and Full Description on **LinkedIn**, **Indeed**, **Workday**, **Greenhouse**, **Lever**, **Ashby**, and custom career sites.
 - **Interactive JD Paste & Edit**: Paste raw JD text or adjust job titles on complex single-page apps (SPAs) or iframe job listings with live ATS rescoring.
 - **1-Click Email Tailored Package**: Compiles the single-page LaTeX resume and emails the PDF package to your inbox in one click.
@@ -91,11 +91,11 @@ The project includes a Manifest V3 Chrome Extension located in the `/extension` 
 - **Cover Letter & Recruiter Outreach Generator**: Drafts tailored cover letters (<300 words) and personalized LinkedIn cold outreach messages.
 
 ### Installing the Chrome Extension
-1. Open Google Chrome (or any Chromium browser like Brave / Edge / Arc).
-2. Navigate to `chrome://extensions/`.
-3. Enable **Developer mode** in the top-right corner.
-4. Click **Load unpacked** and select the [`extension/`](file:///Users/akhilbaja/Documents/Akhil/Job%20Finder/extension) directory (or unzip the package downloaded from the web dashboard).
-5. Click the extension icon in your Chrome toolbar to open the docked Side Panel!
+1. Open [Job Finder ATS Tailor in the Chrome Web Store](https://chromewebstore.google.com/detail/job-finder-ats-tailor/dogakbkhocgjcojmkenahfkggkfneeig) and click **Add to Chrome** (Brave, Edge and Arc work too).
+2. Sign in at [job-finder.space](https://www.job-finder.space) and click **Sync my key**. The extension picks up your Sync Key automatically.
+3. Click the extension icon in your Chrome toolbar to open the docked Side Panel.
+
+Developers can instead open `chrome://extensions/`, turn on **Developer mode**, click **Load unpacked** and choose the [`extension/`](extension) folder.
 
 ---
 

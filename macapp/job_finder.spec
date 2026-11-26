@@ -93,7 +93,12 @@ else:
     exe = EXE(  # noqa: F821
         pyz, a.scripts, [], exclude_binaries=True, name="Job Finder", console=False, argv_emulation=False,
     )
-    coll = COLLECT(exe, a.binaries, a.datas, name="Job Finder")  # noqa: F821
+    # The same program built as a console tool. The window starts it for every scan, install and daily run; being a console
+    # program it does not register as an app, so it never bounces in the Dock.
+    exe_cli = EXE(  # noqa: F821
+        pyz, a.scripts, [], exclude_binaries=True, name="job-finder-cli", console=True, argv_emulation=False,
+    )
+    coll = COLLECT(exe, exe_cli, a.binaries, a.datas, name="Job Finder")  # noqa: F821
     app = BUNDLE(  # noqa: F821
         coll,
         name="Job Finder.app",

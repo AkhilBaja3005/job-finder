@@ -3,6 +3,7 @@
   "use strict";
 
   const $ = (sel, root) => (root || document).querySelector(sel);
+  const $all = (sel, root) => [...(root || document).querySelectorAll(sel)];
   const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const plural = (n, one, many) => n + " " + (n === 1 ? one : many || one + "s");
 
@@ -302,16 +303,16 @@
         '<div class="setting"><div class="info"><div class="t">Keys are stored privately</div><div class="d">In the .env file inside your folder, readable only by you. They never leave this Mac except to call the provider.</div></div><div class="ctl"><button class="btn" data-open="env">Open .env</button></div></div>' +
       "</section>" +
       '<div class="sect-title">Connections</div><section class="card">' +
-        row("Supabase", sb.configured ? esc(sb.host || "Configured") + (sb.reachable ? " · connected" : " · cannot be reached") : "Not set up. Add SUPABASE_URL and a key to your .env to keep applications in your own project.",
+        row("Supabase", sb.configured ? esc(sb.host || "Configured") + (sb.reachable ? " · connected" : " · " + (sb.error ? esc(sb.error) : "cannot be reached")) : "Not set up. Add SUPABASE_URL and a key to your .env to keep applications in your own project.",
           sb.configured ? badge(sb.reachable ? "Connected" : "Unreachable", sb.reachable ? "good" : "warn") + '<button class="btn" data-act="sync">' + icon("refresh") + "Sync now</button>" : '<button class="btn" data-open="env">Open .env</button>') +
         row("job-finder.space", cl.configured ? (cl.connected ? "Applications are saved to your account" + (cl.email ? " (" + esc(cl.email) + ")" : "") + " and show on the website and in the extension." : esc(cl.error || "Cannot be reached right now.")) : "Save your applications to your job-finder.space account with your sync code. API keys never leave this Mac.",
           cl.configured ? badge(cl.connected ? "Connected" : "Unreachable", cl.connected ? "good" : "warn") + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Disconnect</button>' : '<button class="btn primary" data-act="add-sync">Add sync code…</button>', "c-sync") +
         row("Reply detection", mb.configured ? "Reads the last 30 days of " + esc(mb.user) + " for replies from employers and marks them (reply, interview, rejected, offer). Read only: nothing is sent, deleted or marked read." : "Optional. Connect a mailbox with an app password and replies from employers are marked for you. Automated 'we got your application' mails are ignored.",
-          mb.configured ? '<button class="btn" data-act="check-replies">' + icon("refresh") + 'Check now</button><button class="btn" data-act="disconnect-mailbox">Disconnect</button>' : '<button class="btn" data-act="add-mailbox">Connect…</button>', "c-mailbox") +
+          badge("Beta", "accent") + (mb.configured ? '<button class="btn" data-act="check-replies">' + icon("refresh") + 'Check now</button><button class="btn" data-act="disconnect-mailbox">Disconnect</button>' : '<button class="btn" data-act="add-mailbox">Connect…</button>'), "c-mailbox") +
         row("Daily run", S.sched && S.sched.enabled ? "Runs every day at " + String(S.sched.hour).padStart(2, "0") + ":" + String(S.sched.minute).padStart(2, "0") + (S.sched.real ? ", applying for real." : " as a practice run (nothing is submitted).") + " The Mac must be awake; the app does not need to be open." : "Runs a search every day at a time you choose, without opening the app. Starts as a practice run.",
           '<input class="input" id="sched-time" type="time" value="' + (S.sched && S.sched.enabled ? String(S.sched.hour).padStart(2, "0") + ":" + String(S.sched.minute).padStart(2, "0") : "08:00") + '" style="width:110px" aria-label="Daily run time">' +
           (S.sched && S.sched.enabled ? '<button class="btn" data-act="sched-on">Change time</button><button class="btn" data-act="sched-off">Turn off</button>' : '<button class="btn primary" data-act="sched-on">Turn on</button>')) +
-        row("Saved answers", "Answers to questions your profile does not cover, such as why you want the job. The agent uses them word for word instead of guessing.", '<button class="btn" data-open="answers">Edit…</button>') +
+        row("Saved answers", "Answers to questions your profile does not cover, such as why you want the job. The agent uses them word for word instead of guessing.", '<button class="btn" data-act="edit-answers">Edit…</button>') +
         row("Job site sign-ins", "Opens the agent's Chrome so you can sign in to LinkedIn, Indeed and Reed once. Runs reuse the sign-ins.", '<button class="btn" data-act="open-signin">Open Chrome to sign in</button>') +
         row("Page scraper browser", br.ready ? "Installed" : br.installing ? "Downloading, about 150 MB…" : (br.error ? esc(br.error) : "Needed for some job sources. Downloaded once."), br.ready ? badge("Ready", "good") : br.installing ? badge("Installing", "accent") : '<button class="btn" data-act="install-browser">' + icon("download") + "Install</button>") +
       "</section>" +
@@ -406,6 +407,7 @@
       case "save-mailbox": { const r = await call("save_mailbox", $("#mb-user").value, $("#mb-pass").value, ""); if (r && r.ok) { toast("Mailbox connected."); await refreshInfo(); renderSettings(); } else toast((r && r.error) || "Could not connect.", "bad"); return; }
       case "disconnect-mailbox": { await call("disconnect_mailbox"); toast("Mailbox disconnected."); await refreshInfo(); renderSettings(); return; }
       case "check-replies": { toast("Checking your mailbox…"); const r = await call("check_replies_now"); if (r && r.ok) { toast(r.updated ? plural(r.updated, "application") + " moved forward." : "No new replies found (" + r.checked + " messages read)."); await loadApps(true); await refreshInfo(); } else toast((r && r.error) || "Could not check.", "bad"); return; }
+      case "edit-answers": return void openAnswersEditor();
       case "start-tour": return void startTour();
       case "install-browser": await call("ensure_browser"); await refreshInfo(); renderSettings(); watchBrowser(); return;
       case "sync": { if (S.apps.syncing) return; S.apps.syncing = true; renderView(); const r = await call("sync_now"); S.apps.syncing = false;
@@ -434,18 +436,73 @@
     S._bt = setInterval(async () => { const s = await refreshInfo(); if (S.view === "settings") renderSettings(); if (!s || !s.browser.installing) { clearInterval(S._bt); S._bt = null; } }, 3000);
   }
 
+
+  /* ── Saved answers: a form instead of a JSON file ────────────────────────── */
+  async function openAnswersEditor() {
+    const data = await call("get_saved_answers");
+    if (!data || !data.ok) { toast("Could not open your saved answers.", "bad"); return; }
+    const max = data.max_entries, maxChars = data.max_chars;
+    const items = data.items.length ? data.items.slice() : [{ question: "", answer: "" }];
+    const wrap = document.createElement("div"); wrap.className = "scrim";
+    const rowHtml = (it, i) => '<div class="aa-item" data-i="' + i + '"><div class="aa-head"><label for="aa-q-' + i + '">Question</label>' +
+      '<button type="button" class="btn quiet" data-aa="delete" data-i="' + i + '" aria-label="Delete this answer">Delete</button></div>' +
+      '<input class="input" id="aa-q-' + i + '" data-aa-q="' + i + '" maxlength="200" value="' + esc(it.question) + '" placeholder="e.g. Why do you want to work here?">' +
+      '<label for="aa-a-' + i + '">Your answer</label>' +
+      '<textarea class="input" id="aa-a-' + i + '" data-aa-a="' + i + '" rows="3" maxlength="' + maxChars + '" placeholder="Write it the way you want it typed">' + esc(it.answer) + "</textarea></div>";
+    const draw = () => {
+      const unused = data.suggestions.filter((q) => !items.some((it) => it.question.trim().toLowerCase() === q.toLowerCase()));
+      wrap.innerHTML = '<div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="aa-title"><h2 id="aa-title">Saved answers</h2>' +
+        "<p>Answers to questions your profile does not cover. When a form asks the same thing, the agent types your answer exactly as written instead of guessing.</p>" +
+        '<div class="aa-list">' + items.map(rowHtml).join("") + "</div>" +
+        '<div class="aa-add">' + (items.length < max ? '<button type="button" class="btn" data-aa="add">+ Add an answer</button>' : '<span class="d">You have reached the limit of ' + max + ".</span>") +
+        unused.slice(0, 4).map((q) => '<button type="button" class="chip" data-aa="suggest" data-q="' + esc(q) + '">' + esc(q) + "</button>").join("") + "</div>" +
+        '<div class="btns"><button type="button" class="btn" data-aa="cancel">Cancel</button><button type="button" class="btn primary" data-aa="save">Save</button></div></div>';
+    };
+    const collect = () => $all(".aa-item", wrap).forEach((el) => { items[Number(el.dataset.i)] = { question: $("[data-aa-q]", el).value, answer: $("[data-aa-a]", el).value }; });
+    const close = () => { document.removeEventListener("keydown", onKey, true); wrap.remove(); };
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); close(); } };
+    wrap.addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-aa]");
+      if (!b) { if (e.target === wrap) close(); return; }
+      collect();
+      const act = b.dataset.aa;
+      if (act === "cancel") return close();
+      if (act === "add") { items.push({ question: "", answer: "" }); draw(); const last = $all(".aa-item", wrap).pop(); if (last) $("[data-aa-q]", last).focus(); return; }
+      if (act === "suggest") {
+        const entry = { question: b.dataset.q, answer: "" }, blank = items.findIndex((it) => !it.question.trim() && !it.answer.trim());
+        if (blank >= 0) items[blank] = entry; else items.push(entry);
+        draw(); const el = $('[data-aa-a="' + items.indexOf(entry) + '"]', wrap); if (el) el.focus(); return;
+      }
+      if (act === "delete") { items.splice(Number(b.dataset.i), 1); if (!items.length) items.push({ question: "", answer: "" }); draw(); return; }
+      if (act === "save") {
+        if (items.some((it) => Boolean(it.question.trim()) !== Boolean(it.answer.trim()))) { toast("Each answer needs both a question and an answer.", "bad"); return; }
+        const r = await call("save_saved_answers", items);
+        if (r && r.ok) { close(); toast(r.saved ? plural(r.saved, "answer") + " saved." : "Saved answers cleared."); } else toast("Could not save.", "bad");
+      }
+    });
+    document.addEventListener("keydown", onKey, true); draw(); $("#overlay").appendChild(wrap);
+    const first = $("[data-aa-q]", wrap); if (first) first.focus();
+  }
+
   /* ── Guided tour ─────────────────────────────────────────────────────────── */
   const TOUR = [
-    { view: "settings", sel: "#c-gemini", title: "1. Add an AI key", text: "The agent needs one provider to read job pages and fill forms. Gemini has a free tier. Claude and OpenAI work too. Keys stay in a file on this Mac." },
-    { view: "settings", sel: '[data-act="build-profile"], [data-act="import-profile"]', title: "2. Create your profile", text: "Build it from your resume, or import a profile.json you already have. Every form is filled from it, so details like work authorisation matter." },
-    { view: "settings", sel: '[data-act="open-signin"]', title: "3. Sign in to job sites", text: "LinkedIn, Indeed and Reed work best when you are signed in. This opens the agent's own Chrome once. Sign in, close it, and every run reuses the sign-ins." },
-    { view: "run", sel: "#profile-check", title: "4. Fill what is missing", text: "This list shows profile fields that are still empty. Edit the profile, save, and come back. The list updates by itself." },
-    { view: "run", sel: '[data-tags="roles"]', title: "5. Choose roles", text: "One search runs per role. Leave it empty to use the roles from your profile." },
-    { view: "run", sel: "#f-location", title: "6. Set the location", text: "Where to look for jobs, for example London, UK." },
-    { view: "run", sel: "#run-btn", title: "7. Start with a practice run", text: "A practice run fills every form but never presses Submit, so you can check the result. Switch to Apply for real only when you trust it." },
-    { view: "apps", sel: '[data-nav="apps"]', title: "8. Check your applications", text: "Every job the agent handled is listed here with its status. Rows marked Needs review are waiting for you." },
+    { view: "settings", sel: "#c-gemini", title: "Add an AI key", text: "The agent needs one provider to read job pages and fill forms. Gemini has a free tier. Claude and OpenAI work too. Keys stay in a file on this Mac." },
+    { view: "settings", sel: '[data-act="build-profile"], [data-act="import-profile"]', title: "Create your profile", text: "Build it from your resume, or import a profile.json you already have. Every form is filled from it, so details like work authorisation matter." },
+    { view: "settings", sel: '[data-act="open-signin"]', title: "Sign in to job sites", text: "LinkedIn, Indeed and Reed work best when you are signed in. This opens the agent's own Chrome once. Sign in, close it, and every run reuses the sign-ins." },
+    { view: "settings", sel: "#c-sync", title: "Save applications to your account", text: "Optional. Paste your sync code from job-finder.space and every application is saved to your account, so it shows on the website and in the extension too. API keys and your resume file never leave this computer." },
+    { view: "settings", sel: "#c-mailbox", title: "See replies automatically", text: "Optional. Connect your mailbox with an app password and employer replies, interviews and rejections are marked for you. It only reads, and ignores automatic 'we got your application' emails." },
+    { view: "settings", sel: '[data-act="edit-answers"]', title: "Write answers once", text: "For questions your profile cannot answer, such as why you want the job. The agent types your answer word for word instead of guessing." },
+    { view: "settings", sel: "#sched-time", title: "Run every morning", text: "Optional. Pick a time and a practice run starts by itself, even when the app is closed. The computer must be awake." },
+    { view: "run", sel: "#profile-check", title: "Fill what is missing", text: "This list shows profile fields that are still empty. Edit the profile, save, and come back. The list updates by itself." },
+    { view: "run", sel: '[data-tags="roles"]', title: "Choose roles", text: "One search runs per role. Leave it empty to use the roles from your profile." },
+    { view: "run", sel: "#f-location", title: "Set the location", text: "Where to look for jobs, for example London, UK." },
+    { view: "run", sel: "#run-btn", title: "Start with a practice run", text: "A practice run fills every form but never presses Submit, so you can check the result. Switch to Apply for real only when you trust it." },
+    { view: "apps", sel: '[data-nav="apps"]', title: "Check your applications", text: "Every job the agent handled is listed here with its status. Rows marked Needs review are waiting for you." },
   ];
   async function startTour() {
+    // A step about missing profile fields only makes sense when there are some.
+    const pc = S.info && S.info.profile_check, hasGaps = !!(pc && pc.exists && pc.missing.length);
+    const STEPS = TOUR.filter((t) => t.sel !== "#profile-check" || hasGaps);
     const steps = []; let i = 0;
     const layer = document.createElement("div"); layer.className = "tour"; $("#overlay").appendChild(layer);
     const finish = () => { layer.remove(); document.removeEventListener("keydown", onKey, true); window.removeEventListener("resize", place); call("save_app_prefs", { tour_done: true }); go("run"); };
@@ -462,17 +519,17 @@
       Object.assign(card.style, { left: left + "px", top: top + "px", width: cw + "px" });
     }
     async function show(n) {
-      const step = TOUR[n]; go(step.view); await new Promise((res) => setTimeout(res, 90));
+      const step = STEPS[n]; go(step.view); await new Promise((res) => setTimeout(res, 90));
       const el = document.querySelector(step.sel);
       if (!el) return n >= i ? next(n + 1) : back(n - 1);
       el.scrollIntoView({ block: "center" }); current = { el, step, n };
-      const total = TOUR.length;
+      const total = STEPS.length;
       layer.innerHTML = '<div class="tour-hole"></div><div class="tour-card" role="dialog" aria-label="Guided tour"><div class="tour-n">Step ' + (n + 1) + " of " + total + "</div><h3>" + esc(step.title) + "</h3><p>" + esc(step.text) + '</p><div class="tour-btns"><button class="btn quiet" data-t="skip">Skip tour</button><span class="grow"></span>' +
         (n > 0 ? '<button class="btn" data-t="back">Back</button>' : "") + '<button class="btn primary" data-t="next">' + (n === total - 1 ? "Done" : "Next") + "</button></div></div>";
       i = n; place();
       $('[data-t="next"]', layer).focus();
     }
-    function next(n) { const to = typeof n === "number" ? n : i + 1; if (to >= TOUR.length) return finish(); show(to); }
+    function next(n) { const to = typeof n === "number" ? n : i + 1; if (to >= STEPS.length) return finish(); show(to); }
     function back(n) { const to = typeof n === "number" ? n : i - 1; if (to < 0) return; show(to); }
     layer.addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (!b) return; ({ next, back, skip: finish })[b.dataset.t](); });
     window.addEventListener("resize", place);

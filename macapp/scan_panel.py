@@ -601,6 +601,12 @@ def supabase_status(ws: Path) -> Dict[str, Any]:
     try:
         _supabase_request(cfg, f"applications?select=id&limit=1&user_id=eq.{cloud_user_id(ws)}", timeout=6)
         return {"configured": True, "reachable": True, "host": urllib.parse.urlparse(cfg["url"]).hostname or ""}
+    except urllib.error.HTTPError as exc:
+        host = urllib.parse.urlparse(cfg["url"]).hostname or ""
+        if exc.code in (401, 403):  # the project answered but will not let this key read the table
+            return {"configured": True, "reachable": False, "host": host, "denied": True,
+                    "error": "The project is locked and this key is not allowed to read it. Use the secret key (SUPABASE_SERVICE_KEY) in the .env, or connect with a sync code below instead."}
+        return {"configured": True, "reachable": False, "host": host, "error": f"The project answered with an error ({exc.code})."}
     except Exception as exc:
         return {"configured": True, "reachable": False, "host": urllib.parse.urlparse(cfg["url"]).hostname or "", "error": str(exc)[:120]}
 
@@ -1108,6 +1114,14 @@ class Api:
         env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_dir())
         env["HOME"] = str(Path.home())
         return scheduler.install(int(hour), int(minute), program, ws, logs_dir() / "scheduled.log", env)
+
+    def get_saved_answers(self) -> Dict[str, Any]:
+        from services.saved_answers import SUGGESTIONS, MAX_ENTRIES, MAX_CHARS, load_saved_answers
+        return {"ok": True, "items": load_saved_answers(str(workspace_dir())), "suggestions": SUGGESTIONS, "max_entries": MAX_ENTRIES, "max_chars": MAX_CHARS}
+
+    def save_saved_answers(self, items: List[Dict[str, str]]) -> Dict[str, Any]:
+        from services.saved_answers import save_saved_answers
+        return {"ok": True, **save_saved_answers(str(workspace_dir()), items)}
 
     def problem_report(self) -> Dict[str, Any]:
         return {"ok": True, "text": diagnostics_report(workspace_dir())}

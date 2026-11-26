@@ -1,6 +1,101 @@
 import React, { useState, useEffect } from 'react';
 import { APP_VERSION, EXTENSION_VERSION } from '../config/constants';
 
+const DESKTOP_RELEASE = 'https://github.com/AkhilBaja3005/job-finder/releases/download/desktop-latest/';
+const DESKTOP_FILES = {
+  'mac-arm': { name: 'Mac (Apple Silicon)', file: 'Job-Finder-arm64.dmg' },
+  'mac-intel': { name: 'Mac (Intel)', file: 'Job-Finder-x86_64.dmg' },
+  windows: { name: 'Windows', file: 'Job-Finder-windows.zip' },
+};
+
+// Which download fits this visitor? 'windows', 'mac-arm', 'mac-intel', or 'other' (phones, tablets, Linux: no app for them).
+// A Mac's chip cannot be read by every browser. Chrome and Edge say it; Safari and Firefox do not, so those get the
+// Apple Silicon file (every Mac since 2020) and a small link for Intel Macs.
+function useDesktopPlatform() {
+  const read = () => {
+    try {
+      const ua = `${navigator.userAgent || ''} ${navigator.platform || ''}`;
+      if (/iPhone|iPad|iPod|Android/i.test(ua)) return { kind: 'other', sure: true };
+      if (/Win/i.test(ua)) return { kind: 'windows', sure: true };
+      // An iPad asking for the desktop site calls itself a Mac but has a touch screen; no Mac does.
+      if (/Mac/i.test(ua)) return (navigator.maxTouchPoints || 0) > 1 ? { kind: 'other', sure: true } : { kind: 'mac-arm', sure: false };
+    } catch (e) { /* no navigator */ }
+    return { kind: 'other', sure: true };
+  };
+  const [platform, setPlatform] = useState(read);
+  useEffect(() => {
+    if (platform.kind !== 'mac-arm') return undefined;
+    let cancelled = false;
+    try {
+      const data = navigator.userAgentData;
+      if (data && data.getHighEntropyValues) {
+        data.getHighEntropyValues(['architecture']).then((v) => {
+          if (cancelled || !v || !v.architecture) return;
+          setPlatform({ kind: /arm/i.test(v.architecture) ? 'mac-arm' : 'mac-intel', sure: true });
+        }).catch(() => {});
+      }
+    } catch (e) { /* keep the guess */ }
+    return () => { cancelled = true; };
+  }, [platform.kind]);
+  return platform;
+}
+
+function DownloadSection({ platform }) {
+  const fit = DESKTOP_FILES[platform.kind];
+  const isMac = platform.kind === 'mac-arm' || platform.kind === 'mac-intel';
+  const otherMac = platform.kind === 'mac-intel' ? DESKTOP_FILES['mac-arm'] : DESKTOP_FILES['mac-intel'];
+  return (
+    <section id="download-app" style={{
+      background: 'var(--panel-bg)',
+      border: '1px solid var(--border-color)',
+      borderRadius: '14px',
+      padding: '32px 28px',
+      marginBottom: '40px',
+      display: 'flex',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '24px'
+    }}>
+      <div style={{ flex: '1 1 320px', maxWidth: '520px' }}>
+        <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#38BDF8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>
+          Desktop app
+        </div>
+        <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#FFFFFF', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+          Run it on your own computer
+        </h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.6, margin: 0 }}>
+          Search jobs and fill applications with your own browser. Free, and it starts with a practice run that never submits.
+        </p>
+      </div>
+      {fit ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+          <a
+            href={DESKTOP_RELEASE + fit.file}
+            rel="noopener noreferrer"
+            className="btn"
+            style={{ padding: '12px 24px', fontSize: '0.9rem', fontWeight: 700, whiteSpace: 'nowrap', textDecoration: 'none' }}
+          >
+            Download for {fit.name}
+          </a>
+          {isMac && (
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              {platform.sure ? 'Wrong chip? ' : 'Mac from before 2020 (Intel chip)? '}
+              <a href={DESKTOP_RELEASE + otherMac.file} rel="noopener noreferrer" style={{ color: '#38BDF8', textDecoration: 'none' }}>
+                Download for {otherMac.name}
+              </a>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ maxWidth: '300px', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          The desktop app is for Mac and Windows computers. Open this page on your computer to download it.
+        </div>
+      )}
+    </section>
+  );
+}
+
 function AnimatedCounter({ target, suffix = '', duration = 1800 }) {
   const [count, setCount] = useState(1);
 
@@ -44,6 +139,7 @@ function AnimatedCounter({ target, suffix = '', duration = 1800 }) {
  *  4. Quick Navigation Actions (Launch App, Setup Guide, Full Docs)
  */
 export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
+  const desktopPlatform = useDesktopPlatform();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedDemoTab, setSelectedDemoTab] = useState('matching');
   const [contactName, setContactName] = useState('');
@@ -277,6 +373,15 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
             Docs & Setup Guide
           </button>
         </div>
+
+        {desktopPlatform.kind !== 'other' && (
+          <a
+            href="#download-app"
+            style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textDecoration: 'none' }}
+          >
+            Also available as a {desktopPlatform.kind === 'windows' ? 'Windows' : 'Mac'} app <span style={{ color: '#38BDF8' }}>Download</span>
+          </a>
+        )}
       </section>
 
       {/* Quick Stats Banner with Fluid Animated Counters */}
@@ -558,6 +663,8 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
           ))}
         </div>
       </section>
+
+      <DownloadSection platform={desktopPlatform} />
 
       {/* Contact & Developer Feedback Section */}
       <section style={{

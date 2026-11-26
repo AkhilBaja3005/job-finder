@@ -13,6 +13,13 @@ from typing import Dict, Any, List, Optional
 # Ensure backend root is on sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# A tool server has no window: keep Python out of the Mac Dock (the bouncing rocket icon).
+try:
+    from utils.dock import hide_dock_icon
+    hide_dock_icon()
+except Exception:
+    pass
+
 from job_finder_mcp.tools.discovery_tools import DISCOVERY_TOOLS_SPEC, handle_search_jobs, handle_scrape_job_posting
 from job_finder_mcp.tools.ats_tools import ATS_TOOLS_SPEC, handle_calculate_ats_score, handle_analyze_skill_gap, handle_extract_seniority_salary
 from job_finder_mcp.tools.resume_tools import RESUME_TOOLS_SPEC, handle_tailor_resume_latex, handle_compile_latex_metrics, handle_export_overleaf_bundle, handle_parse_and_convert_to_latex
