@@ -63,4 +63,5 @@ def test_unknown_token_with_healthy_supabase_is_cached_as_guest(monkeypatch):
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     monkeypatch.setattr(auth, "supabase_request", lambda *a, **k: [])
     user = auth.get_user_by_token("totally-unknown-token")
+    assert user is not None
     assert user["is_guest"] and not user.get("lookup_failed")

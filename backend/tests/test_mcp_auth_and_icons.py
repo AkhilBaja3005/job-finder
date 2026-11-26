@@ -46,6 +46,7 @@ def test_test_token_shortcut_is_off_outside_tests(monkeypatch):
     monkeypatch.delenv("ALLOW_TEST_TOKENS", raising=False)
     monkeypatch.setattr(auth, "supabase_request", lambda *a, **k: None)
     user = auth.get_user_by_token("test_anything")
+    assert user is not None
     assert user.get("id") != "test_user_id"
     assert user.get("is_guest") is True
 
