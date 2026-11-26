@@ -3,12 +3,13 @@
 ## Unreleased
 
 ### Added
-- Mac app (Apple Silicon, unsigned for now) for the job search and auto-apply part: `Job Finder.app` is a control panel for
-  `job-finder scan`. Choose roles, location, limits and whether to practise or apply for real, then watch the agent work,
-  stop it, and see the results. One minimal page with the Job Finder logo as the window and app icon. It uses your existing Job Finder
-  folder if you point it at one, and when `SUPABASE_URL` and a key are in the `.env` it shows your project's applications and adds any
-  local ones the project is missing. Build it with
-  `macapp/build_mac.sh`, or run the "Build Mac app" workflow, which attaches the .dmg to a release. See `macapp/README.md`.
+- Mac app (Apple Silicon, unsigned for now) for the job search and auto-apply part: `Job Finder.app` is a native-feeling control panel
+  for `job-finder scan`. A sidebar app with Run, Applications and Settings; a first-run checklist; a confirmation dialog before applying
+  for real; a live activity log with counts; Mac notifications; update checks; one log file per run; a real menu bar (Cmd+C and Cmd+V work
+  in every field); a unified title bar; and the Job Finder logo as the app icon. It uses your existing Job Finder folder if you point it at
+  one. When `SUPABASE_URL` and a key are in the `.env`, it shows your project's applications and adds any local ones the project is missing.
+  The page scraper's browser downloads on first launch, with a visible status and a Retry button. Build it with `macapp/build_mac.sh`, or run
+  the "Build Mac app" workflow, which attaches the .dmg to a release. See `macapp/README.md`.
 
 ### Fixed
 - The web app assumed the backend was on port 8000 whenever it was opened on localhost. It now uses the address it is

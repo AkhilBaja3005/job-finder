@@ -15,31 +15,35 @@ Apple Silicon (M1 and later) only for now. Install Google Chrome first: the agen
 
 ## First run
 
-1. **Settings, AI keys:** paste at least one key (Gemini is free to start).
-2. **Settings, Your folder:** if you already use the command line tool, choose **Use my existing Job Finder folder** and
-   pick the folder that has your `candidate_profile.json` and `.env`. Otherwise use **Build profile from my resume** to
-   create a profile from a PDF.
-3. **Scan:** set the roles and limits. Leave it on **Practice run** first: the agent fills every form but never presses Submit.
-4. When the practice run looks right, switch to **Apply for real**. The app asks you to confirm before it starts.
+The Run screen shows a short checklist until you are set up:
+
+1. **Add an AI key** (Settings, AI providers). Gemini has a free tier.
+2. **Create your profile** from your resume, or in Settings choose **Change…** and pick the folder your command line tool already uses.
+3. **Connect Supabase** (optional).
+
+Start with **Practice run**: the agent fills every form but never presses Submit. When it looks right, switch to **Apply for real**; the app asks you to confirm, showing the roles, location and limit.
 
 ## The window
 
-One page, kept small:
+| Screen | What it does |
+|---|---|
+| **Run** | Roles (type and press Return), location, how recent, practice or real. **Advanced** has the minimum ATS score, a limit, title keywords, sites to skip, and which AI drives the browser. Activity shows progress, counts, and the live log. |
+| **Applications** | Every job recorded, with status, ATS match and a cloud mark for rows in your Supabase project. Search, filter, sort, open the job page, **Sync now**. |
+| **Settings** | Your folder, profile, AI keys, Supabase, the scraper browser, updates and log files. |
 
-- **Search:** roles and location, **Practice run** or **Apply for real**, and Start. **More options** holds how recent, the minimum ATS score, a limit on applications, title keywords, sites to skip, and which AI drives the browser.
-- **Progress:** appears while a run is going: checked, submitted, need review, skipped, and the live log. Stop ends the run.
-- **Applications:** every job the agent recorded, newest first. Open shows the job page.
-- **Settings** (top right): your folder, your profile, and your AI keys.
+Shortcuts: Cmd+Return start or stop, Cmd+. stop, Cmd+1/2/3 switch screens, Cmd+, settings. The usual Edit shortcuts (copy, paste, select all, undo) work in every field.
 
-Closing the window stops a run that is still going. The browser window the agent opened stays open so you can review the forms it filled.
+The app also: remembers its window size, opens only once, shows a notification when a run ends, checks GitHub for a newer version (it only reads the public releases page), and keeps its own log plus one log per run in `~/Library/Logs/Job Finder`.
+
+The page's first-run download of the page scraper's browser (about 150 MB) happens in the background with a status banner and a Retry button.
 
 ## Supabase
 
 If your folder's `.env` has `SUPABASE_URL` and a key (`SUPABASE_SERVICE_KEY`, or `SUPABASE_KEY`), the app uses your project:
 
-- The top right shows **Synced with Supabase** (or "Supabase not reachable", or "Local only" when it is not set up).
-- **Applications** shows your project's list merged with the local tracker. A cloud mark means the row is in your project.
-- Every scan already records to Supabase as it goes. When a run ends, the app also adds any local application the project does not have yet. **Sync now** does the same on demand. Sync only adds missing rows; it never changes or deletes any.
+- The sidebar shows **Synced with Supabase** (or "Supabase unreachable", or "Local only").
+- **Applications** shows your project's list merged with the local tracker.
+- Every scan already records to Supabase as it goes. When a run ends the app also adds any local application the project does not have yet. **Sync now** does the same on demand. Sync only adds missing rows; it never changes or deletes any.
 - If the project cannot be reached, the app shows the local list and keeps working.
 
 ## Where things live
@@ -69,9 +73,18 @@ The app bundle can also run the command line tool directly, which is what the wi
 macapp/build_mac.sh        # needs Python 3.12 and the Xcode command line tools
 ```
 
-This produces `dist-mac/Job Finder.app` and a `.dmg`. CI does the same with `.github/workflows/build_mac_app.yml`.
+This produces `dist-mac/Job Finder.app` and a `.dmg`. CI does the same with `.github/workflows/build_mac_app.yml`, then opens the built app's real window and checks that the page and the Python bridge came up (`JOB_FINDER_APP_SELFTEST=1`).
 
-For development, without building:
+## Working on the window
+
+The window is plain HTML, CSS and JavaScript in `macapp/panel/` (no build step). To work on it in a normal browser, serve that folder and open the mock:
+
+```bash
+cd macapp/panel && python3 -m http.server 8777
+# open http://127.0.0.1:8777/dev/index.html  (add ?fresh, ?local, ?empty or ?update to see other states)
+```
+
+`dev/mock-api.js` stands in for the Python side and is not shipped. To run the real app from source:
 
 ```bash
 pip install -r backend/requirements.txt -r macapp/requirements-app.txt

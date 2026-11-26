@@ -7,9 +7,12 @@ process, and shows the output and the tracker. Everything here works without a w
 from __future__ import annotations
 
 import csv
+import functools
 import json
+import logging
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -53,6 +56,20 @@ def save_app_config(config: Dict[str, Any]) -> None:
     home = app_support_dir()
     home.mkdir(parents=True, exist_ok=True)
     (home / "app.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
+
+
+def logs_dir() -> Path:
+    """Where the app and each run write their logs: ~/Library/Logs/Job Finder (inside the app folder when that is overridden)."""
+    override = os.environ.get("JOB_FINDER_APP_HOME")
+    return Path(override) / "logs" if override else Path.home() / "Library" / "Logs" / APP_NAME
+
+
+APP_PREF_KEYS = ("primary_ai", "headless")
+
+
+def load_app_prefs() -> Dict[str, Any]:
+    cfg = load_app_config()
+    return {"primary_ai": cfg.get("primary_ai", "auto"), "headless": bool(cfg.get("headless", False))}
 
 
 def workspace_dir() -> Path:
@@ -213,6 +230,17 @@ def count_progress(lines: List[str]) -> Dict[str, int]:
     return counts
 
 
+# ── the page scraper's browser ───────────────────────────────────────────────────
+def browsers_dir() -> Path:
+    return Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or app_support_dir() / "browsers")
+
+
+def browser_ready() -> bool:
+    """True once Playwright has finished installing its Chromium. It writes INSTALLATION_COMPLETE in each finished folder."""
+    root = browsers_dir()
+    return any(root.glob("chromium*/INSTALLATION_COMPLETE")) if root.is_dir() else False
+
+
 # ── running a scan ───────────────────────────────────────────────────────────────
 class ScanRunner:
     """One child process at a time, with its output kept in memory for the window to read."""
@@ -225,6 +253,7 @@ class ScanRunner:
         self._lock = threading.Lock()
         self._exit_code: Optional[int] = None
         self._title = ""
+        self._logfile: Any = None
 
     @property
     def running(self) -> bool:
@@ -238,6 +267,13 @@ class ScanRunner:
             self._dropped = 0
             self._exit_code = None
             self._title = title
+            try:
+                directory = logs_dir()
+                directory.mkdir(parents=True, exist_ok=True)
+                prune_logs(directory)
+                self._logfile = open(directory / f"scan-{time.strftime('%Y%m%d-%H%M%S')}-{title}.log", "w", encoding="utf-8")
+            except OSError:
+                self._logfile = None
             try:
                 self._proc = subprocess.Popen(
                     self._launcher + args, cwd=str(cwd), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -253,11 +289,22 @@ class ScanRunner:
         for raw in proc.stdout:
             line = ANSI_RE.sub("", raw.rstrip("\n")).replace("\r", "")
             if line.strip():
+                if self._logfile:
+                    try:
+                        self._logfile.write(line + "\n")
+                        self._logfile.flush()
+                    except (OSError, ValueError):
+                        pass
                 with self._lock:
                     if len(self._lines) == self._lines.maxlen:
                         self._dropped += 1
                     self._lines.append(line)
         self._exit_code = proc.wait()
+        if self._logfile:
+            try:
+                self._logfile.close()
+            except OSError:
+                pass
 
     def add_line(self, text: str) -> None:
         with self._lock:
@@ -290,6 +337,52 @@ class ScanRunner:
             "lines": lines[start:], "next": dropped + len(lines), "running": self.running,
             "exit_code": self._exit_code, "counts": count_progress(lines), "title": self._title,
         }
+
+
+# ── updates, Chrome, notifications ───────────────────────────────────────────────
+RELEASES_URL = "https://api.github.com/repos/AkhilBaja3005/job-finder/releases/latest"
+
+
+def _version_tuple(text: str) -> tuple:
+    return tuple(int(n) for n in re.findall(r"\d+", text)[:3])
+
+
+def check_for_update(current: str, fetch: Any = None) -> Dict[str, Any]:
+    """Asks GitHub for the latest release. Sends nothing about you; it is a plain request for a public page."""
+    try:
+        if fetch is None:
+            request = urllib.request.Request(RELEASES_URL, headers={"Accept": "application/vnd.github+json", "User-Agent": "Job-Finder-App"})
+            with urllib.request.urlopen(request, timeout=6) as resp:
+                data = json.load(resp)
+        else:
+            data = fetch()
+        latest = str(data.get("tag_name", "")).lstrip("v")
+        return {"ok": True, "current": current, "latest": latest, "newer": bool(latest) and _version_tuple(latest) > _version_tuple(current),
+                "url": data.get("html_url") or "https://github.com/AkhilBaja3005/job-finder/releases"}
+    except Exception as exc:
+        return {"ok": False, "error": "Could not check for updates: " + str(exc)[:80]}
+
+
+def chrome_found() -> bool:
+    return any(Path(p).exists() for p in ("/Applications/Google Chrome.app", str(Path.home() / "Applications" / "Google Chrome.app"))) or bool(shutil.which("google-chrome"))
+
+
+def notify(title: str, message: str) -> None:
+    """A macOS notification. Failure is ignored: it is a nicety."""
+    try:
+        script = f'display notification {json.dumps(message)} with title {json.dumps(title)}'
+        subprocess.run(["osascript", "-e", script], check=False, timeout=5, capture_output=True)
+    except Exception:
+        pass
+
+
+def prune_logs(directory: Path, keep: int = 25) -> None:
+    files = sorted(directory.glob("scan-*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in files[keep:]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
 
 
 # ── Supabase (optional) ──────────────────────────────────────────────────────────
@@ -429,6 +522,21 @@ def read_tracker(ws: Path, limit: int = 300) -> List[Dict[str, str]]:
 
 
 # ── what the window calls ────────────────────────────────────────────────────────
+log = logging.getLogger("job_finder_app")
+
+
+def _guarded(method):
+    """A failure inside an Api call is logged and returned as {ok: False, error}, never raised into the window."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return method(self, *args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Api.%s failed", method.__name__)
+            return {"ok": False, "error": f"{method.__name__.replace('_', ' ').capitalize()} failed: {str(exc)[:140]}"}
+    return wrapper
+
+
 class Api:
     """Methods the window's JavaScript can call. Only simple values go in and out."""
 
@@ -436,6 +544,9 @@ class Api:
         self._runner = ScanRunner(launcher)
         self._window: Any = None
         self._synced_after_run = True  # nothing to sync until a run has been started
+        self._notified = True
+        self._browser: Dict[str, Any] = {"installing": False, "error": ""}
+        self._launcher = launcher
 
     def _bind(self, window: Any) -> None:
         self._window = window
@@ -445,7 +556,50 @@ class Api:
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
             "running": self._runner.running, "version": _app_version(), "supabase": supabase_status(ws),
+            "browser": {"ready": browser_ready(), **self._browser},
+            "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
+
+    def ensure_browser(self) -> Dict[str, Any]:
+        """Downloads the page scraper's Chromium if it is missing (about 150 MB, once). Safe to call again."""
+        if browser_ready() or self._browser["installing"] or os.environ.get("JOB_FINDER_SKIP_BROWSER_INSTALL") == "1":
+            return {"ok": True}
+        self._browser.update(installing=True, error="")
+        threading.Thread(target=self._install_browser, daemon=True).start()
+        return {"ok": True}
+
+    def _install_browser(self) -> None:
+        tail = ""
+        try:
+            proc = subprocess.run(self._launcher + ["--install-browser"], capture_output=True, text=True, timeout=1200,
+                                  env={**os.environ, "PLAYWRIGHT_BROWSERS_PATH": str(browsers_dir())})
+            tail = ANSI_RE.sub("", (proc.stdout + proc.stderr).strip()).splitlines()[-1] if (proc.stdout + proc.stderr).strip() else ""
+            if proc.returncode != 0 or not browser_ready():
+                self._browser["error"] = tail or f"The browser download ended with code {proc.returncode}."
+        except Exception as exc:
+            self._browser["error"] = str(exc)[:200]
+        finally:
+            self._browser["installing"] = False
+
+    def save_app_prefs(self, values: Dict[str, Any]) -> Dict[str, Any]:
+        config = load_app_config()
+        for key in APP_PREF_KEYS:
+            if key in values:
+                config[key] = values[key]
+        save_app_config(config)
+        return {"ok": True}
+
+    def set_theme(self, dark: bool) -> Dict[str, Any]:
+        """Lets the window's title bar match the page colours."""
+        try:
+            import native
+            native.set_titlebar_theme(self._window, bool(dark))
+        except Exception:
+            log.debug("theme not applied", exc_info=True)
+        return {"ok": True}
+
+    def check_update(self) -> Dict[str, Any]:
+        return check_for_update(_app_version())
 
     def save_prefs(self, form: Dict[str, Any]) -> Dict[str, Any]:
         write_preferences(workspace_dir(), form)
@@ -458,6 +612,7 @@ class Api:
         write_preferences(ws, form)
         result = self._runner.start(build_scan_args(form), build_run_env(form, ws), ws, "scan")
         self._synced_after_run = not result.get("ok")
+        self._notified = not result.get("ok")
         return result
 
     def run_command(self, name: str, extra: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -472,6 +627,10 @@ class Api:
 
     def poll(self, offset: int = 0) -> Dict[str, Any]:
         result = self._runner.poll(int(offset))
+        if not result["running"] and not self._notified and result.get("title") == "scan":
+            self._notified = True
+            counts = result["counts"]
+            notify("Job Finder", f"Run finished: {counts['submitted']} submitted, {counts['needs_review']} to review." if result["exit_code"] in (0, None) else "The run ended with an error.")
         if not result["running"] and not self._synced_after_run:
             self._synced_after_run = True  # once per run
             if supabase_settings(workspace_dir()) and result.get("title") == "scan":
@@ -537,7 +696,10 @@ class Api:
             "profile": ["open", "-t", str(profile_path(ws))],
             "env": ["open", "-t", str(ws / ".env")],
             "tracker": ["open", str(ws / "applications_tracker")],
+            "logs": ["open", str(logs_dir())],
         }
+        if what == "logs":
+            logs_dir().mkdir(parents=True, exist_ok=True)
         if what not in targets:
             return {"ok": False}
         subprocess.run(targets[what], check=False)
@@ -548,6 +710,10 @@ class Api:
             webbrowser.open(url)
             return {"ok": True}
         return {"ok": False}
+
+
+for _name in [n for n in vars(Api) if not n.startswith("_") and callable(vars(Api)[n])]:
+    setattr(Api, _name, _guarded(vars(Api)[_name]))
 
 
 def _app_version() -> str:

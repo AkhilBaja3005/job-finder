@@ -3,230 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-eval'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Job Finder</title>
-<style>
-  :root { --bg:#fafbfc; --card:#fff; --text:#16181d; --muted:#707889; --line:#e6e9ee; --accent:#3182ce; --accent-text:#fff;
-          --good:#15803d; --warn:#b45309; --bad:#c0392b; --log-bg:#101319; --log-text:#d9dce3; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#14161a; --card:#1b1e24; --text:#eceef2; --muted:#9aa2b0; --line:#2a2e36; --accent:#4a97e0; --accent-text:#0b1220;
-            --good:#4ade80; --warn:#fbbf24; --bad:#f87171; --log-bg:#0b0c0f; }
-  }
-  * { box-sizing:border-box; }
-  body { margin:0; font:14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; background:var(--bg); color:var(--text); }
-  header { display:flex; align-items:center; gap:10px; padding:14px 24px; }
-  header svg { width:26px; height:26px; color:var(--accent); flex:none; }
-  header h1 { font-size:16px; font-weight:650; margin:0; }
-  header .right { margin-left:auto; display:flex; align-items:center; gap:16px; font-size:13px; color:var(--muted); }
-  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); margin-right:6px; }
-  .dot.ok { background:var(--good); } .dot.bad { background:var(--warn); }
-  a, .link { color:var(--accent); cursor:pointer; text-decoration:none; background:none; border:0; font:inherit; padding:0; }
-  main { max-width:760px; margin:0 auto; padding:4px 24px 40px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:14px; }
-  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; margin:0 0 12px; display:flex; align-items:center; }
-  h2 .link { margin-left:auto; text-transform:none; letter-spacing:0; font-size:13px; font-weight:400; }
-  label { display:block; font-size:12px; color:var(--muted); margin:12px 0 4px; }
-  input[type=text], input[type=number], input[type=password], textarea, select {
-    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
-  textarea { min-height:70px; resize:vertical; }
-  .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-  .seg { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; margin-top:14px; }
-  .seg button { background:none; border:0; padding:7px 16px; font:inherit; color:var(--muted); cursor:pointer; }
-  .seg button.on { background:var(--accent); color:var(--accent-text); font-weight:600; }
-  .seg button.on.danger { background:var(--bad); color:#fff; }
-  .modehint { color:var(--muted); font-size:12px; margin-top:6px; }
-  button.primary, button.stop { border:0; padding:9px 22px; border-radius:9px; font:inherit; font-weight:600; cursor:pointer; color:#fff; }
-  button.primary { background:var(--accent); color:var(--accent-text); } button.stop { background:var(--bad); }
-  button.ghost { background:none; border:1px solid var(--line); color:var(--text); padding:7px 12px; border-radius:8px; font:inherit; cursor:pointer; }
-  .go { display:flex; align-items:center; gap:14px; margin-top:16px; }
-  #hint { color:var(--muted); font-size:12px; }
-  details { margin-top:14px; } summary { cursor:pointer; color:var(--muted); font-size:13px; }
-  .line { color:var(--muted); font-size:13px; margin-bottom:10px; } .line b { color:var(--text); }
-  #log { background:var(--log-bg); color:var(--log-text); border-radius:9px; padding:10px 12px; height:230px; overflow:auto; font:11.5px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; word-break:break-word; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { color:var(--muted); font-weight:500; font-size:12px; }
-  .pill { font-size:12px; } .pill.applied { color:var(--good); } .pill.review { color:var(--warn); }
-  .cloud { color:var(--good); font-size:11px; margin-left:4px; }
-  .empty { color:var(--muted); font-size:13px; padding:6px 0; }
-  .banner { background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:13px; }
-  @media (prefers-color-scheme: dark) { .banner { background:#2a1d10; color:#fdba74; border-color:#5a3a1a; } }
-  .keyrow { display:grid; grid-template-columns:110px 1fr auto; gap:8px; align-items:center; margin-top:8px; }
-  .btns { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-  .path { font:12px ui-monospace, Menlo, monospace; word-break:break-all; margin:4px 0; }
-  .hidden { display:none; }
-</style>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header>
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Job Finder">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline>
-    <line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline>
-  </svg>
-  <h1>Job Finder</h1>
-  <div class="right"><span id="cloud"><span class="dot"></span>Local only</span><button class="link" id="settings-toggle">Settings</button></div>
-</header>
-
-<main>
-  <section id="settings" class="card hidden">
-    <h2>Settings <button class="link" id="settings-close">Close</button></h2>
-    <div class="path" id="workspace"></div>
-    <div class="btns" style="margin-top:6px">
-      <button class="ghost" id="choose-ws">Use my Job Finder folder…</button>
-      <button class="ghost" id="default-ws">Use the app's folder</button>
-      <button class="ghost" data-open="workspace">Show in Finder</button>
-    </div>
-    <label style="margin-top:16px">Profile <span id="who"></span></label>
-    <div class="btns" style="margin-top:0">
-      <button class="ghost" id="build-profile">Build from my resume…</button>
-      <button class="ghost" data-open="profile">Edit profile</button>
-      <button class="ghost" id="doctor">Check setup</button>
-    </div>
-    <label style="margin-top:16px">AI keys (saved in your folder's .env, only you can read it)</label>
-    <div class="keyrow"><span>Gemini</span><input type="password" id="key-gemini" autocomplete="off"><button class="ghost" data-save="gemini">Save</button></div>
-    <div class="keyrow"><span>Claude</span><input type="password" id="key-anthropic" autocomplete="off"><button class="ghost" data-save="anthropic">Save</button></div>
-    <div class="keyrow"><span>OpenAI</span><input type="password" id="key-openai" autocomplete="off"><button class="ghost" data-save="openai">Save</button></div>
-    <div class="btns"><button class="ghost" data-open="env">Edit all settings (.env)</button></div>
-  </section>
-
-  <div id="noprofile" class="banner hidden">No profile in this folder yet. Open <b>Settings</b> and build one from your resume, or choose your existing Job Finder folder.</div>
-
-  <section class="card">
-    <h2>Search</h2>
-    <label style="margin-top:0">Roles, one per line</label>
-    <textarea id="roles" placeholder="Machine Learning Engineer Intern&#10;Data Science Intern"></textarea>
-    <label>Location</label>
-    <input type="text" id="location" placeholder="London, UK">
-    <div class="seg" id="mode">
-      <button data-mode="dry_run" class="on">Practice run</button>
-      <button data-mode="auto_apply" class="danger">Apply for real</button>
-    </div>
-    <div class="modehint" id="modehint">Fills every form and stops before Submit.</div>
-    <details>
-      <summary>More options</summary>
-      <div class="two">
-        <div><label>Posted within</label><select id="timeframe"><option>24h</option><option>48h</option><option>1w</option></select></div>
-        <div><label>Minimum ATS score</label><input type="number" id="min_ats" min="0" max="100"></div>
-        <div><label>Max applications (0 = no limit)</label><input type="number" id="limit" min="0" value="0"></div>
-        <div><label>Main AI for the browser</label><select id="primary_ai"><option value="auto">Automatic</option><option value="gemini">Gemini</option><option value="anthropic">Claude</option><option value="openai">OpenAI</option></select></div>
-      </div>
-      <label>Job title must contain (comma separated)</label><input type="text" id="title_keywords" placeholder="intern, internship, placement">
-      <label>Skip these sites (comma separated)</label><input type="text" id="skip_portals" placeholder="targetjobs, workday">
-      <label><input type="checkbox" id="headless"> Hide the browser window</label>
-    </details>
-    <div class="go"><button class="primary" id="start">Start</button><button class="stop hidden" id="stop">Stop</button><span id="hint"></span></div>
-  </section>
-
-  <section class="card hidden" id="progress">
-    <h2>Progress</h2>
-    <div class="line" id="counts"></div>
-    <div id="log"></div>
-  </section>
-
-  <section class="card">
-    <h2>Applications <button class="link hidden" id="sync">Sync now</button></h2>
-    <table class="hidden" id="table"><thead><tr><th>Company</th><th>Job</th><th>Status</th><th>ATS</th><th></th></tr></thead><tbody id="rows"></tbody></table>
-    <div class="empty" id="norows">Nothing yet. Each job the agent looks at is listed here.</div>
-  </section>
-</main>
-
-<script>
-let state = null, offset = 0, mode = 'dry_run', timer = null, autoScroll = true;
-const $ = (id) => document.getElementById(id);
-const api = () => window.pywebview.api;
-const HINTS = { dry_run: 'Fills every form and stops before Submit.', auto_apply: 'Fills and submits. Applications cannot be taken back.' };
-
-document.querySelectorAll('#mode button').forEach(b => b.onclick = () => {
-  mode = b.dataset.mode;
-  document.querySelectorAll('#mode button').forEach(x => x.classList.toggle('on', x === b));
-  $('modehint').textContent = HINTS[mode]; $('start').textContent = mode === 'auto_apply' ? 'Start applying' : 'Start';
-});
-$('settings-toggle').onclick = () => $('settings').classList.toggle('hidden');
-$('settings-close').onclick = () => $('settings').classList.add('hidden');
-
-function cloudPill(s) {
-  const c = s.supabase || {};
-  if (!c.configured) return '<span class="dot"></span>Local only';
-  return c.reachable ? '<span class="dot ok"></span>Synced with Supabase' : '<span class="dot bad"></span>Supabase not reachable';
-}
-function fillForm(s) {
-  const p = s.prefs;
-  $('roles').value = p.roles.join('\n'); $('location').value = p.location;
-  $('timeframe').value = ['24h', '48h', '1w'].includes(p.timeframe) ? p.timeframe : '24h';
-  $('min_ats').value = p.min_ats; $('title_keywords').value = p.title_keywords.join(', '); $('skip_portals').value = p.skip_portals.join(', ');
-  $('noprofile').classList.toggle('hidden', p.profile_exists);
-  $('workspace').textContent = s.workspace; $('who').textContent = p.candidate_name ? '· ' + p.candidate_name : '';
-  $('cloud').innerHTML = cloudPill(s); $('sync').classList.toggle('hidden', !(s.supabase && s.supabase.configured));
-  for (const k of ['gemini', 'anthropic', 'openai']) {
-    $('key-' + k).placeholder = s.keys[k].set ? 'Saved' + (s.keys[k].hint ? ' (…' + s.keys[k].hint + ')' : '') : 'Paste key';
-  }
-}
-const formValues = () => ({ roles: $('roles').value, location: $('location').value, timeframe: $('timeframe').value, min_ats: $('min_ats').value,
-  limit: $('limit').value, title_keywords: $('title_keywords').value, skip_portals: $('skip_portals').value,
-  primary_ai: $('primary_ai').value, headless: $('headless').checked, mode });
-
-function setRunning(running) { $('start').classList.toggle('hidden', running); $('stop').classList.toggle('hidden', !running); }
-async function tick() {
-  const r = await api().poll(offset);
-  if (offset === 0 && r.lines.length) $('log').textContent = '';
-  r.lines.forEach(t => { const d = document.createElement('div'); d.textContent = t; $('log').appendChild(d); });
-  offset = r.next; if (autoScroll) $('log').scrollTop = $('log').scrollHeight;
-  const c = r.counts;
-  $('counts').innerHTML = `<b>${c.position}</b> of ${c.found} checked · <b>${c.submitted}</b> submitted · <b>${c.needs_review}</b> need review · <b>${c.skipped}</b> skipped`;
-  setRunning(r.running);
-  if (!r.running && timer) {
-    clearInterval(timer); timer = null;
-    $('hint').textContent = r.exit_code === 0 ? 'Finished.' : (r.exit_code === null ? '' : 'Ended (code ' + r.exit_code + '). See the log.');
-    setTimeout(loadResults, 2500);
-  }
-}
-const watch = () => { if (!timer) timer = setInterval(tick, 800); tick(); };
-$('log').addEventListener('scroll', () => { const l = $('log'); autoScroll = l.scrollTop + l.clientHeight >= l.scrollHeight - 30; });
-
-async function begin(result) {
-  if (!result.ok) { $('hint').textContent = result.error || 'Could not start.'; return; }
-  offset = 0; $('progress').classList.remove('hidden'); $('log').textContent = 'Starting…'; $('hint').textContent = ''; setRunning(true); watch();
-}
-$('start').onclick = async () => {
-  if (mode === 'auto_apply' && !confirm('This will submit real job applications from your accounts. Continue?')) return;
-  begin(await api().start_scan(formValues()));
-};
-$('stop').onclick = async () => { await api().stop_scan(); setTimeout(tick, 400); };
-
-async function loadResults() {
-  const rows = await api().get_results(); const tb = $('rows'); tb.textContent = '';
-  $('table').classList.toggle('hidden', !rows.length); $('norows').classList.toggle('hidden', !!rows.length);
-  for (const r of rows.slice(0, 200)) {
-    const tr = document.createElement('tr');
-    const add = (t) => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); return td; };
-    add(r.company); add(r.title);
-    const st = add(''); const pill = document.createElement('span');
-    pill.className = 'pill ' + (/appl/i.test(r.status) ? 'applied' : (/review|fail/i.test(r.status) ? 'review' : '')); pill.textContent = r.status; st.appendChild(pill);
-    if (r.synced) { const c = document.createElement('span'); c.className = 'cloud'; c.title = 'In your Supabase project'; c.textContent = '☁'; st.appendChild(c); }
-    add(r.ats);
-    const lk = add(''); if (r.url) { const a = document.createElement('a'); a.textContent = 'Open'; a.onclick = () => api().open_url(r.url); lk.appendChild(a); }
-    tb.appendChild(tr);
-  }
-}
-$('sync').onclick = async () => {
-  $('sync').textContent = 'Syncing…'; const r = await api().sync_now();
-  $('sync').textContent = r.ok ? (r.pushed ? 'Added ' + r.pushed : 'Up to date') : 'Sync failed'; if (!r.ok) alert(r.error);
-  setTimeout(() => $('sync').textContent = 'Sync now', 2500); loadResults();
-};
-
-document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => api().open_path(b.dataset.open));
-document.querySelectorAll('[data-save]').forEach(b => b.onclick = async () => {
-  const k = b.dataset.save; const r = await api().save_key(k, $('key-' + k).value);
-  if (r.ok) { $('key-' + k).value = ''; state.keys = r.keys; fillForm(state); b.textContent = 'Saved'; setTimeout(() => b.textContent = 'Save', 1500); } else alert(r.error);
-});
-$('choose-ws').onclick = async () => { const r = await api().choose_workspace(); if (r.ok) { state = r.state; fillForm(state); loadResults(); } };
-$('default-ws').onclick = async () => { const r = await api().use_default_workspace(); state = r.state; fillForm(state); loadResults(); };
-$('build-profile').onclick = async () => { const r = await api().choose_resume_and_build_profile(); if (r.ok) begin(r); else if (r.error) alert(r.error); };
-$('doctor').onclick = async () => begin(await api().run_command('doctor'));
-
-window.addEventListener('pywebviewready', async () => {
-  state = await api().get_state(); fillForm(state); setRunning(state.running); if (state.running) { $('progress').classList.remove('hidden'); watch(); }
-  loadResults();
-});
-</script>
+<div class="app">
+  <aside class="sidebar" aria-label="Main">
+    <div class="brand"><span id="brand-logo"></span><b>Job Finder</b></div>
+    <nav class="nav" id="nav" aria-label="Sections"></nav>
+    <div class="spacer"></div>
+    <button class="update-chip" id="update-chip" hidden></button>
+    <div class="conn" id="conn" aria-live="polite"></div>
+  </aside>
+  <main class="main">
+    <div class="titlebar-space"></div>
+    <div id="view" style="display:flex;flex-direction:column;min-height:0;flex:1"></div>
+  </main>
+</div>
+<div id="overlay"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="icons.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

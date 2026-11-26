@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'">
+<title>Job Finder</title>
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" aria-label="Main">
+    <div class="brand"><span id="brand-logo"></span><b>Job Finder</b></div>
+    <nav class="nav" id="nav" aria-label="Sections"></nav>
+    <div class="spacer"></div>
+    <button class="update-chip" id="update-chip" hidden></button>
+    <div class="conn" id="conn" aria-live="polite"></div>
+  </aside>
+  <main class="main">
+    <div class="titlebar-space"></div>
+    <div id="view" style="display:flex;flex-direction:column;min-height:0;flex:1"></div>
+  </main>
+</div>
+<div id="overlay"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="../icons.js"></script>
+<script src="mock-api.js"></script>
+<script src="../app.js"></script>
+</body>
+</html>

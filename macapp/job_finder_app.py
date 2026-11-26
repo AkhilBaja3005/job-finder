@@ -9,10 +9,13 @@ Pick roles and limits, press Start, and watch the agent search and fill applicat
 """
 from __future__ import annotations
 
+import fcntl
+import logging
+import logging.handlers
 import os
 import subprocess
 import sys
-import threading
+import webbrowser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -65,43 +68,120 @@ def run_cli(argv: list[str]) -> int:
     return 0
 
 
-def ensure_browser_in_background() -> None:
-    """Downloads the Chromium the page scraper uses, once, without blocking the window."""
-    if os.environ.get("JOB_FINDER_SKIP_BROWSER_INSTALL") == "1":
-        return
-    browsers = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", scan_panel.app_support_dir() / "browsers"))
-    if any(browsers.glob("chromium-*")):
-        return
+def install_browser() -> int:
+    """Downloads the Chromium the page scraper uses (what `playwright install chromium` does)."""
+    prepare_environment()
+    from playwright._impl._driver import compute_driver_executable, get_driver_env
+    node, cli = compute_driver_executable()
+    return subprocess.run([str(node), str(cli), "install", "chromium"], env=get_driver_env(), check=False).returncode
 
-    def _install() -> None:
+
+def setup_logging() -> None:
+    """The app's own log, next to the per-run logs: ~/Library/Logs/Job Finder/app.log (rotated)."""
+    directory = scan_panel.logs_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    handler = logging.handlers.RotatingFileHandler(directory / "app.log", maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logging.basicConfig(level=logging.INFO, handlers=[handler])
+
+    def hook(kind, value, trace):
+        logging.getLogger("job_finder_app").critical("Uncaught error", exc_info=(kind, value, trace))
+        sys.__excepthook__(kind, value, trace)
+    sys.excepthook = hook
+
+
+def acquire_single_instance():
+    """Only one window at a time. Returns the lock file object (keep it alive), or None when the app is already open."""
+    scan_panel.app_support_dir().mkdir(parents=True, exist_ok=True)
+    handle = open(scan_panel.app_support_dir() / "app.lock", "w")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return None
+    return handle
+
+
+def selftest(window, log) -> None:
+    """Loads the page, reports what rendered, and closes. For checking a build: JOB_FINDER_APP_SELFTEST=1."""
+    import json
+    import time
+    probe = ("JSON.stringify({script: typeof window.__jf, nav: document.querySelectorAll('#nav button').length, "
+             "title: (document.querySelector('h1') || {}).textContent || '', "
+             "css: getComputedStyle(document.querySelector('.sidebar') || document.body).display, "
+             "icons: document.querySelectorAll('svg').length, info: !!(window.__jf && window.__jf.hasInfo()), bridge: typeof (window.pywebview && window.pywebview.api && window.pywebview.api.get_state)})")
+    result: dict = {}
+    for _ in range(20):  # the page needs a moment to start
+        time.sleep(0.5)
         try:
-            from playwright._impl._driver import compute_driver_executable, get_driver_env
-            node, cli = compute_driver_executable()
-            subprocess.run([str(node), str(cli), "install", "chromium"], env=get_driver_env(), check=False, timeout=900)
-        except Exception as exc:  # the scraper falls back to other methods, so this is not fatal
-            print(f"[job-finder-app] Could not install the scraper browser: {exc}")
-
-    threading.Thread(target=_install, name="playwright-install", daemon=True).start()
+            raw = window.evaluate_js(probe)
+            result = json.loads(raw) if raw else {"error": "no answer from the page"}
+            if result.get("nav") and result.get("info"):
+                break
+        except Exception as exc:
+            result = {"error": str(exc)[:200]}
+    log.info("SELFTEST %s", json.dumps(result))
+    print("SELFTEST", json.dumps(result), flush=True)
+    window.destroy()
 
 
 def run_window() -> int:
     import webview
-    from webview.menu import Menu, MenuAction
 
+    lock = acquire_single_instance()
+    if lock is None:
+        subprocess.run(["osascript", "-e", 'tell application "Job Finder" to activate'], check=False, capture_output=True)
+        print("Job Finder is already open.")
+        return 0
+    setup_logging()
+    log = logging.getLogger("job_finder_app")
     workspace = prepare_environment()
+    log.info("Starting Job Finder %s, folder %s", scan_panel._app_version(), workspace)
+
     api = scan_panel.Api(launcher_command())
     html = bundle_root() / "macapp" / "panel" / "index.html"
     if not html.exists():  # bundled layout
         html = bundle_root() / "panel" / "index.html"
-    window = webview.create_window("Job Finder", str(html), js_api=api, width=1100, height=860, min_size=(820, 620))
+
+    config = scan_panel.load_app_config()
+    size = config.get("window") or {}
+    width, height = int(size.get("width", 1180)), int(size.get("height", 820))
+    window = webview.create_window("Job Finder", str(html), js_api=api, width=max(width, 940), height=max(height, 600), min_size=(940, 600),
+                                   background_color="#FFFFFF", text_select=True)
     api._bind(window)
-    menu = [Menu("Job Finder", [
-        MenuAction("Open data folder", lambda: subprocess.run(["open", str(workspace)])),
-        MenuAction("Edit settings (.env)", lambda: subprocess.run(["open", "-t", str(workspace / ".env")])),
-    ])]
-    ensure_browser_in_background()
-    webview.start(menu=menu)
+
+    def remember_size(new_width: int, new_height: int) -> None:
+        cfg = scan_panel.load_app_config()
+        cfg["window"] = {"width": int(new_width), "height": int(new_height)}
+        scan_panel.save_app_config(cfg)
+    window.events.resized += remember_size
+
+    def on_closing() -> None:
+        api.stop_scan()
+    window.events.closing += on_closing
+
+    def show(page_js: str) -> None:
+        try:
+            window.evaluate_js(page_js)
+        except Exception:
+            log.exception("could not reach the page")
+
+    def after_start() -> None:
+        import native
+        native.style_window(window)
+        native.install_menu("Job Finder", {
+            "settings": lambda: show("window.__jf && window.__jf.go('settings')"),
+            "updates": lambda: show("window.__jf && window.__jf.checkUpdate()"),
+            "folder": lambda: api.open_path("workspace"),
+            "logs": lambda: api.open_path("logs"),
+            "website": lambda: webbrowser.open("https://github.com/AkhilBaja3005/job-finder"),
+        })
+        api.ensure_browser()
+        if os.environ.get("JOB_FINDER_APP_SELFTEST") == "1":
+            selftest(window, log)
+
+    webview.start(after_start)
     api.stop_scan()  # closing the window ends any run that is still going
+    log.info("Job Finder closed")
     return 0
 
 
@@ -109,6 +189,8 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "--cli":
         return run_cli(argv[1:])
+    if argv and argv[0] == "--install-browser":
+        return install_browser()
     return run_window()
 
 

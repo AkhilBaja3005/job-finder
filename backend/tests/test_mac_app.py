@@ -1,5 +1,8 @@
 import importlib
 import json
+import re
+import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -250,3 +253,153 @@ def test_results_fall_back_to_the_local_list_when_the_cloud_fails(home, monkeypa
     monkeypatch.setattr(panel, "_supabase_request", boom)
     rows = panel.Api([sys.executable]).get_results()
     assert [r["company"] for r in rows] == ["A"] and rows[0]["synced"] is False
+
+
+# ── the page scraper's browser ──────────────────────────────────────────────────
+def test_browser_ready_needs_the_finished_marker(home, monkeypatch):
+    root = home / "browsers"
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(root))
+    assert panel.browser_ready() is False  # no folder
+    (root / "chromium_headless_shell-1255").mkdir(parents=True)
+    assert panel.browser_ready() is False  # a half-finished download has no marker
+    (root / "chromium_headless_shell-1255" / "INSTALLATION_COMPLETE").write_text("")
+    assert panel.browser_ready() is True
+
+
+def test_ensure_browser_runs_the_installer_once_and_reports_failure(home, monkeypatch):
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(home / "browsers"))
+    monkeypatch.delenv("JOB_FINDER_SKIP_BROWSER_INSTALL", raising=False)
+    ok_script = ("import os,pathlib;p=pathlib.Path(os.environ['PLAYWRIGHT_BROWSERS_PATH'])/'chromium-1';"
+                 "p.mkdir(parents=True,exist_ok=True);(p/'INSTALLATION_COMPLETE').write_text('');print('done')")
+    api = panel.Api([sys.executable, "-c", ok_script, "--"])
+    api.ensure_browser()
+    for _ in range(100):
+        if not api._browser["installing"]:
+            break
+        time.sleep(0.05)
+    assert panel.browser_ready() and api._browser["error"] == ""
+    assert api.ensure_browser() == {"ok": True}  # already there: nothing to do
+
+    monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(home / "other"))
+    failing = panel.Api([sys.executable, "-c", "import sys; print('no network'); sys.exit(1)", "--"])
+    failing.ensure_browser()
+    for _ in range(100):
+        if not failing._browser["installing"]:
+            break
+        time.sleep(0.05)
+    assert failing._browser["error"] == "no network"
+    assert failing.get_state()["browser"] == {"ready": False, "installing": False, "error": "no network"}
+
+
+# ── updates, preferences, logs, error guard ─────────────────────────────────────
+def test_update_check_compares_versions():
+    newer = panel.check_for_update("1.9.1", fetch=lambda: {"tag_name": "v1.10.0", "html_url": "https://example/rel"})
+    assert newer == {"ok": True, "current": "1.9.1", "latest": "1.10.0", "newer": True, "url": "https://example/rel"}
+    assert panel.check_for_update("1.9.1", fetch=lambda: {"tag_name": "v1.9.1"})["newer"] is False
+    assert panel.check_for_update("1.9.1", fetch=lambda: {"tag_name": "v1.8.9"})["newer"] is False
+    assert panel.check_for_update("1.9.1", fetch=lambda: {})["newer"] is False  # no release published yet
+
+
+def test_update_check_failure_is_a_message_not_an_exception():
+    def offline():
+        raise OSError("offline")
+    result = panel.check_for_update("1.0.0", fetch=offline)
+    assert result["ok"] is False and "offline" in result["error"]
+
+
+def test_app_prefs_keep_only_known_keys(home):
+    api = panel.Api([sys.executable])
+    assert panel.load_app_prefs() == {"primary_ai": "auto", "headless": False}
+    api.save_app_prefs({"primary_ai": "anthropic", "headless": True, "workspace": "/etc", "evil": 1})
+    assert panel.load_app_prefs() == {"primary_ai": "anthropic", "headless": True}
+    assert panel.load_app_config().get("workspace") != "/etc"  # a window call cannot repoint the folder
+
+
+def test_state_reports_what_the_window_needs(home):
+    state = panel.Api([sys.executable]).get_state()
+    for key in ("workspace", "prefs", "keys", "supabase", "browser", "app_prefs", "chrome_found", "version"):
+        assert key in state
+    assert state["supabase"] == {"configured": False, "reachable": False}
+
+
+def test_runs_are_logged_to_files_and_old_logs_pruned(home, tmp_path):
+    runner = panel.ScanRunner([sys.executable, "-c", "print('line one'); print('line two')", "--"])
+    assert runner.start([], {"PATH": "/usr/bin"}, tmp_path, "scan")["ok"]
+    _wait(runner)
+    time.sleep(0.3)
+    files = list(panel.logs_dir().glob("scan-*.log"))
+    assert len(files) == 1 and files[0].read_text().splitlines() == ["line one", "line two"]
+    for i in range(30):
+        (panel.logs_dir() / f"scan-old-{i:02d}.log").write_text("x")
+    panel.prune_logs(panel.logs_dir(), keep=5)
+    assert len(list(panel.logs_dir().glob("scan-*.log"))) == 5
+
+
+def test_a_failing_api_call_returns_an_error_instead_of_raising(home, monkeypatch):
+    api = panel.Api([sys.executable])
+    def boom(*a, **k):
+        raise RuntimeError("disk full")
+    monkeypatch.setattr(panel, "read_preferences", boom)
+    result = api.get_state()
+    assert result["ok"] is False and "disk full" in result["error"]
+
+
+def test_notify_never_raises(monkeypatch):
+    monkeypatch.setattr(panel.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("no osascript")))
+    panel.notify("Job Finder", "done")  # must not raise
+
+
+# ── the window's files ──────────────────────────────────────────────────────────
+PANEL = MACAPP / "panel"
+
+
+def test_every_file_the_page_loads_exists():
+    html = (PANEL / "index.html").read_text()
+    refs = re.findall(r'(?:src|href)="([^"#]+)"', html)
+    assert refs, "index.html should load its stylesheet and scripts"
+    for ref in refs:
+        assert (PANEL / ref).is_file(), f"index.html refers to {ref}, which is missing"
+
+
+def test_page_has_a_strict_content_security_policy():
+    html = (PANEL / "index.html").read_text()
+    match = re.search(r'Content-Security-Policy" content="([^"]+)"', html)
+    assert match, "index.html needs a Content-Security-Policy"
+    policy = match.group(1)
+    assert "default-src 'self'" in policy and "connect-src 'none'" in policy and "object-src 'none'" in policy
+    assert "http" not in policy  # nothing is allowed to load from the network
+    assert "'unsafe-inline'" not in policy.split("script-src")[1].split(";")[0]  # scripts: no inline code
+
+
+def test_page_has_no_inline_scripts_and_no_remote_assets():
+    html = (PANEL / "index.html").read_text()
+    assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>\s*\S", html)
+    assert not re.search(r'(?:src|href)="https?://', html)
+    for name in ("app.js", "icons.js", "styles.css"):
+        assert not re.search(r"https?://", (PANEL / name).read_text().replace("http://www.w3.org", "")), f"{name} reaches for the network"
+
+
+def test_scripts_are_valid_javascript():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    for name in ("app.js", "icons.js"):
+        assert subprocess.run([node, "--check", str(PANEL / name)], capture_output=True).returncode == 0, name
+
+
+def test_every_api_method_the_page_calls_exists():
+    called = set(re.findall(r'call\("([a-z_]+)"', (PANEL / "app.js").read_text()))
+    exposed = {n for n in dir(panel.Api) if not n.startswith("_")}
+    assert called, "the page should call the Python side"
+    assert called <= exposed, f"the page calls methods Python does not have: {sorted(called - exposed)}"
+
+
+def test_every_icon_the_page_uses_is_defined():
+    icons = set(re.findall(r"^\s{4}([a-zA-Z]+):", (PANEL / "icons.js").read_text(), re.M))
+    used = set(re.findall(r'icon\("([a-zA-Z]+)"', (PANEL / "app.js").read_text())) | set(re.findall(r'\["(?:run|apps|settings)", "[A-Za-z]+", "([a-zA-Z]+)"\]', (PANEL / "app.js").read_text()))
+    assert icons and used <= icons, f"icons used but not defined: {sorted(used - icons)}"
+
+
+def test_app_icon_and_logo_are_in_place():
+    assert (MACAPP / "icon.icns").stat().st_size > 10_000 and (MACAPP / "icon.svg").is_file()
+    assert "M14 2H6a2 2 0 0 0-2 2v16" in (PANEL / "icons.js").read_text()  # the Job Finder logo path

@@ -21,10 +21,12 @@ def data_tree(src: Path, dest: str):
 
 
 datas = data_tree(ROOT / "backend", "backend")
-datas += [(str(ROOT / ".env.example"), "."), (str(ROOT / "macapp" / "panel"), "macapp/panel")]
+datas += [(str(ROOT / ".env.example"), ".")]
+datas += [(str(p), str(Path("macapp/panel") / p.relative_to(ROOT / "macapp" / "panel").parent))
+          for p in (ROOT / "macapp" / "panel").rglob("*") if p.is_file() and "dev" not in p.relative_to(ROOT / "macapp" / "panel").parts]
 
 binaries = []
-hiddenimports = ["scan_panel"]
+hiddenimports = ["scan_panel", "native", "objc", "AppKit", "Foundation", "PyObjCTools.AppHelper"]
 
 
 def local_modules(base: Path, prefix: str = ""):

@@ -38,6 +38,9 @@ jobs:
           "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli --version
           "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli doctor || true
           "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli scan --help | grep -q -- "--dry-run"
+          # Opens the real window, waits for the page and the Python bridge, prints what rendered, and quits.
+          JOB_FINDER_APP_SELFTEST=1 "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" | tee selftest.txt
+          grep -q '"info": true' selftest.txt
 
       - uses: actions/upload-artifact@v4
         with:
