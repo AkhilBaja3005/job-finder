@@ -32,7 +32,14 @@ if [ -n "${SIGN_IDENTITY:-}" ]; then
   codesign --verify --deep --strict "dist-mac/Job Finder.app"
 fi
 
-hdiutil create -volname "Job Finder" -srcfolder "dist-mac/Job Finder.app" -ov -format UDZO "$DMG" >/dev/null
+# The disk image holds the app next to a shortcut to /Applications, so installing is one drag.
+STAGE="dist-mac/dmg-stage"
+rm -rf "$STAGE"
+mkdir -p "$STAGE"
+ditto "dist-mac/Job Finder.app" "$STAGE/Job Finder.app"   # ditto keeps the signature intact
+ln -s /Applications "$STAGE/Applications"
+hdiutil create -volname "Job Finder" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+rm -rf "$STAGE"
 
 if [ -n "${SIGN_IDENTITY:-}" ] && [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ]; then
   codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"

@@ -756,3 +756,11 @@ def test_check_replies_updates_matching_rows(tmp_path, monkeypatch):
     assert out["ok"] and out["updated"] == 1 and out["changes"] == [{"company": "Beta", "stage": "interview"}]
     assert [r["Status"] for r in scan_panel._csv_all(ws)] == ["Applied", "Applied", "Interview"]
     assert scan_panel.check_replies(ws)["updated"] == 0  # a second check changes nothing
+
+
+def test_dmg_holds_the_app_and_an_applications_shortcut():
+    from pathlib import Path
+    script = (Path(__file__).resolve().parents[2] / "macapp" / "build_mac.sh").read_text()
+    assert 'ln -s /Applications "$STAGE/Applications"' in script
+    assert 'ditto "dist-mac/Job Finder.app" "$STAGE/Job Finder.app"' in script
+    assert '-srcfolder "$STAGE"' in script  # the image is made from the staged folder, not the bare app
