@@ -15,6 +15,11 @@
 - The web app assumed the backend was on port 8000 whenever it was opened on localhost. It now uses the address it is
   served from, and only the Vite dev server points at 8000.
 
+### Account data
+- Account data controls: `GET /user/export` returns everything stored for the account as JSON (saved API keys are left out),
+  and `DELETE /user/account` removes the account, resumes and application history after the account email is typed to confirm.
+  Both are in the website's extension panel, next to a link to download the Mac app.
+
 ## 1.9.2
 
 ### Added
