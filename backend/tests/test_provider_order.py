@@ -103,3 +103,22 @@ def test_discovery_failure_falls_back_to_static(monkeypatch):
     c._PROVIDER_MODEL_CACHE.clear()
     assert b._expand_model_alias("openai", "terra") == "gpt-6.1-terra"
     c._PROVIDER_MODEL_CACHE.clear()
+
+
+def test_openai_agent_client_omits_sampling_for_new_models(monkeypatch):
+    import sys, types
+    seen = {}
+
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+
+    fake = types.ModuleType("browser_use")
+    fake.ChatOpenAI = FakeChatOpenAI  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "browser_use", fake)
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    b._make_llm("openai", "gpt-6-luna")
+    assert seen["temperature"] is None and seen["frequency_penalty"] is None
+    seen.clear()
+    b._make_llm("openai", "gpt-4o-mini")
+    assert "temperature" not in seen and "frequency_penalty" not in seen

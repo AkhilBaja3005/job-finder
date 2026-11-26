@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.1
+
+### Fixed
+- The browser agent failed every step with `Unsupported value: 'temperature' does not support 0.2 with this model`
+  when OpenAI was the primary provider with `gpt-6-luna`. browser-use sends `temperature=0.2` and
+  `frequency_penalty=0.3` by default, and newer OpenAI models reject them. Only `gpt-4` and `gpt-3` models get them now.
+
 ## 1.9.0
 
 ### Security
