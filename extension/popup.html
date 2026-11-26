@@ -310,7 +310,11 @@
     <div class="card">
       <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin-bottom: 6px;">Extension Sync Key:</div>
       <input type="text" id="user-token" class="form-control" style="font-weight: 700; color: #38bdf8; text-transform: uppercase;" placeholder="Paste Sync Key from Dashboard (e.g. GABY48)">
-      <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">Copy your 6-digit Sync Code from the web dashboard header.</div>
+      <div style="font-size: 9px; color: #94a3b8; margin-top: 4px;">Copy your Sync Code from the web dashboard header.</div>
+
+      <div style="font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; margin: 10px 0 6px;">Your own LLM key (optional):</div>
+      <input type="password" id="custom-api-key" class="form-control" autocomplete="off" placeholder="Gemini, Claude (sk-ant-) or OpenAI (sk-) key">
+      <div id="custom-api-key-note" style="font-size: 9px; color: #94a3b8; margin-top: 4px;">Used for AI answers on forms. The provider is detected from the key. Stored in this browser only. Leave blank to use the server.</div>
 
       <div id="user-info-card" style="display: none; flex-direction: column; gap: 2px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 6px 10px; margin-top: 8px;">
         <div id="user-name-display" style="font-size: 11px; font-weight: 800; color: #34d399;">AUTHENTICATED USER</div>

@@ -537,12 +537,18 @@
     console.log(`%c[Job Finder AI] Extracted Question: "${question}"`, "color: #38bdf8; font-weight: bold;");
 
     try {
+      // The user's own LLM key, if they set one in the popup. The server detects the provider from the key.
+      const ownKey = await new Promise((resolve) => {
+        try { chrome.storage.local.get(["customApiKey"], (items) => resolve((items && items.customApiKey) || "")); }
+        catch (e) { resolve(""); }
+      });
       const res = await fetch(`${baseUrl}/answer_question`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
-          "Authorization": `Bearer ${token || "guest"}`
+          "Authorization": `Bearer ${token || "guest"}`,
+          ...(ownKey ? { "X-Gemini-API-Key": ownKey } : {})
         },
         body: JSON.stringify({
           question: question || "Brief summary of experience",

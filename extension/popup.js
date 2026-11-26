@@ -79,6 +79,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Tab 3 Elements: Settings
   const userTokenInput = document.getElementById("user-token");
+  const customApiKeyInput = document.getElementById("custom-api-key");
+  // Optional own LLM key. Kept in chrome.storage.local only; the field never shows the saved value back.
+  if (customApiKeyInput) {
+    chrome.storage.local.get(["customApiKey"], (items) => {
+      const saved = items && items.customApiKey;
+      if (saved) customApiKeyInput.placeholder = "Saved key ending " + saved.slice(-4) + " (paste a new one to replace)";
+    });
+    customApiKeyInput.addEventListener("change", () => {
+      const value = customApiKeyInput.value.trim();
+      chrome.storage.local.set({ customApiKey: value }, () => {
+        customApiKeyInput.value = "";
+        customApiKeyInput.placeholder = value ? "Saved key ending " + value.slice(-4) + " (paste a new one to replace)" : "Gemini, Claude (sk-ant-) or OpenAI (sk-) key";
+      });
+    });
+  }
   const backendUrlInput = document.getElementById("backend-url-input");
   const userInfoCard = document.getElementById("user-info-card");
   const userNameDisplay = document.getElementById("user-name-display");

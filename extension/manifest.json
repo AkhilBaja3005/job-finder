@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Job Finder ATS Tailor",
-  "version": "3.5.1",
+  "version": "3.6.0",
   "description": "ATS match scoring, resume tailoring, cover letters and outreach on LinkedIn, Indeed, Workday, Greenhouse, Lever and career sites.",
   "permissions": [
     "activeTab",
