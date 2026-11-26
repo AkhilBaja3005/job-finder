@@ -773,3 +773,18 @@ def test_tour_covers_the_account_replies_answers_and_schedule_rows():
     js = (Path(__file__).resolve().parents[2] / "macapp" / "panel" / "app.js").read_text()
     for selector in ('"#c-sync"', '"#c-mailbox"', "edit-answers", '"#sched-time"'):
         assert selector in js, selector
+
+
+def test_locked_supabase_project_gets_a_clear_message(tmp_path, monkeypatch):
+    import urllib.error
+    import scan_panel
+    scan_panel.write_env_value(tmp_path, "SUPABASE_URL", "https://abc.supabase.co")
+    scan_panel.write_env_value(tmp_path, "SUPABASE_KEY", "sb_publishable_example")
+
+    def locked(*a, **k):
+        raise urllib.error.HTTPError("u", 401, "permission denied", {}, None)
+
+    monkeypatch.setattr(scan_panel, "_supabase_request", locked)
+    status = scan_panel.supabase_status(tmp_path)
+    assert status["configured"] and not status["reachable"] and status["denied"] is True
+    assert "SUPABASE_SERVICE_KEY" in status["error"] and "sync code" in status["error"]

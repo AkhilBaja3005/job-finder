@@ -601,6 +601,12 @@ def supabase_status(ws: Path) -> Dict[str, Any]:
     try:
         _supabase_request(cfg, f"applications?select=id&limit=1&user_id=eq.{cloud_user_id(ws)}", timeout=6)
         return {"configured": True, "reachable": True, "host": urllib.parse.urlparse(cfg["url"]).hostname or ""}
+    except urllib.error.HTTPError as exc:
+        host = urllib.parse.urlparse(cfg["url"]).hostname or ""
+        if exc.code in (401, 403):  # the project answered but will not let this key read the table
+            return {"configured": True, "reachable": False, "host": host, "denied": True,
+                    "error": "The project is locked and this key is not allowed to read it. Use the secret key (SUPABASE_SERVICE_KEY) in the .env, or connect with a sync code below instead."}
+        return {"configured": True, "reachable": False, "host": host, "error": f"The project answered with an error ({exc.code})."}
     except Exception as exc:
         return {"configured": True, "reachable": False, "host": urllib.parse.urlparse(cfg["url"]).hostname or "", "error": str(exc)[:120]}
 
