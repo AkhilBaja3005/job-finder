@@ -402,6 +402,38 @@ async def rotate_sync_code(authorization: Optional[str] = Header(None)):
     return {"sync_code": code}
 
 
+@router.get("/user/export")
+async def export_account(authorization: Optional[str] = Header(None)):
+    """Everything stored for the signed-in account, as JSON. Saved API keys are not included."""
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    user = await async_get_user_by_token(token) if token else None
+    if not user or not user.get("id") or str(user["id"]).startswith("guest_"):
+        raise HTTPException(status_code=401, detail="Sign in to export your data")
+    from services.account_data import export_user_data
+    return await asyncio.to_thread(export_user_data, user)
+
+
+class DeleteAccountRequest(BaseModel):
+    confirm_email: str
+
+
+@router.delete("/user/account")
+async def delete_account(request: DeleteAccountRequest, authorization: Optional[str] = Header(None)):
+    """Permanently deletes the account and its data. The caller must type the account's email to confirm."""
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    user = await async_get_user_by_token(token) if token else None
+    if not user or not user.get("id") or str(user["id"]).startswith("guest_"):
+        raise HTTPException(status_code=401, detail="Sign in to delete your account")
+    if request.confirm_email.strip().lower() != str(user.get("email") or "").strip().lower():
+        raise HTTPException(status_code=400, detail="The email does not match this account")
+    from services.account_data import delete_user_data
+    result = await asyncio.to_thread(delete_user_data, user, token)
+    invalidate_token_cache(token)
+    if not result["deleted"]:
+        raise HTTPException(status_code=502, detail="Some data could not be removed. Try again, or email hello@job-finder.space.")
+    return {"status": "deleted"}
+
+
 @router.post("/user/settings")
 async def user_settings(request: SettingsRequest, authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
