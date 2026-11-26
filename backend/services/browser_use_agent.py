@@ -221,10 +221,11 @@ def _make_llm(provider: str, model: Optional[str] = None, api_key: Optional[str]
             )
         if provider == "openai":
             from browser_use import ChatOpenAI  # pyright: ignore[reportAttributeAccessIssue]
-            return ChatOpenAI(
-                model=str(_expand_model_alias("openai", model or os.getenv(_MODEL_ENV["openai"]) or _DEFAULT_FAMILY["openai"]) or _DEFAULT_MODELS["openai"]),
-                api_key=api_key or os.getenv("OPENAI_API_KEY"),
-            )
+            openai_model = str(_expand_model_alias("openai", model or os.getenv(_MODEL_ENV["openai"]) or _DEFAULT_FAMILY["openai"]) or _DEFAULT_MODELS["openai"])
+            # browser-use sends temperature=0.2 and frequency_penalty=0.3 by default. Newer OpenAI models (gpt-5.x,
+            # gpt-6-luna, ...) reject any value except their default, so only the older gpt-4 / gpt-3 models get them.
+            sampling: Dict[str, Any] = {} if openai_model.lower().startswith(("gpt-4", "gpt-3")) else {"temperature": None, "frequency_penalty": None}
+            return ChatOpenAI(model=openai_model, api_key=api_key or os.getenv("OPENAI_API_KEY"), **sampling)
     except Exception:
         return None
     return None
