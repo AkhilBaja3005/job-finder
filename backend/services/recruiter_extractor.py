@@ -399,6 +399,10 @@ async def extract_recruiter(job_url: str, platform: Optional[str] = None, html: 
             "platform": str
         }
     """
+    from utils.url_safety import is_public_http_url
+    if job_url and not is_public_http_url(job_url)[0]:
+        return {"recruiter_name": None, "recruiter_profile_url": None, "company_name": company_hint, "platform": platform}
+
     if not job_url:
         return {
             "recruiter_name": None,

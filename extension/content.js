@@ -1328,13 +1328,20 @@
   setInterval(injectSponsorBadges, 3000);
 
   // Relay 1-Click Sync Key from web application window to extension storage
+  // Only the Job Finder web app may set the sync key. Any other page could otherwise pair this extension with
+  // its own account and receive the user's resume data.
+  const SYNC_TRUSTED_ORIGINS = [
+    "https://www.job-finder.space", "https://job-finder.space", "https://abaja-job-finder.hf.space",
+    "http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:5173", "http://127.0.0.1:5173",
+  ];
   window.addEventListener("message", (event) => {
     try {
+      if (event.source !== window || !SYNC_TRUSTED_ORIGINS.includes(event.origin)) return;
       if (event.data && event.data.type === "SYNC_JOB_FINDER_KEY" && event.data.syncKey) {
         if (isRuntimeValid() && chrome.storage && chrome.storage.local) {
           chrome.storage.local.set({ userToken: event.data.syncKey }, () => {
             if (chrome.runtime.lastError) return;
-            window.postMessage({ type: "SYNC_JOB_FINDER_KEY_SUCCESS", syncKey: event.data.syncKey }, "*");
+            window.postMessage({ type: "SYNC_JOB_FINDER_KEY_SUCCESS", syncKey: event.data.syncKey }, event.origin);
           });
         }
       }

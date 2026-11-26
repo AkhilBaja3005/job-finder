@@ -48,7 +48,7 @@ def _client_signing_key() -> bytes:
     secret = (
         os.getenv("OAUTH_CLIENT_SECRET")
         or os.getenv("ENCRYPTION_KEY")
-        or os.getenv("SUPABASE_KEY")
+        or os.getenv("KEY_ENCRYPTION_SECRET")
     )
     if not secret:
         global _EPHEMERAL_KEY

@@ -226,6 +226,11 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     from utils.text_cleaner import clean_html_to_markdown
     # pyrefly: ignore [missing-import]
     from services.log_queue import log_ist
+    from utils.url_safety import is_public_http_url
+    _url_ok, _url_why = is_public_http_url(url)
+    if not _url_ok:
+        print(f"[Scraper] Refusing to fetch {url!r}: {_url_why}")
+        return {"title": "", "company": "", "description": "", "markdown": "", "error": f"URL not allowed: {_url_why}"}
 
     try:
         # pyrefly: ignore [missing-import]
@@ -754,7 +759,16 @@ async def scrape_job_description(url: str, browser=None, on_log=None) -> dict:
     page = await context.new_page()
 
     # Block heavy resource downloads (images, fonts, media, stylesheets) to reduce RAM/network load by 60%
-    await page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "font", "media", "stylesheet"] else route.continue_())
+    # Also refuse any request (redirect target, frame, script) that points at a private or internal address.
+    async def _guard_route(route):
+        from utils.url_safety import is_public_http_url as _public
+        if route.request.resource_type in ["image", "font", "media", "stylesheet"]:
+            await route.abort()
+        elif route.request.url.startswith(("http://", "https://")) and not _public(route.request.url)[0]:
+            await route.abort()
+        else:
+            await route.continue_()
+    await page.route("**/*", _guard_route)
 
     try:
         body_text = ""

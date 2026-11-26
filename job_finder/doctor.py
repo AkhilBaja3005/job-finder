@@ -67,8 +67,16 @@ def collect_checks() -> List[Dict[str, str]]:
     add("cdp_port", "ok" if _port_open(port) else "warn",
         f"{port} reachable" if _port_open(port) else f"{port} not listening (started on demand)")
 
-    add("supabase", "ok" if _env_set("SUPABASE_URL") and _env_set("SUPABASE_KEY") else "warn",
-        "configured" if _env_set("SUPABASE_URL") and _env_set("SUPABASE_KEY") else "not set; CSV fallback in use")
+    sb_ready = _env_set("SUPABASE_URL") and (_env_set("SUPABASE_KEY") or _env_set("SUPABASE_SERVICE_KEY") or _env_set("SUPABASE_SECRET_KEY"))
+    sb_warning = None
+    if sb_ready:
+        try:
+            from services.auth import supabase_key_warning
+            sb_warning = supabase_key_warning()
+        except Exception:
+            sb_warning = None
+    add("supabase", ("warn" if sb_warning else "ok") if sb_ready else "warn",
+        (sb_warning or "configured") if sb_ready else "not set; CSV fallback in use")
 
     mail = _env_set("BREVO_API_KEY") or _env_set("RESEND_API_KEY") or _env_set("SMTP_USER")
     add("email_provider", "ok" if mail else "warn", "configured" if mail else "no SMTP/Brevo/Resend; notifications disabled")

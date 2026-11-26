@@ -17,6 +17,20 @@
 - The browser agent's prompt now treats page text as untrusted, keeps the account password to the portal's own login
   form, and forbids guessing answers that are not in the profile.
 
+- The server no longer trusts a public Supabase key silently: it prefers `SUPABASE_SERVICE_KEY` (the secret key),
+  warns at startup and in `job-finder doctor` when `SUPABASE_KEY` is a publishable or anon key, and no longer uses
+  that key to sign OAuth client IDs. `docs/supabase_rls.sql` turns on row-level security for all four tables.
+  With a publishable key and RLS off, anyone who holds the key can read the users, resumes and applications tables.
+- The extension accepts the sync key and resume data only from the Job Finder web app (before, any website could
+  pair it with its own account), and its host permissions are limited to the backend and the GOV.UK sponsor
+  register (3.6.0).
+- Server-side fetches refuse private, loopback, link-local and cloud-metadata addresses, including after
+  redirects (the job scraper, the apply pre-flight check, the recruiter lookup, and the scraper's browser requests).
+  The browser agent is blocked from `localhost`, `127.0.0.1` and `169.254.169.254`; `BROWSER_USE_ALLOWED_DOMAINS`
+  can restrict it to a list of sites.
+- `PORTALS_PASSWORD_MODE=per_site` gives each job-portal family its own password, derived from `PORTALS_PASSWORD`,
+  so one leaked portal password does not open the others. Off by default, because existing accounts use the shared one.
+
 ### Added
 - Claude, OpenAI and Gemini keys: `/user/solve_field` now uses the account's saved key, the extension has an optional
   LLM-key field (Settings tab, extension 3.6.0), and a user whose own key is rejected is told that the server's default
