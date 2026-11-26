@@ -215,3 +215,13 @@ tbody tr:hover { background: var(--fill); }
 .toast { display: flex; align-items: center; gap: 9px; max-width: 360px; padding: 10px 14px; border-radius: var(--r-md); background: var(--text); color: var(--bg); box-shadow: var(--shadow-2); animation: pop .16s ease-out; }
 .toast svg { width: 15px; height: 15px; flex: none; }
 .toast.bad { background: var(--bad); color: #fff; }
+
+/* Guided tour */
+.tour { position: fixed; inset: 0; z-index: 60; }
+.tour-hole { position: fixed; border-radius: 10px; box-shadow: 0 0 0 9999px rgba(8,12,20,.52); outline: 2px solid var(--accent); transition: all .18s ease; pointer-events: none; }
+.tour-card { position: fixed; background: var(--surface, #fff); color: var(--text, #1c2430); border: .5px solid var(--line); border-radius: 12px; padding: 16px 16px 12px; box-shadow: 0 12px 40px rgba(0,0,0,.28); }
+.tour-card h3 { margin: 2px 0 6px; font-size: 15px; }
+.tour-card p { margin: 0 0 12px; font-size: 13px; line-height: 1.45; color: var(--text-2, #55606f); }
+.tour-n { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+.tour-btns { display: flex; gap: 8px; align-items: center; }
+.tour-btns .grow { flex: 1; }

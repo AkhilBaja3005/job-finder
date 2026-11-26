@@ -110,10 +110,19 @@
       step(hasProfile, "Create your profile", "Built from your resume. The agent fills forms with it.", "build-profile", "Choose resume…") +
       step(cloud, "Connect Supabase (optional)", "Keeps applications in your own project.", "goto-settings", "Set up") + "</div></section>";
   }
+  function profileCard() {
+    const pc = S.info && S.info.profile_check; if (!pc || !pc.exists || !pc.missing.length) return "";
+    const needed = pc.missing.filter((m) => m.needed), shown = (needed.length ? needed : pc.missing).slice(0, 6);
+    return '<section class="card" id="profile-check"><div class="card-head"><h2>' + (needed.length ? "Finish your profile" : "Optional profile details") + '</h2><span class="sub">' + pc.filled + " of " + pc.total + ' filled</span></div>' +
+      '<div class="checklist">' + shown.map((m) => '<div class="check"><span class="tick">' + icon("alert") + '</span><div><div class="t">' + esc(m.label) + '</div><div class="d">' + esc(m.why) + "</div></div></div>").join("") +
+      (pc.missing.length > shown.length ? '<div class="d" style="padding:4px 2px">and ' + (pc.missing.length - shown.length) + " more</div>" : "") +
+      '<div class="d" style="padding:6px 2px">Open the profile, fill these in, save, then come back. This page updates by itself.</div></div>' +
+      '<div style="padding:0 16px 14px;display:flex;gap:8px"><button class="btn primary" data-open="profile">Edit profile</button><button class="btn" data-act="import-profile">Import profile.json…</button></div></section>';
+  }
   function renderRun() {
     const f = S.form;
     $("#view").innerHTML = head("Run", "Find jobs, tailor your resume and fill applications.", '<span id="run-btn">' + runButton() + "</span>") +
-      '<div class="scroll"><div class="stack">' + checklist() + '<div class="cols">' +
+      '<div class="scroll"><div class="stack">' + checklist() + profileCard() + '<div class="cols">' +
       '<section class="card card-pad form" aria-label="Search settings">' +
         '<div class="field"><label>Roles</label>' + tagsInput("roles", f.roles, "Add a role and press Return") + '<div class="help">One search per role.</div></div>' +
         '<div class="two"><div class="field"><label for="f-location">Location</label><input class="input" id="f-location" value="' + esc(f.location) + '" placeholder="London, UK" autocomplete="off"></div>' +
@@ -267,7 +276,7 @@
     $("#view").innerHTML = head("Settings", "Your folder, AI providers and connections.") + '<div class="scroll"><div class="stack" style="max-width:820px">' +
       '<div class="sect-title">General</div><section class="card">' +
         row("Job Finder folder", esc(i.workspace), '<button class="btn" data-act="choose-ws">Change…</button><button class="btn" data-open="workspace">' + icon("folder") + "Show</button>") +
-        row("Profile", i.prefs.profile_exists ? esc(i.prefs.candidate_name || "Profile found") : "No profile in this folder yet", i.prefs.profile_exists ? '<button class="btn" data-open="profile">Edit</button><button class="btn" data-act="build-profile">Rebuild from resume…</button>' : '<button class="btn primary" data-act="build-profile">Build from resume…</button>') +
+        row("Profile", i.prefs.profile_exists ? esc(i.prefs.candidate_name || "Profile found") : "No profile in this folder yet", i.prefs.profile_exists ? '<button class="btn" data-open="profile">Edit</button><button class="btn" data-act="build-profile">Rebuild from resume…</button><button class="btn" data-act="import-profile">Import…</button>' : '<button class="btn primary" data-act="build-profile">Build from resume…</button><button class="btn" data-act="import-profile">Import profile.json…</button>') +
         row("Google Chrome", i.chrome_found ? "Found. The agent drives it to fill applications." : "Not found. Install Google Chrome to let the agent fill applications.", badge(i.chrome_found ? "Installed" : "Missing", i.chrome_found ? "good" : "bad")) +
       "</section>" +
       '<div class="sect-title">AI providers</div><section class="card">' +
@@ -283,6 +292,7 @@
       "</section>" +
       '<div class="sect-title">About</div><section class="card">' +
         row("Job Finder " + esc(i.version), S.update && S.update.newer ? "Version " + esc(S.update.latest) + " is available." : S.update ? "You are up to date." : "Check for a newer version.", '<button class="btn" data-act="check-update">Check for updates</button>' + (S.update && S.update.newer ? '<button class="btn primary" data-url="' + esc(S.update.url) + '">Download</button>' : "")) +
+        row("Guided tour", "A short walk through the fields that need filling in.", '<button class="btn" data-act="start-tour">Take the tour</button>') +
         row("Log files", "For troubleshooting. Each run is saved separately.", '<button class="btn" data-act="open-logs">Open</button>') +
       "</section></div></div>";
   }
@@ -354,6 +364,8 @@
       case "goto-settings": return go("settings");
       case "choose-ws": { const r = await call("choose_workspace"); if (r && r.ok) { S.info = r.state; S.apps.rows = null; hydrateForm(); toast("Folder changed."); go(S.view); } return; }
       case "build-profile": { const r = await call("choose_resume_and_build_profile"); if (r && r.ok) { go("run"); Object.assign(S.run, { running: true, started: true, offset: 0, lines: [], exit: null }); renderRunStatus(); renderLog(true); watchRun(); } return; }
+      case "import-profile": { const r = await call("choose_profile_and_import"); if (r && r.ok) { toast("Profile imported" + (r.name ? " for " + r.name : "") + "."); await refreshInfo(); hydrateForm(); renderView(); } else if (r && r.error) toast(r.error, "bad"); return; }
+      case "start-tour": return void startTour();
       case "install-browser": await call("ensure_browser"); await refreshInfo(); renderSettings(); watchBrowser(); return;
       case "sync": { if (S.apps.syncing) return; S.apps.syncing = true; renderView(); const r = await call("sync_now"); S.apps.syncing = false;
         if (r && r.ok) toast(r.pushed ? "Added " + plural(r.pushed, "application") + " to Supabase." : "Supabase is up to date."); await loadApps(true); await refreshInfo(); renderView(); return; }
@@ -380,6 +392,50 @@
     if (S._bt) return;
     S._bt = setInterval(async () => { const s = await refreshInfo(); if (S.view === "settings") renderSettings(); if (!s || !s.browser.installing) { clearInterval(S._bt); S._bt = null; } }, 3000);
   }
+
+  /* ── Guided tour ─────────────────────────────────────────────────────────── */
+  const TOUR = [
+    { view: "settings", sel: "#c-gemini", title: "1. Add an AI key", text: "The agent needs one provider to read job pages and fill forms. Gemini has a free tier. Claude and OpenAI work too. Keys stay in a file on this Mac." },
+    { view: "settings", sel: '[data-act="build-profile"], [data-act="import-profile"]', title: "2. Create your profile", text: "Build it from your resume, or import a profile.json you already have. Every form is filled from it, so details like work authorisation matter." },
+    { view: "run", sel: "#profile-check", title: "3. Fill what is missing", text: "This list shows profile fields that are still empty. Edit the profile, save, and come back. The list updates by itself." },
+    { view: "run", sel: '[data-tags="roles"]', title: "4. Choose roles", text: "One search runs per role. Leave it empty to use the roles from your profile." },
+    { view: "run", sel: "#f-location", title: "5. Set the location", text: "Where to look for jobs, for example London, UK." },
+    { view: "run", sel: "#run-btn", title: "6. Start with a practice run", text: "A practice run fills every form but never presses Submit, so you can check the result. Switch to Apply for real only when you trust it." },
+    { view: "apps", sel: '[data-nav="apps"]', title: "7. Check your applications", text: "Every job the agent handled is listed here with its status. Rows marked Needs review are waiting for you." },
+  ];
+  async function startTour() {
+    const steps = []; let i = 0;
+    const layer = document.createElement("div"); layer.className = "tour"; $("#overlay").appendChild(layer);
+    const finish = () => { layer.remove(); document.removeEventListener("keydown", onKey, true); window.removeEventListener("resize", place); call("save_app_prefs", { tour_done: true }); go("run"); };
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); finish(); } else if (e.key === "ArrowRight" || e.key === "Enter") { e.preventDefault(); next(); } else if (e.key === "ArrowLeft") { e.preventDefault(); back(); } };
+    document.addEventListener("keydown", onKey, true);
+    let current = null;
+    function place() {
+      if (!current) return; const r = current.el.getBoundingClientRect(), pad = 6;
+      const hole = $(".tour-hole", layer), card = $(".tour-card", layer);
+      Object.assign(hole.style, { left: r.left - pad + "px", top: r.top - pad + "px", width: r.width + pad * 2 + "px", height: r.height + pad * 2 + "px" });
+      const cw = 320, ch = card.offsetHeight || 170;
+      let left = Math.min(Math.max(12, r.left), window.innerWidth - cw - 12), top = r.bottom + 16;
+      if (top + ch > window.innerHeight - 12) top = Math.max(12, r.top - ch - 16);
+      Object.assign(card.style, { left: left + "px", top: top + "px", width: cw + "px" });
+    }
+    async function show(n) {
+      const step = TOUR[n]; go(step.view); await new Promise((res) => setTimeout(res, 90));
+      const el = document.querySelector(step.sel);
+      if (!el) return n >= i ? next(n + 1) : back(n - 1);
+      el.scrollIntoView({ block: "center" }); current = { el, step, n };
+      const total = TOUR.length;
+      layer.innerHTML = '<div class="tour-hole"></div><div class="tour-card" role="dialog" aria-label="Guided tour"><div class="tour-n">Step ' + (n + 1) + " of " + total + "</div><h3>" + esc(step.title) + "</h3><p>" + esc(step.text) + '</p><div class="tour-btns"><button class="btn quiet" data-t="skip">Skip tour</button><span class="grow"></span>' +
+        (n > 0 ? '<button class="btn" data-t="back">Back</button>' : "") + '<button class="btn primary" data-t="next">' + (n === total - 1 ? "Done" : "Next") + "</button></div></div>";
+      i = n; place();
+      $('[data-t="next"]', layer).focus();
+    }
+    function next(n) { const to = typeof n === "number" ? n : i + 1; if (to >= TOUR.length) return finish(); show(to); }
+    function back(n) { const to = typeof n === "number" ? n : i - 1; if (to < 0) return; show(to); }
+    layer.addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (!b) return; ({ next, back, skip: finish })[b.dataset.t](); });
+    window.addEventListener("resize", place);
+    show(0);
+  }
   async function init() {
     renderShell(); go("run");
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme); applyTheme();
@@ -388,6 +444,7 @@
     go("run"); if (s.browser && s.browser.installing) watchBrowser();
     call("check_update").then((r) => { if (r && r.ok) { S.update = r; renderShell(); } });
     loadApps(true);
+    if (!(s.app_prefs || {}).tour_done) setTimeout(() => { if (!document.querySelector(".tour")) startTour(); }, 900);
   }
   window.__jf = { hasInfo: () => !!(S.info && S.info.workspace), go, checkUpdate: () => { go('settings'); const b = document.querySelector('[data-act="check-update"]'); if (b) b.click(); } };
   init();

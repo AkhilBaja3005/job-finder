@@ -64,12 +64,13 @@ def logs_dir() -> Path:
     return Path(override) / "logs" if override else Path.home() / "Library" / "Logs" / APP_NAME
 
 
-APP_PREF_KEYS = ("primary_ai", "headless")
+APP_PREF_KEYS = ("primary_ai", "headless", "tour_done")
 
 
 def load_app_prefs() -> Dict[str, Any]:
     cfg = load_app_config()
-    return {"primary_ai": cfg.get("primary_ai", "auto"), "headless": bool(cfg.get("headless", False))}
+    return {"primary_ai": cfg.get("primary_ai", "auto"), "headless": bool(cfg.get("headless", False)),
+            "tour_done": bool(cfg.get("tour_done")) or os.environ.get("JOB_FINDER_APP_SELFTEST") == "1"}
 
 
 def workspace_dir() -> Path:
@@ -337,6 +338,72 @@ class ScanRunner:
             "lines": lines[start:], "next": dropped + len(lines), "running": self.running,
             "exit_code": self._exit_code, "counts": count_progress(lines), "title": self._title,
         }
+
+
+# ── profile: what is missing, and importing a ready-made file ───────────────────
+# (section, field, label, why it matters, needed for a good first run)
+PROFILE_FIELDS = (
+    ("candidate", "name", "Full name", "Goes on every application.", True),
+    ("candidate", "email", "Email", "Used for the application and the confirmation email.", True),
+    ("candidate", "phone", "Phone", "Most forms require it.", True),
+    ("candidate", "location", "Location", "City and country. Forms ask where you live.", True),
+    ("candidate", "work_authorization", "Work authorisation", "Right-to-work questions are on almost every form. The agent will not guess.", True),
+    ("candidate", "requires_sponsorship", "Needs visa sponsorship", "Yes or no. Asked on most forms.", True),
+    ("candidate", "experience_summary", "Short summary", "Used for cover letters and 'tell us about yourself' boxes.", True),
+    ("candidate", "work_experience", "Work experience", "Roles, companies and dates.", True),
+    ("candidate", "education", "Education", "Degrees, schools and dates.", True),
+    ("candidate", "core_skills", "Skills", "Used to score jobs and fill skill boxes.", True),
+    ("candidate", "linkedin", "LinkedIn link", "Many forms have a LinkedIn field.", False),
+    ("candidate", "github", "GitHub link", "Asked on engineering roles.", False),
+    ("search_preferences", "target_roles", "Roles to search", "What the scan looks for. You can also set it on the Run page.", True),
+    ("search_preferences", "target_locations", "Locations to search", "Where the scan looks.", True),
+)
+
+
+def _filled(value: Any) -> bool:
+    if isinstance(value, bool):
+        return True  # False is a real answer for "needs sponsorship"
+    if isinstance(value, (list, dict, str)):
+        return bool(value) and not (isinstance(value, str) and not value.strip())
+    return value is not None
+
+
+def profile_check(ws: Path) -> Dict[str, Any]:
+    """Which profile fields are still empty. Needed ones first."""
+    try:
+        data = json.loads(profile_path(ws).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"exists": False, "missing": [], "filled": 0, "total": len(PROFILE_FIELDS)}
+    missing = []
+    for section, field, label, why, needed in PROFILE_FIELDS:
+        if not _filled((data.get(section) or {}).get(field)):
+            missing.append({"section": section, "field": field, "label": label, "why": why, "needed": needed})
+    missing.sort(key=lambda m: not m["needed"])
+    return {"exists": True, "missing": missing, "filled": len(PROFILE_FIELDS) - len(missing), "total": len(PROFILE_FIELDS)}
+
+
+def import_profile_file(ws: Path, source: Path) -> Dict[str, Any]:
+    """Copies a candidate_profile.json into the folder. Checks it first and keeps the old one as a backup."""
+    try:
+        if source.stat().st_size > 2_000_000:
+            return {"ok": False, "error": "That file is too large to be a profile."}
+        data = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"ok": False, "error": "That file is not valid JSON."}
+    if not isinstance(data, dict) or not isinstance(data.get("candidate"), dict):
+        return {"ok": False, "error": "This does not look like a Job Finder profile. It needs a \"candidate\" section."}
+    if not isinstance(data.get("search_preferences", {}), dict):
+        return {"ok": False, "error": "The \"search_preferences\" section must be an object."}
+    target = profile_path(ws)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        shutil.copy2(target, target.with_name(target.name + ".bak"))
+    target.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        os.chmod(target, 0o600)
+    except OSError:
+        pass
+    return {"ok": True, "name": str((data.get("candidate") or {}).get("name") or ""), "check": profile_check(ws)}
 
 
 # ── job-finder.space (sync code) ─────────────────────────────────────────────────
@@ -666,7 +733,7 @@ class Api:
         ws = workspace_dir()
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
-            "running": self._runner.running, "version": _app_version(), "supabase": supabase_status(ws), "cloud": cloud_status(ws),
+            "running": self._runner.running, "version": _app_version(), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "profile_check": profile_check(ws),
             "browser": {"ready": browser_ready(), **self._browser},
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
@@ -812,6 +879,13 @@ class Api:
             return {"ok": False}
         write_env_value(workspace_dir(), "MASTER_RESUME_PATH", picked[0])
         return self.run_command("profile", ["--sync", picked[0]])
+
+    def choose_profile_and_import(self) -> Dict[str, Any]:
+        import webview
+        picked = self._window.create_file_dialog(webview.OPEN_DIALOG, file_types=("Profile (*.json)",)) if self._window else None
+        if not picked:
+            return {"ok": False}
+        return import_profile_file(workspace_dir(), Path(picked[0]))
 
     def open_path(self, what: str) -> Dict[str, Any]:
         ws = workspace_dir()
