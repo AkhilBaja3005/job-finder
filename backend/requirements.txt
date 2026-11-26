@@ -13,7 +13,8 @@ jinja2
 beautifulsoup4
 python-multipart
 groq
-anthropic
+anthropic>=0.40.0,<3
+openai>=1.50.0,<4
 pytest
 sentry-sdk
 pyyaml

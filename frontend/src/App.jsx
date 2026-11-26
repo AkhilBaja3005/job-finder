@@ -155,7 +155,18 @@ function App() {
   const [coverLetterCopied, setCoverLetterCopied] = useState(false);
   const [toast, setToast] = useState(null); // Toast popups disabled per user request
   const showToast = useCallback(() => {}, []);
-  const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  // The key a user types is kept for this tab only (sessionStorage), not in localStorage where any script on the
+  // page could read it later. Saving it to the account (the Save button) keeps it across sessions, encrypted on the server.
+  const [geminiApiKey, setGeminiApiKey] = useState(() => {
+    try {
+      const legacy = localStorage.getItem('gemini_api_key');
+      if (legacy) {
+        sessionStorage.setItem('gemini_api_key', legacy);
+        localStorage.removeItem('gemini_api_key');
+      }
+      return sessionStorage.getItem('gemini_api_key') || '';
+    } catch { return ''; }
+  });
   const [backendHealth, setBackendHealth] = useState('checking'); // 'healthy' | 'warming' | 'checking'
   const [commitSha, setCommitSha] = useState('');
   const [commitTime, setCommitTime] = useState('');
@@ -249,13 +260,20 @@ function App() {
     window.postMessage({ type: "SYNC_JOB_FINDER_KEY", syncKey: targetKey }, "*");
 
     // 3. Always trigger direct ZIP package download
-    const downloadUrl = `${API_BASE}/download_extension?key=${encodeURIComponent(targetKey)}`;
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = `Job_Finder_Extension_${targetKey}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // The key goes in a header, not the URL, so it does not end up in server or proxy logs.
+    fetch(`${API_BASE}/download_extension`, { headers: { 'Authorization': `Bearer ${targetKey}` } })
+      .then((r) => { if (!r.ok) throw new Error(`Download failed (${r.status})`); return r.blob(); })
+      .then((blob) => {
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectUrl;
+        a.download = `Job_Finder_Extension.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+      })
+      .catch((err) => showToast(String(err.message || err), "error"));
 
     showToast(`Extension ZIP (${targetKey}) downloading! Unzip & load in chrome://extensions`, "success");
 
@@ -545,7 +563,7 @@ function App() {
   const handleApiKeyChange = (e) => {
     const val = e.target.value;
     setGeminiApiKey(val);
-    localStorage.setItem('gemini_api_key', val);
+    try { sessionStorage.setItem('gemini_api_key', val); } catch { /* storage unavailable: key lasts until reload */ }
   };
 
   useEffect(() => {
@@ -570,9 +588,6 @@ function App() {
         if (res.ok) {
           const data = await res.json();
           setUser(data);
-          if (data.gemini_api_key) {
-            setGeminiApiKey(data.gemini_api_key);
-          }
           setCronEnabled(!!data.cron_enabled);
           setSendTailoredEmail(data.send_tailored_email !== undefined ? !!data.send_tailored_email : true);
           setCronRole(data.cron_role || '');
@@ -940,6 +955,21 @@ function App() {
       setOtpError(err.message);
     } finally {
       setOtpLoading(false);
+    }
+  };
+
+  // Replaces the sync key with a new, longer one. The old key stops working, so the extension is re-synced.
+  const rotateSyncKey = async () => {
+    if (!authToken) return;
+    if (!window.confirm('Create a new, longer sync key? The old key stops working, and you will need to re-sync the extension.')) return;
+    try {
+      const res = await fetch(`${API_BASE}/user/rotate_sync_code`, { method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` } });
+      if (!res.ok) throw new Error('Could not rotate the sync key');
+      const data = await res.json();
+      setUser((u) => (u ? { ...u, sync_code: data.sync_code } : u));
+      handleOneClickExtensionSync(data.sync_code);
+    } catch (err) {
+      showToast(String(err.message || err), 'error');
     }
   };
 
@@ -3096,13 +3126,13 @@ function App() {
                   rel="noopener noreferrer"
                   style={{ fontSize: '0.73rem', color: 'var(--accent-secondary)', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '3px' }}
                 >
-                  Get Free Gemini Key from Google ↗
+                  Get a free Gemini key ↗
                 </a>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
                   type="password"
-                  placeholder="Leave blank to use Server Free Tier, or paste Gemini/Groq/Claude key"
+                  placeholder={user && user.gemini_api_key_set ? `Saved key ending ${user.gemini_api_key_hint || '••••'} (paste a new one to replace)` : 'Leave blank to use Server Free Tier, or paste a Gemini, Claude (sk-ant-) or OpenAI (sk-) key'}
                   value={geminiApiKey}
                   onChange={handleApiKeyChange}
                   style={{ fontFamily: 'var(--font-mono)', flexGrow: 1, marginBottom: 0, fontSize: '0.84rem' }}
@@ -3112,7 +3142,7 @@ function App() {
                 </button>
               </div>
               <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-                Optional: You can start immediately without entering a key. Add your own key anytime for higher rate limits and unlimited runs.
+                Optional: You can start immediately without entering a key. Add your own Gemini, Claude or OpenAI key anytime for higher rate limits. The provider is detected from the key. Saved keys are stored encrypted and are never shown again in full.
               </div>
             </div>
 
@@ -3985,7 +4015,7 @@ function App() {
                   <span>{resumeData ? 'Profile active & calibrated' : 'Upload a resume to begin'}</span>
                 </div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--font-mono)' }}>
-                  API Key: {geminiApiKey ? '••••••' + geminiApiKey.slice(-4) : 'Not configured'}
+                  API Key: {geminiApiKey ? '••••••' + geminiApiKey.slice(-4) : (user && user.gemini_api_key_set ? 'Saved ••••' + (user.gemini_api_key_hint || '') : 'Not configured')}
                 </div>
               </div>
             </div>
@@ -8033,17 +8063,26 @@ function App() {
               <div style={{ background: 'rgba(2, 132, 199, 0.12)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '12px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase' }}>Your Personal Sync Key</div>
-                  <div style={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: 800, color: '#34d399', marginTop: '2px' }}>{user ? user.sync_code : "GABY48"}</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: 800, color: '#34d399', marginTop: '2px' }}>{user ? user.sync_code : "Sign in to get your key"}</div>
                 </div>
                 <button
                   className="btn"
                   style={{ padding: '6px 12px', fontSize: '0.76rem', background: '#0284c7', color: '#fff' }}
                   onClick={() => {
-                    handleOneClickExtensionSync(user ? user.sync_code : "GABY48");
+                    if (user && user.sync_code) handleOneClickExtensionSync(user.sync_code);
                   }}
                 >
                   Re-Download ZIP
                 </button>
+                {user && user.sync_code && (
+                  <button
+                    className="btn"
+                    style={{ padding: '6px 12px', fontSize: '0.76rem', background: 'transparent', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.4)' }}
+                    onClick={rotateSyncKey}
+                  >
+                    New key
+                  </button>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

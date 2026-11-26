@@ -36,6 +36,13 @@ from services.outreach_generator import generate_outreach_message
 from services.cron_scheduler import process_and_send_user_digest
 from routes.job_routes import _extract_company_from_jd, _check_rate_limit
 
+
+def _limit_llm_call(http_request: Request, endpoint: str, token: Optional[str]) -> None:
+    """Rate limit for endpoints that spend LLM quota and used to be open to anyone: per IP, and per account."""
+    _check_rate_limit(http_request, endpoint + ":ip", max_requests=40, window_seconds=60)
+    if token and token != "guest":
+        _check_rate_limit(http_request, endpoint, max_requests=120, window_seconds=60, token=token)
+
 import hashlib
 from utils.ttl_cache import TTLCache
 
@@ -985,9 +992,10 @@ async def generate_recruiter_outreach_endpoint(
 
 
 @router.post("/answer_question")
-async def answer_question(request: AnswerQuestionRequest, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
+async def answer_question(request: AnswerQuestionRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None)):
     """Generate high-impact, personalized screening question answers using LLM and candidate resume."""
     token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    _limit_llm_call(http_request, "answer_question", token)
 
     session_resume_data = request.candidate_profile or {}
     if not session_resume_data and token:
@@ -1085,10 +1093,18 @@ CRITICAL INSTRUCTIONS:
 
 
 @router.post("/user/solve_field")
-async def user_solve_field(request: SolveFieldRequest, authorization: Optional[str] = Header(None)):
+async def user_solve_field(request: SolveFieldRequest, http_request: Request, authorization: Optional[str] = Header(None), x_gemini_api_key: Optional[str] = Header(None, alias="X-Gemini-API-Key")):
     token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    _limit_llm_call(http_request, "solve_field", token)
     session_data = get_session_data(token)
     resume = session_data.get("data", {})
+
+    # The user's own key: request body, then header, then the key saved on their account.
+    active_api_key = request.api_key or x_gemini_api_key
+    if not active_api_key and token and token != "guest":
+        user = await async_get_user_by_token(token)
+        if user:
+            active_api_key = user.get("gemini_api_key")
 
     from services.autofill_agent import get_answer_from_llm
     answer = await asyncio.to_thread(
@@ -1096,7 +1112,7 @@ async def user_solve_field(request: SolveFieldRequest, authorization: Optional[s
         request.field_name,
         request.context or "",
         resume,
-        request.api_key
+        active_api_key
     )
     return {"answer": answer}
 

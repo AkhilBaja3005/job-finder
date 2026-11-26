@@ -154,7 +154,20 @@ jobs:
           name: dist-packages
           path: dist/
 
-      - name: Publish to PyPI
+      # Trusted Publishing (OIDC): no long-lived token, and PyPI records signed provenance for the release.
+      # Turn it on after adding this repo as a trusted publisher on PyPI (project job-finder-ai -> Publishing:
+      # owner AkhilBaja3005, repository job-finder, workflow publish_pypi.yml, environment pypi), then set the
+      # repository variable PYPI_TRUSTED_PUBLISHING to "true".
+      - name: Publish to PyPI (Trusted Publishing, with provenance)
+        if: ${{ vars.PYPI_TRUSTED_PUBLISHING == 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
+          verbose: true
+
+      # Fallback while Trusted Publishing is not set up. A token upload cannot carry provenance.
+      - name: Publish to PyPI (API token)
+        if: ${{ vars.PYPI_TRUSTED_PUBLISHING != 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN || secrets.PYPI_TOKEN }}

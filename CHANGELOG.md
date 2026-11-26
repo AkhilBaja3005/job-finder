@@ -1,8 +1,29 @@
 # Changelog
 
-## Unreleased
+## 1.9.0
+
+### Security
+- Sync codes can no longer be brute-forced: failed sync-code lookups are counted per client IP (10 per 10 minutes by
+  default, `SYNC_GUESS_MAX` and `SYNC_GUESS_WINDOW_SECONDS`) and then answered with 429. New accounts get 10-character
+  codes (about 3.6e15 values). `POST /user/rotate_sync_code` and a "New key" button on the website replace an old
+  6-character code. The extension download takes the key in a header instead of the URL.
+- Saved LLM API keys are encrypted in the database when `KEY_ENCRYPTION_SECRET` is set (old plain values still read),
+  and `/user/me` no longer returns the key, only whether one is set and its last 4 characters. The website keeps a key
+  typed into the page in `sessionStorage`, not `localStorage`.
+- `/answer_question` and `/user/solve_field` are rate limited per IP and per account, and rate limits use the real
+  client IP from `X-Forwarded-For` (`TRUSTED_PROXY_COUNT`, default 1) instead of the proxy's address.
+- The interactive API docs and `/openapi.json` are off unless `ENABLE_API_DOCS=1`. CORS no longer allows credentials.
+- API-key hints in logs show 4 characters instead of 6. The website no longer shows a sample sync key to signed-out visitors.
+- The browser agent's prompt now treats page text as untrusted, keeps the account password to the portal's own login
+  form, and forbids guessing answers that are not in the profile.
 
 ### Added
+- Claude, OpenAI and Gemini keys: `/user/solve_field` now uses the account's saved key, the extension has an optional
+  LLM-key field (Settings tab, extension 3.6.0), and a user whose own key is rejected is told that the server's default
+  model was used instead. The website label no longer says Gemini only.
+- PyPI publishing can use Trusted Publishing, which records signed provenance. Set the repository variable
+  `PYPI_TRUSTED_PUBLISHING` to `true` after adding the trusted publisher on PyPI. Without it the token upload is used.
+- `openai` is now a declared dependency, and `anthropic` and `openai` have version ranges.
 - Claude and OpenAI now work for text generation too (cover letter, resume tailoring, job-fit analysis, form
   answers), not only the browser agent. After NVIDIA and Cloudflare (when enabled), the pipeline tries the providers
   in `LLM_PROVIDERS` order, default `gemini,anthropic,openai`, so a Gemini 429/503 falls back to Claude, then OpenAI.
@@ -17,6 +38,8 @@
   one user's model list is never used for another user.
 - The Claude and OpenAI helpers sent `temperature`, which `gpt-6-luna` and the current Anthropic SDK reject, and
   used fixed old model names (`gpt-4o`, `claude-3-5-*`). They now pick the model dynamically and omit `temperature`.
+- Scan results were recorded as submitted when the agent wrote "was NOT submitted" or "nothing was submitted". A run is
+  now a success only with an explicit confirmation and no negation.
 
 ## 1.8.0
 

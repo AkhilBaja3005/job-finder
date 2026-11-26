@@ -1,4 +1,5 @@
 import os
+import asyncio
 import json
 import urllib.parse
 from typing import Optional, Any, Dict, List, Union
@@ -366,7 +367,11 @@ async def user_me(authorization: Optional[str] = Header(None)):
     if user.get("skip_portals") is None:
         user["skip_portals"] = ["targetjobs"]
 
-    return user
+    # Never send the saved LLM key back to the browser: only whether one is set and its last 4 characters.
+    from services.secret_store import mask_secret
+    safe = {k: v for k, v in user.items() if k != "gemini_api_key"}
+    safe.update(mask_secret(user.get("gemini_api_key")))
+    return safe
 
 
 @router.get("/user/sync_code")
@@ -380,6 +385,21 @@ async def get_sync_code(authorization: Optional[str] = Header(None)):
 
     code = generate_user_sync_code(user["id"])
     return {"sync_code": code, "email": user.get("email")}
+
+
+@router.post("/user/rotate_sync_code")
+async def rotate_sync_code(authorization: Optional[str] = Header(None)):
+    """Replaces the sync code with a new 10-character one. The old code stops working everywhere."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = authorization.split(" ")[1]
+    user = await async_get_user_by_token(token)
+    if not user or not user.get("id") or str(user["id"]).startswith("guest_"):
+        raise HTTPException(status_code=401, detail="Sign in to rotate your sync code")
+    from services.auth import rotate_user_sync_code
+    code = await asyncio.to_thread(rotate_user_sync_code, user["id"])
+    invalidate_token_cache(token)
+    return {"sync_code": code}
 
 
 @router.post("/user/settings")

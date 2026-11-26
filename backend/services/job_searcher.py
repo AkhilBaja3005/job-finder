@@ -209,7 +209,7 @@ Do not wrap in explanatory text. Only return the JSON array."""
                 except Exception as model_err:
                     err_str = str(model_err).lower()
                     if "429" in err_str or "resource_exhausted" in err_str:
-                        key_hint = f"...{key_candidate[-6:]}" if len(key_candidate) >= 6 else "key"
+                        key_hint = f"...{key_candidate[-4:]}" if len(key_candidate) >= 6 else "key"
                         print(f"[Direct ATS Search] Key {key_hint} quota limit reached (429), rotating to next API key...")
                         continue
                     all_429 = False

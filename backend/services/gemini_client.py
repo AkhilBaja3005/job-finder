@@ -252,6 +252,17 @@ def _nvidia_configured() -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 # Core Logic Engine and Cascading Routine
 # ─────────────────────────────────────────────────────────────────────────────
+def _user_key_failed(provider: str, err: Exception, on_log: Optional[Callable[[str], None]]) -> None:
+    """A key the user supplied did not work. Log it, and tell the user when the key itself was rejected."""
+    print(f"[LLM Client] Override {provider} failed: {str(err)[:160]}. Falling back to standard pipeline...")
+    text = str(err).lower()
+    rejected = any(m in text for m in ("401", "403", "invalid api key", "invalid x-api-key", "incorrect api key", "authentication", "permission"))
+    if on_log:
+        message = (f"Your {provider} API key was rejected, so the server's default model was used instead. Check the key in Settings."
+                   if rejected else f"Your {provider} API key could not be used right now, so the server's default model was used instead.")
+        on_log(json.dumps({"type": "llm_warn", "provider": provider.lower(), "message": message}))
+
+
 def _generate_with_model_list(
     prompt: str,
     model_list: list,
@@ -278,20 +289,20 @@ def _generate_with_model_list(
             try:
                 return _execute_nvidia_nim_fallback(prompt, response_schema, custom_api_key, on_log)
             except Exception as e:
-                print(f"[LLM Client] Override NVIDIA failed: {e}. Falling back to standard pipeline...")
+                _user_key_failed("NVIDIA", e, on_log)
         
         elif custom_api_key.startswith("sk-ant-"):
             try: return _execute_anthropic(prompt, response_schema, custom_api_key)
-            except Exception as e: print(f"[LLM Client] Override Anthropic failed: {e}. Falling back to standard pipeline...")
+            except Exception as e: _user_key_failed("Anthropic", e, on_log)
         elif custom_api_key.startswith("sk-proj-") or (custom_api_key.startswith("sk-") and not custom_api_key.startswith("sk-ant-") and not custom_api_key.startswith("sk-or-")):
             try: return _execute_openai(prompt, response_schema, custom_api_key)
-            except Exception as e: print(f"[LLM Client] Override OpenAI failed: {e}. Falling back to standard pipeline...")
+            except Exception as e: _user_key_failed("OpenAI", e, on_log)
         elif custom_api_key.startswith("gsk_"):
             try: return _execute_groq(prompt, response_schema, custom_api_key)
-            except Exception as e: print(f"[LLM Client] Override Groq failed: {e}. Falling back to standard pipeline...")
+            except Exception as e: _user_key_failed("Groq", e, on_log)
         elif custom_api_key.startswith("sk-or-"):
             try: return _execute_openrouter(prompt, model_list, response_schema, custom_api_key, on_log)
-            except Exception as e: print(f"[LLM Client] Override OpenRouter failed: {e}. Falling back to standard pipeline...")
+            except Exception as e: _user_key_failed("OpenRouter", e, on_log)
 
     # ── STAGE 1: NVIDIA NIM (First General Checkpoint) ───────────────────────
     nvidia_api_key = os.getenv("NVIDIA_API_KEY")
@@ -422,7 +433,7 @@ def _generate_with_gemini(
                     if any(x in err_str for x in ["429", "quota", "rate limit", "resource_exhausted"]):
                         # pyrefly: ignore [missing-import]
                         from services.log_queue import log_ist
-                        key_hint = f"...{key_candidate[-6:]}" if len(key_candidate) >= 6 else "key"
+                        key_hint = f"...{key_candidate[-4:]}" if len(key_candidate) >= 8 else "key"
                         log_ist(f"[LLM] Model {model_name} with key {key_hint} rate limited (429). Rotating to next API key/fallback model...")
                         break  # Break out to try next candidate key or next model
                     break # Non-rate-limit client problems move strictly forward to downstream models
@@ -909,7 +920,7 @@ def call_gemini_grounded(
                 if any(x in err_str for x in ["429", "quota", "rate limit", "resource_exhausted"]):
                     # pyrefly: ignore [missing-import]
                     from services.log_queue import log_ist
-                    key_hint = f"...{key_candidate[-6:]}" if len(key_candidate) >= 6 else "key"
+                    key_hint = f"...{key_candidate[-4:]}" if len(key_candidate) >= 8 else "key"
                     log_ist(f"[LLM Grounding] Model {model_name} with key {key_hint} rate limited (429). Rotating to next API key...")
                     continue
                 print(f"[LLM Grounding] Model {model_name} search grounding warning: {e}. Trying next variant...")
