@@ -788,3 +788,11 @@ def test_locked_supabase_project_gets_a_clear_message(tmp_path, monkeypatch):
     status = scan_panel.supabase_status(tmp_path)
     assert status["configured"] and not status["reachable"] and status["denied"] is True
     assert "SUPABASE_SERVICE_KEY" in status["error"] and "sync code" in status["error"]
+
+
+def test_dmg_holds_the_app_and_an_applications_shortcut():
+    from pathlib import Path
+    script = (Path(__file__).resolve().parents[2] / "macapp" / "build_mac.sh").read_text()
+    assert 'ln -s /Applications "$STAGE/Applications"' in script
+    assert 'ditto "dist-mac/Job Finder.app" "$STAGE/Job Finder.app"' in script
+    assert '-srcfolder "$STAGE"' in script  # the image is made from the staged folder, not the bare app
