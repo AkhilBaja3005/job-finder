@@ -88,6 +88,8 @@ jobs:
           export JOB_FINDER_APP_HOME="$RUNNER_TEMP/jf-home"
           export JOB_FINDER_SKIP_BROWSER_INSTALL=1
           "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli --version
+          # The console build the window uses for background work must exist and run.
+          "dist-mac/Job Finder.app/Contents/MacOS/job-finder-cli" --cli --version
           "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli doctor || true
           "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli scan --help | grep -q -- "--dry-run"
           # Opens the real window, waits for the page and the Python bridge, prints what rendered, and quits.

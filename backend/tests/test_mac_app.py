@@ -756,3 +756,33 @@ def test_check_replies_updates_matching_rows(tmp_path, monkeypatch):
     assert out["ok"] and out["updated"] == 1 and out["changes"] == [{"company": "Beta", "stage": "interview"}]
     assert [r["Status"] for r in scan_panel._csv_all(ws)] == ["Applied", "Applied", "Interview"]
     assert scan_panel.check_replies(ws)["updated"] == 0  # a second check changes nothing
+
+
+# ── background processes stay out of the Dock ────────────────────────────────────
+def test_dock_helper_is_safe_everywhere(monkeypatch):
+    from utils import dock
+    assert isinstance(dock.hide_dock_icon(), bool)
+    assert dock.hide_dock_icon() == dock.hide_dock_icon()   # calling it twice is fine
+    monkeypatch.setattr(dock.sys, "platform", "linux")
+    assert dock.hide_dock_icon() is False
+
+
+def test_window_runs_its_children_through_the_console_build(tmp_path, monkeypatch):
+    import sys
+    import job_finder_app
+    gui = tmp_path / "Job Finder"
+    cli = tmp_path / "job-finder-cli"
+    gui.write_text("")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(gui))
+    assert job_finder_app.launcher_command() == [str(gui), "--cli"]            # older bundle without the console build
+    cli.write_text("")
+    assert job_finder_app.launcher_command() == [str(cli), "--cli"]
+
+
+def test_bundle_builds_a_console_program_and_ci_checks_it():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    spec = (root / "macapp" / "job_finder.spec").read_text()
+    assert 'name="job-finder-cli", console=True' in spec and "COLLECT(exe, exe_cli" in spec
+    assert "job-finder-cli" in (root / ".github" / "workflows" / "build_desktop_apps.yml").read_text()

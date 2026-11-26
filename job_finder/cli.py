@@ -51,8 +51,21 @@ for candidate in [
 from job_finder.updates import check_for_updates, _parse_ver  # noqa: E402,F401
 
 
+def _hide_dock_icon() -> None:
+    """The command line tool never has a window, so on a Mac it should not show a Dock icon (see utils/dock.py)."""
+    try:
+        from utils.dock import hide_dock_icon
+    except ImportError:
+        try:
+            from backend.utils.dock import hide_dock_icon
+        except ImportError:
+            return
+    hide_dock_icon()
+
+
 def main():
     """Console entry point: friendly errors, clean Ctrl-C, full traceback with --debug."""
+    _hide_dock_icon()
     try:
         _main()
     except KeyboardInterrupt:
