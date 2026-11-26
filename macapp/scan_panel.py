@@ -339,6 +339,107 @@ class ScanRunner:
         }
 
 
+# ── job-finder.space (sync code) ─────────────────────────────────────────────────
+DEFAULT_SERVER = "https://abaja-job-finder.hf.space"
+SYNC_CODE_VAR = "JOB_FINDER_SYNC_CODE"
+_cloud_cache: Dict[str, Any] = {}
+
+
+def server_url(ws: Path) -> str:
+    url = (read_env(ws).get("JOB_FINDER_SERVER_URL") or DEFAULT_SERVER).rstrip("/")
+    parsed = urllib.parse.urlparse(url)
+    local = parsed.hostname in ("localhost", "127.0.0.1")
+    return url if parsed.scheme == "https" or (parsed.scheme == "http" and local) else DEFAULT_SERVER  # never send the code in clear text
+
+
+def sync_code(ws: Path) -> str:
+    return read_env(ws).get(SYNC_CODE_VAR, "").strip().upper()
+
+
+def _server_request(ws: Path, code: str, path: str, method: str = "GET", body: Any = None, timeout: float = 20.0) -> Any:
+    request = urllib.request.Request(
+        server_url(ws) + path, method=method, data=json.dumps(body).encode() if body is not None else None,
+        headers={"Authorization": f"Bearer {code}", "Content-Type": "application/json", "User-Agent": "Job-Finder-App"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout, context=_ssl_context()) as resp:
+        raw = resp.read()
+    return json.loads(raw) if raw else None
+
+
+def _explain(exc: Exception) -> str:
+    if isinstance(exc, urllib.error.HTTPError):
+        if exc.code == 401:
+            return "That sync code was not recognised."
+        if exc.code == 429:
+            return "Too many attempts. Wait a few minutes and try again."
+        return f"The server answered with an error ({exc.code})."
+    return "Could not reach job-finder.space. Check your connection."
+
+
+def cloud_status(ws: Path, fresh: bool = False) -> Dict[str, Any]:
+    """Whether a sync code is saved and still accepted. The answer is kept for a minute so the window stays quick."""
+    code = sync_code(ws)
+    if not code:
+        return {"configured": False, "connected": False}
+    cached = _cloud_cache.get("status")
+    if cached and not fresh and cached[0] == (code, server_url(ws)) and time.time() - cached[1] < 60:
+        return cached[2]
+    try:
+        me = _server_request(ws, code, "/user/me", timeout=8) or {}
+        result = {"configured": True, "connected": True, "email": str(me.get("email") or "")}
+    except Exception as exc:
+        result = {"configured": True, "connected": False, "error": _explain(exc)}
+    _cloud_cache["status"] = ((code, server_url(ws)), time.time(), result)
+    return result
+
+
+def save_sync_code(ws: Path, raw: str) -> Dict[str, Any]:
+    code = re.sub(r"[^A-Za-z0-9]", "", raw or "").upper()
+    if not 4 <= len(code) <= 16:
+        return {"ok": False, "error": "A sync code is 6 to 10 letters and numbers. Find it on job-finder.space under your account."}
+    try:
+        me = _server_request(ws, code, "/user/me", timeout=10) or {}
+    except Exception as exc:
+        return {"ok": False, "error": _explain(exc)}
+    write_env_value(ws, SYNC_CODE_VAR, code)
+    _cloud_cache.clear()
+    return {"ok": True, "email": str(me.get("email") or "")}
+
+
+def disconnect_sync(ws: Path) -> Dict[str, Any]:
+    write_env_value(ws, SYNC_CODE_VAR, "")
+    _cloud_cache.clear()
+    return {"ok": True}
+
+
+def sync_to_cloud(ws: Path) -> Dict[str, Any]:
+    """Uploads the applications in the local tracker to the account. The server skips URLs it already has."""
+    code = sync_code(ws)
+    if not code:
+        return {"ok": False, "error": "Add your sync code in Settings first."}
+    rows, seen = [], set()
+    for row in _csv_all(ws):
+        url = (row.get("Job URL") or "").strip()
+        if len(url) < 8 or url in seen:
+            continue
+        seen.add(url)
+        try:
+            score = int(re.sub(r"[^0-9]", "", row.get("Overall ATS") or "") or 0)
+        except ValueError:
+            score = 0
+        rows.append({"job_title": (row.get("Job Title") or "Role")[:300], "company": (row.get("Company") or "Company")[:300], "job_url": url[:2000],
+                     "score": min(score, 100), "status": (row.get("Status") or "saved")[:60], "source_mode": (row.get("Platform") or "desktop")[:60]})
+    added = already = 0
+    try:
+        for i in range(0, len(rows), 200):
+            out = _server_request(ws, code, "/applications/sync", "POST", {"applications": rows[i:i + 200]}, timeout=60) or {}
+            added += int(out.get("added", 0))
+            already += int(out.get("already", 0))
+    except Exception as exc:
+        return {"ok": False, "error": _explain(exc), "pushed": added}
+    return {"ok": True, "pushed": added, "already": already}
+
+
 # ── updates, Chrome, notifications ───────────────────────────────────────────────
 RELEASES_URL = "https://api.github.com/repos/AkhilBaja3005/job-finder/releases/latest"
 
@@ -565,7 +666,7 @@ class Api:
         ws = workspace_dir()
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
-            "running": self._runner.running, "version": _app_version(), "supabase": supabase_status(ws),
+            "running": self._runner.running, "version": _app_version(), "supabase": supabase_status(ws), "cloud": cloud_status(ws),
             "browser": {"ready": browser_ready(), **self._browser},
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
@@ -643,16 +744,18 @@ class Api:
             notify("Job Finder", f"Run finished: {counts['submitted']} submitted, {counts['needs_review']} to review." if result["exit_code"] in (0, None) else "The run ended with an error.")
         if not result["running"] and not self._synced_after_run:
             self._synced_after_run = True  # once per run
-            if supabase_settings(workspace_dir()) and result.get("title") == "scan":
+            if (supabase_settings(workspace_dir()) or sync_code(workspace_dir())) and result.get("title") == "scan":
                 threading.Thread(target=self._sync_and_report, daemon=True).start()
         return result
 
     def _sync_and_report(self) -> None:
-        outcome = sync_missing_to_supabase(workspace_dir())
-        if outcome.get("ok"):
-            self._runner.add_line(f"Synced with your Supabase project: {outcome['pushed']} new application(s) added.")
-        else:
-            self._runner.add_line(outcome.get("error", "Sync failed."))
+        ws = workspace_dir()
+        if supabase_settings(ws):
+            outcome = sync_missing_to_supabase(ws)
+            self._runner.add_line(f"Synced with your Supabase project: {outcome['pushed']} new application(s) added." if outcome.get("ok") else outcome.get("error", "Sync failed."))
+        if sync_code(ws):
+            outcome = sync_to_cloud(ws)
+            self._runner.add_line(f"Synced with job-finder.space: {outcome['pushed']} new application(s) added." if outcome.get("ok") else outcome.get("error", "Sync failed."))
 
     def get_results(self) -> List[Dict[str, Any]]:
         ws = workspace_dir()
@@ -667,6 +770,17 @@ class Api:
 
     def sync_now(self) -> Dict[str, Any]:
         return sync_missing_to_supabase(workspace_dir())
+
+    def save_sync_code(self, code: str) -> Dict[str, Any]:
+        return save_sync_code(workspace_dir(), code)
+
+    def disconnect_sync(self) -> Dict[str, Any]:
+        return disconnect_sync(workspace_dir())
+
+    def sync_cloud_now(self) -> Dict[str, Any]:
+        outcome = sync_to_cloud(workspace_dir())
+        _cloud_cache.clear()
+        return outcome
 
     def save_key(self, provider: str, value: str) -> Dict[str, Any]:
         var = API_KEYS.get(provider)

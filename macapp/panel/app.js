@@ -262,7 +262,7 @@
   const PROVIDERS = [["gemini", "Gemini", "Free tier available"], ["anthropic", "Claude", "Anthropic"], ["openai", "OpenAI", "GPT models"]];
   function renderSettings() {
     const i = S.info; if (!i) { $("#view").innerHTML = head("Settings", "") + '<div class="scroll"><div class="skeleton"></div></div>'; return; }
-    const sb = i.supabase, br = i.browser;
+    const sb = i.supabase, br = i.browser, cl = i.cloud || {};
     const row = (t, d, ctl, id) => '<div class="setting"><div class="info"><div class="t">' + t + '</div><div class="d">' + d + '</div></div><div class="ctl"' + (id ? ' id="' + id + '"' : "") + ">" + ctl + "</div></div>";
     $("#view").innerHTML = head("Settings", "Your folder, AI providers and connections.") + '<div class="scroll"><div class="stack" style="max-width:820px">' +
       '<div class="sect-title">General</div><section class="card">' +
@@ -277,6 +277,8 @@
       '<div class="sect-title">Connections</div><section class="card">' +
         row("Supabase", sb.configured ? esc(sb.host || "Configured") + (sb.reachable ? " · connected" : " · cannot be reached") : "Not set up. Add SUPABASE_URL and a key to your .env to keep applications in your own project.",
           sb.configured ? badge(sb.reachable ? "Connected" : "Unreachable", sb.reachable ? "good" : "warn") + '<button class="btn" data-act="sync">' + icon("refresh") + "Sync now</button>" : '<button class="btn" data-open="env">Open .env</button>') +
+        row("job-finder.space", cl.configured ? (cl.connected ? "Applications are saved to your account" + (cl.email ? " (" + esc(cl.email) + ")" : "") + " and show on the website and in the extension." : esc(cl.error || "Cannot be reached right now.")) : "Save your applications to your job-finder.space account with your sync code. API keys never leave this Mac.",
+          cl.configured ? badge(cl.connected ? "Connected" : "Unreachable", cl.connected ? "good" : "warn") + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Disconnect</button>' : '<button class="btn primary" data-act="add-sync">Add sync code…</button>', "c-sync") +
         row("Page scraper browser", br.ready ? "Installed" : br.installing ? "Downloading, about 150 MB…" : (br.error ? esc(br.error) : "Needed for some job sources. Downloaded once."), br.ready ? badge("Ready", "good") : br.installing ? badge("Installing", "accent") : '<button class="btn" data-act="install-browser">' + icon("download") + "Install</button>") +
       "</section>" +
       '<div class="sect-title">About</div><section class="card">' +
@@ -344,6 +346,10 @@
     switch (d.act) {
       case "start": return startRun();
       case "cancel-key": return renderSettings();
+      case "add-sync": { const ctl = $("#c-sync"); if (!ctl) return; ctl.innerHTML = '<span class="keybox"><input class="input" type="password" id="si-sync" placeholder="Your sync code" autocomplete="off" spellcheck="false" maxlength="16" aria-label="Sync code"><button class="btn primary" data-act="save-sync">Connect</button><button class="btn" data-act="cancel-key">Cancel</button></span>'; $("#si-sync").focus(); return; }
+      case "save-sync": { const r = await call("save_sync_code", $("#si-sync").value); if (r && r.ok) { toast("Connected to job-finder.space."); await refreshInfo(); renderSettings(); } else toast((r && r.error) || "Could not connect.", "bad"); return; }
+      case "disconnect-sync": { await call("disconnect_sync"); toast("Disconnected. Your applications stay on this Mac."); await refreshInfo(); renderSettings(); return; }
+      case "sync-cloud": { const r = await call("sync_cloud_now"); if (r && r.ok) toast(r.pushed ? "Added " + plural(r.pushed, "application") + " to job-finder.space." : "job-finder.space is up to date."); else toast((r && r.error) || "Sync failed.", "bad"); await refreshInfo(); renderSettings(); return; }
       case "stop": return void call("stop_scan");
       case "goto-settings": return go("settings");
       case "choose-ws": { const r = await call("choose_workspace"); if (r && r.ok) { S.info = r.state; S.apps.rows = null; hydrateForm(); toast("Folder changed."); go(S.view); } return; }
