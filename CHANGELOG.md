@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Mac app (Apple Silicon, unsigned for now): `Job Finder.app` runs the server on 127.0.0.1:8000 and shows the web app in its own window.
+  Your data and `.env` live in `~/Library/Application Support/Job Finder`. Build it with `macapp/build_mac.sh`, or run the
+  "Build Mac app" workflow, which attaches the .dmg to a release. See `macapp/README.md`.
+
+### Fixed
+- The web app assumed the backend was on port 8000 whenever it was opened on localhost. It now uses the address it is
+  served from, and only the Vite dev server points at 8000.
+
 ## 1.9.1
 
 ### Fixed

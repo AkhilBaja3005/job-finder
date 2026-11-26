@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 const API_BASE = import.meta.env?.VITE_API_BASE
   || import.meta.env?.VITE_BACKEND_URL
   || ((typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
-    ? 'http://127.0.0.1:8000'
+    ? (['5173', '5174', '4173', '3000'].includes(window.location.port) ? 'http://127.0.0.1:8000' : window.location.origin)
     : (typeof window !== 'undefined' ? window.location.origin : ''));
 
 const DiscoverMode = ({
