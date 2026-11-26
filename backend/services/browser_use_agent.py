@@ -110,11 +110,144 @@ DISABLE_GUARDRAILS: bool = any(
 )
 
 
+_PROVIDERS = ("gemini", "anthropic", "openai")
+_PROVIDER_ALIASES = {"google": "gemini", "claude": "anthropic"}
+_PROVIDER_KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
+_DEFAULT_MODELS = {"anthropic": "claude-haiku-5-5", "openai": "gpt-6-luna"}
+# Short names accepted in BROWSER_USE_ANTHROPIC_MODEL, BROWSER_USE_OPENAI_MODEL, BROWSER_USE_MODEL and --model.
+# Each short name is a model family. The newest model of that family is looked up from the provider's
+# model list (cached for an hour); the static name here is used if the lookup fails or no key is set.
+_MODEL_ALIASES = {
+    "anthropic": {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5"},
+    "openai": {"luna": "gpt-6-luna", "terra": "gpt-6.1-terra"},
+}
+_DEFAULT_FAMILY = {"anthropic": "haiku", "openai": "luna"}
+
+
+def _expand_model_alias(provider: str, model: Optional[str]) -> Optional[str]:
+    """
+    Turns a family name into the newest model of that family: 'haiku' -> 'claude-haiku-5-5',
+    'luna' -> 'gpt-6-luna'. A full model name passes through untouched, so a name the user set
+    explicitly is never replaced.
+    """
+    if not model:
+        return model
+    name = model.strip()
+    aliases = _MODEL_ALIASES.get(provider, {})
+    family = name.lower()
+    if family not in aliases:
+        return name
+    try:
+        from config.constants import discover_provider_model
+        return discover_provider_model(provider, family, os.getenv(_PROVIDER_KEY_ENV[provider]), aliases[family])
+    except Exception:
+        return aliases[family]
+
+
+_MODEL_ENV = {"anthropic": "BROWSER_USE_ANTHROPIC_MODEL", "openai": "BROWSER_USE_OPENAI_MODEL"}
+
+
+def _provider_from_model(model: Optional[str]) -> Optional[str]:
+    """Infers the provider from a model name such as 'claude-haiku-5-5' or 'gpt-4o-mini'."""
+    m = (model or "").strip().lower()
+    if m in _MODEL_ALIASES["anthropic"]:
+        return "anthropic"
+    if m in _MODEL_ALIASES["openai"]:
+        return "openai"
+    if m.startswith("claude"):
+        return "anthropic"
+    if m.startswith(("gpt-", "chatgpt", "o1", "o3", "o4")):
+        return "openai"
+    if m.startswith("gemini"):
+        return "gemini"
+    return None
+
+
+def resolve_provider_order(model_name: Optional[str] = None) -> List[str]:
+    """
+    Returns the LLM providers in the order they are tried: first is the primary, second the
+    secondary, and so on. Only providers that can actually run are returned (Anthropic and OpenAI
+    need their API key; Gemini is kept last when no Gemini key exists so a missing key is reported
+    only if nothing else works).
+
+    Precedence:
+      1. BROWSER_USE_PROVIDERS, e.g. "anthropic,openai,gemini" (also accepts claude/google aliases).
+      2. A model name that clearly belongs to a provider (model_name argument or BROWSER_USE_MODEL).
+      3. A provider whose model is set explicitly (BROWSER_USE_ANTHROPIC_MODEL / BROWSER_USE_OPENAI_MODEL).
+      4. Default: gemini, then anthropic, then openai.
+    Providers not named by the chosen rule are appended in the default order as extra fallbacks.
+    """
+    order: List[str] = []
+
+    def add(provider: Optional[str]) -> None:
+        provider = _PROVIDER_ALIASES.get(provider or "", provider)
+        if provider in _PROVIDERS and provider not in order:
+            order.append(provider)
+
+    for name in os.getenv("BROWSER_USE_PROVIDERS", "").split(","):
+        add(name.strip().lower())
+    if not order:
+        add(_provider_from_model(model_name or os.getenv("BROWSER_USE_MODEL")))
+    if not order:
+        for provider in ("anthropic", "openai"):
+            if os.getenv(_MODEL_ENV[provider], "").strip():
+                add(provider)
+    for provider in _PROVIDERS:
+        add(provider)
+
+    def usable(provider: str) -> bool:
+        return provider == "gemini" or bool(os.getenv(_PROVIDER_KEY_ENV[provider]))
+
+    return [p for p in order if usable(p)]
+
+
+def _make_llm(provider: str, model: Optional[str] = None, api_key: Optional[str] = None):
+    """Builds a browser-use chat client for one provider, or returns None if it cannot be built."""
+    try:
+        if provider == "anthropic":
+            from browser_use import ChatAnthropic  # pyright: ignore[reportAttributeAccessIssue]
+            return ChatAnthropic(
+                model=str(_expand_model_alias("anthropic", model or os.getenv(_MODEL_ENV["anthropic"]) or _DEFAULT_FAMILY["anthropic"]) or _DEFAULT_MODELS["anthropic"]),
+                api_key=api_key or os.getenv("ANTHROPIC_API_KEY"),
+            )
+        if provider == "openai":
+            from browser_use import ChatOpenAI  # pyright: ignore[reportAttributeAccessIssue]
+            return ChatOpenAI(
+                model=str(_expand_model_alias("openai", model or os.getenv(_MODEL_ENV["openai"]) or _DEFAULT_FAMILY["openai"]) or _DEFAULT_MODELS["openai"]),
+                api_key=api_key or os.getenv("OPENAI_API_KEY"),
+            )
+    except Exception:
+        return None
+    return None
+
+
+def _provider_of(llm: Any) -> str:
+    name = type(llm).__name__.lower()
+    if "anthropic" in name:
+        return "anthropic"
+    if "openai" in name:
+        return "openai"
+    return "gemini"
+
+
 def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Optional[str] = None):
     """
-    Initializes browser-use native ChatGoogle client targeting the latest dynamically discovered
-    Gemini Flash-Lite / Flash model (strictly excluding Pro models for high RPM & low latency).
+    Returns the primary browser-use LLM.
+
+    The primary provider comes from resolve_provider_order(): BROWSER_USE_PROVIDERS, a Claude/GPT
+    model name, or an explicitly set BROWSER_USE_ANTHROPIC_MODEL / BROWSER_USE_OPENAI_MODEL.
+    With none of those set it is Gemini, using the latest discovered Flash-Lite model
+    (strictly excluding Pro models for high RPM & low latency).
     """
+    primary = resolve_provider_order(model_name)[0]
+    if primary in ("anthropic", "openai"):
+        explicit = model_name or os.getenv("BROWSER_USE_MODEL")
+        model = explicit if _provider_from_model(explicit) == primary else None
+        llm = _make_llm(primary, model)
+        if llm is not None:
+            return llm
+        print(f"[browser-use] Could not start preferred provider '{primary}', falling back to Gemini.")
+
     try:
         # pyrefly: ignore [missing-import]
         from services.gemini_client import get_next_gemini_api_key
@@ -125,10 +258,11 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
     if not api_key:
         raise ValueError("GEMINI_API_KEY is required for browser-use agent execution.")
 
-    # Automatically resolve the latest available Flash-Lite model if model_name is not explicitly passed
+    # Automatically resolve the latest available Flash-Lite model if no Gemini model is named
     discovered_lite = get_best_flash_lite_model(api_key)
-    target_model = model_name or os.getenv("BROWSER_USE_MODEL") or discovered_lite
-    
+    explicit = model_name or os.getenv("BROWSER_USE_MODEL")
+    target_model = explicit if (explicit and _provider_from_model(explicit) == "gemini") else discovered_lite
+
     return ChatGoogle(
         model=target_model,
         api_key=api_key,
@@ -138,36 +272,15 @@ def get_browser_use_llm(model_name: Optional[str] = None, custom_api_key: Option
 
 def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[str] = None) -> List[Any]:
     """
-    Constructs a list of fallback ChatGoogle instances using all other configured GEMINI_API_KEYS.
-    When one key hits a 429 RESOURCE_EXHAUSTED rate limit, browser-use automatically cascades
-    to the next available key and model tier without crashing the scan.
+    Builds the fallback chain that runs when the primary LLM fails (429, 503, ...).
+
+    The chain follows resolve_provider_order(): the provider after the primary is the secondary,
+    and so on. The primary's own provider is skipped for Anthropic/OpenAI, which have one client
+    each. For Gemini, the remaining GEMINI_API_KEYS and alternate Flash models are added, so a
+    429 on one key or a model-wide 503 still cascades to something that can answer.
     """
     fallback_instances: List[Any] = []
-
-    # 0. Claude Haiku first: Gemini 503 (overload) hits the whole model, so rotating Gemini keys
-    #    cannot help. A different provider can.
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-    if anthropic_key:
-        try:
-            from browser_use import ChatAnthropic  # pyright: ignore[reportAttributeAccessIssue]
-            fallback_instances.append(ChatAnthropic(
-                model=os.getenv("BROWSER_USE_ANTHROPIC_MODEL", "claude-haiku-5-5"),
-                api_key=anthropic_key,
-            ))
-        except Exception:
-            pass
-
-    # 0b. OpenAI next, if a key is set (model override: BROWSER_USE_OPENAI_MODEL)
-    openai_key = os.getenv("OPENAI_API_KEY")
-    if openai_key:
-        try:
-            from browser_use import ChatOpenAI  # pyright: ignore[reportAttributeAccessIssue]
-            fallback_instances.append(ChatOpenAI(
-                model=os.getenv("BROWSER_USE_OPENAI_MODEL", "gpt-4o-mini"),
-                api_key=openai_key,
-            ))
-        except Exception:
-            pass
+    primary_provider = _provider_of(primary_llm) if primary_llm is not None else None
 
     try:
         # pyrefly: ignore [missing-import]
@@ -177,33 +290,41 @@ def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[
         all_keys = [k for k in [os.getenv(f"GEMINI_API_KEY_{i}") for i in range(2, 11)] if k]
 
     primary_key = getattr(primary_llm, "api_key", None)
-    target_model = model_name or os.getenv("BROWSER_USE_MODEL") or "gemini-3.5-flash-lite"
+    explicit = model_name or os.getenv("BROWSER_USE_MODEL")
+    target_model = explicit if (explicit and _provider_from_model(explicit) == "gemini") else "gemini-3.5-flash-lite"
 
-    # 1. Use remaining Gemini keys on the same model tier
-    for key in all_keys:
-        if key and key != primary_key:
-            try:
-                fallback_instances.append(ChatGoogle(
-                    model=target_model,
-                    api_key=key,
-                    temperature=0.1,
-                ))
-            except Exception:
-                pass
-
-    # 2. Add alternate Flash models (e.g. gemini-3.1-flash-lite, gemini-3.5-flash) across keys to hedge against per-model quotas
-    alt_models = ["gemini-3.1-flash-lite", "gemini-3.5-flash"]
-    for alt_m in alt_models:
-        if alt_m != target_model:
-            for key in all_keys[:3]:
+    def gemini_fallbacks() -> List[Any]:
+        out: List[Any] = []
+        # Remaining Gemini keys on the same model tier
+        for key in all_keys:
+            if key and key != primary_key:
                 try:
-                    fallback_instances.append(ChatGoogle(
-                        model=alt_m,
-                        api_key=key,
-                        temperature=0.1,
-                    ))
+                    out.append(ChatGoogle(model=target_model, api_key=key, temperature=0.1))
                 except Exception:
                     pass
+        # Alternate Flash models across keys, to hedge against per-model quotas
+        for alt_m in ("gemini-3.1-flash-lite", "gemini-3.5-flash"):
+            if alt_m != target_model:
+                for key in all_keys[:3]:
+                    try:
+                        out.append(ChatGoogle(model=alt_m, api_key=key, temperature=0.1))
+                    except Exception:
+                        pass
+        return out
+
+    # A model-wide Gemini 503 cannot be fixed by rotating Gemini keys, so when Gemini is the primary
+    # the other providers go first and the Gemini key/model rotation comes last.
+    gemini_after_others = primary_provider == "gemini"
+    for provider in resolve_provider_order(model_name):
+        if provider == "gemini":
+            if not gemini_after_others:
+                fallback_instances.extend(gemini_fallbacks())
+        elif provider != primary_provider:
+            llm = _make_llm(provider)
+            if llm is not None:
+                fallback_instances.append(llm)
+    if gemini_after_others:
+        fallback_instances.extend(gemini_fallbacks())
 
     return fallback_instances
 

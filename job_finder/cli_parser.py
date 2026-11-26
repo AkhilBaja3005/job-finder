@@ -58,7 +58,7 @@ def build_parser(version: str) -> argparse.ArgumentParser:
     scanner_parser.add_argument("--role", type=str, default=None, help="Target role filter override")
     scanner_parser.add_argument("--location", type=str, default=None, help="Target location filter override")
     scanner_parser.add_argument("--timeframe", type=str, default=None, help="Search freshness window (e.g. 24h, 48h, 1w)")
-    scanner_parser.add_argument("--model", type=str, default=None, help="Gemini LLM model override")
+    scanner_parser.add_argument("--model", type=str, default=None, help="LLM model override (gemini-*, claude-* or gpt-*; a claude-*/gpt-* name picks that provider as primary)")
     scanner_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
     scanner_parser.add_argument("--top-applicant", action="store_true", help="Scan LinkedIn specifically for Top Applicant postings and apply directly without JD scoring")
     scanner_parser.add_argument("--sponsor-only", "--sponsored", dest="sponsor_only", action="store_true", help="Filter and only apply/tailor for verified UK Visa Sponsor employers")
