@@ -309,9 +309,9 @@ def test_update_check_failure_is_a_message_not_an_exception():
 
 def test_app_prefs_keep_only_known_keys(home):
     api = panel.Api([sys.executable])
-    assert panel.load_app_prefs() == {"primary_ai": "auto", "headless": False}
+    assert panel.load_app_prefs() == {"primary_ai": "auto", "headless": False, "tour_done": False}
     api.save_app_prefs({"primary_ai": "anthropic", "headless": True, "workspace": "/etc", "evil": 1})
-    assert panel.load_app_prefs() == {"primary_ai": "anthropic", "headless": True}
+    assert panel.load_app_prefs() == {"primary_ai": "anthropic", "headless": True, "tour_done": False}
     assert panel.load_app_config().get("workspace") != "/etc"  # a window call cannot repoint the folder
 
 
@@ -512,3 +512,38 @@ def test_push_without_code_and_server_url_rules(tmp_path):
     assert scan_panel.server_url(ws) == scan_panel.DEFAULT_SERVER  # clear-text remote servers are refused
     scan_panel.write_env_value(ws, "JOB_FINDER_SERVER_URL", "http://localhost:7860")
     assert scan_panel.server_url(ws) == "http://localhost:7860"
+
+
+# ── profile check and import ─────────────────────────────────────────────────────
+GOOD_PROFILE = {"candidate": {"name": "Ada", "email": "ada@example.com", "phone": "", "requires_sponsorship": False,
+                              "work_experience": [{"company": "X"}], "core_skills": []},
+                "search_preferences": {"target_roles": ["AI Engineer"]}}
+
+
+def test_profile_check_lists_only_empty_fields(tmp_path):
+    import scan_panel
+    assert scan_panel.profile_check(tmp_path)["exists"] is False
+    scan_panel.profile_path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    scan_panel.profile_path(tmp_path).write_text(json.dumps(GOOD_PROFILE))
+    check = scan_panel.profile_check(tmp_path)
+    labels = [m["label"] for m in check["missing"]]
+    assert "Phone" in labels and "Skills" in labels and "Locations to search" in labels
+    assert "Full name" not in labels and "Needs visa sponsorship" not in labels  # False is a real answer
+    assert check["missing"][0]["needed"] is True and check["filled"] + len(check["missing"]) == check["total"]
+
+
+def test_import_profile_validates_and_backs_up(tmp_path):
+    import scan_panel
+    src = tmp_path / "in.json"
+    src.write_text("not json")
+    assert scan_panel.import_profile_file(tmp_path, src)["ok"] is False
+    src.write_text(json.dumps({"hello": 1}))
+    assert "candidate" in scan_panel.import_profile_file(tmp_path, src)["error"]
+    src.write_text(json.dumps(GOOD_PROFILE))
+    out = scan_panel.import_profile_file(tmp_path, src)
+    assert out["ok"] and out["name"] == "Ada"
+    src.write_text(json.dumps({**GOOD_PROFILE, "candidate": {"name": "Grace"}}))
+    assert scan_panel.import_profile_file(tmp_path, src)["ok"]
+    backup = scan_panel.profile_path(tmp_path).with_name(scan_panel.profile_path(tmp_path).name + ".bak")
+    assert json.loads(backup.read_text())["candidate"]["name"] == "Ada"
+    assert json.loads(scan_panel.profile_path(tmp_path).read_text())["candidate"]["name"] == "Grace"
