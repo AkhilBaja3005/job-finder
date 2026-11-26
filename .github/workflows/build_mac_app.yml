@@ -1,6 +1,6 @@
 name: Build Mac app
 
-# Builds "Job Finder.app" and a .dmg on a macOS runner (Apple Silicon).
+# Builds "Job Finder.app" and a .dmg on a macOS runner.
 #   - Manual run: Actions -> "Build Mac app" -> Run workflow. The .dmg is an artifact of the run.
 #   - On a published GitHub release the .dmg is also attached to that release.
 #   - A pull request that changes macapp/ builds it too, so a broken build is caught before merging.
@@ -20,7 +20,7 @@ permissions:
 jobs:
   build:
     name: Build .app and .dmg
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
