@@ -2863,12 +2863,12 @@ function App() {
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer'
                     }}
                     onClick={() => {
-                      handleOneClickExtensionSync(user.sync_code);
+                      syncKeyToExtension(user.sync_code);
                       setShowExtensionGuide(true);
                       setProfileDropdownOpen(false);
                     }}
                   >
-                    <span>1-Click Auto-Sync & Download</span>
+                    <span>Sync key to extension</span>
                   </button>
 
                   <button
@@ -2952,7 +2952,6 @@ function App() {
             user={user}
             userToken={authToken}
             initialSection="quickstart"
-            onDownloadExtension={() => handleOneClickExtensionSync(user?.sync_code)}
             onNavigateMode={(mode) => {
               setDashboardMode(mode);
               window.history.pushState(null, '', '/platform');

@@ -187,10 +187,10 @@ Job Finder AI includes a lightweight Chrome/Brave browser extension for 1-click 
 - **Live Sync**: Syncs application status seamlessly with your local CLI tracker or the cloud dashboard at [job-finder.space](https://www.job-finder.space).
 
 ### Installing the Extension:
-1. Download or generate the extension ZIP from your local server or [https://www.job-finder.space](https://www.job-finder.space).
-2. In Chrome / Brave, navigate to `chrome://extensions`.
-3. Enable **Developer mode** in the top right corner.
-4. Click **Load unpacked** and select the extracted `extension/` directory.
+1. Open [Job Finder ATS Tailor in the Chrome Web Store](https://chromewebstore.google.com/detail/job-finder-ats-tailor/dogakbkhocgjcojmkenahfkggkfneeig) and click **Add to Chrome**.
+2. Sign in at [job-finder.space](https://www.job-finder.space) and click **Sync my key** so the extension picks up your Sync Key.
+
+Developers can load the `extension/` folder with **Developer mode** and **Load unpacked** instead.
 
 ---
 

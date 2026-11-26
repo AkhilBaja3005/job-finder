@@ -91,33 +91,32 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             AI Job Finder & ATS Tailor Setup
           </h1>
           <p style={{ color: '#94a3b8', fontSize: '0.95rem', lineHeight: 1.6, margin: 0 }}>
-            Master documentation covering zero-config extension installation, deterministic ATS scoring, single-page LaTeX tailoring, persistent Chrome Side Panel, and automated job discovery.
+            Master documentation covering extension installation, deterministic ATS scoring, single-page LaTeX tailoring, persistent Chrome Side Panel, and automated job discovery.
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          {onDownloadExtension && (
-            <button
-              onClick={onDownloadExtension}
-              style={{
-                background: 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)',
-                color: '#ffffff',
-                border: 'none',
-                padding: '12px 20px',
-                borderRadius: '10px',
-                fontWeight: 700,
-                fontSize: '0.92rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: '0 4px 16px rgba(56, 189, 248, 0.35)',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              Download Extension (.zip)
-            </button>
-          )}
+          <a
+            href="https://chromewebstore.google.com/detail/job-finder-ats-tailor/dogakbkhocgjcojmkenahfkggkfneeig"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              background: 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)',
+              color: '#ffffff',
+              border: 'none',
+              padding: '12px 20px',
+              borderRadius: '10px',
+              fontWeight: 700,
+              fontSize: '0.92rem',
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 4px 16px rgba(56, 189, 248, 0.35)'
+            }}
+          >
+            Add to Chrome
+          </a>
           {onNavigateMode && (
             <button
               onClick={() => onNavigateMode('tailor')}
@@ -251,7 +250,7 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
               {[
                 { step: '1', title: 'Upload & Lock Master Resume', desc: 'Upload your .pdf, .docx, or native .tex file in the Master tab to extract and preserve your exact skill categories, experiences, and metrics.' },
-                { step: '2', title: 'Pair Chrome Extension', desc: 'Download the pre-baked zip package and unpack it in chrome://extensions. Your 6-digit Sync Key pairs the browser side panel automatically.' },
+                { step: '2', title: 'Install the Chrome Extension', desc: 'Add it from the Chrome Web Store, then click Sync my key on the website. Chrome keeps it up to date by itself.' },
                 { step: '3', title: 'Browse Any Career Portal', desc: 'Navigate to LinkedIn, Ashby, Greenhouse, Lever, Workday, or Indeed. The persistent Side Panel auto-extracts the job description in real time.' },
                 { step: '4', title: 'Review Deterministic ATS Fit', desc: 'Inspect your calculated ATS score, required vs. preferred keywords, missing skills chips, and recruiter seniority alignment before tailoring.' },
                 { step: '5', title: '1-Click LaTeX Tailor & Preview', desc: 'Generate a verified 1-page LaTeX PDF resume with XeLaTeX/Tectonic budgeting, live syntax editor, and optional Overleaf sync.' },
@@ -302,18 +301,20 @@ export default function DocsGuide({ user, userToken, onDownloadExtension, onNavi
               marginBottom: '20px'
             }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px', color: '#38bdf8' }}>
-                Zero-Config Installation Guide
+                Installation Guide
               </h3>
               <ol style={{ margin: 0, paddingLeft: '20px', color: '#cbd5e1', lineHeight: 1.8, fontSize: '0.92rem' }}>
                 <li>
-                  Click the <strong>"Download Extension (.zip)"</strong> button in the dashboard header or on this page. Your personalized 6-digit Sync Key (<code>{syncKey}</code>) and server endpoint (<code>{serverUrl}</code>) are automatically pre-baked inside.
+                  <a href="https://chromewebstore.google.com/detail/job-finder-ats-tailor/dogakbkhocgjcojmkenahfkggkfneeig" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8' }}>Open Job Finder ATS Tailor in the Chrome Web Store</a> and click <strong>Add to Chrome</strong>. It also works in Edge, Brave and Arc.
                 </li>
-                <li>Extract / Unzip the downloaded <code>job-finder-extension.zip</code> file to a folder on your computer.</li>
-                <li>Open Google Chrome (or Brave, Edge, Arc) and navigate to <code>chrome://extensions/</code> in the URL bar.</li>
-                <li>Turn on the <strong>"Developer mode"</strong> toggle in the top-right corner.</li>
-                <li>Click <strong>"Load unpacked"</strong> in the top-left corner and select the extracted extension folder.</li>
-                <li>Click the Extension puzzle icon in your browser toolbar and click <strong>Job Finder ATS Tailor</strong> to open the Persistent Side Panel!</li>
+                <li>
+                  Sign in on this site and click <strong>Sync my key</strong> in the extension guide. Your Sync Key (<code>{syncKey}</code>) is sent to the extension automatically; there is nothing to copy or unzip. You can also paste it into the extension by hand.
+                </li>
+                <li>Click the puzzle icon in your browser toolbar and choose <strong>Job Finder ATS Tailor</strong> to open the persistent Side Panel.</li>
               </ol>
+              <p style={{ color: '#94a3b8', fontSize: '0.82rem', lineHeight: 1.6, margin: '14px 0 0' }}>
+                Store installs update automatically. Developers can instead load the <code>extension/</code> folder with Developer mode and Load unpacked.
+              </p>
             </div>
 
             {/* In-Page Capabilities (6 Core Features) */}
