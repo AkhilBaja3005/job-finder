@@ -1191,7 +1191,14 @@ async def run_pipeline(
         # Autofill application if Top Applicant or score meets minimum threshold
         if (is_top_applicant or score >= min_ats_score) and url:
             _day_cap = daily_cap()
-            if _day_cap > 0 and submitted_today() >= _day_cap:
+            try:
+                from services.relevance import check_relevance
+                _fit, _why = check_relevance({**job, "title": title}, jd_text, candidate, prefs)
+            except Exception:  # a broken rule must never stop a run
+                _fit, _why = True, ""
+            if not _fit:
+                print(f"[Scanner] Not applying to {title} @ {company}: {_why}.")
+            elif _day_cap > 0 and submitted_today() >= _day_cap:
                 print(f"[Scanner] Daily limit reached ({_day_cap} applications today, MAX_APPLICATIONS_PER_DAY). Remaining matches are saved to the tracker.")
             elif max_applications > 0 and applied_attempts >= max_applications:
                 print(f"[Scanner] ⏸Reached maximum application limit ({max_applications}) for this run. Remaining qualified matches are saved to tracker.")

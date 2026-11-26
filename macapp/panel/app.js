@@ -88,6 +88,7 @@
     renderShell();
     ({ run: renderRun, apps: renderApps, settings: renderSettings }[view])();
     if (view === "apps" && S.apps.rows === null) loadApps();
+    if (view === "settings" && S.sched === undefined) loadSchedule();
   }
   function head(title, sub, actions) {
     return '<header class="page-head"><div><h1>' + esc(title) + '</h1><div class="sub">' + esc(sub) + '</div></div><div class="actions">' + (actions || "") + "</div></header>";
@@ -282,6 +283,7 @@
 
   /* ── Settings screen ─────────────────────────────────────────────────────── */
   const PROVIDERS = [["gemini", "Gemini", "Free tier available"], ["anthropic", "Claude", "Anthropic"], ["openai", "OpenAI", "GPT models"]];
+  async function loadSchedule() { const r = await call("schedule_status"); if (r && r.ok) { S.sched = r; if (S.view === "settings") renderSettings(); } }
   function renderSettings() {
     const i = S.info; if (!i) { $("#view").innerHTML = head("Settings", "") + '<div class="scroll"><div class="skeleton"></div></div>'; return; }
     const sb = i.supabase, br = i.browser, cl = i.cloud || {};
@@ -301,6 +303,10 @@
           sb.configured ? badge(sb.reachable ? "Connected" : "Unreachable", sb.reachable ? "good" : "warn") + '<button class="btn" data-act="sync">' + icon("refresh") + "Sync now</button>" : '<button class="btn" data-open="env">Open .env</button>') +
         row("job-finder.space", cl.configured ? (cl.connected ? "Applications are saved to your account" + (cl.email ? " (" + esc(cl.email) + ")" : "") + " and show on the website and in the extension." : esc(cl.error || "Cannot be reached right now.")) : "Save your applications to your job-finder.space account with your sync code. API keys never leave this Mac.",
           cl.configured ? badge(cl.connected ? "Connected" : "Unreachable", cl.connected ? "good" : "warn") + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Disconnect</button>' : '<button class="btn primary" data-act="add-sync">Add sync code…</button>', "c-sync") +
+        row("Daily run", S.sched && S.sched.enabled ? "Runs every day at " + String(S.sched.hour).padStart(2, "0") + ":" + String(S.sched.minute).padStart(2, "0") + (S.sched.real ? ", applying for real." : " as a practice run (nothing is submitted).") + " The Mac must be awake; the app does not need to be open." : "Runs a search every day at a time you choose, without opening the app. Starts as a practice run.",
+          '<input class="input" id="sched-time" type="time" value="' + (S.sched && S.sched.enabled ? String(S.sched.hour).padStart(2, "0") + ":" + String(S.sched.minute).padStart(2, "0") : "08:00") + '" style="width:110px" aria-label="Daily run time">' +
+          (S.sched && S.sched.enabled ? '<button class="btn" data-act="sched-on">Change time</button><button class="btn" data-act="sched-off">Turn off</button>' : '<button class="btn primary" data-act="sched-on">Turn on</button>')) +
+        row("Saved answers", "Answers to questions your profile does not cover, such as why you want the job. The agent uses them word for word instead of guessing.", '<button class="btn" data-open="answers">Edit…</button>') +
         row("Job site sign-ins", "Opens the agent's Chrome so you can sign in to LinkedIn, Indeed and Reed once. Runs reuse the sign-ins.", '<button class="btn" data-act="open-signin">Open Chrome to sign in</button>') +
         row("Page scraper browser", br.ready ? "Installed" : br.installing ? "Downloading, about 150 MB…" : (br.error ? esc(br.error) : "Needed for some job sources. Downloaded once."), br.ready ? badge("Ready", "good") : br.installing ? badge("Installing", "accent") : '<button class="btn" data-act="install-browser">' + icon("download") + "Install</button>") +
       "</section>" +
@@ -388,6 +394,9 @@
       case "import-profile": { const r = await call("choose_profile_and_import"); if (r && r.ok) { toast("Profile imported" + (r.name ? " for " + r.name : "") + "."); await refreshInfo(); hydrateForm(); renderView(); } else if (r && r.error) toast(r.error, "bad"); return; }
       case "open-signin": { toast("Opening Chrome…"); const r = await call("open_signin"); toast(r && r.ok ? "Chrome is open. Sign in, then close it before a run." : (r && r.error) || "Could not open Chrome.", r && r.ok ? undefined : "bad"); return; }
       case "report": { const r = await call("problem_report"); if (r && r.ok) { try { await navigator.clipboard.writeText(r.text); toast("Report copied. Paste it into the email."); } catch (_) { toast("Could not copy the report. Open the log files instead.", "bad"); } call("open_url", "mailto:hello@job-finder.space?subject=Job%20Finder%20problem"); } return; }
+      case "sched-on": { const t = ($("#sched-time") || {}).value || "08:00"; const [h, m] = t.split(":").map(Number);
+        const r = await call("set_schedule", true, h, m, false); if (r && r.ok) { toast("Daily practice run scheduled for " + t + "."); S.sched = await call("schedule_status"); renderSettings(); } else toast((r && r.error) || "Could not schedule.", "bad"); return; }
+      case "sched-off": { await call("set_schedule", false); S.sched = await call("schedule_status"); toast("Daily run turned off."); renderSettings(); return; }
       case "start-tour": return void startTour();
       case "install-browser": await call("ensure_browser"); await refreshInfo(); renderSettings(); watchBrowser(); return;
       case "sync": { if (S.apps.syncing) return; S.apps.syncing = true; renderView(); const r = await call("sync_now"); S.apps.syncing = false;

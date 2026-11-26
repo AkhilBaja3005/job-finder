@@ -1023,6 +1023,24 @@ class Api:
             return {"ok": False, "error": str(exc)[:160]}
         return {"ok": proc.returncode == 0, "error": "" if proc.returncode == 0 else "Chrome did not open the page. See the log files."}
 
+    def schedule_status(self) -> Dict[str, Any]:
+        import scheduler
+        return {"ok": True, **scheduler.status()}
+
+    def set_schedule(self, enabled: bool, hour: int = 8, minute: int = 0, real: bool = False) -> Dict[str, Any]:
+        """Turns the daily run on or off. A real (submitting) run is only scheduled when `real` is True."""
+        import scheduler
+        if not enabled:
+            return scheduler.remove()
+        ws = workspace_dir()
+        prefs = load_app_prefs()
+        options = {"mode": "auto_apply" if real else "dry_run", "primary_ai": prefs.get("primary_ai"), "headless": True}
+        program = list(self._launcher) + build_scan_args(options)
+        env = build_run_env(options, ws, base={})
+        env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_dir())
+        env["HOME"] = str(Path.home())
+        return scheduler.install(int(hour), int(minute), program, ws, logs_dir() / "scheduled.log", env)
+
     def problem_report(self) -> Dict[str, Any]:
         return {"ok": True, "text": diagnostics_report(workspace_dir())}
 
@@ -1044,6 +1062,9 @@ class Api:
         }
         if what == "logs":
             logs_dir().mkdir(parents=True, exist_ok=True)
+        if what == "answers":
+            from services.saved_answers import ensure_template
+            targets["answers"] = ["open", "-t", ensure_template(str(ws))]
         if what not in targets:
             return {"ok": False}
         subprocess.run(targets[what], check=False)

@@ -591,3 +591,48 @@ def test_review_in_chrome_only_opens_web_addresses():
     api = scan_panel.Api.__new__(scan_panel.Api)
     assert api.review_in_chrome("file:///etc/passwd")["ok"] is False
     assert api.review_in_chrome("javascript:alert(1)")["ok"] is False
+
+
+# ── daily schedule ───────────────────────────────────────────────────────────────
+def test_schedule_plist_holds_time_command_and_folder(tmp_path):
+    import plistlib
+    import scheduler
+    data = plistlib.loads(scheduler.build_plist(7, 30, ["/App/Job Finder", "--cli", "scan", "--dry-run"], tmp_path, tmp_path / "s.log", {"X": "1"}))
+    assert data["Label"] == "space.job-finder.daily"
+    assert data["StartCalendarInterval"] == {"Hour": 7, "Minute": 30}
+    assert data["ProgramArguments"][-2:] == ["scan", "--dry-run"]
+    assert data["EnvironmentVariables"]["JOB_FINDER_ROOT"] == str(tmp_path) and data["EnvironmentVariables"]["X"] == "1"
+    assert data["RunAtLoad"] is False
+
+
+def test_schedule_install_status_remove(tmp_path, monkeypatch):
+    import subprocess
+    import scheduler
+    calls = []
+    monkeypatch.setattr(scheduler, "_launchctl", lambda *a: calls.append(a) or subprocess.CompletedProcess(a, 0, "", ""))
+    assert scheduler.install(8, 15, ["/p", "--cli", "scan", "--dry-run"], tmp_path, tmp_path / "log" / "s.log", home=tmp_path) == {"ok": True}
+    assert scheduler.status(home=tmp_path) == {"enabled": True, "hour": 8, "minute": 15, "real": False}
+    assert any(c[0] == "bootstrap" for c in calls)
+    assert scheduler.remove(home=tmp_path)["ok"] and scheduler.status(home=tmp_path) == {"enabled": False}
+
+
+def test_schedule_rejects_bad_times_and_reports_launchctl_failure(tmp_path, monkeypatch):
+    import subprocess
+    import scheduler
+    assert scheduler.install(25, 0, ["/p"], tmp_path, tmp_path / "s.log", home=tmp_path)["ok"] is False
+    monkeypatch.setattr(scheduler, "_launchctl", lambda *a: subprocess.CompletedProcess(a, 5, "", "Bootstrap failed"))
+    out = scheduler.install(8, 0, ["/p"], tmp_path, tmp_path / "s.log", home=tmp_path)
+    assert out["ok"] is False and "Bootstrap failed" in out["error"]
+
+
+def test_set_schedule_defaults_to_a_practice_run(tmp_path, monkeypatch):
+    import scan_panel
+    import scheduler
+    seen = {}
+    monkeypatch.setattr(scheduler, "install", lambda hour, minute, program, ws, log, env=None, home=None: seen.update(program=program, env=env) or {"ok": True})
+    monkeypatch.setattr(scan_panel, "workspace_dir", lambda: tmp_path)
+    api = scan_panel.Api.__new__(scan_panel.Api)
+    api._launcher = ["/App/Job Finder", "--cli"]
+    assert api.set_schedule(True, 9, 0)["ok"]
+    assert "--dry-run" in seen["program"] and "--auto-apply" not in seen["program"]
+    assert seen["env"]["JOB_FINDER_ROOT"] == str(tmp_path)
