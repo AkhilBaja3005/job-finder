@@ -62,7 +62,7 @@ def test_model_aliases(monkeypatch):
 
 def test_default_openai_model_is_luna():
     assert b._DEFAULT_MODELS["openai"] == "gpt-6-luna"
-    assert b._DEFAULT_MODELS["anthropic"] == "claude-haiku-5-5"
+    assert b._DEFAULT_MODELS["anthropic"] == "claude-sonnet-5-5"  # the browser agent defaults to Sonnet; text generation to Haiku
 
 
 from config.constants import pick_newest_model
