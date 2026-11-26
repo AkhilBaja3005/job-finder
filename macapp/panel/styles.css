@@ -225,3 +225,6 @@ tbody tr:hover { background: var(--fill); }
 .tour-n { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
 .tour-btns { display: flex; gap: 8px; align-items: center; }
 .tour-btns .grow { flex: 1; }
+
+.acts { white-space: nowrap; text-align: right; }
+.select.stage { height: 24px; font-size: 12px; margin-left: 4px; max-width: 108px; }

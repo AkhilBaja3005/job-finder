@@ -76,6 +76,24 @@ def install_browser() -> int:
     return subprocess.run([str(node), str(cli), "install", "chromium"], env=get_driver_env(), check=False).returncode
 
 
+SIGNIN_PAGES = ("https://www.linkedin.com/login", "https://secure.indeed.com/auth", "https://www.reed.co.uk/account/signin")
+
+
+def open_signin_browser() -> int:
+    """Opens the agent's own Chrome profile with the job sites' sign-in pages, so the user can log in once.
+    The agent reuses this profile, so the sign-ins carry over to every run."""
+    prepare_environment()
+    import urllib.request
+    from services.browser_use_agent import ensure_persistent_browser
+    cdp = ensure_persistent_browser(headless=False)
+    for page in SIGNIN_PAGES:
+        try:  # DevTools opens a tab with PUT /json/new?<url>
+            urllib.request.urlopen(urllib.request.Request(f"{cdp}/json/new?{page}", method="PUT"), timeout=5).read()
+        except Exception:
+            pass
+    return 0
+
+
 def setup_logging() -> None:
     """The app's own log, next to the per-run logs: ~/Library/Logs/Job Finder/app.log (rotated)."""
     directory = scan_panel.logs_dir()
@@ -196,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_cli(argv[1:])
     if argv and argv[0] == "--install-browser":
         return install_browser()
+    if argv and argv[0] == "--signin":
+        return open_signin_browser()
     return run_window()
 
 

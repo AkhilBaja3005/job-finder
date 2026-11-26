@@ -547,3 +547,32 @@ def test_import_profile_validates_and_backs_up(tmp_path):
     backup = scan_panel.profile_path(tmp_path).with_name(scan_panel.profile_path(tmp_path).name + ".bak")
     assert json.loads(backup.read_text())["candidate"]["name"] == "Ada"
     assert json.loads(scan_panel.profile_path(tmp_path).read_text())["candidate"]["name"] == "Grace"
+
+
+# ── statuses, review queue ───────────────────────────────────────────────────────
+def test_set_stage_changes_only_that_rows_status(tmp_path):
+    import scan_panel
+    ws = _ws(tmp_path)
+    out = scan_panel.set_application_stage(ws, "https://jobs.lever.co/beta/2", "interview")
+    assert out == {"ok": True, "status": "Interview"}
+    rows = scan_panel._csv_all(ws)
+    assert [r["Status"] for r in rows] == ["Applied", "Applied", "Interview"]
+    assert rows[2]["Company"] == "Beta" and rows[2]["Job Title"] == "ML Engineer"
+    assert not list((ws / "applications_tracker").glob("*.tmp"))
+
+
+def test_set_stage_rejects_unknown_status_and_url(tmp_path):
+    import scan_panel
+    ws = _ws(tmp_path)
+    assert scan_panel.set_application_stage(ws, "https://jobs.lever.co/beta/2", "hacked")["ok"] is False
+    assert scan_panel.set_application_stage(ws, "https://nowhere.example/x", "offer")["ok"] is False
+    assert scan_panel.set_application_stage(tmp_path / "empty", "u", "offer")["ok"] is False
+
+
+def test_stage_counts_and_last_attempt_without_ledger(tmp_path):
+    import scan_panel
+    ws = _ws(tmp_path)
+    scan_panel.set_application_stage(ws, "https://jobs.lever.co/beta/2", "replied")
+    counts = scan_panel.stage_counts(scan_panel.read_tracker(ws))
+    assert counts["replied"] == 1 and counts["interview"] == 0
+    assert scan_panel.last_attempt(ws, "https://jobs.lever.co/beta/2") == {}
