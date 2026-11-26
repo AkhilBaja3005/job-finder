@@ -3,11 +3,16 @@ name: Build Mac app
 # Builds "Job Finder.app" and a .dmg on a macOS runner (Apple Silicon).
 #   - Manual run: Actions -> "Build Mac app" -> Run workflow. The .dmg is an artifact of the run.
 #   - On a published GitHub release the .dmg is also attached to that release.
+#   - A pull request that changes macapp/ builds it too, so a broken build is caught before merging.
 # The app is not signed or notarized yet, so macOS asks users to right-click -> Open the first time.
 on:
   workflow_dispatch:
   release:
     types: [published]
+  pull_request:
+    paths:
+      - "macapp/**"
+      - ".github/workflows/build_mac_app.yml"
 
 permissions:
   contents: write   # attach the .dmg to a release
