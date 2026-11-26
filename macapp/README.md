@@ -1,0 +1,99 @@
+# Job Finder for macOS
+
+A Mac app for the **job search and auto-apply** part of Job Finder. Pick the roles, location and limits, press Start, and
+watch the agent search, filter, tailor and fill applications. It runs the same `job-finder scan` as the command line tool,
+so the results are identical. You do not need a terminal.
+
+## Install
+
+1. Download `Job-Finder-<version>-arm64.dmg` from the latest GitHub release (or from a "Build Mac app" run).
+2. Open it and drag **Job Finder** to Applications.
+3. The app is not signed yet, so macOS blocks the first launch. **Right-click the app, choose Open, then Open again.**
+   (If macOS still refuses: System Settings, Privacy & Security, "Open Anyway".)
+
+Apple Silicon (M1 and later) only for now. Install Google Chrome first: the agent drives it.
+
+## First run
+
+The Run screen shows a short checklist until you are set up:
+
+1. **Add an AI key** (Settings, AI providers). Gemini has a free tier.
+2. **Create your profile** from your resume, or in Settings choose **Change…** and pick the folder your command line tool already uses.
+3. **Connect Supabase** (optional).
+
+Start with **Practice run**: the agent fills every form but never presses Submit. When it looks right, switch to **Apply for real**; the app asks you to confirm, showing the roles, location and limit.
+
+## The window
+
+| Screen | What it does |
+|---|---|
+| **Run** | Roles (type and press Return), location, how recent, practice or real. **Advanced** has the minimum ATS score, a limit, title keywords, sites to skip, and which AI drives the browser. Activity shows progress, counts, and the live log. |
+| **Applications** | Every job recorded, with status, ATS match and a cloud mark for rows in your Supabase project. Search, filter, sort, open the job page, **Sync now**. |
+| **Settings** | Your folder, profile, AI keys, Supabase, the scraper browser, updates and log files. |
+
+Shortcuts: Cmd+Return start or stop, Cmd+. stop, Cmd+1/2/3 switch screens, Cmd+, settings. The usual Edit shortcuts (copy, paste, select all, undo) work in every field.
+
+The app also: remembers its window size, opens only once, shows a notification when a run ends, checks GitHub for a newer version (it only reads the public releases page), and keeps its own log plus one log per run in `~/Library/Logs/Job Finder`.
+
+The page's first-run download of the page scraper's browser (about 150 MB) happens in the background with a status banner and a Retry button.
+
+## Supabase
+
+If your folder's `.env` has `SUPABASE_URL` and a key (`SUPABASE_SERVICE_KEY`, or `SUPABASE_KEY`), the app uses your project:
+
+- The sidebar shows **Synced with Supabase** (or "Supabase unreachable", or "Local only").
+- **Applications** shows your project's list merged with the local tracker.
+- Every scan already records to Supabase as it goes. When a run ends the app also adds any local application the project does not have yet. **Sync now** does the same on demand. Sync only adds missing rows; it never changes or deletes any.
+- If the project cannot be reached, the app shows the local list and keeps working.
+
+## Where things live
+
+The app uses your Job Finder folder: by default `~/Library/Application Support/Job Finder`, or the one you chose.
+
+| File or folder | What it is |
+|---|---|
+| `.env` | Settings and API keys, readable only by you (menu **Job Finder, Edit settings**) |
+| `candidate_profile.json` | Your profile and search settings. The Scan form saves its fields here. |
+| `applications_tracker/` | The application history shown under Results |
+| `browsers/` (app folder only) | The Chromium the page scraper uses, downloaded once on first launch |
+
+Deleting or updating the app does not touch these.
+
+## Run the command line tool from the app
+
+The app bundle can also run the command line tool directly, which is what the window does for each run:
+
+```bash
+"/Applications/Job Finder.app/Contents/MacOS/Job Finder" --cli scan --dry-run --limit 3
+```
+
+## Build it yourself
+
+```bash
+macapp/build_mac.sh        # needs Python 3.12 and the Xcode command line tools
+```
+
+This produces `dist-mac/Job Finder.app` and a `.dmg`. CI does the same with `.github/workflows/build_mac_app.yml`, then opens the built app's real window and checks that the page and the Python bridge came up (`JOB_FINDER_APP_SELFTEST=1`).
+
+## Working on the window
+
+The window is plain HTML, CSS and JavaScript in `macapp/panel/` (no build step). To work on it in a normal browser, serve that folder and open the mock:
+
+```bash
+cd macapp/panel && python3 -m http.server 8777
+# open http://127.0.0.1:8777/dev/index.html  (add ?fresh, ?local, ?empty or ?update to see other states)
+```
+
+`dev/mock-api.js` stands in for the Python side and is not shipped. To run the real app from source:
+
+```bash
+pip install -r backend/requirements.txt -r macapp/requirements-app.txt
+python macapp/job_finder_app.py
+```
+
+## Not done yet
+
+- Signing and notarization (needs an Apple Developer account), so the first-launch warning goes away.
+- Automatic updates.
+- Intel Macs.
+- A scheduler (run every morning). For now start a run from the window, or use the command line tool with cron.

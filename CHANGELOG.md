@@ -3,6 +3,19 @@
 ## Unreleased
 
 ### Added
+- Mac app (Apple Silicon, unsigned for now) for the job search and auto-apply part: `Job Finder.app` is a native-feeling control panel
+  for `job-finder scan`. A sidebar app with Run, Applications and Settings; a first-run checklist; a confirmation dialog before applying
+  for real; a live activity log with counts; Mac notifications; update checks; one log file per run; a real menu bar (Cmd+C and Cmd+V work
+  in every field); a unified title bar; and the Job Finder logo as the app icon. It uses your existing Job Finder folder if you point it at
+  one. When `SUPABASE_URL` and a key are in the `.env`, it shows your project's applications and adds any local ones the project is missing.
+  The page scraper's browser downloads on first launch, with a visible status and a Retry button. Build it with `macapp/build_mac.sh`, or run
+  the "Build Mac app" workflow, which attaches the .dmg to a release. See `macapp/README.md`.
+
+### Fixed
+- The web app assumed the backend was on port 8000 whenever it was opened on localhost. It now uses the address it is
+  served from, and only the Vite dev server points at 8000.
+
+### Account data
 - Account data controls: `GET /user/export` returns everything stored for the account as JSON (saved API keys are left out),
   and `DELETE /user/account` removes the account, resumes and application history after the account email is typed to confirm.
   Both are in the website's extension panel, next to a link to download the Mac app.

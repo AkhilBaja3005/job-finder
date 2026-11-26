@@ -24,10 +24,13 @@ window.fetch = async function (resource, config = {}) {
   return originalFetch(resource, config);
 };
 
+// On localhost the page is either served by the backend itself (the Mac app, `job-finder server`, any port) or by the
+// Vite dev server, which talks to the backend on 8000.
+const _VITE_DEV_PORTS = ['5173', '5174', '4173', '3000'];
 const API_BASE = import.meta.env.VITE_API_BASE
   || import.meta.env.VITE_BACKEND_URL
   || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://127.0.0.1:8000'
+    ? (_VITE_DEV_PORTS.includes(window.location.port) ? 'http://127.0.0.1:8000' : window.location.origin)
     : window.location.origin);
 
 // Reads a newline-delimited JSON (NDJSON) streaming response body and yields
