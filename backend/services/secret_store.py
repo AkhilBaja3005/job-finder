@@ -8,8 +8,17 @@ _PREFIX = "enc:v1:"
 _warned = False
 
 
+def _secret() -> str:
+    # ENCRYPTION_KEY is accepted as an alias for servers that already define it.
+    return (os.getenv("KEY_ENCRYPTION_SECRET") or os.getenv("ENCRYPTION_KEY") or "").strip()
+
+
+def encryption_enabled() -> bool:
+    return bool(_secret())
+
+
 def _fernet():
-    secret = os.getenv("KEY_ENCRYPTION_SECRET", "").strip()
+    secret = _secret()
     if not secret:
         return None
     from cryptography.fernet import Fernet

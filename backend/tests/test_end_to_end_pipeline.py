@@ -144,7 +144,7 @@ class TestEndToEndJobFinderPipeline(unittest.TestCase):
 
     def test_preflight_active_url(self):
         """Verify preflight check passes on healthy URLs without launching browser."""
-        with patch("urllib.request.urlopen") as mock_urlopen:
+        with patch("utils.url_safety.safe_urlopen") as mock_urlopen:
             mock_resp = MagicMock()
             mock_resp.geturl.return_value = "https://boards.greenhouse.io/stripe/jobs/123"
             mock_resp.getcode.return_value = 200
@@ -157,7 +157,7 @@ class TestEndToEndJobFinderPipeline(unittest.TestCase):
 
     def test_preflight_expired_url_detection(self):
         """Verify preflight detects expired / taken down job without launching browser."""
-        with patch("urllib.request.urlopen") as mock_urlopen:
+        with patch("utils.url_safety.safe_urlopen") as mock_urlopen:
             mock_resp = MagicMock()
             mock_resp.geturl.return_value = "https://jobs.ashbyhq.com/closed/123"
             mock_resp.getcode.return_value = 200

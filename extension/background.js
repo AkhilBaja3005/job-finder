@@ -93,7 +93,24 @@ if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
 }
 
 // Handle 1-Click Sync Key initialization & Live Resume Sync from web app
+// Only the Job Finder web app may talk to the extension. A page on any other site must not be able to
+// pair the extension with its own account or replace the saved resume.
+const TRUSTED_WEB_ORIGINS = [
+  "https://www.job-finder.space", "https://job-finder.space", "https://abaja-job-finder.hf.space",
+  "http://localhost", "http://127.0.0.1", "http://localhost:8000", "http://127.0.0.1:8000",
+  "http://localhost:5173", "http://127.0.0.1:5173",
+];
+function isTrustedWebOrigin(origin) {
+  if (!origin) return false;
+  if (TRUSTED_WEB_ORIGINS.includes(origin)) return true;
+  try { return new URL(BACKEND_URL).origin === origin; } catch (e) { return false; }
+}
+
 chrome.runtime.onMessageExternal.addListener((request, sender, sendResponse) => {
+  if (!isTrustedWebOrigin(sender && sender.origin)) {
+    sendResponse({ success: false, error: "untrusted origin" });
+    return false;
+  }
   if (request.action === "SYNC_USER_KEY" && request.syncKey) {
     chrome.storage.local.set({ userToken: request.syncKey }, () => {
       sendResponse({ success: true, syncedKey: request.syncKey });

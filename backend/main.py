@@ -60,6 +60,17 @@ async def lifespan(app: FastAPI):
     # Startup: Ensure directory structure and baseline assets
     _sync_fallback_resume_cls()
 
+    try:
+        from services.auth import supabase_key_warning
+        _sb_warning = supabase_key_warning()
+        if _sb_warning:
+            print(f"[security] WARNING: {_sb_warning}")
+        from services.secret_store import encryption_enabled
+        if not encryption_enabled():
+            print("[security] WARNING: KEY_ENCRYPTION_SECRET (or ENCRYPTION_KEY) is not set: users' saved LLM keys are stored unencrypted.")
+    except Exception as _sec_err:
+        print(f"[security] startup checks skipped: {_sec_err}")
+
     # Automatically audit & migrate existing legacy files on persistent volumes (Hugging Face / local) to AES-256-GCM
     try:
         from services.storage_encryption import migrate_storage_directory_to_encrypted

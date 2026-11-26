@@ -15,7 +15,30 @@ from utils.ssl_utils import SSL_CONTEXT
 from utils.ttl_cache import TTLCache
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+# The server needs the project's secret (service_role) key. A publishable/anon key is public by design, so with it
+# every table must be readable by anyone who has the key. SUPABASE_SERVICE_KEY / SUPABASE_SECRET_KEY take precedence.
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SECRET_KEY") or os.getenv("SUPABASE_KEY")
+
+
+def supabase_key_warning(key: Optional[str] = None) -> Optional[str]:
+    """A warning when the configured Supabase key is a public (anon / publishable) key, else None."""
+    key = key if key is not None else SUPABASE_KEY
+    if not key:
+        return None
+    public = key.startswith("sb_publishable_")
+    if not public and key.count(".") == 2:
+        try:
+            import base64
+            body = key.split(".")[1]
+            claims = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+            public = claims.get("role") == "anon"
+        except Exception:
+            public = False
+    if public:
+        return ("SUPABASE_KEY is a public (publishable/anon) key. Anyone who has it can read the tables unless "
+                "row-level security is on. Use the project's secret key (SUPABASE_SERVICE_KEY) on the server and "
+                "run docs/supabase_rls.sql.")
+    return None
 
 # ── Persistent HTTP Session Pool for High-Throughput DB Queries ──────────────
 _async_http_client: Optional[httpx.AsyncClient] = None
@@ -70,7 +93,7 @@ _token_cache: TTLCache = TTLCache(ttl_seconds=120, max_size=2000)
 # Supabase connection parameters
 def get_supabase_client():
     url = os.getenv("SUPABASE_URL", "")
-    key = os.getenv("SUPABASE_KEY", "")
+    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SECRET_KEY") or os.getenv("SUPABASE_KEY", "")
     return url, key
 
 import threading

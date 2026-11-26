@@ -14,8 +14,11 @@
   "host_permissions": [
     "http://127.0.0.1:8000/*",
     "http://localhost:8000/*",
-    "https://*/*",
-    "http://*/*"
+    "https://www.job-finder.space/*",
+    "https://job-finder.space/*",
+    "https://abaja-job-finder.hf.space/*",
+    "https://www.gov.uk/*",
+    "https://assets.publishing.service.gov.uk/*"
   ],
   "side_panel": {
     "default_path": "popup.html"
@@ -37,8 +40,12 @@
         "http://*/*"
       ],
       "exclude_matches": [],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle",
       "all_frames": true
     }
@@ -47,7 +54,9 @@
     "matches": [
       "http://localhost/*",
       "http://127.0.0.1/*",
-      "https://*/*"
+      "https://www.job-finder.space/*",
+      "https://job-finder.space/*",
+      "https://abaja-job-finder.hf.space/*"
     ]
   },
   "icons": {

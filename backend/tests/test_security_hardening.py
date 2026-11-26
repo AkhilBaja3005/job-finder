@@ -190,3 +190,39 @@ def test_rotate_sync_code_endpoint(monkeypatch):
     r = c.post("/user/rotate_sync_code", headers={"Authorization": "Bearer GOOD42"})
     assert r.status_code == 200 and r.json() == {"sync_code": "NEWCODE1234"}
     assert c.post("/user/rotate_sync_code").status_code == 401
+
+
+# ── per-site portal passwords ──────────────────────────────────────────────────
+def test_portal_passwords_differ_per_site_and_are_stable():
+    from services.browser_use_agent import derive_portal_password as d
+    a, b = d("seed", "greenhouse.io"), d("seed", "lever.co")
+    assert a != b and a == d("seed", "greenhouse.io") and a != d("other-seed", "greenhouse.io")
+    assert len(a) == 18 and any(c.isupper() for c in a) and any(c.islower() for c in a)
+    assert any(c.isdigit() for c in a) and a.endswith("!")
+
+
+def _prompt(monkeypatch, mode):
+    from services.browser_use_agent import build_application_task_prompt
+    monkeypatch.setenv("PORTALS_PASSWORD", "SharedSecret#1")
+    if mode:
+        monkeypatch.setenv("PORTALS_PASSWORD_MODE", mode)
+    else:
+        monkeypatch.delenv("PORTALS_PASSWORD_MODE", raising=False)
+    return build_application_task_prompt("https://example.com/job", {"name": "A", "email": "a@b.c", "phone": "+447000000000", "location": "London, UK"}, None, True)
+
+
+def test_default_mode_keeps_the_shared_password(monkeypatch):
+    text = _prompt(monkeypatch, None)
+    assert "SharedSecret#1" in text and "PASSWORD TABLE" not in text
+
+
+def test_per_site_mode_hides_the_shared_password(monkeypatch):
+    from services.browser_use_agent import derive_portal_password as d
+    text = _prompt(monkeypatch, "per_site")
+    assert "SharedSecret#1" not in text
+    assert "PASSWORD TABLE" in text and d("SharedSecret#1", "greenhouse.io") in text
+    assert d("SharedSecret#1", "other") in text
+
+
+def test_prompt_has_security_rules(monkeypatch):
+    assert "untrusted data" in _prompt(monkeypatch, None)
