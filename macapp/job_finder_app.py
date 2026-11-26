@@ -30,7 +30,10 @@ def bundle_root() -> Path:
 def launcher_command() -> list[str]:
     """The command that runs the command line tool: this same program with --cli."""
     if getattr(sys, "frozen", False):
-        return [sys.executable, "--cli"]
+        # On a Mac the windowed program registers as an app, so every child of it would bounce in the Dock. The bundle also
+        # holds a console build of the same program (job-finder-cli) for background work, which stays out of the Dock.
+        cli = Path(sys.executable).with_name("job-finder-cli")
+        return [str(cli) if cli.exists() else sys.executable, "--cli"]
     return [sys.executable, str(Path(__file__).resolve()), "--cli"]
 
 
