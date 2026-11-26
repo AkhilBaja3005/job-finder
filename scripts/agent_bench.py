@@ -25,7 +25,11 @@ sys.path[:0] = [str(ROOT), str(ROOT / "backend"), str(ROOT / "tests" / "bench")]
 SAMPLE = {"name": "Ada Lovelace", "email": "ada@example.com", "phone": "+44 7700 900123", "location": "London, UK",
           "linkedin": "https://www.linkedin.com/in/ada-example", "github": "https://github.com/ada-example",
           "work_authorization": "Authorized to work in the UK without restriction", "requires_sponsorship": False,
-          "current_company": "Analytical Engines Ltd"}
+          "current_company": "Analytical Engines Ltd",
+          "work_experience": [{"company": "Analytical Engines Ltd", "title": "Software Engineer", "start": "2022-01", "end": "Present",
+                               "description": "Built and shipped machine learning services."}],
+          "education": [{"school": "University of London", "degree": "BSc Computer Science", "end": "2021"}],
+          "core_skills": ["Python", "Machine learning", "LLM applications"]}
 RESUME_STUB = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
 
 
