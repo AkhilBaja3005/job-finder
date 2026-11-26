@@ -187,6 +187,11 @@ def run_window() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    try:  # a built app has no system certificate list; child processes inherit this too
+        import certifi
+        os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+    except Exception:
+        pass
     if argv and argv[0] == "--cli":
         return run_cli(argv[1:])
     if argv and argv[0] == "--install-browser":

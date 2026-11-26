@@ -411,3 +411,40 @@ def test_app_version_prefers_baked_file(tmp_path, monkeypatch):
     (tmp_path / "VERSION").write_text("9.9.9\n")
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
     assert scan_panel._app_version() == "9.9.9"
+
+
+def test_update_check_uses_certifi_context(monkeypatch):
+    import ssl
+    import scan_panel
+    assert isinstance(scan_panel._ssl_context(), ssl.SSLContext)
+    seen = {}
+
+    class Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"tag_name": "v9.0.0", "html_url": "u"}'
+
+    def fake_urlopen(request, timeout=None, context=None):
+        seen["context"] = context
+        return Resp()
+
+    monkeypatch.setattr(scan_panel.urllib.request, "urlopen", fake_urlopen)
+    out = scan_panel.check_for_update("1.0.0")
+    assert out["ok"] and out["newer"] and seen["context"] is not None
+
+
+def test_browser_install_command_has_no_cli_flag(monkeypatch):
+    import scan_panel
+    calls = []
+
+    class P:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setattr(scan_panel.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or P())
+    api = scan_panel.Api.__new__(scan_panel.Api)
+    api._launcher = ["/app/Job Finder", "--cli"]
+    api._browser = {"installing": True, "error": ""}
+    api._install_browser()
+    assert calls[0] == ["/app/Job Finder", "--install-browser"]

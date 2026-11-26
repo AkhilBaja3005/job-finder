@@ -361,6 +361,9 @@
   $("#update-chip").addEventListener("click", () => S.update && call("open_url", S.update.url));
 
   /* ── Start-up ────────────────────────────────────────────────────────────── */
+  // Pick up changes made outside the window (the .env file, a new profile) when the user comes back to it.
+  let lastFocusRefresh = 0;
+  window.addEventListener("focus", () => { if (Date.now() - lastFocusRefresh > 1500) { lastFocusRefresh = Date.now(); refreshInfo().then(() => { if (S.view === "settings") renderSettings(); }); } });
   async function refreshInfo() { const s = await call("get_state"); if (s && s.workspace) { S.info = s; renderShell(); } return s; }
   function hydrateForm() {
     const p = S.info.prefs;

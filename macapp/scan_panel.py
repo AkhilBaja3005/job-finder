@@ -343,6 +343,16 @@ class ScanRunner:
 RELEASES_URL = "https://api.github.com/repos/AkhilBaja3005/job-finder/releases/latest"
 
 
+def _ssl_context():
+    """A built Mac app has no system certificate list of its own, so use the one that ships with certifi."""
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
 def _version_tuple(text: str) -> tuple:
     return tuple(int(n) for n in re.findall(r"\d+", text)[:3])
 
@@ -352,7 +362,7 @@ def check_for_update(current: str, fetch: Any = None) -> Dict[str, Any]:
     try:
         if fetch is None:
             request = urllib.request.Request(RELEASES_URL, headers={"Accept": "application/vnd.github+json", "User-Agent": "Job-Finder-App"})
-            with urllib.request.urlopen(request, timeout=6) as resp:
+            with urllib.request.urlopen(request, timeout=6, context=_ssl_context()) as resp:
                 data = json.load(resp)
         else:
             data = fetch()
@@ -400,7 +410,7 @@ def _supabase_request(cfg: Dict[str, str], path: str, method: str = "GET", body:
         data=json.dumps(body).encode() if body is not None else None,
         headers={"apikey": cfg["key"], "Authorization": f"Bearer {cfg['key']}", "Content-Type": "application/json", **(headers or {})},
     )
-    with urllib.request.urlopen(request, timeout=timeout) as resp:
+    with urllib.request.urlopen(request, timeout=timeout, context=_ssl_context()) as resp:
         raw = resp.read()
     return json.loads(raw) if raw else None
 
@@ -571,7 +581,7 @@ class Api:
     def _install_browser(self) -> None:
         tail = ""
         try:
-            proc = subprocess.run(self._launcher + ["--install-browser"], capture_output=True, text=True, timeout=1200,
+            proc = subprocess.run([a for a in self._launcher if a != "--cli"] + ["--install-browser"], capture_output=True, text=True, timeout=1200,
                                   env={**os.environ, "PLAYWRIGHT_BROWSERS_PATH": str(browsers_dir())})
             tail = ANSI_RE.sub("", (proc.stdout + proc.stderr).strip()).splitlines()[-1] if (proc.stdout + proc.stderr).strip() else ""
             if proc.returncode != 0 or not browser_ready():
