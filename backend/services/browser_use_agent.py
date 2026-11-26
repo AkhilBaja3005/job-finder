@@ -340,6 +340,37 @@ def get_browser_use_fallback_llms(primary_llm: Any = None, model_name: Optional[
     return fallback_instances
 
 
+def _background_text(resume_data: Dict[str, Any]) -> str:
+    """Work history, education and skills as plain lines, so the agent can answer "current company", "school", "degree"
+    and similar questions from the profile instead of leaving them blank or guessing."""
+    cand = resume_data.get("candidate") if isinstance(resume_data.get("candidate"), dict) else {}
+
+    def pick(*keys):
+        for source in (resume_data, cand):
+            for key in keys:
+                if source.get(key):
+                    return source[key]
+        return []
+
+    def line(item: Any, order: tuple) -> str:
+        if not isinstance(item, dict):
+            return str(item)[:160]
+        parts = [str(item.get(k)).strip() for k in order if item.get(k)]
+        return " | ".join(parts)[:220]
+
+    jobs = [line(j, ("title", "role", "position", "company", "employer", "start", "start_date", "end", "end_date", "dates", "location")) for j in (pick("work_experience") or [])[:6]]
+    schools = [line(e, ("degree", "school", "institution", "university", "field", "start", "end", "dates", "grade")) for e in (pick("education") or [])[:3]]
+    skills = ", ".join(str(x) for x in (pick("skills", "core_skills") or [])[:30])
+    out = []
+    if jobs:
+        out.append("    - Work history (most recent first; the first entry is the CURRENT employer and job title):\n" + "\n".join(f"        * {j}" for j in jobs if j))
+    if schools:
+        out.append("    - Education:\n" + "\n".join(f"        * {e}" for e in schools if e))
+    if skills:
+        out.append(f"    - Skills: {skills}")
+    return ("\n" + "\n".join(out)) if out else ""
+
+
 def build_application_task_prompt(
     job_url: str,
     resume_data: Dict[str, Any],
@@ -353,10 +384,10 @@ def build_application_task_prompt(
     email = resume_data.get("email") or resume_data.get("candidate", {}).get("email", "")
     phone = resume_data.get("phone") or resume_data.get("candidate", {}).get("phone", "")
     location = resume_data.get("location") or resume_data.get("candidate", {}).get("location", "")
-    postal_code = resume_data.get("postal_code") or resume_data.get("postcode") or resume_data.get("candidate", {}).get("postal_code") or resume_data.get("candidate", {}).get("postcode", "W12 0BZ")
+    postal_code = resume_data.get("postal_code") or resume_data.get("postcode") or resume_data.get("candidate", {}).get("postal_code") or resume_data.get("candidate", {}).get("postcode", "")
     linkedin = resume_data.get("linkedin") or resume_data.get("candidate", {}).get("linkedin", "")
     github = resume_data.get("github") or resume_data.get("candidate", {}).get("github", "")
-    portfolio = resume_data.get("portfolio") or resume_data.get("candidate", {}).get("portfolio", "https://akhilbaja3005.github.io/AkhilBaja3005/")
+    portfolio = resume_data.get("portfolio") or resume_data.get("candidate", {}).get("portfolio", "")
     summary = resume_data.get("summary") or resume_data.get("candidate", {}).get("experience_summary", "")
 
     # Demographic & compliance answers commonly asked on job forms
@@ -487,6 +518,7 @@ def build_application_task_prompt(
         saved_answers_block = prompt_block(resolve_workspace_root())
     except Exception:
         saved_answers_block = ""
+    background_text = _background_text(resume_data)
     task = f"""
     Navigate to the job application URL: {job_url}
     
@@ -509,7 +541,7 @@ def build_application_task_prompt(
     - Notice Period / Earliest Availability: {notice_period} (Immediate / Available immediately)
     - Protected Veteran Status: {veteran_status}
     - Disability Status: {disability_status}
-    - Professional Background: {summary}
+    - Professional Background: {summary}{background_text}
     {password_profile_line}"""
 
     if resume_pdf_path and os.path.exists(resume_pdf_path):
