@@ -118,7 +118,7 @@ def test_preflight_check_job_url_closed_or_expired():
     from services.browser_use_agent import preflight_check_job_url
 
     # Test HTTP 404
-    with patch("urllib.request.urlopen") as mock_urlopen:
+    with patch("utils.url_safety.safe_urlopen") as mock_urlopen:
         mock_urlopen.side_effect = urllib.error.HTTPError(
             url="https://example.com/job/1", code=404, msg="Not Found", hdrs=Message(), fp=None
         )
@@ -127,7 +127,7 @@ def test_preflight_check_job_url_closed_or_expired():
         assert reason is not None and "404" in reason
 
     # Test closed marker in content
-    with patch("urllib.request.urlopen") as mock_urlopen:
+    with patch("utils.url_safety.safe_urlopen") as mock_urlopen:
         mock_response = MagicMock()
         mock_response.geturl.return_value = "https://example.com/job/closed"
         mock_response.read.return_value = b"<html><body>This job has expired and is no longer accepting applications</body></html>"
