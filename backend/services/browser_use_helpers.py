@@ -26,7 +26,7 @@ def detect_blocker(text: str) -> Optional[str]:
     return None
 
 
-def get_run_timeout(default: float = 900.0) -> float:
+def get_run_timeout(default: float = 600.0) -> float:
     """Total wall-clock budget for one application (BROWSER_USE_TIMEOUT, seconds)."""
     raw = os.getenv("BROWSER_USE_TIMEOUT", "").strip()
     try:
