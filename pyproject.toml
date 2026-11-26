@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "job-finder-ai"
-version = "1.8.0"
+version = "1.9.0"
 description = "Autonomous career agent, ATS resume tailor, and job search copilot."
 readme = "README_PYPI.md"
 
@@ -69,7 +69,10 @@ huggingface = [
 
 # Alternative model providers
 anthropic = [
-    "anthropic>=0.18.0",
+    "anthropic>=0.40.0,<3",
+]
+openai = [
+    "openai>=1.50.0,<4",
 ]
 groq = [
     "groq>=0.4.0",
@@ -100,7 +103,8 @@ dev = [
 all = [
     "httpx>=0.24.0",
     "huggingface-hub>=0.20.0",
-    "anthropic>=0.18.0",
+    "anthropic>=0.40.0,<3",
+    "openai>=1.50.0,<4",
     "groq>=0.4.0",
     "sentry-sdk>=1.30.0",
     "jev-ultrafast>=0.1.0",
