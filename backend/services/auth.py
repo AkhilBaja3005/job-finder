@@ -135,6 +135,24 @@ def create_session(user_id) -> str:
     supabase_request("sessions", "POST", {"token": token, "user_id": user_id})
     return token
 
+SYNC_CODE_MIN_LEN = 6
+SYNC_CODE_MAX_LEN = 12
+NEW_SYNC_CODE_LEN = 10
+
+
+class TooManySyncGuesses(Exception):
+    """Raised when a client made too many failed sync-code lookups. Routes turn it into HTTP 429."""
+
+
+def _decrypt_user(user: dict) -> dict:
+    """Returns the user row with the saved LLM key decrypted (in memory only)."""
+    from services.secret_store import decrypt_secret
+    if user.get("gemini_api_key"):
+        user = dict(user)
+        user["gemini_api_key"] = decrypt_secret(user["gemini_api_key"])
+    return user
+
+
 def get_user_by_token(token: str) -> Optional[dict]:
     # Fast path for local test mocks
     # Test shortcut: honoured only under pytest or when explicitly enabled, never on a deployed server.
@@ -148,14 +166,20 @@ def get_user_by_token(token: str) -> Optional[dict]:
 
     _lookup_state.failed = False
 
-    # 1. Check if token is a 6-digit Sync Code (e.g., A7X9K2)
+    # 1. Check if token is a Sync Code: 6 characters for older accounts (e.g. A7X9K2), 10 for new ones.
     clean_token = token.strip().upper()
-    if len(clean_token) == 6 and clean_token.isalnum():
+    if SYNC_CODE_MIN_LEN <= len(clean_token) <= SYNC_CODE_MAX_LEN and clean_token.isalnum():
+        # A short code is guessable, so lookups that miss are counted per client IP and blocked after a few.
+        from services.request_context import sync_guess_blocked, record_sync_guess_miss
+        if sync_guess_blocked():
+            raise TooManySyncGuesses("Too many failed sync-code attempts. Try again later.")
         users = supabase_request(f"users?sync_code=eq.{clean_token}&select=id,email,gemini_api_key,picture_url,cron_enabled,cron_role,cron_location,cron_time,send_tailored_email,sync_code", "GET")
         if users:
-            result = users[0]
+            result = _decrypt_user(users[0])
             _token_cache.set(token, result)
             return result
+        if not getattr(_lookup_state, "failed", False):
+            record_sync_guess_miss()
 
     encoded_token = urllib.parse.quote(token)
     try:
@@ -169,6 +193,7 @@ def get_user_by_token(token: str) -> Optional[dict]:
             else:
                 result = None
             if result:
+                result = _decrypt_user(result)
                 _token_cache.set(token, result)
                 return result
     except Exception as e:
@@ -181,7 +206,7 @@ def get_user_by_token(token: str) -> Optional[dict]:
         "name": "Guest User",
         "is_guest": True,
         "gemini_api_key": None,
-        "sync_code": clean_token if len(clean_token) == 6 else f"G{token[:5].upper()}",
+        "sync_code": clean_token if SYNC_CODE_MIN_LEN <= len(clean_token) <= SYNC_CODE_MAX_LEN else f"G{token[:5].upper()}",
         "send_tailored_email": False
     }
     if getattr(_lookup_state, "failed", False):
@@ -195,19 +220,25 @@ import secrets
 import string
 
 def _generate_unique_sync_code() -> str:
-    """Generates a cryptographically secure, collision-checked 6-character sync code."""
+    """Generates a cryptographically secure, collision-checked sync code (10 characters, about 3.6e15 values)."""
     alphabet = string.ascii_uppercase + string.digits
     for _ in range(10):
-        code = ''.join(secrets.choice(alphabet) for _ in range(6))
+        code = ''.join(secrets.choice(alphabet) for _ in range(NEW_SYNC_CODE_LEN))
         # Check if code already exists in Supabase
         existing = supabase_request(f"users?sync_code=eq.{code}&select=id", "GET")
         if not existing:
             return code
-    # Fallback to 8-character code if 6-char collision space is saturated
-    return ''.join(secrets.choice(alphabet) for _ in range(8))
+    return ''.join(secrets.choice(alphabet) for _ in range(NEW_SYNC_CODE_LEN + 2))
+
+def rotate_user_sync_code(user_id) -> str:
+    """Replaces the user's sync code with a new 10-character one. The old code stops working."""
+    code = _generate_unique_sync_code()
+    supabase_request(f"users?id=eq.{user_id}", "PATCH", {"sync_code": code})
+    return code
+
 
 def generate_user_sync_code(user_id) -> str:
-    """Generates or fetches a permanent 6-character alphanumeric sync key for linking extension."""
+    """Generates or fetches the user's permanent alphanumeric sync key for linking the extension."""
     users = supabase_request(f"users?id=eq.{user_id}&select=sync_code", "GET")
     if users and users[0].get("sync_code"):
         return users[0]["sync_code"]
@@ -230,7 +261,8 @@ def invalidate_token_cache(token: str):
         _token_cache._store.pop(token, None)
 
 def update_user_api_key(user_id, api_key: str):
-    supabase_request(f"users?id=eq.{user_id}", "PATCH", {"gemini_api_key": api_key})
+    from services.secret_store import encrypt_secret
+    supabase_request(f"users?id=eq.{user_id}", "PATCH", {"gemini_api_key": encrypt_secret(api_key)})
 
 def update_user_resume_data(user_id, resume_data: dict, master_latex: Optional[str] = None):
     payload = {"resume_data": json.dumps(resume_data)}

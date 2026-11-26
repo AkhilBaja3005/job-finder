@@ -31,6 +31,7 @@ from services.session_store import (
     _safe_key
 )
 from services.cron_scheduler import background_cron_worker
+from services.auth import TooManySyncGuesses
 from routes.auth_routes import router as auth_router
 from routes.resume_routes import router as resume_router
 from routes.job_routes import router as job_router, _extract_company_from_jd
@@ -149,18 +150,42 @@ async def lifespan(app: FastAPI):
 # ─────────────────────────────────────────────────────────────────────────────
 # FastAPI Application & Router Mounts
 # ─────────────────────────────────────────────────────────────────────────────
+# The interactive API docs list every route and schema, so they are off unless ENABLE_API_DOCS=1.
+_docs_enabled = os.getenv("ENABLE_API_DOCS", "0").strip() in ("1", "true", "True", "yes")
 app = FastAPI(
     title="Job Finder & ATS Tailor API",
     description="Full-stack automated Job Discovery, ATS Match Scoring, Resume Tailoring, and AI Auto-Apply Backend",
     version="3.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
+
+
+@app.middleware("http")
+async def _remember_client_ip(request, call_next):
+    """Stores the real client IP (behind the proxy) for rate limits and failed-login counting."""
+    from services.request_context import client_ip_var, get_client_ip
+    token = client_ip_var.set(get_client_ip(request.client.host if request.client else None, request.headers.get("x-forwarded-for")))
+    try:
+        return await call_next(request)
+    finally:
+        client_ip_var.reset(token)
+
+
+@app.exception_handler(TooManySyncGuesses)
+async def _too_many_sync_guesses(request, exc):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=429, content={"detail": str(exc)}, headers={"Retry-After": "600"})
 
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
+    # Origins stay open on purpose: the extension's content script calls the API from whatever job site is open.
+    # Auth is a bearer token in a header, never a cookie, so credentials are not allowed cross-site.
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
