@@ -1,3 +1,4 @@
-# Extra packages needed only to build the Mac app (the server's own requirements are in backend/requirements.txt).
+# Extra packages needed only to build the desktop apps (the server's own requirements are in backend/requirements.txt).
 pywebview>=5.3
 pyinstaller>=6.10
+pillow>=10.0; sys_platform == "win32"   # turns icon.png into the Windows icon

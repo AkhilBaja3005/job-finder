@@ -26,6 +26,8 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional
 
+import platform_support
+
 APP_NAME = "Job Finder"
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
 PROGRESS_RE = re.compile(r"\[(\d+)/(\d+)\]")
@@ -42,7 +44,7 @@ PROVIDER_ORDERS = {
 # ── folders ──────────────────────────────────────────────────────────────────────
 def app_support_dir() -> Path:
     override = os.environ.get("JOB_FINDER_APP_HOME")
-    return Path(override) if override else Path.home() / "Library" / "Application Support" / APP_NAME
+    return Path(override) if override else platform_support.app_support_dir(APP_NAME)
 
 
 def load_app_config() -> Dict[str, Any]:
@@ -61,7 +63,7 @@ def save_app_config(config: Dict[str, Any]) -> None:
 def logs_dir() -> Path:
     """Where the app and each run write their logs: ~/Library/Logs/Job Finder (inside the app folder when that is overridden)."""
     override = os.environ.get("JOB_FINDER_APP_HOME")
-    return Path(override) / "logs" if override else Path.home() / "Library" / "Logs" / APP_NAME
+    return Path(override) / "logs" if override else platform_support.logs_base(APP_NAME)
 
 
 APP_PREF_KEYS = ("primary_ai", "headless", "tour_done")
@@ -276,9 +278,10 @@ class ScanRunner:
             except OSError:
                 self._logfile = None
             try:
+                group = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW} if platform_support.IS_WINDOWS else {"start_new_session": True}
                 self._proc = subprocess.Popen(
                     self._launcher + args, cwd=str(cwd), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1, errors="replace", start_new_session=True,
+                    text=True, bufsize=1, errors="replace", **group,
                 )
             except OSError as exc:
                 return {"ok": False, "error": f"Could not start: {exc}"}
@@ -316,13 +319,16 @@ class ScanRunner:
         if proc is None or proc.poll() is not None:
             return {"ok": True, "message": "Nothing is running."}
         try:
-            os.killpg(proc.pid, signal.SIGTERM)
-            for _ in range(50):
-                if proc.poll() is not None:
-                    break
-                time.sleep(0.1)
-            if proc.poll() is None:
-                os.killpg(proc.pid, signal.SIGKILL)
+            if platform_support.IS_WINDOWS:  # kills the process and everything it started
+                subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], check=False, capture_output=True)
+            else:
+                os.killpg(proc.pid, signal.SIGTERM)
+                for _ in range(50):
+                    if proc.poll() is not None:
+                        break
+                    time.sleep(0.1)
+                if proc.poll() is None:
+                    os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
         with self._lock:
@@ -542,16 +548,12 @@ def check_for_update(current: str, fetch: Any = None) -> Dict[str, Any]:
 
 
 def chrome_found() -> bool:
-    return any(Path(p).exists() for p in ("/Applications/Google Chrome.app", str(Path.home() / "Applications" / "Google Chrome.app"))) or bool(shutil.which("google-chrome"))
+    return platform_support.chrome_found()
 
 
 def notify(title: str, message: str) -> None:
-    """A macOS notification. Failure is ignored: it is a nicety."""
-    try:
-        script = f'display notification {json.dumps(message)} with title {json.dumps(title)}'
-        subprocess.run(["osascript", "-e", script], check=False, timeout=5, capture_output=True)
-    except Exception:
-        pass
+    """A system notification where the platform makes it easy. Failure is ignored: it is a nicety."""
+    platform_support.notify(title, message)
 
 
 def prune_logs(directory: Path, keep: int = 25) -> None:
@@ -839,7 +841,7 @@ class Api:
         ws = workspace_dir()
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
-            "running": self._runner.running, "version": _app_version(), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "profile_check": profile_check(ws),
+            "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "profile_check": profile_check(ws),
             "browser": {"ready": browser_ready(), **self._browser},
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
@@ -876,6 +878,8 @@ class Api:
     def set_theme(self, dark: bool) -> Dict[str, Any]:
         """Lets the window's title bar match the page colours."""
         try:
+            if not platform_support.IS_MAC:
+                return {"ok": True}
             import native
             native.set_titlebar_theme(self._window, bool(dark))
         except Exception:
@@ -1008,7 +1012,7 @@ class Api:
         shot = last_attempt(workspace_dir(), url).get("screenshot")
         if not shot:
             return {"ok": False, "error": "There is no screenshot for this job."}
-        subprocess.run(["open", shot], check=False)
+        platform_support.open_path(shot)
         return {"ok": True}
 
     def review_in_chrome(self, url: str) -> Dict[str, Any]:
@@ -1025,13 +1029,13 @@ class Api:
 
     def schedule_status(self) -> Dict[str, Any]:
         import scheduler
-        return {"ok": True, **scheduler.status()}
+        return {"ok": True, **scheduler.status(workspace=workspace_dir())}
 
     def set_schedule(self, enabled: bool, hour: int = 8, minute: int = 0, real: bool = False) -> Dict[str, Any]:
         """Turns the daily run on or off. A real (submitting) run is only scheduled when `real` is True."""
         import scheduler
         if not enabled:
-            return scheduler.remove()
+            return scheduler.remove(workspace=workspace_dir())
         ws = workspace_dir()
         prefs = load_app_prefs()
         options = {"mode": "auto_apply" if real else "dry_run", "primary_ai": prefs.get("primary_ai"), "headless": True}
@@ -1053,21 +1057,19 @@ class Api:
 
     def open_path(self, what: str) -> Dict[str, Any]:
         ws = workspace_dir()
-        targets = {
-            "workspace": ["open", str(ws)],
-            "profile": ["open", "-t", str(profile_path(ws))],
-            "env": ["open", "-t", str(ws / ".env")],
-            "tracker": ["open", str(ws / "applications_tracker")],
-            "logs": ["open", str(logs_dir())],
+        targets = {  # name -> (path, open as a text file)
+            "workspace": (str(ws), False), "profile": (str(profile_path(ws)), True), "env": (str(ws / ".env"), True),
+            "tracker": (str(ws / "applications_tracker"), False), "logs": (str(logs_dir()), False),
         }
         if what == "logs":
             logs_dir().mkdir(parents=True, exist_ok=True)
         if what == "answers":
             from services.saved_answers import ensure_template
-            targets["answers"] = ["open", "-t", ensure_template(str(ws))]
+            targets["answers"] = (ensure_template(str(ws)), True)
         if what not in targets:
             return {"ok": False}
-        subprocess.run(targets[what], check=False)
+        path, as_text = targets[what]
+        platform_support.open_path(path, as_text)
         return {"ok": True}
 
     def open_url(self, url: str) -> Dict[str, Any]:

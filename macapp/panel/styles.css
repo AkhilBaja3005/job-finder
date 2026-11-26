@@ -228,3 +228,6 @@ tbody tr:hover { background: var(--fill); }
 
 .acts { white-space: nowrap; text-align: right; }
 .select.stage { height: 24px; font-size: 12px; margin-left: 4px; max-width: 108px; }
+
+/* Windows and Linux: the system title bar is above the page, so there is no space to leave for window buttons. */
+.no-traffic-lights { --titlebar-h: 0px; }

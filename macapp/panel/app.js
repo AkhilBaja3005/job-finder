@@ -7,6 +7,9 @@
   const plural = (n, one, many) => n + " " + (n === 1 ? one : many || one + "s");
 
   /* ── State ───────────────────────────────────────────────────────────────── */
+  const IS_MAC = /Mac/i.test(navigator.platform), MOD = IS_MAC ? "⌘" : "Ctrl+";
+  const isMod = (e) => (IS_MAC ? e.metaKey : e.ctrlKey);
+  if (!IS_MAC) document.documentElement.classList.add("no-traffic-lights");
   const S = {
     view: "run",
     info: null,           // from api.get_state()
@@ -97,8 +100,8 @@
   /* ── Run screen ──────────────────────────────────────────────────────────── */
   function runButton() {
     return S.run.running
-      ? '<button class="btn danger lg" data-act="stop">' + icon("stop") + "Stop<kbd>⌘.</kbd></button>"
-      : '<button class="btn primary lg" data-act="start">' + icon("play") + (S.form.mode === "auto_apply" ? "Start applying" : "Start practice run") + "<kbd>⌘↵</kbd></button>";
+      ? '<button class="btn danger lg" data-act="stop">' + icon("stop") + "Stop<kbd>" + MOD + ".</kbd></button>"
+      : '<button class="btn primary lg" data-act="start">' + icon("play") + (S.form.mode === "auto_apply" ? "Start applying" : "Start practice run") + "<kbd>" + MOD + "↵</kbd></button>";
   }
   function checklist() {
     const i = S.info; if (!i) return "";
@@ -338,10 +341,10 @@
       if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(id, t.value); }
       else if (e.key === "Backspace" && !t.value && S.form[id].length) { S.form[id].pop(); renderRun(); saveFormSoon(); const el = $('[data-tags="' + id + '"] input'); if (el) el.focus(); }
     }
-    if (e.metaKey && e.key === "Enter") { e.preventDefault(); S.run.running ? call("stop_scan") : startRun(); }
-    else if (e.metaKey && e.key === ".") { e.preventDefault(); call("stop_scan"); }
-    else if (e.metaKey && ["1", "2", "3"].includes(e.key)) { e.preventDefault(); go(NAV[Number(e.key) - 1][0]); }
-    else if (e.metaKey && e.key === ",") { e.preventDefault(); go("settings"); }
+    if (isMod(e) && e.key === "Enter") { e.preventDefault(); S.run.running ? call("stop_scan") : startRun(); }
+    else if (isMod(e) && e.key === ".") { e.preventDefault(); call("stop_scan"); }
+    else if (isMod(e) && ["1", "2", "3"].includes(e.key)) { e.preventDefault(); go(NAV[Number(e.key) - 1][0]); }
+    else if (isMod(e) && e.key === ",") { e.preventDefault(); go("settings"); }
   });
   document.addEventListener("focusout", (e) => { const t = e.target; if (t.matches && t.matches(".tags input") && t.value.trim()) addTag(t.closest("[data-tags]").dataset.tags, t.value); });
   document.addEventListener("input", (e) => {

@@ -1,0 +1,189 @@
+name: Build desktop apps
+
+# Builds the Mac app (Apple Silicon and Intel) and the Windows app.
+#   - Pull request that changes the app or the code it bundles: builds all three and smoke-tests them.
+#   - Push to main that changes them: builds, then refreshes the "desktop-latest" release, which the website's download
+#     buttons point to. File names there never change, so the links never break.
+#   - A published GitHub release: the versioned files are attached to that release too.
+#   - Manual run: Actions -> "Build desktop apps" -> Run workflow.
+# Mac signing and notarizing switch on by themselves when these repository secrets exist (see macapp/README.md):
+#   APPLE_CERT_P12_BASE64, APPLE_CERT_PASSWORD, APPLE_SIGN_IDENTITY, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD.
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+  push:
+    branches: [main]
+    paths: &app_paths
+      - "macapp/**"
+      - "backend/**"
+      - "job_finder/**"
+      - "applications_tracker/**"
+      - "pyproject.toml"
+      - ".github/workflows/build_desktop_apps.yml"
+  pull_request:
+    paths: *app_paths
+
+permissions:
+  contents: write   # refresh the desktop-latest release and attach files to releases
+
+concurrency:
+  group: desktop-apps-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    name: Mac ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-latest
+            required: true
+          - arch: x86_64
+            runner: macos-15-intel
+            required: false
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ !matrix.required }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Import the signing certificate (only when the secrets exist)
+        id: signing
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+        run: |
+          if [ -z "$APPLE_CERT_P12_BASE64" ] || [ -z "$APPLE_SIGN_IDENTITY" ]; then
+            echo "No Apple signing secrets: building unsigned."; exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$APPLE_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          rm -f "$RUNNER_TEMP/cert.p12"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        env:
+          SIGN_IDENTITY: ${{ steps.signing.outputs.signed == 'true' && secrets.APPLE_SIGN_IDENTITY || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: macapp/build_mac.sh
+
+      - name: Smoke test the built app
+        run: |
+          export JOB_FINDER_APP_HOME="$RUNNER_TEMP/jf-home"
+          export JOB_FINDER_SKIP_BROWSER_INSTALL=1
+          "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli --version
+          "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli doctor || true
+          "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --cli scan --help | grep -q -- "--dry-run"
+          # Opens the real window, waits for the page and the Python bridge, prints what rendered, and quits.
+          JOB_FINDER_APP_SELFTEST=1 "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" | tee selftest.txt
+          grep -q '"info": true' selftest.txt
+
+      - name: Give the file a stable name
+        run: cp dist-mac/Job-Finder-*.dmg "dist-mac/Job-Finder-${{ matrix.arch }}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: job-finder-mac-${{ matrix.arch }}
+          path: dist-mac/*.dmg
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist-mac/Job-Finder-[0-9]*.dmg --clobber
+
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build
+        shell: pwsh
+        run: macapp\build_windows.ps1
+
+      - name: Smoke test the built app
+        shell: pwsh
+        run: |
+          $env:JOB_FINDER_APP_HOME = Join-Path $env:RUNNER_TEMP "jf-home"
+          $env:JOB_FINDER_SKIP_BROWSER_INSTALL = "1"
+          $exe = (Resolve-Path "dist-win\Job Finder\Job Finder.exe").Path
+          # The app has no console window, so cmd would not wait for it. Start-Process -Wait does, and captures its output.
+          function Invoke-App([string[]]$AppArgs, [int]$Seconds = 120) {
+            $out = New-TemporaryFile; $err = New-TemporaryFile
+            $p = Start-Process -FilePath $exe -ArgumentList $AppArgs -PassThru -RedirectStandardOutput $out.FullName -RedirectStandardError $err.FullName
+            if (-not $p.WaitForExit($Seconds * 1000)) { $p.Kill(); Get-Content $err.FullName -ErrorAction SilentlyContinue; throw "Timed out after $Seconds seconds: $AppArgs" }
+            [pscustomobject]@{ Code = $p.ExitCode; Out = (Get-Content $out.FullName -Raw); Err = (Get-Content $err.FullName -Raw) }
+          }
+          $r = Invoke-App @("--cli", "--version"); Write-Host $r.Out; if ($r.Code -ne 0) { Write-Host $r.Err; throw "--version failed" }
+          $r = Invoke-App @("--cli", "scan", "--help"); if ($r.Out -notmatch "--dry-run") { Write-Host $r.Err; throw "scan --help did not list --dry-run" }
+          # Opens the real window, waits for the page and the Python bridge, prints what rendered, and quits.
+          $env:JOB_FINDER_APP_SELFTEST = "1"
+          $r = Invoke-App @() 120
+          Write-Host $r.Out
+          if ($r.Out -notmatch '"info": true') { Write-Host $r.Err; throw "The page did not finish loading in the window" }
+
+      - name: Give the file a stable name
+        shell: pwsh
+        run: Copy-Item (Get-ChildItem dist-win\Job-Finder-*-windows.zip | Select-Object -First 1).FullName dist-win\Job-Finder-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: job-finder-windows
+          path: dist-win/*.zip
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" (Get-ChildItem dist-win\Job-Finder-[0-9]*-windows.zip).FullName --clobber
+
+  publish-latest:
+    name: Refresh the desktop-latest release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.mac.result == 'success' && needs.windows.result == 'success'
+    needs: [mac, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ls -l files
+          NOTES="Latest build of the desktop apps, from commit ${GITHUB_SHA::7} on $(date -u +%F). Mac apps are signed only when Apple secrets are set; otherwise right-click the app and choose Open the first time. Windows may show a SmartScreen warning: choose More info, then Run anyway."
+          if gh release view desktop-latest >/dev/null 2>&1; then
+            gh release edit desktop-latest --notes "$NOTES" --prerelease
+          else
+            gh release create desktop-latest --prerelease --target "$GITHUB_SHA" --title "Desktop apps (latest build)" --notes "$NOTES"
+          fi
+          gh release upload desktop-latest files/Job-Finder-arm64.dmg files/Job-Finder-windows.zip --clobber
+          [ -f files/Job-Finder-x86_64.dmg ] && gh release upload desktop-latest files/Job-Finder-x86_64.dmg --clobber || echo "No Intel build this time."

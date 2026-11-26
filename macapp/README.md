@@ -97,3 +97,38 @@ python macapp/job_finder_app.py
 - Automatic updates.
 - Intel Macs.
 - A scheduler (run every morning). For now start a run from the window, or use the command line tool with cron.
+
+## Windows
+
+The same app runs on Windows 10 and 11 (it uses the WebView2 runtime that Windows already includes).
+
+```powershell
+macapp\build_windows.ps1        # needs Python 3.11 or 3.12; makes dist-win\Job Finder\Job Finder.exe and a zip
+```
+
+Windows differences: settings and logs live in `%APPDATA%\Job Finder` and `%LOCALAPPDATA%\Job Finder\Logs`; the daily run uses
+Task Scheduler instead of launchd; there are no desktop notifications yet. The app is not code-signed, so SmartScreen may say
+"Windows protected your PC": choose More info, then Run anyway.
+
+## Automatic builds
+
+`.github/workflows/build_desktop_apps.yml` builds the Mac app (Apple Silicon and Intel) and the Windows app:
+
+- on every pull request and every push to `main` that touches `macapp/`, `backend/`, `job_finder/`, `applications_tracker/` or
+  `pyproject.toml`, and runs a smoke test of each built app (the real window opens and the page must load);
+- on a push to `main`, refreshes the `desktop-latest` pre-release with `Job-Finder-arm64.dmg`, `Job-Finder-x86_64.dmg` and
+  `Job-Finder-windows.zip`. These names never change, which is what the website's download buttons link to;
+- on a published GitHub release, attaches the versioned files to it.
+
+### Signing and notarizing the Mac app (optional)
+Needs an Apple Developer account. Add these repository secrets and the next build signs and notarizes by itself:
+
+| Secret | What |
+|---|---|
+| `APPLE_CERT_P12_BASE64` | your "Developer ID Application" certificate exported as .p12, base64-encoded |
+| `APPLE_CERT_PASSWORD` | the password you set when exporting it |
+| `APPLE_SIGN_IDENTITY` | e.g. `Developer ID Application: Your Name (TEAMID)` |
+| `APPLE_ID`, `APPLE_TEAM_ID` | your Apple ID email and 10-character team id |
+| `APPLE_APP_PASSWORD` | an app-specific password from appleid.apple.com |
+
+Without them the Mac builds are unsigned and users right-click, Open the first time.

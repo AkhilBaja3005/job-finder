@@ -8128,15 +8128,21 @@ function App() {
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-                <a
-                  className="btn"
-                  href="https://github.com/AkhilBaja3005/job-finder/releases/latest"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ padding: '6px 12px', fontSize: '0.76rem', background: '#0284c7', color: '#fff', textDecoration: 'none' }}
-                >
-                  Download the Mac app
-                </a>
+                {[
+                  ['Download for Mac (Apple Silicon)', 'Job-Finder-arm64.dmg'],
+                  ['Download for Mac (Intel)', 'Job-Finder-x86_64.dmg'],
+                  ['Download for Windows', 'Job-Finder-windows.zip'],
+                ].map(([label, file]) => (
+                  <a
+                    key={file}
+                    className="btn"
+                    href={`https://github.com/AkhilBaja3005/job-finder/releases/download/desktop-latest/${file}`}
+                    rel="noopener noreferrer"
+                    style={{ padding: '6px 12px', fontSize: '0.76rem', background: '#0284c7', color: '#fff', textDecoration: 'none' }}
+                  >
+                    {label}
+                  </a>
+                ))}
                 {user && user.sync_code && (
                   <>
                     <button className="btn" style={{ padding: '6px 12px', fontSize: '0.76rem', background: 'transparent', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.4)' }} onClick={exportMyData}>Export my data</button>
