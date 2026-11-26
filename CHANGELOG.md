@@ -1,8 +1,29 @@
 # Changelog
 
-## Unreleased
+## 1.8.0
+
+### Added
+- Browser-agent provider order. Set `BROWSER_USE_PROVIDERS` (for example `anthropic,openai,gemini`) to choose the
+  primary and secondary LLM provider. Without it, a `claude-*` or `gpt-*` model in `--model` or `BROWSER_USE_MODEL`,
+  or an explicitly set `BROWSER_USE_ANTHROPIC_MODEL` or `BROWSER_USE_OPENAI_MODEL`, makes that provider the primary.
+  Providers without an API key are skipped. With nothing set, the order stays Gemini, then Claude, then OpenAI.
+- Dynamic model choice for Claude and OpenAI, like Gemini. By default the agent asks the provider for its model list
+  (cached for an hour) and uses the newest Haiku (Anthropic) or Luna (OpenAI). `BROWSER_USE_ANTHROPIC_MODEL`
+  accepts a family name (`haiku`, `sonnet`, `opus`) or a full model ID; `BROWSER_USE_OPENAI_MODEL` accepts `luna`,
+  `terra` or a full ID. A full ID is always used as given. If the lookup fails, it falls back to
+  `claude-haiku-5-5` and `gpt-6-luna`.
+- A Gemini API key is no longer required to start the browser agent when another provider is the primary.
+
+### Changed
+- Job-fit analysis no longer asks an LLM for the role-fit score, alignment labels, red flags or tailoring
+  suggestions. They are computed from the job description and resume by fixed rules, so the same input always
+  gives the same result. Set `USE_LLM_SEMANTIC_SCORING=1` to restore the old LLM step. The cover letter and
+  resume text still come from the LLM.
+- `search_preferences.required_title_keywords` (for example `["intern", "internship", "placement"]`) skips scan
+  results whose title lacks one of those whole words. `min_ats_score_threshold` is now read by the scanner.
 
 ### Fixed
+- The ATS result now reports the real matched and total required-skill counts. They were always 0/0.
 - MCP `search_jobs` returned up to 120 jobs with their full descriptions, 150,000 to 210,000 characters in
   one result, which clients rejected as too large. It now returns at most 25 jobs by default, with descriptions
   shortened to 300 characters and the whole result capped at 60,000 characters. A new `limit` argument (max 100)
