@@ -314,6 +314,60 @@ def _generate_with_model_list(
             if on_log:
                 on_log(json.dumps({"type": "llm_warn", "provider": "cloudflare", "message": f"Cloudflare failed: {str(cf_err)[:100]}"}))
 
+    # ── STAGE 3: Gemini / Claude / OpenAI, in the order set by LLM_PROVIDERS ─────
+    # Default order is Gemini, then Claude, then OpenAI. A provider without a key is skipped.
+    providers = _text_provider_order(custom_api_key)
+    if not providers:
+        raise ValueError("Pipeline dropped to final floor, but GEMINI_API_KEY environment variable is missing.")
+    last_provider_error: Optional[Exception] = None
+    for provider in providers:
+        try:
+            if provider == "gemini":
+                return _generate_with_gemini(prompt, model_list, response_schema, custom_api_key, on_log)
+            if provider == "anthropic":
+                return _execute_anthropic(prompt, response_schema, os.getenv("ANTHROPIC_API_KEY", ""))
+            if provider == "openai":
+                return _execute_openai(prompt, response_schema, os.getenv("OPENAI_API_KEY", ""))
+        except Exception as prov_err:
+            last_provider_error = prov_err
+            print(f"[LLM Client] Provider {provider} failed: {str(prov_err)[:160]}. Trying the next provider...")
+            if on_log:
+                on_log(json.dumps({"type": "llm_warn", "provider": provider, "message": f"{provider} failed: {str(prov_err)[:100]}"}))
+    raise RuntimeError(f"All LLM providers failed ({', '.join(providers)}). Last error: {last_provider_error}")
+
+
+def _text_provider_order(custom_api_key: Optional[str] = None) -> List[str]:
+    """
+    Providers for text generation, first = primary, second = secondary, and so on.
+    LLM_PROVIDERS="anthropic,openai,gemini" sets the order; providers it leaves out are added after
+    in the default order (gemini, anthropic, openai). Providers without an API key are dropped.
+    """
+    aliases = {"google": "gemini", "claude": "anthropic"}
+    order: List[str] = []
+    for name in os.getenv("LLM_PROVIDERS", "").split(","):
+        name = aliases.get(name.strip().lower(), name.strip().lower())
+        if name in ("gemini", "anthropic", "openai") and name not in order:
+            order.append(name)
+    for name in ("gemini", "anthropic", "openai"):
+        if name not in order:
+            order.append(name)
+
+    def usable(name: str) -> bool:
+        if name == "gemini":
+            return bool(get_gemini_api_keys() or os.getenv("GEMINI_API_KEY") or (custom_api_key or "").startswith(("AIza", "AQ.")))
+        return bool(os.getenv("ANTHROPIC_API_KEY" if name == "anthropic" else "OPENAI_API_KEY"))
+
+    return [n for n in order if usable(n)]
+
+
+def _generate_with_gemini(
+    prompt: str,
+    model_list: list,
+    response_schema=None,
+    custom_api_key: Optional[str] = None,
+    on_log: Optional[Callable[[str], None]] = None,
+) -> str:
+    """Runs the prompt through the Gemini model list, rotating API keys on 429. Raises if all fail."""
     available_keys = [custom_api_key] if (custom_api_key and (custom_api_key.startswith("AIza") or custom_api_key.startswith("AQ."))) else (get_gemini_api_keys() or [os.getenv("GEMINI_API_KEY", "")])
     available_keys = [k for k in available_keys if k]
     if not available_keys:
@@ -576,36 +630,39 @@ def _generate_with_cloudflare_llama(prompt: str, response_schema=None, on_log: O
     print(f"[LLM Client] Cloudflare generation successful with: {model}")
     return text_str
 
-def _execute_openai(prompt: str, response_schema, api_key: str) -> str:
+def _execute_openai(prompt: str, response_schema, api_key: str, model: Optional[str] = None) -> str:
     # pyrefly: ignore [missing-import]
     from openai import OpenAI
-    client = OpenAI(api_key=api_key)
-    is_latex_or_review = (response_schema is None or "latex" in prompt.lower())
-    openai_model = "gpt-4o" if is_latex_or_review else "gpt-4o-mini"
+    from config.constants import resolve_provider_model
+    client = OpenAI(api_key=api_key, timeout=90)
+    # Model: LLM_OPENAI_MODEL (luna, terra or a full ID); default is the newest Luna from the model list.
+    openai_model = resolve_provider_model("openai", model or os.getenv("LLM_OPENAI_MODEL"), api_key)
 
+    user_content = prompt
+    if response_schema is not None:
+        schema_json = json.dumps(clean_schema(response_schema.model_json_schema()), indent=2)
+        user_content += f"\n\nReturn strictly valid JSON only, matching this JSON schema:\n{schema_json}"
     messages = [
         {"role": "system", "content": "You are an expert recruiter and career systems engineer."},
-        {"role": "user", "content": prompt}
+        {"role": "user", "content": user_content},
     ]
-    kwargs: Dict[str, Any] = {
-        "model": openai_model,
-        "messages": messages,
-        "temperature": 0.1,
-    }
+    # No temperature: newer OpenAI models accept only the default value and reject anything else.
+    kwargs: Dict[str, Any] = {"model": openai_model, "messages": messages}
     if response_schema is not None:
         kwargs["response_format"] = {"type": "json_object"}
-        messages[1]["content"] += "\nReturn strictly valid JSON only."
 
+    print(f"[LLM Client] OpenAI generation with: {openai_model}")
     completion = client.chat.completions.create(**kwargs)
     return completion.choices[0].message.content or ""
 
-def _execute_anthropic(prompt: str, response_schema, api_key: str) -> str:
+def _execute_anthropic(prompt: str, response_schema, api_key: str, model: Optional[str] = None) -> str:
     # pyrefly: ignore [missing-import]
     import anthropic
-    anthropic_client = anthropic.Anthropic(api_key=api_key)
-    is_latex_or_review = (response_schema is None or "latex" in prompt.lower())
-    claude_model = "claude-3-5-sonnet-latest" if is_latex_or_review else "claude-3-5-haiku-latest"
-    
+    from config.constants import resolve_provider_model
+    anthropic_client = anthropic.Anthropic(api_key=api_key, timeout=90)
+    # Model: LLM_ANTHROPIC_MODEL (haiku, sonnet, opus or a full ID); default is the newest Haiku.
+    claude_model = resolve_provider_model("anthropic", model or os.getenv("LLM_ANTHROPIC_MODEL"), api_key)
+
     messages = [{"role": "user", "content": prompt}]
     system_prompt = "You are an expert recruiter AI system."
     if response_schema is not None:
@@ -613,13 +670,14 @@ def _execute_anthropic(prompt: str, response_schema, api_key: str) -> str:
         system_prompt += f"\nReturn ONLY a raw JSON object string that complies strictly with this JSON schema:\n{schema_json}"
         messages[0]["content"] += "\nEnsure your response is valid JSON and starts with '{' and ends with '}'."
 
+    # No temperature: the current Anthropic SDK and models do not accept it.
     call_kwargs: Any = {
         "model": claude_model,
-        "max_tokens": 4096,
-        "temperature": 0.1,
+        "max_tokens": 8192,
         "system": system_prompt,
         "messages": messages,
     }
+    print(f"[LLM Client] Anthropic generation with: {claude_model}")
     completion: Any = anthropic_client.messages.create(**call_kwargs)
     c0 = completion.content[0]
     try:

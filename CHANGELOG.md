@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Claude and OpenAI now work for text generation too (cover letter, resume tailoring, job-fit analysis, form
+  answers), not only the browser agent. After NVIDIA and Cloudflare (when enabled), the pipeline tries the providers
+  in `LLM_PROVIDERS` order, default `gemini,anthropic,openai`, so a Gemini 429/503 falls back to Claude, then OpenAI.
+  Providers without an API key are skipped. Models: `LLM_ANTHROPIC_MODEL` (`haiku`, `sonnet`, `opus` or a full ID,
+  default newest Haiku) and `LLM_OPENAI_MODEL` (`luna`, `terra` or a full ID, default newest Luna).
+- On the hosted server, a user's own key (`X-Gemini-API-Key` header or the key saved on their account) already selects
+  the provider by its prefix (`sk-ant-` Claude, `sk-` OpenAI, `AIza` Gemini). Their key is now used with that
+  provider's newest Haiku or Luna, looked up with their own key.
+
+### Fixed
+- The model-list cache for Claude and OpenAI is kept per API key (a hash, never the key), so on the hosted server
+  one user's model list is never used for another user.
+- The Claude and OpenAI helpers sent `temperature`, which `gpt-6-luna` and the current Anthropic SDK reject, and
+  used fixed old model names (`gpt-4o`, `claude-3-5-*`). They now pick the model dynamically and omit `temperature`.
+
 ## 1.8.0
 
 ### Added

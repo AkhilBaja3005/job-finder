@@ -260,7 +260,11 @@ def discover_provider_model(provider: str, family: str, api_key: Optional[str], 
     if not api_key:
         return fallback
     now = time.time()
-    cached = _PROVIDER_MODEL_CACHE.get(provider)
+    # Cache per API key: which models exist can differ by account, and a hosted server serves many users.
+    # Only a short hash of the key is kept, never the key itself.
+    import hashlib
+    cache_key = f"{provider}:{hashlib.sha256(api_key.encode()).hexdigest()[:16]}"
+    cached = _PROVIDER_MODEL_CACHE.get(cache_key)
     if cached and now - cached[0] < _DISCOVERY_TTL_SECONDS:
         ids = cached[1]
     else:
@@ -268,5 +272,33 @@ def discover_provider_model(provider: str, family: str, api_key: Optional[str], 
             ids = _list_provider_model_ids(provider, api_key)
         except Exception:
             return fallback
-        _PROVIDER_MODEL_CACHE[provider] = (now, ids)
+        _PROVIDER_MODEL_CACHE[cache_key] = (now, ids)
     return pick_newest_model(provider, family, ids) or fallback
+
+
+# Short names are model families; the newest model of the family is looked up from the provider.
+MODEL_ALIASES: Dict[str, Dict[str, str]] = {
+    "anthropic": {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5"},
+    "openai": {"luna": "gpt-6-luna", "terra": "gpt-6.1-terra"},
+}
+DEFAULT_MODEL_FAMILY: Dict[str, str] = {"anthropic": "haiku", "openai": "luna"}
+PROVIDER_KEY_ENV: Dict[str, str] = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
+
+
+def expand_model_alias(provider: str, model: Optional[str], api_key: Optional[str] = None) -> Optional[str]:
+    """'haiku' -> newest Haiku, 'luna' -> newest Luna. A full model ID passes through unchanged."""
+    if not model:
+        return model
+    name = model.strip()
+    aliases = MODEL_ALIASES.get(provider, {})
+    family = name.lower()
+    if family not in aliases:
+        return name
+    key = api_key or os.getenv(PROVIDER_KEY_ENV.get(provider, ""))
+    return discover_provider_model(provider, family, key, aliases[family])
+
+
+def resolve_provider_model(provider: str, requested: Optional[str] = None, api_key: Optional[str] = None) -> str:
+    """The model to call: `requested` (family or full ID), else the provider's default family."""
+    chosen = expand_model_alias(provider, requested or DEFAULT_MODEL_FAMILY[provider], api_key)
+    return str(chosen or MODEL_ALIASES[provider][DEFAULT_MODEL_FAMILY[provider]])
