@@ -636,3 +636,123 @@ def test_set_schedule_defaults_to_a_practice_run(tmp_path, monkeypatch):
     assert api.set_schedule(True, 9, 0)["ok"]
     assert "--dry-run" in seen["program"] and "--auto-apply" not in seen["program"]
     assert seen["env"]["JOB_FINDER_ROOT"] == str(tmp_path)
+
+
+# ── Windows support ──────────────────────────────────────────────────────────────
+def _as_platform(monkeypatch, name):
+    import platform_support as ps
+    monkeypatch.setattr(ps, "IS_MAC", name == "mac")
+    monkeypatch.setattr(ps, "IS_WINDOWS", name == "windows")
+    return ps
+
+
+def test_folders_follow_each_platforms_conventions(monkeypatch, tmp_path):
+    ps = _as_platform(monkeypatch, "windows")
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+    assert ps.app_support_dir("Job Finder") == tmp_path / "Roaming" / "Job Finder"
+    assert ps.logs_base("Job Finder") == tmp_path / "Local" / "Job Finder" / "Logs"
+    ps = _as_platform(monkeypatch, "mac")
+    assert ps.app_support_dir("Job Finder").parts[-3:] == ("Library", "Application Support", "Job Finder")
+    assert ps.logs_base("Job Finder").parts[-3:] == ("Library", "Logs", "Job Finder")
+
+
+def test_open_command_per_platform(monkeypatch):
+    ps = _as_platform(monkeypatch, "mac")
+    assert ps.open_command("/x/.env", as_text=True) == ["open", "-t", "/x/.env"] and ps.open_command("/x") == ["open", "/x"]
+    ps = _as_platform(monkeypatch, "windows")
+    assert ps.open_command("C:\\x\\.env", as_text=True) == ["notepad.exe", "C:\\x\\.env"]
+    assert ps.open_command("C:\\x") is None  # opened with os.startfile
+    ps = _as_platform(monkeypatch, "linux")
+    assert ps.open_command("/x") == ["xdg-open", "/x"]
+
+
+def test_chrome_is_looked_for_in_the_right_places(monkeypatch, tmp_path):
+    ps = _as_platform(monkeypatch, "windows")
+    chrome = tmp_path / "Google" / "Chrome" / "Application"
+    chrome.mkdir(parents=True)
+    (chrome / "chrome.exe").write_text("")
+    monkeypatch.setenv("PROGRAMFILES", str(tmp_path))
+    monkeypatch.delenv("PROGRAMFILES(X86)", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setattr(ps.shutil, "which", lambda name: None)
+    assert ps.chrome_found() is True
+    monkeypatch.setenv("PROGRAMFILES", str(tmp_path / "nowhere"))
+    assert ps.chrome_found() is False
+
+
+def test_second_copy_of_the_app_is_refused(tmp_path):
+    import platform_support as ps
+    first = open(tmp_path / "lock", "w")
+    second = open(tmp_path / "lock", "w")
+    try:
+        assert ps.lock_file(first) is True
+        assert ps.lock_file(second) is False
+    finally:
+        first.close()
+        second.close()
+
+
+def test_windows_schedule_writes_script_and_calls_task_scheduler(tmp_path, monkeypatch):
+    import subprocess
+    import scheduler
+    calls = []
+    monkeypatch.setattr(scheduler, "_schtasks", lambda *a: calls.append(a) or subprocess.CompletedProcess(a, 0, "", ""))
+    out = scheduler.install_windows(7, 5, ["C:\\Apps\\Job Finder\\Job Finder.exe", "--cli", "scan", "--dry-run"], tmp_path, tmp_path / "logs" / "s.log", {"PLAYWRIGHT_BROWSERS_PATH": "C:\\b"})
+    assert out == {"ok": True}
+    script = (tmp_path / "run_daily.cmd").read_text()
+    assert 'set "JOB_FINDER_ROOT=' in script and 'set "PLAYWRIGHT_BROWSERS_PATH=C:\\b"' in script
+    assert '"C:\\Apps\\Job Finder\\Job Finder.exe" --cli scan --dry-run' in script and "s.log" in script
+    create = next(c for c in calls if c[0] == "/Create")
+    assert "/SC" in create and "DAILY" in create and "07:05" in create and "/F" in create
+    assert scheduler.status_windows(tmp_path) == {"enabled": True, "hour": 7, "minute": 5, "real": False}
+    assert scheduler.remove_windows(tmp_path)["ok"] and scheduler.status_windows(tmp_path) == {"enabled": False}
+    assert scheduler.install_windows(25, 0, ["x"], tmp_path, tmp_path / "s.log")["ok"] is False
+
+
+def test_desktop_workflow_builds_mac_and_windows_and_keeps_stable_download_names():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "build_desktop_apps.yml").read_text()
+    for needle in ("macos-latest", "macos-15-intel", "windows-latest", "desktop-latest", "Job-Finder-arm64.dmg", "Job-Finder-x86_64.dmg",
+                   "Job-Finder-windows.zip", "APPLE_CERT_P12_BASE64", "paths: &app_paths", "pull_request:"):
+        assert needle in text, needle
+
+
+# ── mailbox reply check ──────────────────────────────────────────────────────────
+def test_mailbox_login_is_checked_before_it_is_saved(tmp_path, monkeypatch):
+    import imaplib
+    import scan_panel
+    assert scan_panel.save_mailbox(tmp_path, "nobody", "short")["ok"] is False
+
+    class Bad:
+        def __init__(self, *a, **k): pass
+        def login(self, u, p): raise imaplib.IMAP4.error("AUTHENTICATIONFAILED")
+
+    monkeypatch.setattr(imaplib, "IMAP4_SSL", Bad)
+    out = scan_panel.save_mailbox(tmp_path, "me@example.com", "abcd efgh ijkl mnop")
+    assert out["ok"] is False and "app password" in out["error"]
+    assert scan_panel.mailbox_status(tmp_path)["configured"] is False
+
+    class Good(Bad):
+        def login(self, u, p): self.p = p
+        def logout(self): pass
+
+    monkeypatch.setattr(imaplib, "IMAP4_SSL", Good)
+    assert scan_panel.save_mailbox(tmp_path, "me@example.com", "abcd efgh ijkl mnop")["ok"] is True
+    assert scan_panel.read_env(tmp_path)["REPLY_IMAP_PASSWORD"] == "abcdefghijklmnop"  # spaces from the Google page are dropped
+    assert scan_panel.mailbox_status(tmp_path) == {"configured": True, "user": "me@example.com"}
+    assert scan_panel.disconnect_mailbox(tmp_path)["ok"] and scan_panel.mailbox_status(tmp_path)["configured"] is False
+
+
+def test_check_replies_updates_matching_rows(tmp_path, monkeypatch):
+    import scan_panel
+    from applications_tracker import replies
+    ws = _ws(tmp_path)
+    assert scan_panel.check_replies(ws)["ok"] is False
+    for k, v in (("REPLY_IMAP_USER", "me@example.com"), ("REPLY_IMAP_PASSWORD", "abcdefghijkl")):
+        scan_panel.write_env_value(ws, k, v)
+    monkeypatch.setattr(replies, "fetch_messages", lambda *a, **k: [{"from": "jo@beta.io", "subject": "Interview with Beta", "body": "Can we schedule a call?"}])
+    out = scan_panel.check_replies(ws)
+    assert out["ok"] and out["updated"] == 1 and out["changes"] == [{"company": "Beta", "stage": "interview"}]
+    assert [r["Status"] for r in scan_panel._csv_all(ws)] == ["Applied", "Applied", "Interview"]
+    assert scan_panel.check_replies(ws)["updated"] == 0  # a second check changes nothing

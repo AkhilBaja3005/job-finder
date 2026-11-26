@@ -9,7 +9,7 @@ Pick roles and limits, press Start, and watch the agent search and fill applicat
 """
 from __future__ import annotations
 
-import fcntl
+import platform_support
 import logging
 import logging.handlers
 import os
@@ -128,9 +128,8 @@ def acquire_single_instance():
     """Only one window at a time. Returns the lock file object (keep it alive), or None when the app is already open."""
     scan_panel.app_support_dir().mkdir(parents=True, exist_ok=True)
     handle = open(scan_panel.app_support_dir() / "app.lock", "w")
-    try:
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
+    if not platform_support.lock_file(handle):
+        handle.close()
         return None
     return handle
 
@@ -163,7 +162,7 @@ def run_window() -> int:
 
     lock = acquire_single_instance()
     if lock is None:
-        subprocess.run(["osascript", "-e", 'tell application "Job Finder" to activate'], check=False, capture_output=True)
+        platform_support.activate_running_app("Job Finder")
         print("Job Finder is already open.")
         return 0
     setup_logging()
@@ -200,15 +199,16 @@ def run_window() -> int:
             log.exception("could not reach the page")
 
     def after_start() -> None:
-        import native
-        native.style_window(window)
-        native.install_menu("Job Finder", {
-            "settings": lambda: show("window.__jf && window.__jf.go('settings')"),
-            "updates": lambda: show("window.__jf && window.__jf.checkUpdate()"),
-            "folder": lambda: api.open_path("workspace"),
-            "logs": lambda: api.open_path("logs"),
-            "website": lambda: webbrowser.open("https://github.com/AkhilBaja3005/job-finder"),
-        })
+        if platform_support.IS_MAC:
+            import native
+            native.style_window(window)
+            native.install_menu("Job Finder", {
+                "settings": lambda: show("window.__jf && window.__jf.go('settings')"),
+                "updates": lambda: show("window.__jf && window.__jf.checkUpdate()"),
+                "folder": lambda: api.open_path("workspace"),
+                "logs": lambda: api.open_path("logs"),
+                "website": lambda: webbrowser.open("https://github.com/AkhilBaja3005/job-finder"),
+            })
         api.ensure_browser()
         if os.environ.get("JOB_FINDER_APP_SELFTEST") == "1":
             selftest(window, log)

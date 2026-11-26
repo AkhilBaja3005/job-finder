@@ -22,5 +22,22 @@ PY
 )"
 ARCH="$(uname -m)"
 DMG="dist-mac/Job-Finder-${VERSION}-${ARCH}.dmg"
+
+# Signing is optional. With a Developer ID identity in SIGN_IDENTITY the app is signed with the hardened runtime;
+# with APPLE_ID, APPLE_TEAM_ID and APPLE_APP_PASSWORD as well, the .dmg is notarized and stapled so macOS opens it
+# without a warning. Without them the build is unsigned (right-click -> Open the first time).
+if [ -n "${SIGN_IDENTITY:-}" ]; then
+  echo "Signing with: $SIGN_IDENTITY"
+  codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" "dist-mac/Job Finder.app"
+  codesign --verify --deep --strict "dist-mac/Job Finder.app"
+fi
+
 hdiutil create -volname "Job Finder" -srcfolder "dist-mac/Job Finder.app" -ov -format UDZO "$DMG" >/dev/null
+
+if [ -n "${SIGN_IDENTITY:-}" ] && [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ]; then
+  codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
+  xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+  xcrun stapler staple "$DMG"
+  echo "Notarized and stapled."
+fi
 echo "Built: dist-mac/Job Finder.app and $DMG"

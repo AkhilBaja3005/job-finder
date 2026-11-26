@@ -1,5 +1,6 @@
-# PyInstaller spec for "Job Finder.app". Build with macapp/build_mac.sh.
+# PyInstaller spec for Job Finder: "Job Finder.app" on a Mac (macapp/build_mac.sh), a "Job Finder" folder with Job Finder.exe on Windows (macapp/build_windows.ps1).
 import re
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
@@ -30,7 +31,9 @@ datas += [(str(p), str(Path("macapp/panel") / p.relative_to(ROOT / "macapp" / "p
           for p in (ROOT / "macapp" / "panel").rglob("*") if p.is_file() and "dev" not in p.relative_to(ROOT / "macapp" / "panel").parts]
 
 binaries = []
-hiddenimports = ["scan_panel", "scheduler", "native", "objc", "AppKit", "Foundation", "PyObjCTools.AppHelper"]
+hiddenimports = ["scan_panel", "scheduler", "platform_support"]
+if sys.platform == "darwin":
+    hiddenimports += ["native", "objc", "AppKit", "Foundation", "PyObjCTools.AppHelper"]
 
 
 def local_modules(base: Path, prefix: str = ""):
@@ -80,22 +83,29 @@ a = Analysis(  # noqa: F821
     excludes=["tkinter", "pytest", "pyright"],
 )
 pyz = PYZ(a.pure)  # noqa: F821
-exe = EXE(  # noqa: F821
-    pyz, a.scripts, [], exclude_binaries=True, name="Job Finder", console=False, argv_emulation=False,
-)
-coll = COLLECT(exe, a.binaries, a.datas, name="Job Finder")  # noqa: F821
-app = BUNDLE(  # noqa: F821
-    coll,
-    name="Job Finder.app",
-    icon=str(ROOT / "macapp" / "icon.icns") if (ROOT / "macapp" / "icon.icns").exists() else None,
-    bundle_identifier="space.job-finder.app",
-    version=VERSION,
-    info_plist={
-        "CFBundleName": "Job Finder",
-        "CFBundleDisplayName": "Job Finder",
-        "CFBundleShortVersionString": VERSION,
-        "NSHighResolutionCapable": True,
-        "LSMinimumSystemVersion": "12.0",
-        "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},
-    },
-)
+if sys.platform == "win32":
+    icon_png = ROOT / "macapp" / "icon.png"  # PyInstaller turns the PNG into an .ico when Pillow is installed
+    exe = EXE(  # noqa: F821
+        pyz, a.scripts, [], exclude_binaries=True, name="Job Finder", console=False, icon=str(icon_png) if icon_png.exists() else None,
+    )
+    coll = COLLECT(exe, a.binaries, a.datas, name="Job Finder")  # noqa: F821
+else:
+    exe = EXE(  # noqa: F821
+        pyz, a.scripts, [], exclude_binaries=True, name="Job Finder", console=False, argv_emulation=False,
+    )
+    coll = COLLECT(exe, a.binaries, a.datas, name="Job Finder")  # noqa: F821
+    app = BUNDLE(  # noqa: F821
+        coll,
+        name="Job Finder.app",
+        icon=str(ROOT / "macapp" / "icon.icns") if (ROOT / "macapp" / "icon.icns").exists() else None,
+        bundle_identifier="space.job-finder.app",
+        version=VERSION,
+        info_plist={
+            "CFBundleName": "Job Finder",
+            "CFBundleDisplayName": "Job Finder",
+            "CFBundleShortVersionString": VERSION,
+            "NSHighResolutionCapable": True,
+            "LSMinimumSystemVersion": "12.0",
+            "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},
+        },
+    )
