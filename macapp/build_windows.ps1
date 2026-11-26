@@ -4,13 +4,13 @@ $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
 $py = if ($env:PYTHON) { $env:PYTHON } else { "python" }
-$venv = ".winbuild\venv"
+$venv = Join-Path (Get-Location).Path ".winbuild\venv"
 if (-not (Test-Path $venv)) { & $py -m venv $venv }
 & "$venv\Scripts\python.exe" -m pip install -q --upgrade pip
 & "$venv\Scripts\python.exe" -m pip install -q -r backend\requirements.txt -r macapp\requirements-app.txt
 
 if (Test-Path dist-win) { Remove-Item dist-win -Recurse -Force }
-& "$venv\Scripts\pyinstaller.exe" macapp\job_finder.spec --noconfirm --distpath dist-win --workpath .winbuild\work
+& "$venv\Scripts\pyinstaller.exe" macapp\job_finder.spec --noconfirm --distpath dist-win --workpath (Join-Path (Get-Location).Path ".winbuild\work")
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
 
 $version = (Select-String -Path pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
