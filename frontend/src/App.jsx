@@ -973,6 +973,45 @@ function App() {
     }
   };
 
+  // Downloads everything stored for this account as a JSON file. Saved API keys are not included.
+  const exportMyData = async () => {
+    if (!authToken) return;
+    try {
+      const res = await fetch(`${API_BASE}/user/export`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+      if (!res.ok) throw new Error('Could not export your data');
+      const blob = new Blob([JSON.stringify(await res.json(), null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `job_finder_data_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      showToast(String(err.message || err), 'error');
+    }
+  };
+
+  // Permanently deletes the account. The user types the account email to confirm.
+  const deleteMyAccount = async () => {
+    if (!authToken || !user) return;
+    const typed = window.prompt(`This permanently deletes your account, resumes and application history. It cannot be undone.\n\nType your email (${user.email}) to confirm.`);
+    if (!typed) return;
+    try {
+      const res = await fetch(`${API_BASE}/user/account`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({ confirm_email: typed }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || 'Could not delete the account');
+      }
+      showToast('Your account and data were deleted.', 'success');
+      handleLogout();
+    } catch (err) {
+      showToast(String(err.message || err), 'error');
+    }
+  };
+
   const saveApiKeyToCloud = async () => {
     if (!authToken) return;
     setLoading(true);
@@ -8082,6 +8121,24 @@ function App() {
                   >
                     New key
                   </button>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                <a
+                  className="btn"
+                  href="https://github.com/AkhilBaja3005/job-finder/releases/latest"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ padding: '6px 12px', fontSize: '0.76rem', background: '#0284c7', color: '#fff', textDecoration: 'none' }}
+                >
+                  Download the Mac app
+                </a>
+                {user && user.sync_code && (
+                  <>
+                    <button className="btn" style={{ padding: '6px 12px', fontSize: '0.76rem', background: 'transparent', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.4)' }} onClick={exportMyData}>Export my data</button>
+                    <button className="btn" style={{ padding: '6px 12px', fontSize: '0.76rem', background: 'transparent', color: '#f87171', border: '1px solid rgba(248, 113, 113, 0.4)' }} onClick={deleteMyAccount}>Delete my account</button>
+                  </>
                 )}
               </div>
 

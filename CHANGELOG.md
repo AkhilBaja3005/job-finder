@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Account data controls: `GET /user/export` returns everything stored for the account as JSON (saved API keys are left out),
+  and `DELETE /user/account` removes the account, resumes and application history after the account email is typed to confirm.
+  Both are in the website's extension panel, next to a link to download the Mac app.
+
 ## 1.9.2
 
 ### Added
