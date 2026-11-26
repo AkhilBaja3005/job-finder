@@ -219,9 +219,10 @@
   }
 
   /* ── Applications screen ─────────────────────────────────────────────────── */
-  const FILTERS = [["all", "All"], ["applied", "Applied"], ["review", "Needs review"], ["other", "Other"]];
-  const statusLabel = (s) => ({ applied: "Applied", review: "Needs review" }[statusKind(s)] || (/ready|tailored/i.test(s) ? "Ready" : (s || "—")));
-  const statusKind = (s) => (/appl|submitted/i.test(s) ? "applied" : /review|fail|unsub/i.test(s) ? "review" : "other");
+  const FILTERS = [["all", "All"], ["applied", "Applied"], ["review", "Needs review"], ["progress", "Replies"], ["closed", "Closed"], ["other", "Other"]];
+  const STAGES = [["applied", "I submitted it"], ["replied", "Got a reply"], ["interview", "Interview"], ["offer", "Offer"], ["rejected", "Rejected"], ["skipped", "Skip"]];
+  const statusLabel = (s) => ({ applied: "Applied", review: "Needs review" }[statusKind(s)] || (/^(replied|interview|offer|rejected|skipped)/i.test(s) ? s : null) || (/ready|tailored/i.test(s) ? "Ready" : (s || "—")));
+  const statusKind = (s) => (/^(replied|interview|offer)/i.test(s) ? "progress" : /^(rejected|skipped)/i.test(s) ? "closed" : /appl|submitted/i.test(s) ? "applied" : /review|fail|unsub/i.test(s) ? "review" : "other");
   async function loadApps(quiet) {
     if (!quiet) { S.apps.loading = true; if (S.view === "apps") renderApps(); }
     const rows = await call("get_results");
@@ -239,10 +240,15 @@
     }
     return rows;
   }
+  function stageSummary() {
+    const st = (S.info && S.info.stages) || {}, bits = [];
+    if (st.replied) bits.push(st.replied + " replied"); if (st.interview) bits.push(plural(st.interview, "interview")); if (st.offer) bits.push(plural(st.offer, "offer"));
+    return bits.length ? " · " + bits.join(", ") : "";
+  }
   function renderApps() {
     const c = S.info && S.info.supabase, a = S.apps;
     const sync = c && c.configured ? '<button class="btn" data-act="sync">' + icon("refresh") + (a.syncing ? "Syncing…" : "Sync now") + "</button>" : "";
-    $("#view").innerHTML = head("Applications", a.rows ? plural(a.rows.length, "job") + " recorded" + (c && c.configured ? " · your Supabase project is included" : "") : "Loading…", sync) +
+    $("#view").innerHTML = head("Applications", a.rows ? plural(a.rows.length, "job") + " recorded" + stageSummary() + (c && c.configured ? " · your Supabase project is included" : "") : "Loading…", sync) +
       '<div class="scroll"><div class="stack"><section class="card"><div class="toolbar"><div class="search">' + icon("search") + '<input class="input" id="a-q" type="search" placeholder="Search company or role" value="' + esc(a.query) + '" aria-label="Search applications"></div>' +
       '<div class="seg" role="group" aria-label="Filter">' + FILTERS.map(([v, l]) => '<button type="button" data-filter="' + v + '" aria-pressed="' + (a.filter === v) + '">' + l + "</button>").join("") + '</div></div><div id="a-body"></div></section></div></div>';
     renderAppsBody();
@@ -262,7 +268,9 @@
           '<td title="' + esc(r.status) + '">' + badge(statusLabel(r.status), k === "applied" ? "good" : k === "review" ? "warn" : "") + "</td>" +
           '<td><span class="score num">' + (r.ats ? '<span class="bar"><i style="width:' + Math.min(100, ats) + '%"></i></span>' + esc(r.ats) : "—") + "</span></td>" +
           '<td title="' + (r.synced ? "In your Supabase project" : "Only on this Mac") + '">' + icon(r.synced ? "cloud" : "cloudOff", ' class="cloud-ic' + (r.synced ? "" : " off") + '"') + "</td>" +
-          "<td>" + (r.url ? '<button class="btn quiet" data-url="' + esc(r.url) + '" aria-label="Open ' + esc(r.title) + '">Open</button>' : "") + "</td></tr>";
+          "<td class=\"acts\">" + (r.url ? '<button class="btn quiet" data-url="' + esc(r.url) + '" aria-label="Open ' + esc(r.title) + '">Open</button>' : "") +
+          (r.url && k === "review" ? '<button class="btn quiet" data-detail="' + esc(r.url) + '">Why</button>' : "") +
+          (r.url ? '<select class="select stage" data-stage="' + esc(r.url) + '" aria-label="Update status of ' + esc(r.title) + '"><option value="">Update…</option>' + STAGES.map(([v, l]) => '<option value="' + v + '">' + l + "</option>").join("") + "</select>" : "") + "</td></tr>";
       }).join("") + "</tbody></table></div>" +
       '<div class="foot">Showing ' + shown.length + " of " + rows.length + (rows.length > shown.length ? '&nbsp;·&nbsp;<button class="btn quiet" data-act="more">Show more</button>' : "") + "</div>";
   }
@@ -288,6 +296,7 @@
           sb.configured ? badge(sb.reachable ? "Connected" : "Unreachable", sb.reachable ? "good" : "warn") + '<button class="btn" data-act="sync">' + icon("refresh") + "Sync now</button>" : '<button class="btn" data-open="env">Open .env</button>') +
         row("job-finder.space", cl.configured ? (cl.connected ? "Applications are saved to your account" + (cl.email ? " (" + esc(cl.email) + ")" : "") + " and show on the website and in the extension." : esc(cl.error || "Cannot be reached right now.")) : "Save your applications to your job-finder.space account with your sync code. API keys never leave this Mac.",
           cl.configured ? badge(cl.connected ? "Connected" : "Unreachable", cl.connected ? "good" : "warn") + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Disconnect</button>' : '<button class="btn primary" data-act="add-sync">Add sync code…</button>', "c-sync") +
+        row("Job site sign-ins", "Opens the agent's Chrome so you can sign in to LinkedIn, Indeed and Reed once. Runs reuse the sign-ins.", '<button class="btn" data-act="open-signin">Open Chrome to sign in</button>') +
         row("Page scraper browser", br.ready ? "Installed" : br.installing ? "Downloading, about 150 MB…" : (br.error ? esc(br.error) : "Needed for some job sources. Downloaded once."), br.ready ? badge("Ready", "good") : br.installing ? badge("Installing", "accent") : '<button class="btn" data-act="install-browser">' + icon("download") + "Install</button>") +
       "</section>" +
       '<div class="sect-title">About</div><section class="card">' +
@@ -331,6 +340,8 @@
   });
   document.addEventListener("change", (e) => {
     const t = e.target;
+    if (t.dataset && t.dataset.stage) { const url = t.dataset.stage, v = t.value; t.value = ""; if (!v) return;
+      call("set_status", url, v).then(async (r) => { if (r && r.ok) { toast("Status updated."); await loadApps(true); await refreshInfo(); } else toast((r && r.error) || "Could not update.", "bad"); }); return; }
     if (t.id === "f-ai") { S.form.primary_ai = t.value; call("save_app_prefs", { primary_ai: t.value }); }
     else if (t.id === "f-headless") { S.form.headless = t.checked; call("save_app_prefs", { headless: t.checked }); }
   });
@@ -344,6 +355,9 @@
     if (d.rm) { const [id, idx] = d.rm.split(":"); S.form[id].splice(Number(idx), 1); renderRun(); saveFormSoon(); return; }
     if (d.time) { S.form.timeframe = d.time; renderRun(); saveFormSoon(); return; }
     if (d.mode) { S.form.mode = d.mode; renderRun(); return; }
+    if (d.detail) { const r = await call("review_info", d.detail); const has = r && r.screenshot;
+      const ok = await dialog({ title: "Why it stopped", body: "<p>" + esc((r && r.reason) || "No reason was recorded for this job. Open the job and check the form yourself.") + "</p>", confirm: has ? "Open screenshot" : "OK" });
+      if (ok && has) call("open_screenshot", d.detail); return; }
     if (d.filter) { S.apps.filter = d.filter; S.apps.limit = 100; renderApps(); return; }
     if (d.sort) { const s = S.apps.sort; s.dir = s.key === d.sort ? -s.dir : 1; s.key = d.sort; renderAppsBody(); return; }
     if (d.url) return void call("open_url", d.url);
@@ -365,6 +379,7 @@
       case "choose-ws": { const r = await call("choose_workspace"); if (r && r.ok) { S.info = r.state; S.apps.rows = null; hydrateForm(); toast("Folder changed."); go(S.view); } return; }
       case "build-profile": { const r = await call("choose_resume_and_build_profile"); if (r && r.ok) { go("run"); Object.assign(S.run, { running: true, started: true, offset: 0, lines: [], exit: null }); renderRunStatus(); renderLog(true); watchRun(); } return; }
       case "import-profile": { const r = await call("choose_profile_and_import"); if (r && r.ok) { toast("Profile imported" + (r.name ? " for " + r.name : "") + "."); await refreshInfo(); hydrateForm(); renderView(); } else if (r && r.error) toast(r.error, "bad"); return; }
+      case "open-signin": { toast("Opening Chrome…"); const r = await call("open_signin"); toast(r && r.ok ? "Chrome is open. Sign in, then close it before a run." : (r && r.error) || "Could not open Chrome.", r && r.ok ? undefined : "bad"); return; }
       case "start-tour": return void startTour();
       case "install-browser": await call("ensure_browser"); await refreshInfo(); renderSettings(); watchBrowser(); return;
       case "sync": { if (S.apps.syncing) return; S.apps.syncing = true; renderView(); const r = await call("sync_now"); S.apps.syncing = false;
@@ -397,11 +412,12 @@
   const TOUR = [
     { view: "settings", sel: "#c-gemini", title: "1. Add an AI key", text: "The agent needs one provider to read job pages and fill forms. Gemini has a free tier. Claude and OpenAI work too. Keys stay in a file on this Mac." },
     { view: "settings", sel: '[data-act="build-profile"], [data-act="import-profile"]', title: "2. Create your profile", text: "Build it from your resume, or import a profile.json you already have. Every form is filled from it, so details like work authorisation matter." },
-    { view: "run", sel: "#profile-check", title: "3. Fill what is missing", text: "This list shows profile fields that are still empty. Edit the profile, save, and come back. The list updates by itself." },
-    { view: "run", sel: '[data-tags="roles"]', title: "4. Choose roles", text: "One search runs per role. Leave it empty to use the roles from your profile." },
-    { view: "run", sel: "#f-location", title: "5. Set the location", text: "Where to look for jobs, for example London, UK." },
-    { view: "run", sel: "#run-btn", title: "6. Start with a practice run", text: "A practice run fills every form but never presses Submit, so you can check the result. Switch to Apply for real only when you trust it." },
-    { view: "apps", sel: '[data-nav="apps"]', title: "7. Check your applications", text: "Every job the agent handled is listed here with its status. Rows marked Needs review are waiting for you." },
+    { view: "settings", sel: '[data-act="open-signin"]', title: "3. Sign in to job sites", text: "LinkedIn, Indeed and Reed work best when you are signed in. This opens the agent's own Chrome once. Sign in, close it, and every run reuses the sign-ins." },
+    { view: "run", sel: "#profile-check", title: "4. Fill what is missing", text: "This list shows profile fields that are still empty. Edit the profile, save, and come back. The list updates by itself." },
+    { view: "run", sel: '[data-tags="roles"]', title: "5. Choose roles", text: "One search runs per role. Leave it empty to use the roles from your profile." },
+    { view: "run", sel: "#f-location", title: "6. Set the location", text: "Where to look for jobs, for example London, UK." },
+    { view: "run", sel: "#run-btn", title: "7. Start with a practice run", text: "A practice run fills every form but never presses Submit, so you can check the result. Switch to Apply for real only when you trust it." },
+    { view: "apps", sel: '[data-nav="apps"]', title: "8. Check your applications", text: "Every job the agent handled is listed here with its status. Rows marked Needs review are waiting for you." },
   ];
   async function startTour() {
     const steps = []; let i = 0;

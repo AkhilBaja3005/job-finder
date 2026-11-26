@@ -699,6 +699,75 @@ def read_tracker(ws: Path, limit: int = 300) -> List[Dict[str, str]]:
     return out
 
 
+# ── moving an application along: submitted by hand, reply, interview ────────────
+STAGES = {
+    "applied": "Applied (manual)", "replied": "Replied", "interview": "Interview", "offer": "Offer",
+    "rejected": "Rejected", "skipped": "Skipped",
+}
+
+
+def set_application_stage(ws: Path, url: str, stage: str) -> Dict[str, Any]:
+    """Changes the Status of the tracker row with this job URL. Only the Status cell is touched; the file is replaced in one step."""
+    label = STAGES.get(stage)
+    if not label:
+        return {"ok": False, "error": "Unknown status."}
+    path = ws / "applications_tracker" / "job_applications_tracker.csv"
+    try:
+        with path.open(newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            fields = list(reader.fieldnames or [])
+            rows = list(reader)
+    except OSError:
+        return {"ok": False, "error": "The tracker file was not found."}
+    if "Status" not in fields or "Job URL" not in fields:
+        return {"ok": False, "error": "The tracker file has no Status column."}
+    changed = 0
+    for row in rows:
+        if (row.get("Job URL") or "").strip() == url.strip():
+            row["Status"] = label
+            changed += 1
+    if not changed:
+        return {"ok": False, "error": "That application is not in the tracker."}
+    tmp = path.with_name(path.name + ".tmp")
+    with tmp.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    os.replace(tmp, path)
+    cfg = supabase_settings(ws)
+    if cfg:  # best effort: the local file is the record, so a failure here is not an error
+        try:
+            quoted = urllib.parse.quote(url.strip(), safe="")
+            _supabase_request(cfg, f"applications?user_id=eq.{cloud_user_id(ws)}&job_url=eq.{quoted}", "PATCH", {"status": label}, headers={"Prefer": "return=minimal"}, timeout=8)
+        except Exception:
+            log.debug("could not update the status in Supabase", exc_info=True)
+    return {"ok": True, "status": label}
+
+
+def stage_counts(rows: List[Dict[str, str]]) -> Dict[str, int]:
+    counts = {k: 0 for k in STAGES}
+    for row in rows:
+        status = (row.get("status") or row.get("Status") or "").lower()
+        for key, label in STAGES.items():
+            if status == label.lower():
+                counts[key] += 1
+    return counts
+
+
+def last_attempt(ws: Path, url: str) -> Dict[str, Any]:
+    """The most recent line in the run ledger for this job: why it stopped, and the final screenshot if there is one."""
+    try:
+        from applications_tracker.outcomes import read_outcomes
+    except Exception:
+        return {}
+    for row in reversed(read_outcomes(str(ws))):
+        if (row.get("url") or "").strip() == url.strip():
+            shot = str(row.get("screenshot") or "")
+            inside = bool(shot) and Path(shot).resolve().is_relative_to(ws.resolve()) and Path(shot).is_file()
+            return {"reason": str(row.get("final_result") or row.get("reason") or ""), "outcome": row.get("outcome", ""), "screenshot": shot if inside else ""}
+    return {}
+
+
 # ── what the window calls ────────────────────────────────────────────────────────
 log = logging.getLogger("job_finder_app")
 
@@ -733,7 +802,7 @@ class Api:
         ws = workspace_dir()
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
-            "running": self._runner.running, "version": _app_version(), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "profile_check": profile_check(ws),
+            "running": self._runner.running, "version": _app_version(), "stages": stage_counts(read_tracker(ws, 5000)), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "profile_check": profile_check(ws),
             "browser": {"ready": browser_ready(), **self._browser},
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
@@ -879,6 +948,31 @@ class Api:
             return {"ok": False}
         write_env_value(workspace_dir(), "MASTER_RESUME_PATH", picked[0])
         return self.run_command("profile", ["--sync", picked[0]])
+
+    def open_signin(self) -> Dict[str, Any]:
+        """Opens the agent's Chrome so the user can sign in to LinkedIn, Indeed and Reed once."""
+        if self._runner.running:
+            return {"ok": False, "error": "A run is in progress. Stop it first, then sign in."}
+        if not chrome_found():
+            return {"ok": False, "error": "Google Chrome was not found. Install it first."}
+        try:
+            proc = subprocess.run([a for a in self._launcher if a != "--cli"] + ["--signin"], capture_output=True, text=True, timeout=60)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:160]}
+        return {"ok": proc.returncode == 0, "error": "" if proc.returncode == 0 else "Chrome did not start. See the log files."}
+
+    def set_status(self, url: str, stage: str) -> Dict[str, Any]:
+        return set_application_stage(workspace_dir(), url, stage)
+
+    def review_info(self, url: str) -> Dict[str, Any]:
+        return {"ok": True, **last_attempt(workspace_dir(), url)}
+
+    def open_screenshot(self, url: str) -> Dict[str, Any]:
+        shot = last_attempt(workspace_dir(), url).get("screenshot")
+        if not shot:
+            return {"ok": False, "error": "There is no screenshot for this job."}
+        subprocess.run(["open", shot], check=False)
+        return {"ok": True}
 
     def choose_profile_and_import(self) -> Dict[str, Any]:
         import webview
