@@ -1109,6 +1109,14 @@ class Api:
         env["HOME"] = str(Path.home())
         return scheduler.install(int(hour), int(minute), program, ws, logs_dir() / "scheduled.log", env)
 
+    def get_saved_answers(self) -> Dict[str, Any]:
+        from services.saved_answers import SUGGESTIONS, MAX_ENTRIES, MAX_CHARS, load_saved_answers
+        return {"ok": True, "items": load_saved_answers(str(workspace_dir())), "suggestions": SUGGESTIONS, "max_entries": MAX_ENTRIES, "max_chars": MAX_CHARS}
+
+    def save_saved_answers(self, items: List[Dict[str, str]]) -> Dict[str, Any]:
+        from services.saved_answers import save_saved_answers
+        return {"ok": True, **save_saved_answers(str(workspace_dir()), items)}
+
     def problem_report(self) -> Dict[str, Any]:
         return {"ok": True, "text": diagnostics_report(workspace_dir())}
 

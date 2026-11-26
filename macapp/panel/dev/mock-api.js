@@ -3,6 +3,7 @@
 (function () {
   const q = new URLSearchParams(location.search);
   const empty = q.has("empty");
+  let savedAnswers = [{ question: "Earliest start date", answer: "Available to start immediately." }];
   const companies = ["Hudson River Trading", "Capstone Investment Advisors", "G-Research", "Revolut", "Monzo", "Wise", "Deliveroo", "Palantir", "DeepMind", "Arm", "Cohere", "Graphcore", "Quantexa", "Darktrace", "Improbable", "Faculty", "Ocado Technology", "Bloomberg"];
   const roles = ["Data Scientist Intern - 2027", "Summer 2027 Risk Internship", "Machine Learning Engineer Intern", "Software Engineering Intern", "Quantitative Research Placement", "AI Engineer Intern", "Data Engineering Intern"];
   const statuses = ["applied", "applied", "Needs Review (Unsubmitted)", "Tailored & Ready", "applied", "Ready to Apply"];
@@ -51,6 +52,9 @@
     sync_now: async () => { await wait(900); return { ok: true, pushed: 3, already: rows.length }; },
     save_key: async () => ({ ok: true, keys: state.keys }), open_url: async () => ({ ok: true }), open_path: async () => ({ ok: true }),
     choose_workspace: async () => ({ ok: false }), choose_resume_and_build_profile: async () => ({ ok: false }),
+    get_saved_answers: async () => ({ ok: true, items: savedAnswers.slice(), suggestions: ["Why do you want to work here?", "What are your salary expectations?", "What is your notice period or earliest start date?", "Where did you hear about this role?"], max_entries: 40, max_chars: 600 }),
+    save_saved_answers: async (items) => { savedAnswers = items.filter((i) => i.question.trim() && i.answer.trim()); return { ok: true, saved: savedAnswers.length }; },
+    schedule_status: async () => ({ ok: true, enabled: false }),
     ensure_browser: async () => ({ ok: true }),
   } };
   window.dispatchEvent(new Event("pywebviewready"));

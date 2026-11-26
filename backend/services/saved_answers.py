@@ -17,6 +17,12 @@ TEMPLATE = [
 ]
 
 
+SUGGESTIONS = [
+    "Why do you want to work here?", "What are your salary expectations?", "What is your notice period or earliest start date?",
+    "Where did you hear about this role?", "Tell us about a project you are proud of.", "Anything else you would like us to know?",
+]
+
+
 def path_for(root: str) -> str:
     return os.path.join(root, FILE_NAME)
 
@@ -54,3 +60,21 @@ def prompt_block(root: str) -> str:
         "         - SAVED ANSWERS (written by the candidate). When a form question means the same as one of these, "
         "type the answer exactly as written. Do not rephrase it and do not invent a different one:\n" + lines + "\n"
     )
+
+
+def save_saved_answers(root: str, items) -> Dict[str, int]:
+    """Writes the list from the app's form. Blank rows are dropped, long text is cut to the limits, the file is replaced in one step."""
+    clean: List[Dict[str, str]] = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        question, answer = str(item.get("question", "")).strip()[:200], str(item.get("answer", "")).strip()[:MAX_CHARS]
+        if question and answer:
+            clean.append({"question": question, "answer": answer})
+    clean = clean[:MAX_ENTRIES]
+    os.makedirs(root, exist_ok=True)
+    tmp = path_for(root) + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(clean, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, path_for(root))
+    return {"saved": len(clean)}

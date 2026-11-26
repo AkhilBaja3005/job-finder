@@ -231,3 +231,16 @@ tbody tr:hover { background: var(--fill); }
 
 /* Windows and Linux: the system title bar is above the page, so there is no space to leave for window buttons. */
 .no-traffic-lights { --titlebar-h: 0px; }
+
+/* Saved answers form */
+.dialog.wide { width: 640px; display: flex; flex-direction: column; max-height: calc(100vh - 48px); overflow: hidden; }
+.dialog.wide > p { margin: 0 0 12px; flex: none; }
+.aa-list { flex: 1 1 auto; min-height: 150px; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 2px; margin: 0 -2px; }
+.aa-item { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 12px; border: .5px solid var(--line); border-radius: var(--r-md); background: var(--fill); }
+.aa-item label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.aa-head { display: flex; align-items: center; justify-content: space-between; }
+.aa-item textarea { resize: vertical; min-height: 64px; font: inherit; line-height: 1.45; }
+.aa-add { flex: none; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0 4px; max-height: 96px; overflow: auto; }
+.dialog.wide .btns { flex: none; }
+.chip { min-height: 24px; padding: 3px 10px; border-radius: 12px; border: .5px solid var(--line-strong); background: var(--surface); color: var(--text-2); font-size: 12px; text-align: left; white-space: normal; cursor: pointer; }
+.chip:hover { background: var(--accent-soft); color: var(--accent); border-color: transparent; }

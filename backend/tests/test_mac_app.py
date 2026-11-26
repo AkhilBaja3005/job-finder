@@ -756,3 +756,20 @@ def test_check_replies_updates_matching_rows(tmp_path, monkeypatch):
     assert out["ok"] and out["updated"] == 1 and out["changes"] == [{"company": "Beta", "stage": "interview"}]
     assert [r["Status"] for r in scan_panel._csv_all(ws)] == ["Applied", "Applied", "Interview"]
     assert scan_panel.check_replies(ws)["updated"] == 0  # a second check changes nothing
+
+
+def test_saved_answers_form_goes_through_the_app_bridge(tmp_path, monkeypatch):
+    import scan_panel
+    monkeypatch.setattr(scan_panel, "workspace_dir", lambda: tmp_path)
+    api = scan_panel.Api.__new__(scan_panel.Api)
+    first = api.get_saved_answers()
+    assert first["ok"] and first["items"] == [] and first["suggestions"] and first["max_entries"] == 40
+    assert api.save_saved_answers([{"question": "Start date", "answer": "1 March"}]) == {"ok": True, "saved": 1}
+    assert api.get_saved_answers()["items"] == [{"question": "Start date", "answer": "1 March"}]
+
+
+def test_tour_covers_the_account_replies_answers_and_schedule_rows():
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[2] / "macapp" / "panel" / "app.js").read_text()
+    for selector in ('"#c-sync"', '"#c-mailbox"', "edit-answers", '"#sched-time"'):
+        assert selector in js, selector
