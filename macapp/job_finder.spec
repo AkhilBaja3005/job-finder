@@ -22,6 +22,10 @@ def data_tree(src: Path, dest: str):
 
 datas = data_tree(ROOT / "backend", "backend")
 datas += [(str(ROOT / ".env.example"), ".")]
+# The window reads its version from this file. Package metadata can be stale on a dev machine, pyproject.toml is not.
+(ROOT / ".macbuild").mkdir(exist_ok=True)
+(ROOT / ".macbuild" / "VERSION").write_text(VERSION)
+datas += [(str(ROOT / ".macbuild" / "VERSION"), ".")]
 datas += [(str(p), str(Path("macapp/panel") / p.relative_to(ROOT / "macapp" / "panel").parent))
           for p in (ROOT / "macapp" / "panel").rglob("*") if p.is_file() and "dev" not in p.relative_to(ROOT / "macapp" / "panel").parts]
 

@@ -717,6 +717,13 @@ for _name in [n for n in vars(Api) if not n.startswith("_") and callable(vars(Ap
 
 
 def _app_version() -> str:
+    # Built app: the version baked in from pyproject.toml at build time.
+    try:
+        baked = Path(getattr(sys, "_MEIPASS", "")) / "VERSION"
+        if getattr(sys, "_MEIPASS", None) and baked.is_file():
+            return baked.read_text().strip()
+    except Exception:
+        pass
     try:
         from job_finder import __version__
         return str(__version__)

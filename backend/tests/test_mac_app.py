@@ -403,3 +403,11 @@ def test_every_icon_the_page_uses_is_defined():
 def test_app_icon_and_logo_are_in_place():
     assert (MACAPP / "icon.icns").stat().st_size > 10_000 and (MACAPP / "icon.svg").is_file()
     assert "M14 2H6a2 2 0 0 0-2 2v16" in (PANEL / "icons.js").read_text()  # the Job Finder logo path
+
+
+def test_app_version_prefers_baked_file(tmp_path, monkeypatch):
+    import sys
+    import scan_panel
+    (tmp_path / "VERSION").write_text("9.9.9\n")
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    assert scan_panel._app_version() == "9.9.9"
