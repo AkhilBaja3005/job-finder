@@ -289,7 +289,7 @@
   async function loadSchedule() { const r = await call("schedule_status"); if (r && r.ok) { S.sched = r; if (S.view === "settings") renderSettings(); } }
   function renderSettings() {
     const i = S.info; if (!i) { $("#view").innerHTML = head("Settings", "") + '<div class="scroll"><div class="skeleton"></div></div>'; return; }
-    const sb = i.supabase, br = i.browser, cl = i.cloud || {};
+    const sb = i.supabase, br = i.browser, cl = i.cloud || {}, mb = i.mailbox || {};
     const row = (t, d, ctl, id) => '<div class="setting"><div class="info"><div class="t">' + t + '</div><div class="d">' + d + '</div></div><div class="ctl"' + (id ? ' id="' + id + '"' : "") + ">" + ctl + "</div></div>";
     $("#view").innerHTML = head("Settings", "Your folder, AI providers and connections.") + '<div class="scroll"><div class="stack" style="max-width:820px">' +
       '<div class="sect-title">General</div><section class="card">' +
@@ -306,6 +306,8 @@
           sb.configured ? badge(sb.reachable ? "Connected" : "Unreachable", sb.reachable ? "good" : "warn") + '<button class="btn" data-act="sync">' + icon("refresh") + "Sync now</button>" : '<button class="btn" data-open="env">Open .env</button>') +
         row("job-finder.space", cl.configured ? (cl.connected ? "Applications are saved to your account" + (cl.email ? " (" + esc(cl.email) + ")" : "") + " and show on the website and in the extension." : esc(cl.error || "Cannot be reached right now.")) : "Save your applications to your job-finder.space account with your sync code. API keys never leave this Mac.",
           cl.configured ? badge(cl.connected ? "Connected" : "Unreachable", cl.connected ? "good" : "warn") + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Disconnect</button>' : '<button class="btn primary" data-act="add-sync">Add sync code…</button>', "c-sync") +
+        row("Reply detection", mb.configured ? "Reads the last 30 days of " + esc(mb.user) + " for replies from employers and marks them (reply, interview, rejected, offer). Read only: nothing is sent, deleted or marked read." : "Optional. Connect a mailbox with an app password and replies from employers are marked for you. Automated 'we got your application' mails are ignored.",
+          mb.configured ? '<button class="btn" data-act="check-replies">' + icon("refresh") + 'Check now</button><button class="btn" data-act="disconnect-mailbox">Disconnect</button>' : '<button class="btn" data-act="add-mailbox">Connect…</button>', "c-mailbox") +
         row("Daily run", S.sched && S.sched.enabled ? "Runs every day at " + String(S.sched.hour).padStart(2, "0") + ":" + String(S.sched.minute).padStart(2, "0") + (S.sched.real ? ", applying for real." : " as a practice run (nothing is submitted).") + " The Mac must be awake; the app does not need to be open." : "Runs a search every day at a time you choose, without opening the app. Starts as a practice run.",
           '<input class="input" id="sched-time" type="time" value="' + (S.sched && S.sched.enabled ? String(S.sched.hour).padStart(2, "0") + ":" + String(S.sched.minute).padStart(2, "0") : "08:00") + '" style="width:110px" aria-label="Daily run time">' +
           (S.sched && S.sched.enabled ? '<button class="btn" data-act="sched-on">Change time</button><button class="btn" data-act="sched-off">Turn off</button>' : '<button class="btn primary" data-act="sched-on">Turn on</button>')) +
@@ -400,6 +402,10 @@
       case "sched-on": { const t = ($("#sched-time") || {}).value || "08:00"; const [h, m] = t.split(":").map(Number);
         const r = await call("set_schedule", true, h, m, false); if (r && r.ok) { toast("Daily practice run scheduled for " + t + "."); S.sched = await call("schedule_status"); renderSettings(); } else toast((r && r.error) || "Could not schedule.", "bad"); return; }
       case "sched-off": { await call("set_schedule", false); S.sched = await call("schedule_status"); toast("Daily run turned off."); renderSettings(); return; }
+      case "add-mailbox": { const ctl = $("#c-mailbox"); if (!ctl) return; ctl.innerHTML = '<span class="keybox"><input class="input" id="mb-user" type="email" placeholder="you@gmail.com" autocomplete="off" aria-label="Mailbox address"><input class="input" id="mb-pass" type="password" placeholder="App password" autocomplete="off" aria-label="App password"><button class="btn primary" data-act="save-mailbox">Connect</button><button class="btn" data-act="cancel-key">Cancel</button></span>'; $("#mb-user").focus(); return; }
+      case "save-mailbox": { const r = await call("save_mailbox", $("#mb-user").value, $("#mb-pass").value, ""); if (r && r.ok) { toast("Mailbox connected."); await refreshInfo(); renderSettings(); } else toast((r && r.error) || "Could not connect.", "bad"); return; }
+      case "disconnect-mailbox": { await call("disconnect_mailbox"); toast("Mailbox disconnected."); await refreshInfo(); renderSettings(); return; }
+      case "check-replies": { toast("Checking your mailbox…"); const r = await call("check_replies_now"); if (r && r.ok) { toast(r.updated ? plural(r.updated, "application") + " moved forward." : "No new replies found (" + r.checked + " messages read)."); await loadApps(true); await refreshInfo(); } else toast((r && r.error) || "Could not check.", "bad"); return; }
       case "start-tour": return void startTour();
       case "install-browser": await call("ensure_browser"); await refreshInfo(); renderSettings(); watchBrowser(); return;
       case "sync": { if (S.apps.syncing) return; S.apps.syncing = true; renderView(); const r = await call("sync_now"); S.apps.syncing = false;

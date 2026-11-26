@@ -716,3 +716,43 @@ def test_desktop_workflow_builds_mac_and_windows_and_keeps_stable_download_names
     for needle in ("macos-latest", "macos-15-intel", "windows-latest", "desktop-latest", "Job-Finder-arm64.dmg", "Job-Finder-x86_64.dmg",
                    "Job-Finder-windows.zip", "APPLE_CERT_P12_BASE64", "paths: &app_paths", "pull_request:"):
         assert needle in text, needle
+
+
+# ── mailbox reply check ──────────────────────────────────────────────────────────
+def test_mailbox_login_is_checked_before_it_is_saved(tmp_path, monkeypatch):
+    import imaplib
+    import scan_panel
+    assert scan_panel.save_mailbox(tmp_path, "nobody", "short")["ok"] is False
+
+    class Bad:
+        def __init__(self, *a, **k): pass
+        def login(self, u, p): raise imaplib.IMAP4.error("AUTHENTICATIONFAILED")
+
+    monkeypatch.setattr(imaplib, "IMAP4_SSL", Bad)
+    out = scan_panel.save_mailbox(tmp_path, "me@example.com", "abcd efgh ijkl mnop")
+    assert out["ok"] is False and "app password" in out["error"]
+    assert scan_panel.mailbox_status(tmp_path)["configured"] is False
+
+    class Good(Bad):
+        def login(self, u, p): self.p = p
+        def logout(self): pass
+
+    monkeypatch.setattr(imaplib, "IMAP4_SSL", Good)
+    assert scan_panel.save_mailbox(tmp_path, "me@example.com", "abcd efgh ijkl mnop")["ok"] is True
+    assert scan_panel.read_env(tmp_path)["REPLY_IMAP_PASSWORD"] == "abcdefghijklmnop"  # spaces from the Google page are dropped
+    assert scan_panel.mailbox_status(tmp_path) == {"configured": True, "user": "me@example.com"}
+    assert scan_panel.disconnect_mailbox(tmp_path)["ok"] and scan_panel.mailbox_status(tmp_path)["configured"] is False
+
+
+def test_check_replies_updates_matching_rows(tmp_path, monkeypatch):
+    import scan_panel
+    from applications_tracker import replies
+    ws = _ws(tmp_path)
+    assert scan_panel.check_replies(ws)["ok"] is False
+    for k, v in (("REPLY_IMAP_USER", "me@example.com"), ("REPLY_IMAP_PASSWORD", "abcdefghijkl")):
+        scan_panel.write_env_value(ws, k, v)
+    monkeypatch.setattr(replies, "fetch_messages", lambda *a, **k: [{"from": "jo@beta.io", "subject": "Interview with Beta", "body": "Can we schedule a call?"}])
+    out = scan_panel.check_replies(ws)
+    assert out["ok"] and out["updated"] == 1 and out["changes"] == [{"company": "Beta", "stage": "interview"}]
+    assert [r["Status"] for r in scan_panel._csv_all(ws)] == ["Applied", "Applied", "Interview"]
+    assert scan_panel.check_replies(ws)["updated"] == 0  # a second check changes nothing

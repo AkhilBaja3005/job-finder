@@ -784,6 +784,57 @@ def last_attempt(ws: Path, url: str) -> Dict[str, Any]:
     return {}
 
 
+# ── replies from employers (opt-in mailbox check) ───────────────────────────────
+MAILBOX_VARS = ("REPLY_IMAP_USER", "REPLY_IMAP_PASSWORD", "REPLY_IMAP_HOST")
+
+
+def mailbox_status(ws: Path) -> Dict[str, Any]:
+    env = read_env(ws)
+    return {"configured": bool(env.get("REPLY_IMAP_USER") and env.get("REPLY_IMAP_PASSWORD")), "user": env.get("REPLY_IMAP_USER", "")}
+
+
+def save_mailbox(ws: Path, user: str, password: str, host: str = "") -> Dict[str, Any]:
+    """Checks that the mailbox login works, then keeps it in the .env. The password never leaves this Mac except to log in."""
+    import imaplib
+    user, password, host = (user or "").strip(), re.sub(r"\s+", "", password or ""), (host or "").strip() or "imap.gmail.com"
+    if "@" not in user or len(password) < 8:
+        return {"ok": False, "error": "Enter your email address and an app password (not your normal password)."}
+    try:
+        conn = imaplib.IMAP4_SSL(host, timeout=20)
+        conn.login(user, password)
+        conn.logout()
+    except imaplib.IMAP4.error:
+        return {"ok": False, "error": "The mailbox refused the login. For Gmail, create an app password (Google account, Security, 2-Step Verification, App passwords)."}
+    except Exception as exc:
+        return {"ok": False, "error": f"Could not reach {host}: {str(exc)[:80]}"}
+    write_env_value(ws, "REPLY_IMAP_USER", user)
+    write_env_value(ws, "REPLY_IMAP_PASSWORD", password)
+    write_env_value(ws, "REPLY_IMAP_HOST", host)
+    return {"ok": True}
+
+
+def disconnect_mailbox(ws: Path) -> Dict[str, Any]:
+    for var in MAILBOX_VARS:
+        write_env_value(ws, var, "")
+    return {"ok": True}
+
+
+def check_replies(ws: Path) -> Dict[str, Any]:
+    """Reads the last 30 days of the inbox, and moves matching applications to Replied, Interview, Rejected or Offer."""
+    env = read_env(ws)
+    user, password = env.get("REPLY_IMAP_USER", ""), env.get("REPLY_IMAP_PASSWORD", "")
+    if not (user and password):
+        return {"ok": False, "error": "Connect a mailbox in Settings first."}
+    try:
+        from applications_tracker.replies import fetch_messages, find_updates
+        messages = fetch_messages(env.get("REPLY_IMAP_HOST") or "imap.gmail.com", user, password)
+        changes = find_updates(read_tracker(ws, 5000), messages)
+    except Exception as exc:
+        return {"ok": False, "error": f"Could not read the mailbox: {str(exc)[:100]}"}
+    applied = [c for c in changes if set_application_stage(ws, c["url"], c["stage"]).get("ok")]
+    return {"ok": True, "checked": len(messages), "updated": len(applied), "changes": [{"company": c["company"], "stage": c["stage"]} for c in applied]}
+
+
 # ── problem report (nothing is sent; the user copies it into an email) ──────────
 _SECRET_RE = re.compile(r"(sk-[A-Za-z0-9_\-]{8,}|AIza[0-9A-Za-z_\-]{20,}|sb_(?:secret|publishable)_[A-Za-z0-9_\-]{8,}|eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,})")
 
@@ -841,7 +892,7 @@ class Api:
         ws = workspace_dir()
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
-            "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "profile_check": profile_check(ws),
+            "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "mailbox": mailbox_status(ws), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "profile_check": profile_check(ws),
             "browser": {"ready": browser_ready(), **self._browser},
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
@@ -921,7 +972,7 @@ class Api:
             notify("Job Finder", f"Run finished: {counts['submitted']} submitted, {counts['needs_review']} to review." if result["exit_code"] in (0, None) else "The run ended with an error.")
         if not result["running"] and not self._synced_after_run:
             self._synced_after_run = True  # once per run
-            if (supabase_settings(workspace_dir()) or sync_code(workspace_dir())) and result.get("title") == "scan":
+            if (supabase_settings(workspace_dir()) or sync_code(workspace_dir()) or mailbox_status(workspace_dir())["configured"]) and result.get("title") == "scan":
                 threading.Thread(target=self._sync_and_report, daemon=True).start()
         return result
 
@@ -930,6 +981,10 @@ class Api:
         if supabase_settings(ws):
             outcome = sync_missing_to_supabase(ws)
             self._runner.add_line(f"Synced with your Supabase project: {outcome['pushed']} new application(s) added." if outcome.get("ok") else outcome.get("error", "Sync failed."))
+        if mailbox_status(ws)["configured"]:
+            found = check_replies(ws)
+            if found.get("ok") and found.get("updated"):
+                self._runner.add_line(f"Mailbox: {found['updated']} application(s) moved forward after replies.")
         if sync_code(ws):
             outcome = sync_to_cloud(ws)
             self._runner.add_line(f"Synced with job-finder.space: {outcome['pushed']} new application(s) added." if outcome.get("ok") else outcome.get("error", "Sync failed."))
@@ -1026,6 +1081,15 @@ class Api:
         except Exception as exc:
             return {"ok": False, "error": str(exc)[:160]}
         return {"ok": proc.returncode == 0, "error": "" if proc.returncode == 0 else "Chrome did not open the page. See the log files."}
+
+    def save_mailbox(self, user: str, password: str, host: str = "") -> Dict[str, Any]:
+        return save_mailbox(workspace_dir(), user, password, host)
+
+    def disconnect_mailbox(self) -> Dict[str, Any]:
+        return disconnect_mailbox(workspace_dir())
+
+    def check_replies_now(self) -> Dict[str, Any]:
+        return check_replies(workspace_dir())
 
     def schedule_status(self) -> Dict[str, Any]:
         import scheduler
