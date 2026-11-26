@@ -114,11 +114,12 @@ DISABLE_GUARDRAILS: bool = any(
 _PROVIDERS = ("gemini", "anthropic", "openai")
 _PROVIDER_ALIASES = {"google": "gemini", "claude": "anthropic"}
 _PROVIDER_KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY"}
-_DEFAULT_MODELS = {"anthropic": "claude-haiku-5-5", "openai": "gpt-6-luna"}
+_DEFAULT_MODELS = {"anthropic": "claude-sonnet-5-5", "openai": "gpt-6-luna"}
 # Short names (model families) accepted in BROWSER_USE_ANTHROPIC_MODEL, BROWSER_USE_OPENAI_MODEL,
 # BROWSER_USE_MODEL and --model. See config.constants.expand_model_alias for the dynamic lookup.
 from config.constants import MODEL_ALIASES as _MODEL_ALIASES, expand_model_alias as _expand
-_DEFAULT_FAMILY = {"anthropic": "haiku", "openai": "luna"}
+# The agent needs a model that keeps to its output format on long pages; Haiku does not (see CHANGELOG), so Sonnet is the default here.
+_DEFAULT_FAMILY = {"anthropic": "sonnet", "openai": "luna"}
 
 
 def _expand_model_alias(provider: str, model: Optional[str]) -> Optional[str]:
@@ -637,6 +638,7 @@ def build_application_task_prompt(
            * If the application form asks to attach/upload a resume, CV, or file (e.g. 'Upload a file', 'Attach Resume', 'Upload Resume/CV', 'Select file', or file input dropzone):
            * You MUST upload the provided resume file path using `upload_file` action!
            * Do NOT leave the file upload blank or skip it if a file is requested.
+           * If `upload_file` fails with "Node is not a file input element", you picked the visible button or label, not the real input. Upload needs the element index of the actual `<input type="file">`: it is usually hidden and sits right next to the "Upload", "Attach" or "Browse" button. Look for it in the page elements, click the button once to reveal it if you cannot find it, and try the file input's index. Do not give up after one failed attempt.
          - For Cover Letter (Greenhouse, Ashby, Lever, Workday):
            * GREENHOUSE "TYPE COVER LETTER" MANDATORY ACTION:
              - Many forms (especially Greenhouse) feature two options/buttons for cover letter: 'Attach' (file upload) vs 'Type Cover Letter' (or 'Write cover letter', 'Paste cover letter', 'Add Cover Letter').
@@ -882,16 +884,16 @@ def rotate_chrome_instance(headless: bool = False, max_tabs: Optional[int] = Non
     Returns the CDP URL of a Chrome instance with room for another application tab.
 
     Every tab stays open for review. When the current Chrome holds more than `max_tabs`
-    (default 30, env JOB_FINDER_MAX_TABS) tabs, a separate Chrome process is started on the
+    (default 6, env JOB_FINDER_MAX_TABS) tabs, a separate Chrome process is started on the
     next port with its own profile (seeded with the login state of the first one). Opening
     another window in the same Chrome does not help: browser-use sees every window's tabs
     over one connection, and around 50 tabs it fails with "EventBus at capacity".
     """
     if max_tabs is None:
         try:
-            max_tabs = int(os.getenv("JOB_FINDER_MAX_TABS", "30"))
+            max_tabs = int(os.getenv("JOB_FINDER_MAX_TABS", "6"))
         except ValueError:
-            max_tabs = 30
+            max_tabs = 6
     max_instances = 20
     for generation in range(max_instances):
         port = CDP_PORT + generation
