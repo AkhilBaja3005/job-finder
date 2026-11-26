@@ -455,6 +455,42 @@ async def get_applications(authorization: Optional[str] = Header(None)):
     return {"applications": await asyncio.to_thread(list_applications, token)}
 
 
+class SyncedApplication(BaseModel):
+    job_title: str = Field("", max_length=300)
+    company: str = Field("", max_length=300)
+    job_url: str = Field(..., min_length=8, max_length=2000)
+    score: Optional[int] = Field(None, ge=0, le=100)
+    status: str = Field("saved", max_length=60)
+    source_mode: str = Field("desktop", max_length=60)
+
+
+class SyncApplicationsRequest(BaseModel):
+    applications: List[SyncedApplication] = Field(..., max_length=500)
+
+
+@router.post("/applications/sync")
+async def sync_applications(request: SyncApplicationsRequest, authorization: Optional[str] = Header(None)):
+    """Adds applications from the Mac app to the signed-in account. Add-only: a job URL that is already stored is skipped,
+    and nothing is changed or deleted. Needs a real account (sync code or session), never a guest."""
+    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    user = await async_get_user_by_token(token) if token else None
+    if not user or not user.get("id") or str(user["id"]).startswith("guest_"):
+        raise HTTPException(status_code=401, detail="Invalid sync code")
+    known = {a.get("job_url") for a in await asyncio.to_thread(list_applications, token) if a.get("job_url")}
+    added = 0
+    for item in request.applications:
+        url = item.job_url.strip()
+        if url in known:
+            continue
+        known.add(url)
+        await asyncio.to_thread(record_application, token, {
+            "job_title": item.job_title or "Role", "company": item.company or "Company", "job_url": url,
+            "score": item.score, "status": item.status or "saved", "source_mode": item.source_mode or "desktop",
+        })
+        added += 1
+    return {"added": added, "already": len(request.applications) - added}
+
+
 @router.get("/applications/skills_heatmap")
 async def get_skills_heatmap(authorization: Optional[str] = Header(None)):
     """Computes an interactive ATS keyword gap & skill frequency heatmap across user applications."""

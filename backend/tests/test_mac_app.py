@@ -448,3 +448,67 @@ def test_browser_install_command_has_no_cli_flag(monkeypatch):
     api._browser = {"installing": True, "error": ""}
     api._install_browser()
     assert calls[0] == ["/app/Job Finder", "--install-browser"]
+
+
+# ── job-finder.space sync ────────────────────────────────────────────────────────
+def _ws(tmp_path):
+    (tmp_path / "applications_tracker").mkdir()
+    (tmp_path / "applications_tracker" / "job_applications_tracker.csv").write_text(
+        "Company,Job Title,Job URL,Status,Overall ATS,Platform\n"
+        "Acme,AI Engineer,https://boards.greenhouse.io/acme/jobs/1,Applied,82%,Greenhouse\n"
+        "Acme,AI Engineer,https://boards.greenhouse.io/acme/jobs/1,Applied,82%,Greenhouse\n"
+        "Beta,ML Engineer,https://jobs.lever.co/beta/2,Needs Review,,Lever\n")
+    return tmp_path
+
+
+def test_sync_code_is_validated_then_saved(tmp_path, monkeypatch):
+    import scan_panel
+    ws = _ws(tmp_path)
+    monkeypatch.setattr(scan_panel, "_server_request", lambda *a, **k: {"email": "me@example.com"})
+    assert scan_panel.save_sync_code(ws, "!!")["ok"] is False
+    out = scan_panel.save_sync_code(ws, " ab-12 cd ")
+    assert out == {"ok": True, "email": "me@example.com"}
+    assert scan_panel.sync_code(ws) == "AB12CD"
+    assert scan_panel.disconnect_sync(ws)["ok"] and scan_panel.sync_code(ws) == ""
+
+
+def test_wrong_sync_code_is_not_saved(tmp_path, monkeypatch):
+    import urllib.error
+    import scan_panel
+    ws = _ws(tmp_path)
+
+    def reject(*a, **k):
+        raise urllib.error.HTTPError("u", 401, "no", {}, None)
+
+    monkeypatch.setattr(scan_panel, "_server_request", reject)
+    out = scan_panel.save_sync_code(ws, "ABCDEF")
+    assert out["ok"] is False and "not recognised" in out["error"]
+    assert scan_panel.sync_code(ws) == ""
+
+
+def test_push_sends_each_url_once_and_reports_counts(tmp_path, monkeypatch):
+    import scan_panel
+    ws = _ws(tmp_path)
+    scan_panel.write_env_value(ws, "JOB_FINDER_SYNC_CODE", "ABCDEF")
+    sent = []
+
+    def fake(ws_, code, path, method="GET", body=None, timeout=20.0):
+        sent.append((code, path, body))
+        return {"added": len(body["applications"]), "already": 0}
+
+    monkeypatch.setattr(scan_panel, "_server_request", fake)
+    out = scan_panel.sync_to_cloud(ws)
+    assert out == {"ok": True, "pushed": 2, "already": 0}
+    assert sent[0][1] == "/applications/sync" and sent[0][0] == "ABCDEF"
+    urls = [r["job_url"] for r in sent[0][2]["applications"]]
+    assert urls == ["https://boards.greenhouse.io/acme/jobs/1", "https://jobs.lever.co/beta/2"]
+
+
+def test_push_without_code_and_server_url_rules(tmp_path):
+    import scan_panel
+    ws = _ws(tmp_path)
+    assert scan_panel.sync_to_cloud(ws)["ok"] is False
+    scan_panel.write_env_value(ws, "JOB_FINDER_SERVER_URL", "http://evil.example.com")
+    assert scan_panel.server_url(ws) == scan_panel.DEFAULT_SERVER  # clear-text remote servers are refused
+    scan_panel.write_env_value(ws, "JOB_FINDER_SERVER_URL", "http://localhost:7860")
+    assert scan_panel.server_url(ws) == "http://localhost:7860"
