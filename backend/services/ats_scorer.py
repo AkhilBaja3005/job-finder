@@ -286,6 +286,8 @@ class ATSScoreResult:
     candidate_years: float
     required_years: int
     score_breakdown: Dict[str, Any]
+    matched_required_count: int = 0
+    total_required_count: int = 0
 
     @property
     def overall_score(self) -> int:
@@ -848,7 +850,9 @@ def compute_ats_score(resume_data: dict, jd_text: str, config: ScoringConfig = D
         missing_skills=skill_res.missing_required,
         candidate_years=calendar_years,
         required_years=required_years,
-        score_breakdown=score_breakdown
+        score_breakdown=score_breakdown,
+        matched_required_count=len(skill_res.matched_required),
+        total_required_count=len(skill_res.matched_required) + len(skill_res.missing_required),
     )
 
 def compute_overall_score(skills: int, experience: int, role_fit: int, config: ScoringConfig = DEFAULT_SCORING_CONFIG) -> int:
@@ -891,6 +895,98 @@ def estimate_role_fit_score(resume_data: dict, jd_text: str) -> int:
     base = 90 - (tier_gap * 15)
     domain_adjustment = round((overlap_ratio - 0.5) * 30)
     return max(0, min(100, base + domain_adjustment))
+
+
+_CLEARANCE_RE = re.compile(r"security clearance|\bsc clearance\b|\bdv clearance\b|top secret|ts/sci|\bpublic trust\b")
+_ONSITE_FULL_RE = re.compile(r"\b(?:5|five)\s+days?\s+(?:a|per|each)\s+week\s+(?:on-?site|in[- ]office|in the office)|\bfully on-?site\b|\bon-?site only\b")
+
+
+def deterministic_semantic_analysis(resume_data: dict, jd_text: str, ats: "ATSScoreResult") -> Dict[str, Any]:
+    """
+    Rule-based replacement for the LLM semantic scoring step in analyze_job_fit.
+
+    Same inputs always give the same output. Produces role_fit_score, the three
+    short alignment labels, red flags and tailoring suggestions using only the
+    JD text, the resume and the deterministic ATS result.
+    """
+    role_fit = estimate_role_fit_score(resume_data, jd_text)
+    overall = compute_overall_score(ats.skills_score, ats.experience_score, role_fit)
+
+    _, _, required_tier = extract_jd_expectations(jd_text)
+    candidate_tier = get_candidate_seniority_tier(resume_data)
+    tiers = {"junior": 1, "mid": 2, "senior": 3, "lead": 4, "executive": 5}
+    gap = tiers.get(candidate_tier, 2) - tiers.get(required_tier, 2)
+    if gap == 0:
+        seniority = "Direct Level Match"
+    elif gap < 0:
+        seniority = f"Target {required_tier.title()} vs {candidate_tier.title()} Profile"
+    elif gap >= 2:
+        seniority = "Overqualified"
+    else:
+        seniority = "Above Target Level"
+
+    matched_n = getattr(ats, "matched_required_count", 0)
+    total_n = getattr(ats, "total_required_count", 0)
+    if total_n == 0:
+        domain = "Insufficient JD Signal"
+    else:
+        ratio = matched_n / total_n
+        if ratio >= 0.75:
+            domain = "Strong Stack Match"
+        elif ratio >= 0.5:
+            domain = "Partial Stack Match"
+        elif ratio > 0:
+            domain = "Slight Domain Shift"
+        else:
+            domain = "Domain Mismatch"
+
+    if not ats.eligible:
+        verdict = "Not Eligible"
+    elif overall >= 75:
+        verdict = "Recommended Apply"
+    elif overall >= 60:
+        verdict = "Worth Applying"
+    elif overall >= 45:
+        verdict = "Stretch Role"
+    else:
+        verdict = "Key Skills Gap"
+
+    jd_lower = (jd_text or "").lower()
+    red_flags: List[str] = []
+    if not ats.eligible and ats.knockout_reason:
+        red_flags.append(ats.knockout_reason)
+    if _CLEARANCE_RE.search(jd_lower):
+        red_flags.append("Requires security clearance")
+    if _ONSITE_FULL_RE.search(jd_lower):
+        red_flags.append("Full-time on-site required")
+    req_years = ats.required_years or 0
+    if req_years and ats.candidate_years + 2 < req_years:
+        red_flags.append(f"Requires {req_years}+ yrs vs {round(ats.candidate_years, 1)} yrs")
+    if total_n and matched_n / total_n < 0.5 and ats.missing_skills:
+        red_flags.append("Missing required: " + ", ".join(ats.missing_skills[:3]))
+    red_flags = red_flags[:3]
+
+    suggestions: List[str] = []
+    for s in ats.missing_skills[:3]:
+        suggestions.append(f"If you have genuinely used {s}, add it to the skills section and to one relevant experience bullet.")
+    if ats.matched_skills:
+        suggestions.append("Lead the summary and skills section with: " + ", ".join(ats.matched_skills[:4]) + ".")
+    if req_years and ats.candidate_years < req_years:
+        suggestions.append(f"State total experience clearly near the top; the role asks for {req_years}+ years.")
+    if gap < 0:
+        suggestions.append(f"Show scope and ownership in recent bullets to support a {required_tier} level role.")
+    while len(suggestions) < 3:
+        suggestions.append("Mirror the exact wording of the job description's key terms where they are true for you.")
+    suggestions = suggestions[:5]
+
+    return {
+        "role_fit_score": role_fit,
+        "seniority_alignment": seniority,
+        "domain_industry_fit": domain,
+        "alignment_verdict": verdict,
+        "red_flags": red_flags,
+        "tailoring_suggestions": suggestions,
+    }
 
 
 def evaluate_master_resume(resume_data: dict, config: ScoringConfig = DEFAULT_SCORING_CONFIG) -> dict:

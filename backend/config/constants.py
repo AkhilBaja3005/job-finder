@@ -10,7 +10,7 @@ from typing import List, Dict, Optional, Tuple, Any
 
 # ── Application Version ──────────────────────────────────────────────────────────
 # Single source of truth for application & extension version
-APP_VERSION = "1.7.1"
+APP_VERSION = "1.8.0"
 APP_NAME = "AI Job Finder Agent"
 
 # ── Workspace & User Data Root Resolution ─────────────────────────────────────────
@@ -199,3 +199,74 @@ def get_best_flash_model(api_key: Optional[str] = None) -> str:
     """Returns the newest available flagship Gemini Flash model (e.g. gemini-3.8-flash), strictly excluding Pro."""
     _, strong = discover_gemini_models(api_key)
     return strong[0] if strong else "gemini-3.8-flash"
+
+
+# ── Dynamic model discovery for Anthropic and OpenAI ─────────────────────────────
+# Same idea as discover_gemini_models(): ask the provider which models exist, pick the newest
+# one of a family, cache it for an hour, and fall back to a static name if the call fails.
+_PROVIDER_MODEL_CACHE: Dict[str, Tuple[float, List[str]]] = {}
+
+_OPENAI_FAMILY_RE = re.compile(r"^gpt-(\d+(?:\.\d+)?)-(luna|terra)$")
+_ANTHROPIC_FAMILY_RE = re.compile(r"^claude-(haiku|sonnet|opus)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$")
+
+
+def pick_newest_model(provider: str, family: str, model_ids: List[str]) -> Optional[str]:
+    """
+    Returns the newest model of a family from a list of model IDs, or None if there is none.
+
+    OpenAI families are luna and terra (gpt-6-luna, gpt-6.1-terra). Anthropic families are haiku,
+    sonnet and opus (claude-haiku-5-5). Variant names such as '-healthcare' or '-preview' never match.
+    For the same version, the undated ID wins over a dated snapshot.
+    """
+    family = family.lower()
+    best: Optional[Tuple[Tuple[float, ...], int, str]] = None
+    for mid in model_ids:
+        if provider == "openai":
+            m = _OPENAI_FAMILY_RE.match(mid)
+            if not m or m.group(2) != family:
+                continue
+            key: Tuple[float, ...] = (float(m.group(1)),)
+        elif provider == "anthropic":
+            m = _ANTHROPIC_FAMILY_RE.match(mid)
+            if not m or m.group(1) != family:
+                continue
+            key = (float(m.group(2)), float(m.group(3) or 0))
+        else:
+            return None
+        candidate = (key, -len(mid), mid)
+        if best is None or candidate[:2] > best[:2]:
+            best = candidate
+    return best[2] if best else None
+
+
+def _list_provider_model_ids(provider: str, api_key: str) -> List[str]:
+    import json
+    import urllib.request
+
+    if provider == "openai":
+        req = urllib.request.Request("https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {api_key}"})
+    else:
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/models?limit=1000",
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+        )
+    with urllib.request.urlopen(req, timeout=6) as resp:
+        data = json.load(resp)
+    return [str(m.get("id")) for m in data.get("data", []) if m.get("id")]
+
+
+def discover_provider_model(provider: str, family: str, api_key: Optional[str], fallback: str) -> str:
+    """Newest model of `family` for `provider`, cached for an hour; `fallback` if discovery fails."""
+    if not api_key:
+        return fallback
+    now = time.time()
+    cached = _PROVIDER_MODEL_CACHE.get(provider)
+    if cached and now - cached[0] < _DISCOVERY_TTL_SECONDS:
+        ids = cached[1]
+    else:
+        try:
+            ids = _list_provider_model_ids(provider, api_key)
+        except Exception:
+            return fallback
+        _PROVIDER_MODEL_CACHE[provider] = (now, ids)
+    return pick_newest_model(provider, family, ids) or fallback

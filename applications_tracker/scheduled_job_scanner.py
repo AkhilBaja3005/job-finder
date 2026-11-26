@@ -805,12 +805,20 @@ async def run_pipeline(
     ])
     # Deduplicate target roles while preserving order
     target_roles = list(dict.fromkeys(raw_target_roles))
+    # Optional hard title filter, e.g. ["intern", "internship", "placement"]. Whole-word, case-insensitive.
+    _req_kw = prefs.get("required_title_keywords") or []
+    if isinstance(_req_kw, str):
+        _req_kw = [k.strip() for k in _req_kw.split(",") if k.strip()]
+    required_title_re = (
+        re.compile(r"\b(?:" + "|".join(re.escape(str(k).lower()) + "s?" for k in _req_kw) + r")\b")
+        if _req_kw else None
+    )
     keywords = ", ".join(target_roles)
     target_locations = [location_override] if location_override else prefs.get("target_locations", ["London, UK"])
     location = target_locations[0] if target_locations else "London, UK"
     raw_timeframe = timeframe_override or prefs.get("timeframe", "48h")
     timeframe = normalize_timeframe(raw_timeframe)
-    min_ats_score = int(min_ats if min_ats is not None else prefs.get("min_ats_score", 65))
+    min_ats_score = int(min_ats if min_ats is not None else prefs.get("min_ats_score", prefs.get("min_ats_score_threshold", 65)))
     DIRECT_APPLY_ATS_THRESHOLD = 80  # >= 80%: apply directly with master resume without tailoring
     max_apps_env = os.getenv("MAX_APPLICATIONS_PER_RUN", "0").strip()
     max_applications = max_apps if max_apps is not None else (int(max_apps_env) if max_apps_env.isdigit() else 0)
@@ -965,6 +973,10 @@ async def run_pipeline(
         )
         if any(bad in title_lower for bad in irrelevant_keywords):
             print(f"[{idx}/{len(jobs)}] ⏭Skipping irrelevant non-technical posting: {title} @ {company}")
+            continue
+
+        if required_title_re and not required_title_re.search(title_lower):
+            print(f"[{idx}/{len(jobs)}] Skipping title without required keyword ({', '.join(_req_kw)}): {title} @ {company}")
             continue
 
         # Check UK visa sponsorship status from official Home Office register

@@ -739,6 +739,7 @@ async def handle_sync_candidate_profile_from_resume(args: Dict[str, Any]) -> Dic
             cand["core_skills"] = list(dict.fromkeys(x for v in skills.values() for x in v))
         elif isinstance(skills, list) and skills:
             cand["core_skills"] = skills
+        assert token  # cloud_mode implies a token (checked above)
         _save_session_profile(token, profile)
         return {
             "success": True,
