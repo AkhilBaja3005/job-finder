@@ -1,33 +1,42 @@
-# Privacy Policy: Job Finder ATS Tailor (Chrome extension)
+# Privacy
 
-Last updated: 18 November 2026
+*Draft written from how the software works. It is not legal advice; have it reviewed before you rely on it.*
 
-Job Finder ATS Tailor is a browser extension and web service that scores a job posting against your resume and helps you tailor applications.
+Job Finder has three parts: the Mac app and command line tool that run on your computer, the website and server at
+job-finder.space, and the Chrome extension.
 
-## What the extension reads
-- The text of the job posting on the page you are viewing, when you open the side panel or use a feature on that page.
-- Form fields on application pages, only when you click Auto-Fill.
+## What stays on your computer
+The Mac app and `job-finder` command keep these in your Job Finder folder: your profile (`candidate_profile.json`), your
+`.env` (API keys, readable only by you), the application tracker, run logs and screenshots. They are not uploaded unless
+you turn on a sync option below.
 
-It does not read pages in the background for any other purpose, track your browsing history, or collect data for advertising.
+## What the server stores (only if you sign in or use a sync code)
+- Your email address and your sync code.
+- Your resume data and application history (job title, company, link, score, status).
+- An optional API key you save for the AI provider. It is stored encrypted and is never shown back in full.
+- Sign-in sessions.
 
-## What you provide
-- Your resume and profile details (name, email, phone, location, work history, skills, links), entered or uploaded by you.
-- An optional sync code or session token that links the extension to your Job Finder account.
+The server is a Hugging Face Space; the database is Supabase. The database is locked with row-level security so only the
+server can read it.
 
-## Where data is sent
-When you use a feature, the job posting text and the profile fields needed for that feature are sent to:
-- the Job Finder service at `https://www.job-finder.space` (or to a local Job Finder server on your own machine, if you set that in Settings), and
-- the language-model provider the service uses to generate scores, resumes, cover letters and outreach text.
+## What is sent to AI providers
+When the software writes a cover letter, tailors a resume or fills a form, the relevant resume text and job description
+are sent to the provider you chose (Google Gemini, Anthropic Claude or OpenAI), using your key or, on the website, the
+server's key. Those providers handle the data under their own terms.
 
-Your profile is stored in the Job Finder service database under your account so it syncs between the extension and the website. The extension also stores settings and your profile locally in the browser (`chrome.storage`).
+## The Mac app's sync code
+If you enter a sync code in the Mac app, it uploads the application list (job title, company, link, score, status) to your
+account. It never uploads API keys, your resume file or your profile.
 
-## What we do not do
-- We do not sell or rent your data.
-- We do not use your data for advertising or for creditworthiness or lending decisions.
-- We do not transfer your data to third parties except those needed to provide the features above.
+## Your controls
+- **Export:** the website's extension panel has "Export my data" (JSON, saved API keys left out).
+- **Delete:** "Delete my account" removes your account, resumes and application history from the server.
+- **Local data:** delete your Job Finder folder to remove everything on your computer.
+- **Reset the sync code:** "New key" on the website makes the old code stop working.
 
-## Retention and deletion
-You can edit or delete your profile in the extension or on the website. To delete your account data, contact us at the address below. Uninstalling the extension removes the locally stored data.
+## Problem reports
+The Mac app's "Report a problem" only copies a short report to your clipboard and opens an email. API keys and your home
+folder path are removed from it. Nothing is sent until you press send.
 
 ## Contact
-Open an issue at https://github.com/AkhilBaja3005/job-finder/issues.
+hello@job-finder.space

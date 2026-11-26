@@ -73,6 +73,29 @@ def read_outcomes(workspace: Optional[str] = None) -> List[Dict[str, Any]]:
     return rows
 
 
+def submitted_today(workspace: Optional[str] = None) -> int:
+    """How many applications went out today (local date). Used for the daily cap."""
+    today = time.strftime("%Y-%m-%d")
+    return sum(1 for r in read_outcomes(workspace) if r.get("outcome") == SUBMITTED and str(r.get("time", "")).startswith(today))
+
+
+def usage_today(workspace: Optional[str] = None) -> Dict[str, float]:
+    """Tokens (and cost, when the agent library reported one) used by today's attempts."""
+    today = time.strftime("%Y-%m-%d")
+    tokens = cost = 0.0
+    for r in read_outcomes(workspace):
+        if str(r.get("time", "")).startswith(today) and isinstance(r.get("usage"), dict):
+            tokens += float(r["usage"].get("total_tokens") or 0)
+            cost += float(r["usage"].get("total_cost") or 0)
+    return {"tokens": int(tokens), "cost": round(cost, 4)}
+
+
+def daily_cap() -> int:
+    """MAX_APPLICATIONS_PER_DAY, default 25. 0 means no cap."""
+    raw = os.environ.get("MAX_APPLICATIONS_PER_DAY", "25").strip()
+    return int(raw) if raw.isdigit() else 25
+
+
 def summarize(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Per site: attempts, how many were submitted, needed review, or failed, and the most common reason for a miss."""
     sites: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"attempts": 0, SUBMITTED: 0, REVIEW: 0, FAILED: 0, "reasons": defaultdict(int)})

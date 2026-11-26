@@ -79,6 +79,22 @@ def install_browser() -> int:
 SIGNIN_PAGES = ("https://www.linkedin.com/login", "https://secure.indeed.com/auth", "https://www.reed.co.uk/account/signin")
 
 
+def open_in_agent_chrome(url: str) -> int:
+    """Opens one job page in the agent's Chrome profile (where the user is signed in), for checking a form by hand."""
+    if not url.startswith(("http://", "https://")):
+        return 2
+    prepare_environment()
+    import urllib.parse
+    import urllib.request
+    from services.browser_use_agent import ensure_persistent_browser
+    cdp = ensure_persistent_browser(headless=False)
+    try:
+        urllib.request.urlopen(urllib.request.Request(f"{cdp}/json/new?{urllib.parse.quote(url, safe=':/?&=%#')}", method="PUT"), timeout=5).read()
+    except Exception:
+        return 1
+    return 0
+
+
 def open_signin_browser() -> int:
     """Opens the agent's own Chrome profile with the job sites' sign-in pages, so the user can log in once.
     The agent reuses this profile, so the sign-ins carry over to every run."""
@@ -214,6 +230,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_cli(argv[1:])
     if argv and argv[0] == "--install-browser":
         return install_browser()
+    if argv and argv[0] == "--open" and len(argv) > 1:
+        return open_in_agent_chrome(argv[1])
     if argv and argv[0] == "--signin":
         return open_signin_browser()
     return run_window()

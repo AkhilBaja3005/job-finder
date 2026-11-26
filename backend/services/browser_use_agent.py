@@ -481,6 +481,12 @@ def build_application_task_prompt(
 
     password_profile_line = f"- Account Creation / Portal Password: {portals_password}\n" if portals_password else ""
 
+    try:
+        from services.saved_answers import prompt_block
+        from config.constants import resolve_workspace_root
+        saved_answers_block = prompt_block(resolve_workspace_root())
+    except Exception:
+        saved_answers_block = ""
     task = f"""
     Navigate to the job application URL: {job_url}
     
@@ -647,7 +653,7 @@ def build_application_task_prompt(
                * In a single turn, TYPE a tailored, compelling 3-paragraph cover letter into the textarea highlighting candidate's technical accomplishments and alignment with the job title.
                * NEVER leave the cover letter empty if 'Type Cover Letter' or a cover letter text area is available.
          - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
-    4. Handle Email Verification / OTP Codes:
+{saved_answers_block}    4. Handle Email Verification / OTP Codes:
        - If the form asks to enter a verification code / OTP sent to your email (e.g., micro1, Ashby, Workday):
          a. Open a new tab to Gmail: open a new tab with url 'https://mail.google.com'.
          b. Locate the latest verification email from the company or portal (usually at the very top of the inbox).
@@ -1354,8 +1360,28 @@ async def run_browser_use_autofill(
         "model_used": getattr(llm, "model", model_name),
         "steps_taken": len(history.history) if hasattr(history, "history") else 0,
         "is_done": is_done,
+        "usage": usage_summary(history),
         "final_result": final_res or "Completed application autofill run.",
     }
+
+
+def usage_summary(history: Any) -> Dict[str, Any]:
+    """Token counts (and the cost, when the library reports one) for one run. Empty when the installed browser-use cannot say."""
+    out: Dict[str, Any] = {}
+    try:
+        usage = getattr(history, "usage", None)
+        if usage is not None:
+            for key in ("total_prompt_tokens", "total_completion_tokens", "total_tokens", "total_cost"):
+                value = getattr(usage, key, None) if not isinstance(usage, dict) else usage.get(key)
+                if isinstance(value, (int, float)):
+                    out[key] = value
+        if "total_tokens" not in out and hasattr(history, "total_input_tokens"):
+            total = history.total_input_tokens()
+            if isinstance(total, (int, float)) and total:
+                out["total_tokens"] = int(total)
+    except Exception:
+        return {}
+    return out
 
 
 async def extract_jd_with_browser_use(

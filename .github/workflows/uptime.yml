@@ -1,0 +1,37 @@
+name: Server uptime
+
+# Checks the hosted server every 30 minutes. When it is down, opens one issue (and does not open a second while that one
+# is still open). Closing the issue when the server is back is left to a person.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        id: ping
+        run: |
+          for attempt in 1 2 3; do
+            if curl -fsS --max-time 30 https://abaja-job-finder.hf.space/health | grep -q '"status":"ok"'; then
+              echo "up=true" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+            sleep 20
+          done
+          echo "up=false" >> "$GITHUB_OUTPUT"
+      - name: Open an issue when it is down
+        if: steps.ping.outputs.up == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --label server-down --state open --json number --jq 'length')
+          if [ "$open" = "0" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --label server-down \
+              --title "Hosted server is not answering" \
+              --body "The check at $(date -u +%FT%TZ) got no healthy answer from /health after three tries. Look at the Space logs on Hugging Face."
+          fi

@@ -88,3 +88,12 @@ def test_storage_purge_of_unencrypted_plaintext():
         assert decrypted_pdf == b"%PDF-1.5 test binary"
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_is_encrypted_and_reencrypt_script_skips_encrypted_values(monkeypatch):
+    from services import secret_store
+    monkeypatch.setenv("KEY_ENCRYPTION_SECRET", "unit-test-secret")
+    plain = "AIza" + "x" * 30
+    stored = secret_store.encrypt_secret(plain)
+    assert secret_store.is_encrypted(stored) and not secret_store.is_encrypted(plain) and not secret_store.is_encrypted(None)
+    assert secret_store.decrypt_secret(stored) == plain

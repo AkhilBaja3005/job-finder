@@ -25,6 +25,11 @@ def _fernet():
     return Fernet(base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest()))
 
 
+def is_encrypted(value: Optional[str]) -> bool:
+    """True for a value this module already encrypted (so it is never encrypted twice)."""
+    return bool(value) and str(value).startswith(_PREFIX)
+
+
 def encrypt_secret(value: Optional[str]) -> Optional[str]:
     """Encrypts a key for storage. Without KEY_ENCRYPTION_SECRET the key is stored as is, with a warning."""
     global _warned

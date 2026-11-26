@@ -699,6 +699,14 @@ def read_tracker(ws: Path, limit: int = 300) -> List[Dict[str, str]]:
     return out
 
 
+def usage_today_for(ws: Path) -> Dict[str, Any]:
+    try:
+        from applications_tracker.outcomes import usage_today
+        return usage_today(str(ws))
+    except Exception:
+        return {"tokens": 0, "cost": 0}
+
+
 # ── moving an application along: submitted by hand, reply, interview ────────────
 STAGES = {
     "applied": "Applied (manual)", "replied": "Replied", "interview": "Interview", "offer": "Offer",
@@ -741,6 +749,12 @@ def set_application_stage(ws: Path, url: str, stage: str) -> Dict[str, Any]:
             _supabase_request(cfg, f"applications?user_id=eq.{cloud_user_id(ws)}&job_url=eq.{quoted}", "PATCH", {"status": label}, headers={"Prefer": "return=minimal"}, timeout=8)
         except Exception:
             log.debug("could not update the status in Supabase", exc_info=True)
+    code = sync_code(ws)
+    if code:  # best effort: the account on job-finder.space follows along
+        try:
+            _server_request(ws, code, "/applications/status", "POST", {"job_url": url.strip(), "status": label}, timeout=8)
+        except Exception:
+            log.debug("could not update the status on job-finder.space", exc_info=True)
     return {"ok": True, "status": label}
 
 
@@ -766,6 +780,29 @@ def last_attempt(ws: Path, url: str) -> Dict[str, Any]:
             inside = bool(shot) and Path(shot).resolve().is_relative_to(ws.resolve()) and Path(shot).is_file()
             return {"reason": str(row.get("final_result") or row.get("reason") or ""), "outcome": row.get("outcome", ""), "screenshot": shot if inside else ""}
     return {}
+
+
+# ── problem report (nothing is sent; the user copies it into an email) ──────────
+_SECRET_RE = re.compile(r"(sk-[A-Za-z0-9_\-]{8,}|AIza[0-9A-Za-z_\-]{20,}|sb_(?:secret|publishable)_[A-Za-z0-9_\-]{8,}|eyJ[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,})")
+
+
+def redact(text: str) -> str:
+    """Removes API keys, tokens and the user's home folder from text that is about to be shared."""
+    text = _SECRET_RE.sub("[removed]", text)
+    return text.replace(str(Path.home()), "~")
+
+
+def diagnostics_report(ws: Path) -> str:
+    import platform
+    lines = [f"Job Finder {_app_version()}", f"macOS {platform.mac_ver()[0]} {platform.machine()}",
+             f"Chrome found: {chrome_found()}", f"Scraper browser ready: {browser_ready()}",
+             "Keys set: " + ", ".join(name for name, v in key_status(ws).items() if v["set"]) ,
+             f"Sync code saved: {bool(sync_code(ws))}", f"Supabase configured: {bool(supabase_settings(ws))}", "", "--- app.log (last 60 lines) ---"]
+    try:
+        lines += (logs_dir() / "app.log").read_text(encoding="utf-8", errors="replace").splitlines()[-60:]
+    except OSError:
+        lines.append("(no log yet)")
+    return redact("\n".join(lines))
 
 
 # ── what the window calls ────────────────────────────────────────────────────────
@@ -802,7 +839,7 @@ class Api:
         ws = workspace_dir()
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
-            "running": self._runner.running, "version": _app_version(), "stages": stage_counts(read_tracker(ws, 5000)), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "profile_check": profile_check(ws),
+            "running": self._runner.running, "version": _app_version(), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "profile_check": profile_check(ws),
             "browser": {"ready": browser_ready(), **self._browser},
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
@@ -974,6 +1011,39 @@ class Api:
         subprocess.run(["open", shot], check=False)
         return {"ok": True}
 
+    def review_in_chrome(self, url: str) -> Dict[str, Any]:
+        """Opens the job in the agent's signed-in Chrome so the user can check the form and submit it by hand."""
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            return {"ok": False, "error": "That is not a web address."}
+        if self._runner.running:
+            return {"ok": False, "error": "A run is in progress. Stop it first, or open the job from the Open button."}
+        try:
+            proc = subprocess.run([a for a in self._launcher if a != "--cli"] + ["--open", url], capture_output=True, text=True, timeout=60)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:160]}
+        return {"ok": proc.returncode == 0, "error": "" if proc.returncode == 0 else "Chrome did not open the page. See the log files."}
+
+    def schedule_status(self) -> Dict[str, Any]:
+        import scheduler
+        return {"ok": True, **scheduler.status()}
+
+    def set_schedule(self, enabled: bool, hour: int = 8, minute: int = 0, real: bool = False) -> Dict[str, Any]:
+        """Turns the daily run on or off. A real (submitting) run is only scheduled when `real` is True."""
+        import scheduler
+        if not enabled:
+            return scheduler.remove()
+        ws = workspace_dir()
+        prefs = load_app_prefs()
+        options = {"mode": "auto_apply" if real else "dry_run", "primary_ai": prefs.get("primary_ai"), "headless": True}
+        program = list(self._launcher) + build_scan_args(options)
+        env = build_run_env(options, ws, base={})
+        env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_dir())
+        env["HOME"] = str(Path.home())
+        return scheduler.install(int(hour), int(minute), program, ws, logs_dir() / "scheduled.log", env)
+
+    def problem_report(self) -> Dict[str, Any]:
+        return {"ok": True, "text": diagnostics_report(workspace_dir())}
+
     def choose_profile_and_import(self) -> Dict[str, Any]:
         import webview
         picked = self._window.create_file_dialog(webview.OPEN_DIALOG, file_types=("Profile (*.json)",)) if self._window else None
@@ -992,13 +1062,16 @@ class Api:
         }
         if what == "logs":
             logs_dir().mkdir(parents=True, exist_ok=True)
+        if what == "answers":
+            from services.saved_answers import ensure_template
+            targets["answers"] = ["open", "-t", ensure_template(str(ws))]
         if what not in targets:
             return {"ok": False}
         subprocess.run(targets[what], check=False)
         return {"ok": True}
 
     def open_url(self, url: str) -> Dict[str, Any]:
-        if url.startswith(("http://", "https://")):
+        if url.startswith(("http://", "https://", "mailto:hello@job-finder.space")):
             webbrowser.open(url)
             return {"ok": True}
         return {"ok": False}
