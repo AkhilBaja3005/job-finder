@@ -81,3 +81,22 @@ def test_rate_limits_still_rotate_without_waiting(sleeps, monkeypatch):
     models = _run(monkeypatch, [RuntimeError("429 RESOURCE_EXHAUSTED"), "from-b"])
     assert g._generate_with_gemini("hi", ["model-a", "model-b"]) == "from-b"
     assert sleeps == [] and models.calls == 2
+
+
+def test_prompt_carries_work_history_education_and_skills():
+    from services.browser_use_agent import build_application_task_prompt
+    prompt = build_application_task_prompt("https://x.example/job", {
+        "name": "Ada", "email": "ada@example.com",
+        "work_experience": [{"title": "Engineer", "company": "Acme Ltd", "start": "2022"}, {"title": "Intern", "company": "Old Co"}],
+        "education": [{"degree": "BSc Computer Science", "school": "UCL", "end": "2021"}],
+        "core_skills": ["Python", "SQL"],
+    })
+    assert "CURRENT employer" in prompt and "Engineer | Acme Ltd | 2022" in prompt
+    assert "BSc Computer Science | UCL | 2021" in prompt and "Skills: Python, SQL" in prompt
+
+
+def test_prompt_works_without_background_and_has_no_hardcoded_personal_defaults():
+    from services.browser_use_agent import build_application_task_prompt
+    prompt = build_application_task_prompt("https://x.example/job", {"name": "Ada"})
+    assert "Work history" not in prompt
+    assert "W12 0BZ" not in prompt and "akhilbaja3005.github.io" not in prompt
