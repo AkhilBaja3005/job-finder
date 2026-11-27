@@ -146,7 +146,7 @@
           '<div class="field"><span class="label">Browser window</span><label class="row-between" style="font-weight:400;color:var(--text)"><span>Hide while running</span><span class="switch"><input type="checkbox" id="f-headless"' + (f.headless ? " checked" : "") + '><i></i></span></label></div></div>' +
         "</div></details>" +
       "</section>" +
-      '<section class="card" aria-label="Activity"><div class="card-head"><h2>Activity</h2><div class="right"><button class="btn quiet" data-act="copy-log">Copy</button><button class="btn quiet" data-act="open-logs">Open log files</button></div></div>' +
+      '<section class="card act-card" aria-label="Activity"><div class="card-head"><h2>Activity</h2><div class="right"><button class="btn quiet" data-act="copy-log">Copy</button><button class="btn quiet" data-act="open-logs">Open log files</button></div></div>' +
         '<div class="card-pad"><div class="status-line" aria-live="polite"><span class="dot" id="run-dot"></span><span class="state" id="run-state"></span><span class="detail" id="run-detail"></span></div>' +
         '<div class="progress" id="run-bar"><i></i></div>' +
         '<div class="tiles"><div class="tile"><b class="num" id="t-checked">0</b><span>Checked</span></div><div class="tile good"><b class="num" id="t-sub">0</b><span>Submitted</span></div>' +
@@ -277,7 +277,7 @@
         return '<tr><td class="job"><div class="co">' + esc(r.company) + '</div><div class="ro" title="' + esc(r.title) + '">' + esc(r.title) + (r.platform ? '<span class="src"> · ' + esc(r.platform) + "</span>" : "") + "</div></td>" +
           '<td title="' + esc(r.status) + '">' + badge(statusLabel(r.status), k === "applied" ? "good" : k === "review" ? "warn" : "") + "</td>" +
           '<td><span class="score num">' + (r.ats ? '<span class="bar"><i style="width:' + Math.min(100, ats) + '%"></i></span>' + esc(r.ats) : "—") + "</span></td>" +
-          '<td title="' + (r.synced ? "In your Supabase project" : "Only on this Mac") + '">' + icon(r.synced ? "cloud" : "cloudOff", ' class="cloud-ic' + (r.synced ? "" : " off") + '"') + "</td>" +
+          '<td title="' + (r.synced ? "Saved to your account" : "Only on this computer") + '">' + icon(r.synced ? "cloud" : "cloudOff", ' class="cloud-ic' + (r.synced ? "" : " off") + '"') + "</td>" +
           "<td class=\"acts\">" + (r.url ? '<button class="btn quiet" data-url="' + esc(r.url) + '" aria-label="Open ' + esc(r.title) + '">Open</button>' : "") +
           (r.url && k === "review" ? '<button class="btn quiet" data-detail="' + esc(r.url) + '">Why</button><button class="btn quiet" data-review="' + esc(r.url) + '">Review</button>' : "") +
           (r.url ? '<select class="select stage" data-stage="' + esc(r.url) + '" aria-label="Update status of ' + esc(r.title) + '"><option value="">Update…</option>' + STAGES.map(([v, l]) => '<option value="' + v + '">' + l + "</option>").join("") + "</select>" : "") + "</td></tr>";
@@ -483,6 +483,26 @@
     document.addEventListener("keydown", onKey, true); draw(); $("#overlay").appendChild(wrap);
     const first = $("[data-aa-q]", wrap); if (first) first.focus();
   }
+
+  /* ── Moving the window by its top bar ───────────────────────────────────── */
+  // Elements marked data-drag (the empty top bar and the logo area) move the window. Buttons inside them still click.
+  (function enableWindowDrag() {
+    let start = null, pending = null, raf = 0;
+    const flush = () => { raf = 0; if (pending && start) { call("drag_to", pending.dx, pending.dy); pending = null; } };
+    document.addEventListener("mousedown", (e) => {
+      if (e.button !== 0 || !e.target.closest("[data-drag]") || e.target.closest("button, a, input, select, textarea, [data-nav]")) return;
+      if (e.detail === 2) { call("zoom_window"); return; }
+      start = { x: e.screenX, y: e.screenY }; call("drag_start"); e.preventDefault();
+    });
+    document.addEventListener("mousemove", (e) => {
+      if (!start) return;
+      if (e.buttons !== 1) { start = null; return; }
+      pending = { dx: e.screenX - start.x, dy: e.screenY - start.y };
+      if (!raf) raf = requestAnimationFrame(flush);
+    });
+    const stop = () => { start = null; pending = null; };
+    document.addEventListener("mouseup", stop); window.addEventListener("blur", stop);
+  })();
 
   /* ── Guided tour ─────────────────────────────────────────────────────────── */
   const TOUR = [

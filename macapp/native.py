@@ -25,50 +25,6 @@ def _ns_window(window: Any) -> Any:
     return getattr(window, "native", None)
 
 
-_DRAG_STRIP = None
-TITLEBAR_HEIGHT = 28
-
-
-def _drag_strip_class():
-    """A transparent view over the top edge. The page covers the title bar, so without this the window cannot be dragged."""
-    global _DRAG_STRIP
-    if _DRAG_STRIP is None:
-        import AppKit
-
-        class JobFinderDragStrip(AppKit.NSView):
-            def mouseDownCanMoveWindow(self):
-                return True
-
-            def acceptsFirstMouse_(self, event):
-                return True
-
-            def mouseDown_(self, event):
-                win = self.window()
-                if win is None:
-                    return
-                if event.clickCount() == 2:
-                    win.performZoom_(None)
-                else:
-                    win.performWindowDragWithEvent_(event)
-
-        _DRAG_STRIP = JobFinderDragStrip
-    return _DRAG_STRIP
-
-
-def _add_drag_strip(ns: Any) -> None:
-    import AppKit
-    content = ns.contentView()
-    for view in content.subviews():
-        if view.className() == "JobFinderDragStrip":
-            return
-    bounds = content.bounds()
-    flipped = bool(content.isFlipped())  # web views count y from the top, plain views from the bottom
-    y = 0 if flipped else bounds.size.height - TITLEBAR_HEIGHT
-    strip = _drag_strip_class().alloc().initWithFrame_(((0, y), (bounds.size.width, TITLEBAR_HEIGHT)))
-    strip.setAutoresizingMask_(AppKit.NSViewWidthSizable | (AppKit.NSViewMaxYMargin if flipped else AppKit.NSViewMinYMargin))
-    content.addSubview_(strip)
-
-
 def style_window(window: Any) -> None:
     """Content runs under a transparent title bar, so the sidebar reaches the top and the traffic lights sit on it."""
     def apply() -> None:
@@ -81,7 +37,6 @@ def style_window(window: Any) -> None:
             ns.setTitleVisibility_(AppKit.NSWindowTitleHidden)
             ns.setStyleMask_(ns.styleMask() | AppKit.NSWindowStyleMaskFullSizeContentView)
             ns.setToolbar_(None)
-            _add_drag_strip(ns)
             log.info("Window styled: unified title bar")
         except Exception:
             log.exception("could not style the window")
@@ -187,3 +142,15 @@ def install_menu(app_name: str, handlers: Dict[str, Callable[[], None]]) -> None
         _on_main(build)
     except Exception:
         log.exception("could not schedule the menu bar")
+
+
+def toggle_zoom(window: Any) -> None:
+    """Zooms or restores the window, like a double-click on a title bar."""
+    def apply() -> None:
+        ns = _ns_window(window)
+        if ns is not None:
+            ns.performZoom_(None)
+    try:
+        _on_main(apply)
+    except Exception:
+        log.exception("could not zoom the window")

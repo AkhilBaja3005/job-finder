@@ -119,7 +119,7 @@ textarea.input { height: auto; padding: 7px 9px; resize: vertical; min-height: 6
 .card .card-head { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: .5px solid var(--line); }
 .card .card-head .sub { color: var(--text-3); font-weight: 400; margin-left: 2px; }
 .card .card-head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-.cols { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.cols { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
 @media (max-width: 1060px) { .cols { grid-template-columns: 1fr; } }
 .form { display: flex; flex-direction: column; gap: 16px; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -244,3 +244,11 @@ tbody tr:hover { background: var(--fill); }
 .dialog.wide .btns { flex: none; }
 .chip { min-height: 24px; padding: 3px 10px; border-radius: 12px; border: .5px solid var(--line-strong); background: var(--surface); color: var(--text-2); font-size: 12px; text-align: left; white-space: normal; cursor: pointer; }
 .chip:hover { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+[data-drag] { cursor: default; -webkit-user-select: none; user-select: none; }
+
+/* Run screen: the settings card and the Activity card are the same height. The log takes the room that is left. */
+.act-card { display: flex; flex-direction: column; }
+.act-card > .card-pad { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+.act-card .log-wrap { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+.act-card .log { flex: 1 1 auto; height: auto; min-height: 220px; }
