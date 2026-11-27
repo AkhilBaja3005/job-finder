@@ -1,5 +1,6 @@
 import os
 import asyncio
+import time
 from utils.loop_lock import LoopLock
 from typing import Any
 # pyrefly: ignore [missing-import]
@@ -37,6 +38,8 @@ async def _create_stealth_context(browser):
     return context
 
 _recover_lock = LoopLock()
+_LAUNCH_RETRY_SECONDS = 60.0
+_last_launch_failure = 0.0     # monotonic time of the last failed launch (for example Chromium not installed)
 
 
 def _shared_browser_connected() -> bool:
@@ -50,15 +53,18 @@ async def ensure_shared_browser_alive():
     """Verifies that the shared browser is connected; automatically re-launches if disconnected or closed.
     Only one caller does the relaunch: the others wait for it and reuse the new browser (a scan runs a dozen query
     streams at once, and each used to close and relaunch Chromium on its own)."""
-    global _shared_playwright, _shared_browser, _context_pool
+    global _shared_playwright, _shared_browser, _context_pool, _last_launch_failure
     if _shared_browser_connected():
         return _shared_browser
     async with _recover_lock.get():
         if _shared_browser_connected():      # another stream recovered it while this one waited
             return _shared_browser
+        if _last_launch_failure and time.monotonic() - _last_launch_failure < _LAUNCH_RETRY_SECONDS:
+            return _shared_browser           # it just failed to start; do not retry for every caller
         print("[Scraper] Shared browser disconnected/dead. Auto-recovering...")
         await close_shared_browser()
         await init_shared_browser()
+        _last_launch_failure = 0.0 if _shared_browser_connected() else time.monotonic()
         return _shared_browser
 
 async def init_shared_browser():
