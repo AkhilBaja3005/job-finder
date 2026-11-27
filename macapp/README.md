@@ -144,3 +144,8 @@ Without them the Mac builds are unsigned and users right-click, Open the first t
 ## Docked browser
 
 Setting: Run, Advanced, Browser window, "Dock beside this window". The agent's Chrome opens against the right edge of the app window and follows it when it moves or resizes (`macapp/browser_dock.py`, through CDP `Browser.setWindowBounds`, same on Mac and Windows). It is not embedded: pywebview uses WKWebView on macOS, which has no DevTools protocol for browser-use, and Google blocks sign-in inside embedded web views. Off by default; with it off, or with a hidden run, Chrome opens as before.
+
+### Preparing the release automatically
+
+Actions, **Prepare release**, Run workflow (patch, minor, major or an exact version) does step 1 for you: it bumps the four version files, writes the `CHANGELOG.md` entry from the PR titles merged since the last tag (`feat:` under Added, `fix:` under Fixed, the rest under Changed; `ci:`, `test:`, `docs:`, `chore:` and merge commits are left out) and opens a `release/X.Y.Z` PR. Merge it, then run **Release**.
+It needs the repository secret `RELEASE_TOKEN`: a fine-grained personal access token for this repository only, with Contents and Pull requests set to read and write (GitHub, Settings, Developer settings, Personal access tokens). The built-in token is not enough because pull requests it opens do not start the required checks. The same script runs locally: `python scripts/bump_version.py patch --dry-run`.
