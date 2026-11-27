@@ -583,7 +583,7 @@
       wrap.addEventListener("click", async (e) => {
         const b = e.target.closest("button"); if (!b) { if (e.target === wrap) close(false); return; }
         collectText();
-        if (b.dataset.abBool) { const [k, v] = b.dataset.abBool.split(":"); values[k] = v === "yes"; const y = wrap.scrollTop; draw(); return; }
+        if (b.dataset.abBool) { const [k, v] = b.dataset.abBool.split(":"), want = v === "yes"; values[k] = values[k] === want ? null : want; const list = $(".ab-list", wrap), top = list ? list.scrollTop : 0; draw(); const again = $(".ab-list", wrap); if (again) again.scrollTop = top; return; }   // pressing the chosen answer again clears it
         if (b.dataset.abMulti) { const i = b.dataset.abMulti.indexOf(":"), k = b.dataset.abMulti.slice(0, i), o = b.dataset.abMulti.slice(i + 1); values[k] = values[k].includes(o) ? values[k].filter((x) => x !== o) : values[k].concat(o); const list = $(".ab-list", wrap), top = list ? list.scrollTop : 0; draw(); const again = $(".ab-list", wrap); if (again) again.scrollTop = top; return; }
         if (b.dataset.ab === "close") return close(false);
         if (b.dataset.ab === "save") {

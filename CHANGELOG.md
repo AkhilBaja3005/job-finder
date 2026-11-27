@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- **More questions in "About you":** how you hear about jobs, relocation, on-site/hybrid/remote, preferred name, pronouns, languages, whether
+  you are 18 or older, and consent to background checks. The agent answers "have you worked here before?" from your work history, and stops
+  with `BLOCKED:` (the job is marked needs review) instead of guessing on an age check or background-check consent you have not answered.
+  A practice run that stops this way is also marked needs review.
+- **`job-finder outcomes --questions`:** the agent reports the screening questions it met at the end of each application; the ledger keeps them
+  and this lists the most common ones with the sites they came from.
+- **Fix:** clearing an optional dropdown answer in the questions screen now removes it from the profile instead of saving an empty value.
 - **Questions a resume cannot answer.** The tour, Settings ("About you") and the first real run now ask where you can work, whether you
   need visa sponsorship, when you can start, salary expectation, the levels you want, and the optional equal-opportunity questions.
   The answers are saved into the profile and the agent types them instead of guessing. Without an answer the agent now declines

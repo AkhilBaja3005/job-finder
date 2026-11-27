@@ -371,6 +371,61 @@ def _background_text(resume_data: Dict[str, Any]) -> str:
     return ("\n" + "\n".join(out)) if out else ""
 
 
+def decide_status(auto_submit: bool, is_done: bool, blocker: Optional[str], confirmed: bool, failed: bool, denied: bool, blocked: bool = False) -> str:
+    """How a run ended: success, needs_review (a person must look), preview_ready (practice run finished) or failed.
+    `denied` is the agent saying it did not submit (normal for a practice run). `blocked` is the agent stopping with "BLOCKED:" because
+    only the candidate can answer a question; that needs a person in either mode."""
+    if auto_submit:
+        if confirmed and not blocker and not failed and not denied and not blocked:
+            return "success"
+        if blocker or denied or blocked:
+            return "needs_review"
+        if failed or not is_done:
+            return "failed"
+        return "needs_review"           # never record a success without an explicit confirmation
+    if blocker or blocked:
+        return "needs_review"           # a practice run that stopped on a question only the candidate can answer is not "ready"
+    return "preview_ready" if is_done else "failed"
+
+
+def _profile_extras(resume_data: Dict[str, Any]) -> tuple:
+    """Extra profile lines and the rules for questions that only the candidate can answer. Returns (profile_lines, rules)."""
+    cand = resume_data.get("candidate") if isinstance(resume_data.get("candidate"), dict) else {}
+
+    def get(key: str) -> Any:
+        value = resume_data.get(key)
+        return value if value not in (None, "", []) else cand.get(key)
+
+    arrangement = get("work_arrangement")
+    over_18 = get("over_18")
+    consent = str(get("background_check_consent") or "")
+    past = [str(w.get("company")).strip() for w in (get("work_experience") or []) if isinstance(w, dict) and w.get("company")][:8]
+    lines = [
+        "    - How did you hear about us / Source: " + str(get("referral_source") or "the site where you found this job (for example LinkedIn, Indeed or the careers page)"),
+        "    - Willing to relocate: " + str(get("relocation") or "not specified: choose 'Depends on the role' if offered, otherwise the most open honest option"),
+    ]
+    if isinstance(arrangement, list) and arrangement:
+        lines.append("    - Preferred work arrangement: " + ", ".join(str(a) for a in arrangement))
+    if get("preferred_name"):
+        lines.append(f"    - Preferred name: {get('preferred_name')}")
+    if get("pronouns"):
+        lines.append(f"    - Pronouns: {get('pronouns')}")
+    if get("languages"):
+        lines.append(f"    - Languages: {get('languages')}")
+    age_rule = "answer " + ("Yes" if over_18 else "No") if isinstance(over_18, bool) else "NOT PROVIDED: stop and report it, do not answer"
+    check_rule = "the candidate consents: answer Yes" if consent.lower().startswith("yes") else "NOT PROVIDED: stop and report it, do not tick or answer"
+    rules = (
+        "         - QUESTIONS ABOUT THE CANDIDATE THAT ONLY THE CANDIDATE CAN ANSWER:\n"
+        f"           * 'Have you worked for this company before?': answer Yes only if the company is one of: {', '.join(past) or 'none listed'}. Otherwise No.\n"
+        f"           * 'Are you 18 or older?' or any age check: {age_rule}.\n"
+        f"           * Consent to a background check, drug test or criminal record check: {check_rule}.\n"
+        "           * Privacy notice or terms checkboxes that are required to submit: tick them. They are acknowledgements, not those consents.\n"
+        "           * Anything else that is not in the profile above and cannot be answered from it (a legal confirmation, a personal fact): do NOT guess. Finish with a final message that starts with 'BLOCKED:' and names the question.\n"
+        "         - AT THE END of your final message add one line that starts with 'QUESTIONS:' followed by the screening questions you met, question text only, separated by ' | ' (at most 25, no answers, no personal data).\n"
+    )
+    return "\n".join(lines), rules
+
+
 def build_application_task_prompt(
     job_url: str,
     resume_data: Dict[str, Any],
@@ -526,6 +581,7 @@ def build_application_task_prompt(
     except Exception:
         saved_answers_block = ""
     background_text = _background_text(resume_data)
+    extra_profile, personal_rules = _profile_extras(resume_data)
     task = f"""
     Navigate to the job application URL: {job_url}
     
@@ -550,6 +606,7 @@ def build_application_task_prompt(
     - Protected Veteran Status: {veteran_status}
     - Disability Status: {disability_status}
     - Professional Background: {summary}{background_text}
+{extra_profile}
     {password_profile_line}"""
 
     if resume_pdf_path and os.path.exists(resume_pdf_path):
@@ -693,7 +750,7 @@ def build_application_task_prompt(
                * In a single turn, TYPE a tailored, compelling 3-paragraph cover letter into the textarea highlighting candidate's technical accomplishments and alignment with the job title.
                * NEVER leave the cover letter empty if 'Type Cover Letter' or a cover letter text area is available.
          - For Experience years questions: enter truthful estimates based on profile (e.g., 3-5 years for AI/LLM, 0 for unrelated legacy tools).
-{saved_answers_block}    4. Handle Email Verification / OTP Codes:
+{saved_answers_block}{personal_rules}    4. Handle Email Verification / OTP Codes:
        - If the form asks to enter a verification code / OTP sent to your email (e.g., micro1, Ashby, Workday):
          a. Open a new tab to Gmail: open a new tab with url 'https://mail.google.com'.
          b. Locate the latest verification email from the company or portal (usually at the very top of the inbox).
@@ -1262,9 +1319,9 @@ async def run_browser_use_autofill(
     )
 
     try:
-        from services.browser_use_helpers import detect_blocker, get_run_timeout, save_review_screenshot
+        from services.browser_use_helpers import detect_blocker, extract_questions, get_run_timeout, save_review_screenshot
     except ImportError:
-        from backend.services.browser_use_helpers import detect_blocker, get_run_timeout, save_review_screenshot
+        from backend.services.browser_use_helpers import detect_blocker, extract_questions, get_run_timeout, save_review_screenshot
 
     import time as _time
     run_deadline = _time.monotonic() + get_run_timeout()
@@ -1372,18 +1429,8 @@ async def run_browser_use_autofill(
     # "submitted" but mean the opposite, so any negation rules out a confirmed submission.
     submission_denied = any(m in res_lower for m in _SUBMISSION_DENIED_MARKERS) or res_lower.lstrip().startswith("blocked")
 
-    if effective_auto_submit:
-        if submission_confirmed and not blocker and not submission_failed and not submission_denied:
-            exec_status = "success"
-        elif blocker or submission_denied:
-            exec_status = "needs_review"
-        elif submission_failed or not is_done:
-            exec_status = "failed"
-        else:
-            # Never record a success without an explicit confirmation
-            exec_status = "needs_review"
-    else:
-        exec_status = "needs_review" if blocker else ("preview_ready" if is_done else "failed")
+    exec_status = decide_status(effective_auto_submit, is_done, blocker, submission_confirmed, submission_failed, submission_denied,
+                                blocked=res_lower.lstrip().startswith("blocked"))
 
     screenshot_dir = os.getenv("JOB_FINDER_SCREENSHOT_DIR") or os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "applications_tracker", "screenshots")
@@ -1401,6 +1448,7 @@ async def run_browser_use_autofill(
         "steps_taken": len(history.history) if hasattr(history, "history") else 0,
         "is_done": is_done,
         "usage": usage_summary(history),
+        "questions": extract_questions(final_res),
         "final_result": final_res or "Completed application autofill run.",
     }
 

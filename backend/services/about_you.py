@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 PREFER_NOT = "Prefer not to say"
 LEVELS = ["Intern", "Junior", "Mid", "Senior", "Staff", "Lead", "Manager"]   # words services/relevance.py understands
+WORK_ARRANGEMENTS = ["On-site", "Hybrid", "Remote"]
 
 # section, key, where it lives in the profile, label, kind, options, help
 FIELDS: List[Dict[str, Any]] = [
@@ -28,6 +29,22 @@ FIELDS: List[Dict[str, Any]] = [
     {"key": "postal_code", "in": "candidate", "section": "Availability and pay", "label": "Postcode", "kind": "text", "required": False, "placeholder": "e.g. EC1A 1BB"},
     {"key": "seniority", "in": "search_preferences", "section": "What you are looking for", "label": "Which levels?", "kind": "multi", "required": True,
      "options": LEVELS, "help": "Jobs whose title points to a level you did not pick are skipped, for example Senior when you chose Intern."},
+    {"key": "referral_source", "in": "candidate", "section": "Application details", "label": "How do you usually hear about jobs?", "kind": "choice", "required": False,
+     "options": ["LinkedIn", "Company website", "Indeed", "Job board", "Referral from someone", "University careers site", "Other"],
+     "help": "Used when a form asks how you heard about the job. Leave it empty and the agent names the site where it found the job."},
+    {"key": "relocation", "in": "candidate", "section": "Application details", "label": "Open to relocating?", "kind": "choice", "required": False,
+     "options": ["Yes, open to relocating", "No, not open to relocating", "Depends on the role"]},
+    {"key": "work_arrangement", "in": "candidate", "section": "Application details", "label": "Where do you want to work?", "kind": "multi", "required": False,
+     "options": WORK_ARRANGEMENTS},
+    {"key": "preferred_name", "in": "candidate", "section": "Application details", "label": "Preferred name", "kind": "text", "required": False, "placeholder": "If different from your first name"},
+    {"key": "pronouns", "in": "candidate", "section": "Application details", "label": "Pronouns", "kind": "choice", "required": False,
+     "options": ["she/her", "he/him", "they/them", PREFER_NOT]},
+    {"key": "languages", "in": "candidate", "section": "Application details", "label": "Languages", "kind": "text", "required": False, "placeholder": "e.g. English (fluent), Hindi (native)"},
+    {"key": "over_18", "in": "candidate", "section": "Questions the agent will not answer unless you say so", "label": "Are you 18 or older?", "kind": "bool", "required": False,
+     "help": "Some forms ask. Leave it unanswered and the agent stops and asks you instead of answering."},
+    {"key": "background_check_consent", "in": "candidate", "section": "Questions the agent will not answer unless you say so", "label": "Background checks", "kind": "choice", "required": False,
+     "options": ["Yes, I consent to background checks", "Ask me each time"], "default": "Ask me each time",
+     "help": "Forms that ask for consent to a background check, drug test or criminal record check are a legal agreement. Unless you say yes here, the agent stops and leaves them to you."},
     {"key": "gender", "in": "candidate", "section": "Optional: equal-opportunity forms", "label": "Gender", "kind": "choice", "required": False,
      "options": [PREFER_NOT, "Female", "Male", "Non-binary"], "default": PREFER_NOT},
     {"key": "ethnicity", "in": "candidate", "section": "Optional: equal-opportunity forms", "label": "Ethnicity", "kind": "text", "required": False, "default": PREFER_NOT},
@@ -82,6 +99,10 @@ def read_about_you(profile_path: str) -> Dict[str, Any]:
 def _clean(field: Dict[str, Any], raw: Any) -> Any:
     kind = field["kind"]
     if kind == "bool":
+        if raw is None or str(raw).strip() == "":
+            if field["required"]:
+                raise AboutYouError(f'Answer Yes or No for "{field["label"]}".')
+            return None                                # an optional yes/no left unanswered stays unanswered
         if isinstance(raw, bool):
             return raw
         if str(raw).strip().lower() in ("yes", "true", "1"):
@@ -92,7 +113,7 @@ def _clean(field: Dict[str, Any], raw: Any) -> Any:
     if kind == "multi":
         if not isinstance(raw, list):
             raise AboutYouError(f'Pick at least one for "{field["label"]}".')
-        picked = [v for v in LEVELS if v in raw]
+        picked = [v for v in field["options"] if v in raw]
         if field["required"] and not picked:
             raise AboutYouError(f'Pick at least one for "{field["label"]}".')
         return picked
@@ -114,8 +135,8 @@ def save_about_you(profile_path: str, answers: Dict[str, Any]) -> Dict[str, Any]
         if field is None:
             continue                                   # an unknown key is ignored, never written
         value = _clean(field, raw)
-        if field["kind"] == "text" and not value:
-            data.setdefault(field["in"], {}).pop(key, None)
+        if value is None or value == "" or value == []:
+            data.setdefault(field["in"], {}).pop(key, None)         # an empty optional answer removes the field
         else:
             data.setdefault(field["in"], {})[key] = value
     tmp = profile_path + ".tmp"
