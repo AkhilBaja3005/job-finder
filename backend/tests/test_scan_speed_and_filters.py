@@ -117,3 +117,48 @@ def test_indeed_runs_in_parallel_once_it_is_known_to_work(monkeypatch):
         await asyncio.gather(*[js.search_indeed_jobs(f"q{i}", "London") for i in range(5)])
     asyncio.run(run())
     assert len(calls) == 5 and js._indeed_probed is True
+
+
+def test_portal_scan_keeps_what_answered_when_some_boards_stall(monkeypatch):
+    from services.portal_scanner import PortalScanner
+    sc = PortalScanner()
+    monkeypatch.setattr(PortalScanner, "SCAN_DEADLINE_SECONDS", 5.0)
+    monkeypatch.setattr(PortalScanner, "TAIL_GRACE_SECONDS", 0.5)
+    monkeypatch.setattr(sc, "_get_active_portals_for_scan", lambda *a, **k: {
+        "greenhouse": [{"company_slug": "fast", "name": "Fast"}, {"company_slug": "stuck", "name": "Stuck"}]})
+
+    async def fake_gh(client, slug, name):
+        if slug == "stuck":
+            await asyncio.sleep(30)
+        return [{"title": "AI Engineer", "company": name, "location": "London", "url": f"https://x/{slug}",
+                 "posted_at": None, "portal": "greenhouse"}]
+    monkeypatch.setattr(sc, "scan_greenhouse_company", fake_gh)
+    monkeypatch.setattr(sc, "_is_within_timeframe", lambda *a, **k: True)
+    monkeypatch.setattr(sc, "_matches_location", lambda *a, **k: True)
+
+    async def run():
+        return await sc.scan_all_portals(target_keywords=["AI Engineer"], timeframe="48h", location="London", exclude_portals=[])
+    import time as _t
+    t0 = _t.monotonic()
+    out = asyncio.run(asyncio.wait_for(run(), timeout=10))
+    assert [j["company"] for j in out] == ["Fast"]
+    assert _t.monotonic() - t0 < 4          # a stuck tail waits only the grace period, not the whole deadline
+
+
+def test_browser_launch_failure_is_not_retried_by_every_caller(monkeypatch):
+    import services.scraper as sc
+    launches = []
+
+    async def fake_close(): sc._shared_browser = None
+    async def fake_init():
+        launches.append(1)
+        sc._shared_browser = None          # Chromium is not installed: the launch fails
+    monkeypatch.setattr(sc, "_shared_browser", None)
+    monkeypatch.setattr(sc, "_last_launch_failure", 0.0)
+    monkeypatch.setattr(sc, "close_shared_browser", fake_close)
+    monkeypatch.setattr(sc, "init_shared_browser", fake_init)
+
+    async def run():
+        return await asyncio.gather(*[sc.ensure_shared_browser_alive() for _ in range(12)])
+    assert set(asyncio.run(run())) == {None}
+    assert len(launches) == 1
