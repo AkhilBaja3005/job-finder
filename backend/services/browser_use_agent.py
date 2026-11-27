@@ -387,7 +387,8 @@ def _apply_reviewed_cover_letter(task: str, text: Optional[str], path: Optional[
         extra += f"- If a cover letter TEXT box is offered, paste exactly this:\n<<<COVER_LETTER\n{text.strip()}\nCOVER_LETTER>>>\n"
     extra += "- If no cover letter field exists on the form, do not add one.\n"
     return task + extra
-  
+
+
 def decide_status(auto_submit: bool, is_done: bool, blocker: Optional[str], confirmed: bool, failed: bool, denied: bool, blocked: bool = False) -> str:
     """How a run ended: success, needs_review (a person must look), preview_ready (practice run finished) or failed.
     `denied` is the agent saying it did not submit (normal for a practice run). `blocked` is the agent stopping with "BLOCKED:" because
