@@ -132,3 +132,7 @@ Needs an Apple Developer account. Add these repository secrets and the next buil
 | `APPLE_APP_PASSWORD` | an app-specific password from appleid.apple.com |
 
 Without them the Mac builds are unsigned and users right-click, Open the first time.
+
+## Docked browser
+
+Setting: Run, Advanced, Browser window, "Dock beside this window". The agent's Chrome opens against the right edge of the app window and follows it when it moves or resizes (`macapp/browser_dock.py`, through CDP `Browser.setWindowBounds`, same on Mac and Windows). It is not embedded: pywebview uses WKWebView on macOS, which has no DevTools protocol for browser-use, and Google blocks sign-in inside embedded web views. Off by default; with it off, or with a hidden run, Chrome opens as before.
