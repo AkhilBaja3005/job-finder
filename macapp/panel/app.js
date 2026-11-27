@@ -1175,7 +1175,12 @@
       case "signoff-pack": {
         const id = d.id;
         const r = await call("signoff_pack", id);
-        if (r && r.ok) { toast("Signed off for Apply."); await loadDocuments(id); await refreshNextStep(); }
+        if (r && r.ok) {
+          toast("Signed off for Apply.");
+          const nextNeed = (S.docs.packs || []).find((p) => p.id !== id && (p.state === "needs_signoff" || p.state === "ready"));
+          await loadDocuments(nextNeed ? nextNeed.id : id);
+          await refreshNextStep();
+        }
         return;
       }
       case "cancel-key": return renderSettings();

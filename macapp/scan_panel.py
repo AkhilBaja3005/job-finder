@@ -1204,6 +1204,22 @@ class Api:
 
     def poll(self, offset: int = 0) -> Dict[str, Any]:
         result = self._runner.poll(int(offset))
+        if not result["running"] and result.get("title") == "apply":
+            ws = workspace_dir()
+            candidates = [ws / "applications_tracker" / "apply_run_audit.jsonl"]
+            with self._ws_env(ws):
+                try:
+                    from services import searches
+                    candidates.insert(0, Path(searches.resolve_current().folder) / "apply_run_audit.jsonl")
+                except Exception:
+                    pass
+            for audit_file in candidates:
+                if audit_file.is_file():
+                    try:
+                        result["applied_rows"] = [json.loads(ln) for ln in audit_file.read_text(encoding="utf-8").splitlines() if ln.strip()]
+                        break
+                    except Exception:
+                        pass
         if not result["running"] and not self._notified and result.get("title") == "scan":
             self._notified = True
             counts = result["counts"]

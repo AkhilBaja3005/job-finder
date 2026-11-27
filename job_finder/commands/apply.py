@@ -224,6 +224,12 @@ def run(args: argparse.Namespace):
             print(f"[Tracker] Could not record result for {job['url']}: {e}")
 
     async def _batch() -> None:
+        audit_path = os.path.join(os.path.dirname(tracker.path), "apply_run_audit.jsonl")
+        try:
+            with open(audit_path, "w", encoding="utf-8") as af:
+                af.write("")
+        except OSError:
+            audit_path = ""
         for idx, job in enumerate(jobs, 1):
             print(f"\n{'=' * 60}\n[{idx}/{len(jobs)}] {job['title']} @ {job['company']}\n{job['url']}\n{'=' * 60}")
             cv_file = _pack_cv(job) or target_resume
@@ -244,6 +250,20 @@ def run(args: argparse.Namespace):
                 res = {"status": "failed", "error": str(ex)}
             outcome = _classify(res, submit)
             _record(job, outcome)
+            if audit_path and isinstance(res, dict):
+                try:
+                    entry = {
+                        "id": str(job.get("id") or ""),
+                        "role": str(job.get("title") or ""),
+                        "company": str(job.get("company") or ""),
+                        "status": outcome.get("status") or "Previewed",
+                        "grounding": res.get("grounding") or {},
+                        "questions": res.get("questions") or [],
+                    }
+                    with open(audit_path, "a", encoding="utf-8") as af:
+                        af.write(json.dumps(entry) + "\n")
+                except OSError:
+                    pass
             if job.get("pack"):
                 shot = ap.copy_into_pack(job["pack"], res.get("review_screenshot") if isinstance(res, dict) else None,
                                          f"screenshot_{datetime.now().strftime('%Y%m%d-%H%M%S')}.png")

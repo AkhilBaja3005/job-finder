@@ -1301,6 +1301,17 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
     assert api.start_apply({"mode": "submit", "limit": 3, "headless": True}) == {"ok": True}
     assert called_cmds[-1][1] == "apply" and "--submit" in called_cmds[-1][0] and "--yes" in called_cmds[-1][0]
 
+    # Verify poll() surfaces apply_run_audit.jsonl as applied_rows when apply finishes
+    (tmp_path / "applications_tracker").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "applications_tracker" / "apply_run_audit.jsonl").write_text(
+        json.dumps({"id": "1", "role": "AI Intern", "company": "Acme", "status": "Applied",
+                    "grounding": {"answered_from_profile": 5, "verified": True}, "questions": []}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api._runner, "poll", lambda offset=0: {"lines": [], "next": 0, "running": False, "exit_code": 0, "title": "apply", "counts": {}})
+    polled = api.poll(0)
+    assert polled["applied_rows"][0]["grounding"]["answered_from_profile"] == 5
+
     # 6. Portal password stored in .env + scan_args flags + closing date cleanup
     assert api.get_state()["portal_password"]["set"] is False
     pw_res = api.save_portal_password("SuperSecret#99")
