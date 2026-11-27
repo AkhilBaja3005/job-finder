@@ -145,6 +145,14 @@ Without them the Mac builds are unsigned and users right-click, Open the first t
 
 Setting: Run, Advanced, Browser window, "Dock beside this window". The agent's Chrome opens against the right edge of the app window and follows it when it moves or resizes (`macapp/browser_dock.py`, through CDP `Browser.setWindowBounds`, same on Mac and Windows). It is not embedded: pywebview uses WKWebView on macOS, which has no DevTools protocol for browser-use, and Google blocks sign-in inside embedded web views. Off by default; with it off, or with a hidden run, Chrome opens as before.
 
+## Making a numbered release
+
+1. Bump the version in `pyproject.toml`, `backend/config/constants.py`, `job_finder/__init__.py` and `backend/job_finder_mcp/__init__.py`, add a `CHANGELOG.md` entry, and merge the PR to main. Wait for CI on main.
+2. GitHub, Actions, **Release**, Run workflow: type the version (for example `1.9.4`); tick *Also publish to PyPI* if the command line tool should ship too.
+3. The workflow checks the version matches `pyproject.toml` and the tag is new and CI on main passed, creates the release and tag, builds the Mac (arm64, Intel) and Windows apps and attaches them, and starts the PyPI publish when asked. Installed apps then show "update available".
+
+The `desktop-latest` pre-release is separate: it is rebuilt on every app change for the website's download buttons, and the in-app update check ignores it.
+
 ### Preparing the release automatically
 
 Actions, **Prepare release**, Run workflow (patch, minor, major or an exact version) does step 1 for you: it bumps the four version files, writes the `CHANGELOG.md` entry from the PR titles merged since the last tag (`feat:` under Added, `fix:` under Fixed, the rest under Changed; `ci:`, `test:`, `docs:`, `chore:` and merge commits are left out) and opens a `release/X.Y.Z` PR. Merge it, then run **Release**.

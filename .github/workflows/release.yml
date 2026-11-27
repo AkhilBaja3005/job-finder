@@ -1,0 +1,73 @@
+name: Release
+
+# One button for a numbered release. Actions -> "Release" -> Run workflow, type the version (for example 1.9.4).
+# Before running it, merge the version bump to main (pyproject.toml, backend/config/constants.py, job_finder/__init__.py,
+# backend/job_finder_mcp/__init__.py) and wait for CI to pass on main.
+#
+# It then: checks the version and CI, creates the GitHub release and tag, builds the Mac and Windows apps and attaches
+# them to it (the in-app "Check for updates" starts reporting the new version), and, if you tick the box, publishes the
+# command line tool to PyPI through the existing "Build & Publish to PyPI" workflow (which keeps its trusted-publisher setup).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, exactly as in pyproject.toml (for example 1.9.4)"
+        required: true
+        type: string
+      publish_pypi:
+        description: "Also publish the command line tool to PyPI"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write   # create the release and tag
+  actions: write    # start the build and PyPI workflows
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release v${{ inputs.version }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Check the version, the tag and CI
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "::error::Version must look like 1.9.4"; exit 1; fi
+          python3 scripts/check_release_version.py "v$VERSION"
+          if gh release view "v$VERSION" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::v$VERSION already exists. Bump the version first."; exit 1
+          fi
+          SHA=$(git rev-parse HEAD)
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+          RESULT=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" --jq '[.check_runs[] | select(.name=="Distribution & Test Suite")] | first | .conclusion // "missing"')
+          if [ "$RESULT" != "success" ]; then echo "::error::CI on main (${SHA:0:7}) is '$RESULT'. Wait for it to pass."; exit 1; fi
+
+      - name: Create the GitHub release
+        run: gh release create "v$VERSION" --target "$SHA" --title "Job Finder $VERSION" --generate-notes
+
+      - name: Build the desktop apps and attach them to the release
+        run: gh workflow run build_desktop_apps.yml --ref "v$VERSION" -f release_tag="v$VERSION"
+
+      - name: Publish to PyPI
+        if: ${{ inputs.publish_pypi }}
+        run: gh workflow run publish_pypi.yml --ref "v$VERSION" -f target=pypi
+
+      - name: Summary
+        run: |
+          {
+            echo "### Released v$VERSION"
+            echo "- Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/v$VERSION"
+            echo "- Desktop builds: https://github.com/${GITHUB_REPOSITORY}/actions/workflows/build_desktop_apps.yml"
+            if [ "${{ inputs.publish_pypi }}" = "true" ]; then echo "- PyPI: https://github.com/${GITHUB_REPOSITORY}/actions/workflows/publish_pypi.yml"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
