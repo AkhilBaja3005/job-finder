@@ -35,7 +35,13 @@
   };
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   window.pywebview = { api: {
-    get_state: async () => { await wait(120); return { ...state, running }; },
+    get_state: async () => {
+      await wait(120);
+      const waiting = window.__signin === "waiting";
+      const out = q.has("signedout") && window.__signin !== "done";   // ?signedout shows the sign-in screen; ?offline shows the offline one
+      const session = out ? { signed_in: false, reason: q.has("offline") ? "offline" : q.has("expired") ? "expired" : "none", signing_in: waiting, error: "" } : { signed_in: true, reason: "", email: "me@example.com" };
+      return { ...state, running, session };
+    },
     save_prefs: async () => ({ ok: true }), save_app_prefs: async () => ({ ok: true }), set_theme: async () => ({ ok: true }),
     check_update: async () => ({ ok: true, current: "1.9.1", latest: q.has("update") ? "1.10.0" : "1.9.1", newer: q.has("update"), url: "https://github.com" }),
     start_scan: async () => { running = true; started = Date.now(); lineIndex = 0; return { ok: true }; },
@@ -58,6 +64,10 @@
     drag_start: async () => { (window.__dragLog = window.__dragLog || []).push(["start"]); return { ok: true }; },
     drag_to: async (dx, dy) => { (window.__dragLog = window.__dragLog || []).push(["to", dx, dy]); return { ok: true }; },
     zoom_window: async () => { (window.__dragLog = window.__dragLog || []).push(["zoom"]); return { ok: true }; },
+    google_sign_in: async () => { window.__signin = "waiting"; setTimeout(() => { window.__signin = "done"; }, 2500); return { ok: true }; },
+    google_sign_in_status: async () => ({ ok: true, state: window.__signin || "idle", error: "", email: "me@example.com" }),
+    cancel_google_sign_in: async () => { window.__signin = "idle"; return { ok: true }; },
+    session_check: async () => ({ ok: true, signed_in: true }),
     ensure_browser: async () => ({ ok: true }),
   } };
   window.dispatchEvent(new Event("pywebviewready"));

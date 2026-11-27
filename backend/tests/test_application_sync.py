@@ -14,6 +14,7 @@ def _patch(monkeypatch, user, existing=()):
 
     recorded = []
     monkeypatch.setattr(job_routes, "async_get_user_by_token", fake_user)
+    monkeypatch.setattr("services.app_auth.async_get_user_by_token", fake_user)
     monkeypatch.setattr(job_routes, "list_applications", lambda token=None: [{"job_url": u} for u in existing])
     monkeypatch.setattr(job_routes, "record_application", lambda token, entry: recorded.append(entry))
     return recorded
@@ -31,16 +32,16 @@ def test_rejects_guests(monkeypatch):
 
 
 def test_adds_only_new_urls(monkeypatch):
-    recorded = _patch(monkeypatch, {"id": 7}, existing=["https://boards.greenhouse.io/acme/jobs/1"])
+    recorded = _patch(monkeypatch, {"id": 7, "email": "me@example.com"}, existing=["https://boards.greenhouse.io/acme/jobs/1"])
     new = {**ROW, "job_url": "https://jobs.lever.co/acme/2"}
-    r = client.post("/applications/sync", json={"applications": [ROW, new, new]}, headers={"Authorization": "Bearer CODE12"})
+    r = client.post("/applications/sync", json={"applications": [ROW, new, new]}, headers={"Authorization": "Bearer CODE12", "X-Account-Email": "me@example.com"})
     assert r.status_code == 200
     assert r.json() == {"added": 1, "already": 2}
     assert [e["job_url"] for e in recorded] == ["https://jobs.lever.co/acme/2"]
 
 
 def test_rejects_oversized_batches_and_bad_rows(monkeypatch):
-    _patch(monkeypatch, {"id": 7})
+    _patch(monkeypatch, {"id": 7, "email": "me@example.com"})
     headers = {"Authorization": "Bearer CODE12"}
     too_many = [{**ROW, "job_url": f"https://example.com/jobs/{i}"} for i in range(501)]
     assert client.post("/applications/sync", json={"applications": too_many}, headers=headers).status_code == 422
@@ -49,9 +50,9 @@ def test_rejects_oversized_batches_and_bad_rows(monkeypatch):
 
 def test_status_update_needs_account_and_known_status(monkeypatch):
     changed = []
-    _patch(monkeypatch, {"id": 7})
+    _patch(monkeypatch, {"id": 7, "email": "me@example.com"})
     monkeypatch.setattr(job_routes, "update_application_status", lambda token, url, status: changed.append((url, status)) or True)
-    H = {"Authorization": "Bearer CODE12"}
+    H = {"Authorization": "Bearer CODE12", "X-Account-Email": "me@example.com"}
     body = {"job_url": "https://jobs.lever.co/acme/2", "status": "Interview"}
     assert client.post("/applications/status", json=body, headers=H).json() == {"updated": True}
     assert client.post("/applications/status", json={**body, "status": "Hired!!"}, headers=H).status_code == 422

@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Added
+- **Desktop app: Google sign-in is required.** The app shows a sign-in screen and does nothing until a valid Google sign-in exists.
+  The browser opens the website's Google login and returns to the app on its own computer with a one-time code that only this
+  app can trade for a session token (OAuth with PKCE and a loopback address; the token never appears in a URL). The token is kept
+  with the app, readable only by you, and Sign out ends the session on the server. The app opens offline for up to a week after
+  the last good check. The sync-code option is gone from the app.
+- **Server:** `POST /auth/app/begin`, `/auth/app/exchange` and `/auth/app/revoke`. A sync code now needs the account's email
+  (`X-Account-Email`) on the desktop endpoints, and a wrong or missing email is refused. `REQUIRE_SYNC_EMAIL=1` asks for the
+  email on every endpoint that accepts a sync code (turn it on after the extension sends the email).
 - Mac app: one-click "Review" opens a job in the signed-in Chrome; status changes follow to job-finder.space
   (`POST /applications/status`); a rough token count for the day; "Report a problem" (copies a report with keys removed);
   a daily run through launchd (practice run by default); "Saved answers" for questions the profile cannot answer;
