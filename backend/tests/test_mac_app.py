@@ -1286,6 +1286,8 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
 
     ready = api.list_ready()
     assert ready["ok"] and len(ready["jobs"]) == 1 and ready["cap"]["limit"] == 20
+    api.save_app_prefs({"daily_cap": 35})
+    assert api.list_ready()["cap"]["limit"] == 35
 
     # start_apply requires profile
     assert api.start_apply({"mode": "preview"})["ok"] is False

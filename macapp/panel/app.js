@@ -745,7 +745,9 @@
       nextBannerHtml() +
       '<div class="scroll"><div class="stack">' +
       '<section class="card card-pad form">' +
-        '<div class="cap-bar"><span class="label">Daily cap</span><div class="progress"><i style="width:' + pct + '%"></i></div><span class="num" style="font-size:12px;color:var(--text-2)">' + cap.used + " / " + cap.limit + " used today</span></div>" +
+        '<div class="cap-bar"><span class="label">Daily cap</span><div class="progress"><i style="width:' + pct + '%"></i></div>' +
+          '<span class="num" style="font-size:12px;color:var(--text-2);display:inline-flex;align-items:center;gap:6px">' + cap.used + " / " +
+          '<input class="input num inline-num" id="ap-cap" type="number" min="1" max="200" value="' + esc(cap.limit) + '" aria-label="Daily cap limit" style="height:24px"> used today</span></div>' +
         '<div class="cols" style="align-items:center">' +
           '<div class="field"><span class="label">Mode</span><div class="seg real" role="group" aria-label="Apply mode">' +
             '<button type="button" data-apply-mode="preview" aria-pressed="' + (ap.mode === "preview") + '">Preview (stop before Submit)</button>' +
@@ -1022,6 +1024,11 @@
     else if (t.id === "f-headless") { S.form.headless = t.checked; call("save_app_prefs", { headless: t.checked }); }
     else if (t.id === "f-score-all") { S.form.score_all = t.checked; }
     else if (t.id === "ap-headless") { S.apply.headless = t.checked; }
+    else if (t.id === "ap-cap") {
+      const val = Math.max(1, Math.min(200, Number(t.value) || 20));
+      S.apply.cap.limit = val;
+      call("save_app_prefs", { daily_cap: val }).then(() => loadApply());
+    }
   });
 
   document.addEventListener("toggle", (e) => { if (e.target.classList && e.target.classList.contains("disclosure")) S.advOpen = e.target.open; }, true);
@@ -1327,7 +1334,7 @@
     { view: "settings", sel: '[data-act="edit-about"]', title: "Tell us what your resume cannot", text: "Forms ask where you can work, whether you need a visa, when you can start and what you want to earn. Answer once and the agent uses it.", cta: "Answer now" },
     { view: "settings", sel: '[data-act="open-signin"]', title: "Sign in to job sites", text: "LinkedIn, Indeed and Reed work best when you are signed in. Open Chrome once, sign in, and future runs reuse it." },
     { view: "settings", sel: "#c-portal-pw", title: "Portal sign-up password", text: "Optional. Stored privately in .env for portals like Workday or Reed that require creating an account with email and password." },
-    { view: "settings", sel: "#c-sync", title: "Save applications to your account", text: "Optional. Your Google sign-in keeps every application saved to your job-finder.space account, so it shows on the website and in the extension too." },
+    { view: "settings", sel: "#c-sync", title: "Saved to your account", text: "Your applications sync to your job-finder.space account automatically. Use Sync now anytime to push or refresh." },
     { view: "settings", sel: "#c-mailbox", title: "See replies automatically", text: "Optional. Connect your mailbox with an app password and employer replies, interviews and rejections are marked for you." },
     { view: "settings", sel: '[data-act="edit-answers"]', title: "Write answers once", text: "For questions your profile cannot answer, such as why you want the job. The agent types your answer word for word instead of guessing." },
     { view: "settings", sel: "#sched-time", title: "Run every morning", text: "Optional. Pick a time and a daily run starts by itself, even when the app is closed." },
@@ -1351,7 +1358,7 @@
       if (!current) return; const r = current.el.getBoundingClientRect(), pad = 6;
       const hole = $(".tour-hole", layer), card = $(".tour-card", layer);
       Object.assign(hole.style, { left: r.left - pad + "px", top: r.top - pad + "px", width: r.width + pad * 2 + "px", height: r.height + pad * 2 + "px" });
-      const cw = 320, ch = card.offsetHeight || 170;
+      const cw = 370, ch = card.offsetHeight || 170;
       let left = Math.min(Math.max(12, r.left), window.innerWidth - cw - 12), top = r.bottom + 16;
       if (top + ch > window.innerHeight - 12) top = Math.max(12, r.top - ch - 16);
       Object.assign(card.style, { left: left + "px", top: top + "px", width: cw + "px" });

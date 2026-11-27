@@ -74,7 +74,7 @@ def logs_dir() -> Path:
     return Path(override) / "logs" if override else platform_support.logs_base(APP_NAME)
 
 
-APP_PREF_KEYS = ("primary_ai", "headless", "tour_done", "dock_browser")
+APP_PREF_KEYS = ("primary_ai", "headless", "tour_done", "dock_browser", "daily_cap")
 
 
 def load_app_prefs() -> Dict[str, Any]:
@@ -1487,8 +1487,9 @@ class Api:
                 if str(r.get("Applied") or "No") == "Yes" and str(r.get("Date Applied") or "").startswith(today_str)
             )
             try:
-                cap_limit = int(os.environ.get("JOB_FINDER_DAILY_CAP") or 20)
-            except ValueError:
+                pref_cap = load_app_config().get("daily_cap")
+                cap_limit = int(pref_cap or os.environ.get("JOB_FINDER_DAILY_CAP") or 20)
+            except (TypeError, ValueError):
                 cap_limit = 20
             return {"ok": True, "jobs": ready, "cap": {"used": used, "limit": cap_limit}}
 

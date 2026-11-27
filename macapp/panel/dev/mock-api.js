@@ -81,7 +81,7 @@
   };
 
   let capUsed = empty ? 0 : 3;
-  const capLimit = 20;
+  let capLimit = 20;
 
   const scanScript = [
     "[Scanner] Starting search: applied AI (intern) in London...",
@@ -267,7 +267,8 @@
       }
       return { ok: true };
     },
-    save_prefs: async () => ({ ok: true }), save_app_prefs: async () => ({ ok: true }), set_theme: async () => ({ ok: true }),
+    save_prefs: async () => ({ ok: true }),
+    save_app_prefs: async (vals) => { if (vals && vals.daily_cap) capLimit = Number(vals.daily_cap) || 20; return { ok: true }; }, set_theme: async () => ({ ok: true }),
     check_update: async () => ({ ok: true, current: "1.9.1", latest: q.has("update") ? "1.10.0" : "1.9.1", newer: q.has("update"), url: "https://github.com" }),
     start_scan: async (options) => {
       activeTask = options && options.mode === "practice" ? "practice" : "scan";
