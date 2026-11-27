@@ -63,8 +63,19 @@ def _hide_dock_icon() -> None:
     hide_dock_icon()
 
 
+def _line_buffer_output():
+    """Send each log line out as soon as it is printed. When output goes to a pipe or a file (the desktop app, a log file, `| tee`) Python
+    otherwise holds it back in blocks and the whole log appears at the end."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(line_buffering=True)
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main():
     """Console entry point: friendly errors, clean Ctrl-C, full traceback with --debug."""
+    _line_buffer_output()
     _hide_dock_icon()
     try:
         _main()
