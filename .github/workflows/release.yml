@@ -45,7 +45,9 @@ jobs:
        github.event.workflow_run.event == 'push' &&
        startsWith(github.event.workflow_run.head_commit.message, 'release: '))
     env:
-      GH_TOKEN: ${{ github.token }}
+      # Your RELEASE_TOKEN creates the release: the workflow's own token was refused (403) when creating it. Falls back to the
+      # built-in token if the secret is missing.
+      GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
       COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
     steps:
       - uses: actions/checkout@v4
