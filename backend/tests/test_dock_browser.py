@@ -56,7 +56,9 @@ def test_tick_retries_when_chrome_not_up(monkeypatch):
 
 
 def test_api_docks_only_when_enabled(monkeypatch, tmp_path):
-    monkeypatch.setenv("JOB_FINDER_APP_HOME", str(tmp_path))
+    monkeypatch.setenv("JOB_FINDER_APP_HOME", str(tmp_path / "support"))
+    (tmp_path / "support").mkdir()
+    monkeypatch.setattr(panel, "GATE_ENABLED", False)  # the sign-in gate has its own tests
     api = panel.Api(["x"])
     assert api._dock_env() == {}  # no window
     api._bind(MagicMock(x=0, y=0, width=1000, height=700))

@@ -31,7 +31,7 @@ datas += [(str(p), str(Path("macapp/panel") / p.relative_to(ROOT / "macapp" / "p
           for p in (ROOT / "macapp" / "panel").rglob("*") if p.is_file() and "dev" not in p.relative_to(ROOT / "macapp" / "panel").parts]
 
 binaries = []
-hiddenimports = ["scan_panel", "scheduler", "platform_support"]
+hiddenimports = ["scan_panel", "scheduler", "platform_support", "browser_dock", "websockets.sync.client"]
 if sys.platform == "darwin":
     hiddenimports += ["native", "objc", "AppKit", "Foundation", "PyObjCTools.AppHelper"]
 
