@@ -53,6 +53,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Release tag must match the app version
+        if: github.event_name == 'release'
+        shell: bash
+        run: python scripts/check_release_version.py "${{ github.event.release.tag_name }}"
+
       - name: Import the signing certificate (only when the secrets exist)
         id: signing
         env:
@@ -120,6 +125,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Release tag must match the app version
+        if: github.event_name == 'release'
+        shell: bash
+        run: python scripts/check_release_version.py "${{ github.event.release.tag_name }}"
 
       - name: Build
         shell: pwsh
