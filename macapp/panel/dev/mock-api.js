@@ -35,7 +35,13 @@
   };
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   window.pywebview = { api: {
-    get_state: async () => { await wait(120); return { ...state, running }; },
+    get_state: async () => {
+      await wait(120);
+      const waiting = window.__signin === "waiting";
+      const out = q.has("signedout") && window.__signin !== "done";   // ?signedout shows the sign-in screen; ?offline shows the offline one
+      const session = out ? { signed_in: false, reason: q.has("offline") ? "offline" : q.has("expired") ? "expired" : "none", signing_in: waiting, error: "" } : { signed_in: true, reason: "", email: "me@example.com" };
+      return { ...state, running, session };
+    },
     save_prefs: async () => ({ ok: true }), save_app_prefs: async () => ({ ok: true }), set_theme: async () => ({ ok: true }),
     check_update: async () => ({ ok: true, current: "1.9.1", latest: q.has("update") ? "1.10.0" : "1.9.1", newer: q.has("update"), url: "https://github.com" }),
     start_scan: async () => { running = true; started = Date.now(); lineIndex = 0; return { ok: true }; },

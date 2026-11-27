@@ -309,14 +309,15 @@
   // The sign-in screen covers the whole window until a valid Google sign-in exists.
   function renderGate() {
     const el = $("#gate"), ses = S.info && S.info.session; if (!el) return;
-    const show = !!S.info && !(ses && ses.signed_in); el.hidden = !show; if (!show) { el.innerHTML = ""; return; }
+    if (!S.info) { el.hidden = false; el.innerHTML = '<div class="gate-card"><div class="gate-logo">' + icon("logo") + '</div><div class="gate-wait"><span class="spin"></span>Starting…</div></div>'; return; }   // nothing of the app shows before we know
+    const show = !(ses && ses.signed_in); el.hidden = !show; if (!show) { el.innerHTML = ""; return; }
     const waiting = ses && ses.signing_in, offline = ses && ses.reason === "offline", expired = ses && ses.reason === "expired";
     const err = S.gateError || (ses && ses.error) || "";
     el.innerHTML = '<div class="gate-card" role="dialog" aria-modal="true" aria-labelledby="gate-t"><div class="gate-logo">' + icon("logo") + '</div><h1 id="gate-t">' + (offline ? "Cannot reach job-finder.space" : expired ? "Please sign in again" : "Sign in to Job Finder") + "</h1>" +
       "<p>" + (offline ? "Check your internet connection and try again. You can use the app offline for up to a week after you last signed in." : waiting ? "Finish signing in with Google in your browser. This window continues by itself." : "Job Finder is free. Sign in with your Google account to keep your applications saved to your account and in sync with the website and extension.") + "</p>" +
       (err ? '<div class="gate-error" role="alert">' + esc(err) + "</div>" : "") +
       (waiting ? '<div class="gate-wait"><span class="spin"></span>Waiting for your browser…</div><button class="btn" data-act="cancel-signin">Cancel</button>' :
-        offline ? '<button class="btn primary lg" data-act="retry-session">Try again</button>' : '<button class="btn primary lg" data-act="google-signin">' + icon("logo") + "Sign in with Google</button>") +
+        offline ? '<button class="btn primary lg" data-act="retry-session">Try again</button>' : '<button class="btn primary lg" data-act="google-signin">Sign in with Google</button>') +
       '<div class="gate-fine">We only receive your name and email from Google. Your API keys and resume file stay on this computer.</div></div>';
   }
   async function loadSchedule() { const r = await call("schedule_status"); if (r && r.ok) { S.sched = r; if (S.view === "settings") renderSettings(); } }
