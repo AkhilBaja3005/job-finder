@@ -54,6 +54,11 @@
       return { lines, next: lineIndex, running, exit_code: running ? null : 0, title: "scan",
         counts: { found: 26, position: Math.min(26, count(/^\[\d+\//gm) + 0), submitted: count(/submitted successfully/g), needs_review: count(/verification failed/g), skipped: count(/Skipping/g) } };
     },
+    live_view: async () => {
+      if (!running) return { ok: false };
+      const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='960' height='540'><rect width='960' height='540' fill='#f6f6f4'/><rect x='60' y='50' width='840' height='60' fill='#fff' stroke='#ddd'/><text x='80' y='90' font-family='sans-serif' font-size='22' fill='#333'>Apply for Software Engineering Intern</text><rect x='60' y='140' width='400' height='44' fill='#fff' stroke='#bbb'/><text x='72' y='168' font-family='sans-serif' font-size='16' fill='#555'>Akhil Baja</text><rect x='60' y='204' width='400' height='44' fill='#fff' stroke='#bbb'/><text x='72' y='232' font-family='sans-serif' font-size='16' fill='#555'>me@example.com</text></svg>";
+      return { ok: true, url: "https://jobs.example.com/apply/4821", title: "Apply | Example Ltd", image: "data:image/svg+xml;utf8," + encodeURIComponent(svg) };
+    },
     get_results: async () => { await wait(350); return rows; },
     sync_now: async () => { await wait(900); return { ok: true, pushed: 3, already: rows.length }; },
     save_key: async () => ({ ok: true, keys: state.keys }), open_url: async () => ({ ok: true }), open_path: async () => ({ ok: true }),

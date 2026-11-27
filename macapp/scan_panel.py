@@ -953,6 +953,14 @@ class Api:
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
 
+    def live_view(self) -> Dict[str, Any]:
+        """What the agent's browser shows right now, for the Run page. Only while a run is going."""
+        if not self._runner.running:
+            return {"ok": False}
+        import browser_dock
+        base = f"http://127.0.0.1:{os.environ.get('JOB_FINDER_CDP_PORT', '9223')}"
+        return browser_dock.live_view(browser_dock.port_urls(base))
+
     def _dock_env(self) -> Dict[str, str]:
         """With "dock browser" on, tells Chrome where to open (beside this window) and starts keeping it there.
         Empty when the setting is off, the run is hidden, or there is no window (tests, command line)."""
