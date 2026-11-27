@@ -199,6 +199,18 @@ def portal_password_status(ws: Path) -> Dict[str, Any]:
     return {"set": bool(value), "hint": value[-4:] if len(value) > 8 else ""}
 
 
+def boards_status(ws: Path) -> Dict[str, Any]:
+    db = ws / "data" / "board_index.db"
+    if not db.is_file():
+        return {"ready": False, "updated": ""}
+    try:
+        import datetime as _dt
+        ts = _dt.datetime.fromtimestamp(db.stat().st_mtime).strftime("%Y-%m-%d")
+        return {"ready": True, "updated": ts}
+    except OSError:
+        return {"ready": False, "updated": ""}
+
+
 # ── the scan command ─────────────────────────────────────────────────────────────
 def build_scan_args(options: Dict[str, Any]) -> List[str]:
     """The arguments after `job-finder` for one run. A scan only searches and saves to the Excel: it never applies.
@@ -1121,7 +1133,7 @@ class Api:
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws), "portal_password": portal_password_status(ws),
             "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "mailbox": mailbox_status(ws), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "cloud": cloud_status(ws), "session": {**session_status(ws), "signing_in": _signin_state.get("state") == "waiting", "error": _signin_state.get("error", "") if _signin_state.get("state") == "error" else ""}, "profile_check": profile_check(ws), "about_you": _about_state(ws),
-            "browser": {"ready": browser_ready(), **self._browser},
+            "browser": {"ready": browser_ready(), **self._browser}, "boards": boards_status(ws),
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
 
@@ -1439,6 +1451,8 @@ class Api:
         ws = workspace_dir()
         data = payload or {}
         args = ["prepare", "--cover-letter", "always"]
+        if data.get("redo"):
+            args.append("--redo")
         ids = data.get("ids") or []
         if ids:
             args += ["--ids", ",".join(str(i) for i in ids)]
@@ -1474,6 +1488,7 @@ class Api:
             return {
                 "ok": True,
                 "cv_pdf": str(cv_pdf) if cv_pdf.is_file() else "",
+                "cv_html": _read("cv.html"),
                 "cover_letter": _read("cover_letter.txt"),
                 "review_md": _read("REVIEW.md"),
                 "fit": _read("fit_analysis.md"),
@@ -1547,6 +1562,10 @@ class Api:
             if not s.is_main and not opts.get("search"):
                 opts["search"] = s.name
         return self._runner.start(build_apply_args(opts), {**build_run_env(opts, ws), **self._dock_env()}, ws, "apply")
+
+    def refresh_boards(self) -> Dict[str, Any]:
+        ws = workspace_dir()
+        return self._runner.start(["boards", "refresh"], {**build_run_env({}, ws), **self._dock_env()}, ws, "boards")
 
     def session_check(self) -> Dict[str, Any]:
         """Asks the server again whether the sign-in is good (the sign-in screen's Try again button)."""

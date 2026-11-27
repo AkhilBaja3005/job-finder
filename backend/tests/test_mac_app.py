@@ -1320,6 +1320,18 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
     assert api.delete_account("ada@example.com") == {"ok": True}
     assert called_del == [("/user/account", "DELETE", {"confirm_email": "ada@example.com"})]
 
+    # Verify boards_status, refresh_boards, prepare_packs redo, and cv_html
+    assert api.get_state()["boards"]["ready"] is False
+    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "data" / "board_index.db").write_bytes(b"sqlite")
+    assert api.get_state()["boards"]["ready"] is True
+    assert api.refresh_boards() == {"ok": True}
+    assert called_cmds[-1][1] == "boards" and called_cmds[-1][0] == ["boards", "refresh"]
+    assert api.prepare_packs({"ids": ["1"], "redo": True}) == {"ok": True}
+    assert "--redo" in called_cmds[-1][0]
+    (folder / "cv.html").write_text("<html><body>CV</body></html>", encoding="utf-8")
+    assert "<body>CV</body>" in api.pack_documents("1")["cv_html"]
+
     # 6. Portal password stored in .env + scan_args flags + closing date cleanup
     assert api.get_state()["portal_password"]["set"] is False
     pw_res = api.save_portal_password("SuperSecret#99")

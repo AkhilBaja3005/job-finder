@@ -133,6 +133,7 @@
     app_prefs: { primary_ai: "auto", headless: false, dock_browser: false, tour_done: true },
     cloud: { configured: true, connected: true, email: "me@example.com", kind: "google" },
     browser: { ready: !q.has("browser"), installing: false, error: "" },
+    boards: { ready: !q.has("fresh"), updated: q.has("fresh") ? "" : "2026-11-27" },
     keys: q.has("fresh") ? { gemini: { set: false, hint: "" }, anthropic: { set: false, hint: "" }, openai: { set: false, hint: "" } }
                           : { gemini: { set: true, hint: "a3Kd" }, anthropic: { set: true, hint: "Qw9z" }, openai: { set: false, hint: "" } },
     portal_password: { set: !q.has("fresh"), hint: q.has("fresh") ? "" : "x9Kp" },
@@ -355,6 +356,7 @@
       { key: "disability_status", section: "Optional: equal-opportunity forms", label: "Disability", kind: "choice", required: false, options: ["Prefer not to say", "Yes", "No"], default: "Prefer not to say", value: null } ] }),
     save_about_you: async (answers) => { window.__aboutSaved = answers; return { ok: true, unanswered: [] }; },
     ensure_browser: async () => ({ ok: true }),
+    refresh_boards: async () => { activeTask = "scan"; activeScript = ["[Boards] Refreshing Greenhouse/Lever/Ashby index...", "[Boards] Indexed 8,412 company boards."]; running = true; started = Date.now(); lineIndex = 0; return { ok: true }; },
   } };
   window.dispatchEvent(new Event("pywebviewready"));
 })();

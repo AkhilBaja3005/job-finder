@@ -329,7 +329,7 @@
             '<label class="row-between" style="font-weight:400;color:var(--text)"><span>AI-score all levels</span><span class="switch"><input type="checkbox" id="f-score-all"' + (f.score_all ? " checked" : "") + '><i></i></span></label></div></div>' +
         "</div></details>" +
       "</section>" +
-      '<section class="card act-card" aria-label="Activity"><div class="card-head"><h2>Activity</h2><div class="right"><button class="btn quiet" data-act="copy-log">Copy</button><button class="btn quiet" data-act="open-logs">Open log files</button></div></div>' +
+      '<section class="card act-card" aria-label="Activity"><div class="card-head"><h2>Activity</h2><span id="rate-badge"></span><div class="right"><button class="btn quiet" data-act="copy-log">Copy</button><button class="btn quiet" data-act="open-logs">Open log files</button></div></div>' +
         '<div class="card-pad"><div class="status-line" aria-live="polite"><span class="dot" id="run-dot"></span><span class="state" id="run-state"></span><span class="detail" id="run-detail"></span></div>' +
         '<div class="progress" id="run-bar"><i></i></div>' +
         '<div class="tiles"><div class="tile"><b class="num" id="t-found">0</b><span>Found</span></div><div class="tile"><b class="num" id="t-checked">0</b><span>Checked</span></div>' +
@@ -369,6 +369,11 @@
     if ($("#t-skip")) $("#t-skip").textContent = active ? c.skipped : 0;
     if ($("#t-rev")) $("#t-rev").textContent = active ? c.needs_review : 0;
     if ($("#t-sub")) $("#t-sub").textContent = active ? c.submitted : 0;
+    const rb = $("#rate-badge");
+    if (rb) {
+      const limited = active && r.lines.some((ln) => /quota limit reached|429/i.test(ln));
+      rb.innerHTML = limited ? badge("Rate-limited — rotating keys", "warn") : "";
+    }
     const btn = $("#run-btn");
     if (btn) btn.innerHTML = S.view === "apply" ? applyButton() : scanButton();
   }
@@ -672,8 +677,9 @@
       } else if (d.tab === "fit") {
         content = '<div class="doc-md">' + renderMarkdown(doc.fit || "No fit analysis recorded.") + "</div>";
       } else if (d.tab === "cv") {
-        content = '<div class="doc-path">' + esc(doc.cv_pdf || "No cv.pdf path") + "</div>" +
-          '<button class="btn primary" data-open-pack="' + esc(sel.id) + ':cv">' + icon("external") + "Open CV PDF</button>";
+        content = '<div class="doc-path" style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span>' + esc(doc.cv_pdf || "No cv.pdf path") + '</span>' +
+          '<button class="btn primary" data-open-pack="' + esc(sel.id) + ':cv" style="flex:none">' + icon("external") + "Open CV PDF</button></div>" +
+          (doc.cv_html ? '<iframe title="Tailored CV preview" sandbox="" srcdoc="' + esc(doc.cv_html) + '" style="width:100%;height:520px;border:.5px solid var(--line);border-radius:8px;background:#fff"></iframe>' : "");
       }
 
       bodyHtml = '<div class="docs-layout">' +
@@ -688,6 +694,8 @@
             (doc && doc.cover_letter ? '<button class="btn" data-open-pack="' + esc(sel.id) + ':cover">' + icon("external") + "Cover</button>" : "") +
             '<button class="btn" data-open-pack="' + esc(sel.id) + ':jd">' + icon("external") + "JD</button>" +
             '<button class="btn" data-open-pack="' + esc(sel.id) + ':review">' + icon("external") + "REVIEW</button>" +
+            '<button class="btn" data-act="redo-pack" data-id="' + esc(sel.id) + '">Regenerate</button>' +
+            '<button class="btn" data-act="revoke-pack" data-id="' + esc(sel.id) + '">Revoke</button>' +
             '<button class="btn ' + (isSigned ? "" : "primary") + '" data-act="signoff-pack" data-id="' + esc(sel.id) + '"' + (isSigned ? " disabled" : "") + ">" + icon("check") + (isSigned ? "Signed off" : "Docs OK") + "</button>" +
           "</div></div>" +
           '<div class="doc-tabs" role="tablist">' +
@@ -947,6 +955,7 @@
         row("Portal sign-up password", "Optional. Used when a job portal (like Workday or Reed) requires creating an account or signing in with email + password. Stored in .env only.",
           (pp.set ? badge("Saved" + (pp.hint ? " ···" + pp.hint : ""), "good") : badge("Not set")) + '<button class="btn" data-act="edit-portal-pw">' + (pp.set ? "Replace…" : "Add password…") + "</button>", "c-portal-pw") +
         row("Page scraper browser", br.ready ? "Installed" : br.installing ? "Downloading, about 150 MB…" : (br.error ? esc(br.error) : "Needed for some job sources. Downloaded once."), br.ready ? badge("Ready", "good") : br.installing ? badge("Installing", "accent") : '<button class="btn" data-act="install-browser">' + icon("download") + "Install</button>") +
+        row("Company boards index", (i.boards && i.boards.ready) ? "Indexed local Greenhouse/Lever/Ashby boards (updated " + esc(i.boards.updated) + ")." : "Not built yet. Indexes ~8,500 company boards for fast direct-link searches.", ((i.boards && i.boards.ready) ? badge("Ready", "good") : badge("Not built")) + '<button class="btn" data-act="refresh-boards">' + icon("refresh") + "Refresh</button>") +
       "</section>" +
       '<div class="sect-title">About</div><section class="card">' +
         row("Job Finder " + esc(i.version), S.update && S.update.newer ? "Version " + esc(S.update.latest) + " is available." : S.update ? "You are up to date." : "Check for a newer version.", '<button class="btn" data-act="check-update">Check for updates</button>' + (S.update && S.update.newer ? '<button class="btn primary" data-url="' + esc(S.update.url) + '">Download</button>' : "")) +
@@ -1181,6 +1190,27 @@
           const nextNeed = (S.docs.packs || []).find((p) => p.id !== id && (p.state === "needs_signoff" || p.state === "ready"));
           await loadDocuments(nextNeed ? nextNeed.id : id);
           await refreshNextStep();
+        }
+        return;
+      }
+      case "redo-pack": {
+        const r = await call("prepare_packs", { ids: [d.id], redo: true });
+        if (r && r.ok) {
+          Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
+          S.stick = true; go("packs"); watchRun();
+        }
+        return;
+      }
+      case "revoke-pack": {
+        const r = await call("revoke_jobs", { ids: [d.id] });
+        if (r && r.ok) { toast("Revoked from queue."); S.docs.selectedId = null; await loadDocuments(); await refreshNextStep(); }
+        return;
+      }
+      case "refresh-boards": {
+        const r = await call("refresh_boards");
+        if (r && r.ok) {
+          Object.assign(S.run, { kind: "scan", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 0, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
+          S.stick = true; go("search"); watchRun();
         }
         return;
       }
