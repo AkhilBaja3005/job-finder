@@ -4,12 +4,18 @@ name: Build desktop apps
 #   - Pull request that changes the app or the code it bundles: builds all three and smoke-tests them.
 #   - Push to main that changes them: builds, then refreshes the "desktop-latest" release, which the website's download
 #     buttons point to. File names there never change, so the links never break.
-#   - A published GitHub release: the versioned files are attached to that release too.
+#   - A published GitHub release (or a manual run with release_tag, which the Release workflow starts): the versioned files are
+#     attached to that release too.
 #   - Manual run: Actions -> "Build desktop apps" -> Run workflow.
 # Mac signing and notarizing switch on by themselves when these repository secrets exist (see macapp/README.md):
 #   APPLE_CERT_P12_BASE64, APPLE_CERT_PASSWORD, APPLE_SIGN_IDENTITY, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD.
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Attach the built files to this existing release (for example v1.9.4). Leave blank for a test build."
+        required: false
+        default: ""
   release:
     types: [published]
   push:
@@ -54,9 +60,9 @@ jobs:
           python-version: "3.12"
 
       - name: Release tag must match the app version
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || github.event.inputs.release_tag != ''
         shell: bash
-        run: python scripts/check_release_version.py "${{ github.event.release.tag_name }}"
+        run: python scripts/check_release_version.py "${{ github.event.release.tag_name || github.event.inputs.release_tag }}"
 
       - name: Import the signing certificate (only when the secrets exist)
         id: signing
@@ -111,10 +117,10 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to the release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || github.event.inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist-mac/Job-Finder-[0-9]*.dmg --clobber
+        run: gh release upload "${{ github.event.release.tag_name || github.event.inputs.release_tag }}" dist-mac/Job-Finder-[0-9]*.dmg --clobber
 
   windows:
     name: Windows
@@ -127,9 +133,9 @@ jobs:
           python-version: "3.12"
 
       - name: Release tag must match the app version
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || github.event.inputs.release_tag != ''
         shell: bash
-        run: python scripts/check_release_version.py "${{ github.event.release.tag_name }}"
+        run: python scripts/check_release_version.py "${{ github.event.release.tag_name || github.event.inputs.release_tag }}"
 
       - name: Build
         shell: pwsh
@@ -167,11 +173,11 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to the release
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || github.event.inputs.release_tag != ''
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.event.release.tag_name }}" (Get-ChildItem dist-win\Job-Finder-[0-9]*-windows.zip).FullName --clobber
+        run: gh release upload "${{ github.event.release.tag_name || github.event.inputs.release_tag }}" (Get-ChildItem dist-win\Job-Finder-[0-9]*-windows.zip).FullName --clobber
 
   publish-latest:
     name: Refresh the desktop-latest release

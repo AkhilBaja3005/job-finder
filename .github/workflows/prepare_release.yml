@@ -1,0 +1,69 @@
+name: Prepare release
+
+# Step 1 of a release. Actions -> "Prepare release" -> Run workflow, choose patch, minor, major or type an exact version.
+# It bumps the version in all four files, writes the CHANGELOG.md entry from the PR titles merged since the last tag,
+# and opens a pull request. Merge it, then run "Release" (step 2).
+#
+# Needs the repository secret RELEASE_TOKEN: a personal access token (fine-grained, this repository only, permissions
+# Contents: read and write, Pull requests: read and write). A pull request opened with the built-in token does not start
+# the required checks, so it could never be merged; one opened with this token does.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "patch, minor, major, or an exact version like 2.0.0"
+        required: true
+        default: "patch"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Open the release pull request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the token exists
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo "::error::Add the repository secret RELEASE_TOKEN (see the comment at the top of this workflow)."; exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bump the version and write the changelog
+        id: bump
+        run: |
+          python scripts/bump_version.py "${{ inputs.bump }}" | tee bump.txt
+          VERSION=$(grep -m1 '^version' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Open the pull request
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::v$VERSION already exists."; exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "release/$VERSION"
+          git add pyproject.toml backend/config/constants.py job_finder/__init__.py backend/job_finder_mcp/__init__.py CHANGELOG.md
+          git commit -m "release: $VERSION"
+          git push origin "release/$VERSION"
+          gh pr create --base main --head "release/$VERSION" --title "release: $VERSION" \
+            --body "Version bump and changelog for $VERSION, made by the Prepare release workflow. Check the CHANGELOG.md entry, edit it if a line reads badly, merge, then run the **Release** workflow with version $VERSION."
