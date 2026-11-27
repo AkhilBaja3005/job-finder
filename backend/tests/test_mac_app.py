@@ -1286,6 +1286,12 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
 
     ready = api.list_ready()
     assert ready["ok"] and len(ready["jobs"]) == 1 and ready["cap"]["limit"] == 20
+    # Verify list_ready sorts signed-off jobs by descending fit score
+    ExcelTracker(s.approved).add_jobs([
+        {"Company": "TopCo", "Job Role": "Staff AI", "ATS %": 96, "Status": "Approved", "Approve": "Yes", "Docs OK": "Yes", "Job URL": "https://example.com/top"},
+    ])
+    top_ready = api.list_ready()
+    assert [j["company"] for j in top_ready["jobs"]] == ["TopCo", "Acme"]
     api.save_app_prefs({"daily_cap": 35})
     assert api.list_ready()["cap"]["limit"] == 35
 

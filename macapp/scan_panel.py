@@ -1481,6 +1481,7 @@ class Api:
                 and str(r.get("Docs OK") or "").strip().lower() == "yes"
                 and str(r.get("Applied") or "No") != "Yes"
             ]
+            ready.sort(key=lambda j: j.get("fit", 0), reverse=True)
             today_str = date.today().isoformat()
             used = sum(
                 1 for r in rows

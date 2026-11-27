@@ -146,7 +146,7 @@ def run(args: argparse.Namespace):
             print(f"[Tracker] Marked {closed} listing(s) Closed (closing date passed).")
         ids = [int(x) for x in re.split(r"[,\s]+", args.ids.strip()) if x] if args.ids else None
         statuses = ("Approved", "Needs Review") if getattr(args, "retry", False) else ("Approved",)
-        rows = tracker.pending(min_ats=args.min_ats, limit=args.limit if args.limit > 0 else None,
+        rows = tracker.pending(min_ats=args.min_ats, limit=None,
                                ids=ids, company=args.company, statuses=statuses)
         vetoed = [r for r in rows if normalize_job_url(r["Job URL"]) in handled]
         for r in vetoed:                                   # the scanned file says it's done: believe it, and sync the queue
@@ -170,6 +170,9 @@ def run(args: argparse.Namespace):
                          "title": r.get("Job Role"), "ats": r.get("ATS %"),
                          "pack": folder if (has_pack and not no_pack) else None,
                          "cover": r.get("Cover Letter") if (has_pack and not no_pack) else None})
+        jobs.sort(key=lambda j: int(float(j["ats"] or 0)), reverse=True)
+        if args.limit and args.limit > 0:
+            jobs = jobs[:args.limit]
         if rows and not jobs:
             return
         if not jobs:

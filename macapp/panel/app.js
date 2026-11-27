@@ -670,7 +670,7 @@
           ? '<div class="doc-pre">' + esc(doc.cover_letter) + "</div>"
           : '<p class="help">No cover letter required for this posting.</p>';
       } else if (d.tab === "fit") {
-        content = '<div class="doc-pre">' + esc(doc.fit || "No fit analysis recorded.") + "</div>";
+        content = '<div class="doc-md">' + renderMarkdown(doc.fit || "No fit analysis recorded.") + "</div>";
       } else if (d.tab === "cv") {
         content = '<div class="doc-path">' + esc(doc.cv_pdf || "No cv.pdf path") + "</div>" +
           '<button class="btn primary" data-open-pack="' + esc(sel.id) + ':cv">' + icon("external") + "Open CV PDF</button>";
