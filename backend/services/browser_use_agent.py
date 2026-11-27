@@ -1391,7 +1391,7 @@ async def run_browser_use_autofill(
     except asyncio.TimeoutError:
         return _timeout_result()
     is_done = history.is_done() if hasattr(history, "is_done") else True
-    final_res = str(history.final_result() if hasattr(history, "final_result") else "")
+    final_res = str((history.final_result() if hasattr(history, "final_result") else "") or "")
 
     # Determine if the pure-DOM pass succeeded or got stuck
     # If not done or explicitly stated failure/unable to interact, fallback to vision
@@ -1406,13 +1406,14 @@ async def run_browser_use_autofill(
 
     if needs_vision_fallback:
         print(f"[browser-use] Pure-DOM pass encountered difficulties. Activating Vision + Reasoning (thinking=True) fallback...")
+        vision_session = get_or_create_browser_session(headless=headless)
         agent_vision = agent_cls(
             task=task_prompt + "\nNOTE: Retrying with visual sight and deep reasoning enabled. Analyze the visual layout carefully to locate, solve, and fill any inputs, custom dropdowns, or multi-step modals that were missed.",
             # pyrefly: ignore [bad-argument-type]
             llm=llm,
             fallback_pool=fallback_llms,
-            browser_session=browser_session,
-            initial_actions=None,  # Keep active tab already opened in DOM pass
+            browser_session=vision_session,
+            initial_actions=nav_actions,  # Fresh BrowserSession needs navigation to target_url
             available_file_paths=available_paths,
             **grounding_kwargs,
             use_vision=True,
@@ -1435,7 +1436,7 @@ async def run_browser_use_autofill(
             return _timeout_result()
 
     is_done = history.is_done() if hasattr(history, "is_done") else True
-    final_res = str(history.final_result() if hasattr(history, "final_result") else "")
+    final_res = str((history.final_result() if hasattr(history, "final_result") else "") or "")
 
     # Rigorous Post-Submission Verification
     # Distinguish between actual confirmed submission vs forms stuck on validation errors / unfinished
@@ -1496,7 +1497,7 @@ async def run_browser_use_autofill(
         "usage": usage_summary(history),
         "questions": extract_questions(final_res),
         "grounding": grounding_audit.summary(),
-        "final_result": final_res or "Completed application autofill run.",
+        "final_result": final_res or ("Application autofill stopped before completion." if not is_done else "Completed application autofill run."),
     }
 
 
