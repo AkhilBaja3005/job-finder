@@ -348,6 +348,10 @@ class ScanRunner:
         with self._lock:
             if self.running:
                 return {"ok": False, "error": "A run is already in progress."}
+            if title in ("scan", "apply", "prepare"):
+                other = _other_run_holder(cwd)
+                if other:
+                    return {"ok": False, "error": "Another Job Finder run is already going (a scheduled run, or a second window). Wait for it to finish, then try again."}
             self._lines.clear()
             self._dropped = 0
             self._exit_code = None
@@ -1116,6 +1120,15 @@ def diagnostics_report(ws: Path) -> str:
 log = logging.getLogger("job_finder_app")
 
 
+def _other_run_holder(workspace: Path) -> Optional[int]:
+    """The live process (not this one) that is already running a scan or an apply in this workspace, if any."""
+    try:
+        from services import run_lock
+        return run_lock.holder(str(Path(workspace) / "data" / "run.lock"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _guarded(method):
     """A failure inside an Api call is logged and returned as {ok: False, error}, never raised into the window."""
     @functools.wraps(method)
@@ -1125,6 +1138,8 @@ def _guarded(method):
         try:
             return method(self, *args, **kwargs)
         except Exception as exc:  # noqa: BLE001
+            if type(exc).__name__ == "TrackerLockedError":   # the Excel file is open in Excel
+                return {"ok": False, "error": "The Excel file is open in another program. Close it there, then try again."}
             log.exception("Api.%s failed", method.__name__)
             return {"ok": False, "error": f"{method.__name__.replace('_', ' ').capitalize()} failed: {str(exc)[:140]}"}
     return wrapper
