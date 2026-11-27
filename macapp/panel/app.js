@@ -76,8 +76,8 @@
     $("#brand-logo").innerHTML = icon("logo");
     $("#nav").innerHTML = NAV.map(([id, label, ic]) => '<button data-nav="' + id + '"' + (S.view === id ? ' aria-current="page"' : "") + ">" + icon(ic) + "<span>" + label + "</span>" +
       (id === "apps" && S.apps.rows ? '<span class="count num">' + S.apps.rows.length + "</span>" : "") + "</button>").join("");
-    const i = S.info, c = i && i.supabase, b = i && i.browser;
-    const cloud = !c ? ["", "Checking…"] : !c.configured ? ["", "Local only"] : c.reachable ? ["good", "Synced with Supabase"] : ["warn", "Supabase unreachable"];
+    const i = S.info, c = i && i.cloud, b = i && i.browser;
+    const cloud = !c ? ["", "Checking…"] : c.connected ? ["good", "Synced with job-finder.space"] : ["warn", "job-finder.space unreachable"];
     $("#conn").innerHTML = '<div class="row"><span class="dot ' + cloud[0] + '"></span>' + esc(cloud[1]) + "</div>" +
       '<div class="row"><span class="dot ' + (S.run.running ? "good pulse" : "") + '"></span>' + (S.run.running ? "Running" : "Idle") + "</div>" +
       (i ? '<div class="row" style="color:var(--text-3)">Version ' + esc(i.version) + "</div>" : "");
@@ -108,14 +108,13 @@
   }
   function checklist() {
     const i = S.info; if (!i) return "";
-    const hasKey = Object.values(i.keys).some((k) => k.set), hasProfile = i.prefs.profile_exists, cloud = i.supabase && i.supabase.configured;
+    const hasKey = Object.values(i.keys).some((k) => k.set), hasProfile = i.prefs.profile_exists;
     if (hasKey && hasProfile) return "";
     const step = (done, t, d, action, label) => '<div class="check ' + (done ? "done" : "") + '"><span class="tick">' + icon("check") + '</span><div><div class="t">' + t + '</div><div class="d">' + d + "</div></div>" +
       (done ? "" : '<button class="btn" data-act="' + action + '">' + label + "</button>") + "</div>";
     return '<section class="card"><div class="card-head"><h2>Get ready</h2><span class="sub">Two quick steps before your first run</span></div><div class="checklist">' +
       step(hasKey, "Add an AI key", "Gemini, Claude or OpenAI. Gemini has a free tier.", "goto-settings", "Add a key") +
-      step(hasProfile, "Create your profile", "Built from your resume. The agent fills forms with it.", "build-profile", "Choose resume…") +
-      step(cloud, "Connect Supabase (optional)", "Keeps applications in your own project.", "goto-settings", "Set up") + "</div></section>";
+      step(hasProfile, "Create your profile", "Built from your resume. The agent fills forms with it.", "build-profile", "Choose resume…") + "</div></section>";
   }
   function profileCard() {
     const pc = S.info && S.info.profile_check; if (!pc || !pc.exists || !pc.missing.length) return "";
@@ -258,9 +257,9 @@
     return bits.length ? " · " + bits.join(", ") : "";
   }
   function renderApps() {
-    const c = S.info && S.info.supabase, a = S.apps;
-    const sync = c && c.configured ? '<button class="btn" data-act="sync">' + icon("refresh") + (a.syncing ? "Syncing…" : "Sync now") + "</button>" : "";
-    $("#view").innerHTML = head("Applications", a.rows ? plural(a.rows.length, "job") + " recorded" + stageSummary() + (c && c.configured ? " · your Supabase project is included" : "") : "Loading…", sync) +
+    const a = S.apps;
+    const sync = '<button class="btn" data-act="sync">' + icon("refresh") + (a.syncing ? "Syncing…" : "Sync now") + "</button>";
+    $("#view").innerHTML = head("Applications", a.rows ? plural(a.rows.length, "job") + " recorded" + stageSummary() + " · saved to your account" : "Loading…", sync) +
       '<div class="scroll"><div class="stack"><section class="card"><div class="toolbar"><div class="search">' + icon("search") + '<input class="input" id="a-q" type="search" placeholder="Search company or role" value="' + esc(a.query) + '" aria-label="Search applications"></div>' +
       '<div class="seg" role="group" aria-label="Filter">' + FILTERS.map(([v, l]) => '<button type="button" data-filter="' + v + '" aria-pressed="' + (a.filter === v) + '">' + l + "</button>").join("") + '</div></div><div id="a-body"></div></section></div></div>';
     renderAppsBody();
@@ -273,7 +272,7 @@
     if (!rows.length) { body.innerHTML = '<div class="empty-state">' + icon("search") + "<h3>No matches</h3><p>Try a different search or filter.</p></div>"; return; }
     const arrow = (k) => (a.sort.key === k ? '<span class="arrow">' + (a.sort.dir > 0 ? "↑" : "↓") + "</span>" : "");
     const shown = rows.slice(0, a.limit);
-    body.innerHTML = '<div class="table-wrap"><table><thead><tr><th data-sort="company">Job' + arrow("company") + '</th><th data-sort="status">Status' + arrow("status") + '</th><th data-sort="ats">ATS match' + arrow("ats") + '</th><th aria-label="In Supabase"></th><th aria-label="Open"></th></tr></thead><tbody>' +
+    body.innerHTML = '<div class="table-wrap"><table><thead><tr><th data-sort="company">Job' + arrow("company") + '</th><th data-sort="status">Status' + arrow("status") + '</th><th data-sort="ats">ATS match' + arrow("ats") + '</th><th aria-label="Saved to your account"></th><th aria-label="Open"></th></tr></thead><tbody>' +
       shown.map((r) => {
         const k = statusKind(r.status), ats = parseInt(r.ats) || 0;
         return '<tr><td class="job"><div class="co">' + esc(r.company) + '</div><div class="ro" title="' + esc(r.title) + '">' + esc(r.title) + (r.platform ? '<span class="src"> · ' + esc(r.platform) + "</span>" : "") + "</div></td>" +
@@ -323,7 +322,7 @@
   async function loadSchedule() { const r = await call("schedule_status"); if (r && r.ok) { S.sched = r; if (S.view === "settings") renderSettings(); } }
   function renderSettings() {
     const i = S.info; if (!i) { $("#view").innerHTML = head("Settings", "") + '<div class="scroll"><div class="skeleton"></div></div>'; return; }
-    const sb = i.supabase, br = i.browser, cl = i.cloud || {}, mb = i.mailbox || {};
+    const br = i.browser, cl = i.cloud || {}, mb = i.mailbox || {};
     const row = (t, d, ctl, id) => '<div class="setting"><div class="info"><div class="t">' + t + '</div><div class="d">' + d + '</div></div><div class="ctl"' + (id ? ' id="' + id + '"' : "") + ">" + ctl + "</div></div>";
     $("#view").innerHTML = head("Settings", "Your folder, AI providers and connections.") + '<div class="scroll"><div class="stack" style="max-width:820px">' +
       '<div class="sect-title">General</div><section class="card">' +
@@ -336,8 +335,6 @@
         '<div class="setting"><div class="info"><div class="t">Keys are stored privately</div><div class="d">In the .env file inside your folder, readable only by you. They never leave this Mac except to call the provider.</div></div><div class="ctl"><button class="btn" data-open="env">Open .env</button></div></div>' +
       "</section>" +
       '<div class="sect-title">Connections</div><section class="card">' +
-        row("Supabase", sb.configured ? esc(sb.host || "Configured") + (sb.reachable ? " · connected" : " · " + (sb.error ? esc(sb.error) : "cannot be reached")) : "Not set up. Add SUPABASE_URL and a key to your .env to keep applications in your own project.",
-          sb.configured ? badge(sb.reachable ? "Connected" : "Unreachable", sb.reachable ? "good" : "warn") + '<button class="btn" data-act="sync">' + icon("refresh") + "Sync now</button>" : '<button class="btn" data-open="env">Open .env</button>') +
         row("Your account", cl.connected ? "Signed in with Google as " + esc(cl.email || (i.session || {}).email || "") + ". Your applications are saved to your job-finder.space account and show on the website and in the extension." : esc(cl.error || "Checking your sign-in…"),
           (cl.connected ? badge("Connected", "good") : badge("Unreachable", "warn")) + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Sign out</button>', "c-sync") +
         row("Reply detection", mb.configured ? "Reads the last 30 days of " + esc(mb.user) + " for replies from employers and marks them (reply, interview, rejected, offer). Read only: nothing is sent, deleted or marked read." : "Optional. Connect a mailbox with an app password and replies from employers are marked for you. Automated 'we got your application' mails are ignored.",
@@ -444,8 +441,8 @@
       case "edit-answers": return void openAnswersEditor();
       case "start-tour": return void startTour();
       case "install-browser": await call("ensure_browser"); await refreshInfo(); renderSettings(); watchBrowser(); return;
-      case "sync": { if (S.apps.syncing) return; S.apps.syncing = true; renderView(); const r = await call("sync_now"); S.apps.syncing = false;
-        if (r && r.ok) toast(r.pushed ? "Added " + plural(r.pushed, "application") + " to Supabase." : "Supabase is up to date."); await loadApps(true); await refreshInfo(); renderView(); return; }
+      case "sync": { if (S.apps.syncing) return; S.apps.syncing = true; renderView(); const r = await call("sync_cloud_now"); S.apps.syncing = false;
+        if (r && r.ok) toast(r.pushed ? "Added " + plural(r.pushed, "application") + " to your account." : "Your account is up to date."); else toast((r && r.error) || "Sync failed.", "bad"); await loadApps(true); await refreshInfo(); renderView(); return; }
       case "more": S.apps.limit += 200; renderAppsBody(); return;
       case "copy-log": { try { await navigator.clipboard.writeText(S.run.lines.join("\n")); toast("Log copied."); } catch (_) { toast("Could not copy the log.", "bad"); } return; }
       case "open-logs": return void call("open_path", "logs");
