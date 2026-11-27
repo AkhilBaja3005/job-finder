@@ -1377,7 +1377,7 @@ class Api:
     def prepare_packs(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         ws = workspace_dir()
         data = payload or {}
-        args = ["prepare"]
+        args = ["prepare", "--cover-letter", "always"]
         ids = data.get("ids") or []
         if ids:
             args += ["--ids", ",".join(str(i) for i in ids)]

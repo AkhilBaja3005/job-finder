@@ -1256,7 +1256,7 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
     called_cmds = []
     monkeypatch.setattr(api._runner, "start", lambda args, env, cwd, title="scan": (called_cmds.append((args, title)) or {"ok": True}))
     assert api.prepare_packs({"ids": ["1"]}) == {"ok": True}
-    assert called_cmds[-1][1] == "prepare" and "--ids" in called_cmds[-1][0]
+    assert called_cmds[-1][1] == "prepare" and "--ids" in called_cmds[-1][0] and ["--cover-letter", "always"] == called_cmds[-1][0][1:3]
 
     # Simulate generated pack files
     row = ExcelTracker(s.approved).rows()[0]

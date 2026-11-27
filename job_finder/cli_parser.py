@@ -124,7 +124,7 @@ def build_parser(version: str) -> argparse.ArgumentParser:
     approve_parser.add_argument("--revoke", action="store_true", help="Take --ids back out of the queue (not if already applied)")
     approve_parser.add_argument("--list", action="store_true", help="Show what is waiting in the approved queue")
     approve_parser.add_argument("--no-prepare", action="store_true", help="Don't build the application packs (tailored CV, cover letter) for newly approved jobs")
-    approve_parser.add_argument("--cover-letter", choices=["auto", "always", "never"], default="auto", help="Cover letter for new packs: auto = only when the posting mentions one (default)")
+    approve_parser.add_argument("--cover-letter", choices=["auto", "always", "never"], default="always", help="Cover letter for new packs: always generate one (default)")
 
     # 2b2. Topic inspector
     topic_parser = subparsers.add_parser("topic", help="Show what a topic means to `scan` (sub-fields, look-alikes, searches) without searching")
@@ -138,7 +138,7 @@ def build_parser(version: str) -> argparse.ArgumentParser:
     prep_parser.add_argument("--ids", type=str, default=None, help="Only these row IDs, comma-separated")
     prep_parser.add_argument("--redo", action="store_true", help="Regenerate from scratch (discards your edits to cv.json / cover_letter.txt)")
     prep_parser.add_argument("--render-only", action="store_true", help="Rebuild the PDFs from your edited cv.json / cover_letter.txt without calling the LLM")
-    prep_parser.add_argument("--cover-letter", choices=["auto", "always", "never"], default="auto", help="auto = only when the posting mentions a cover letter (default)")
+    prep_parser.add_argument("--cover-letter", choices=["auto", "always", "never"], default="always", help="always = generate a cover letter for every pack (default)")
     review_parser = subparsers.add_parser("review", help="List application packs, open one, and sign off (Docs OK) so `apply` may use it")
     review_parser.add_argument("--open", type=int, default=None, metavar="ID", help="Open this job's pack folder")
     review_parser.add_argument("--ok", type=str, default=None, help="Sign off these IDs (comma-separated): you reviewed the CV / cover letter")
