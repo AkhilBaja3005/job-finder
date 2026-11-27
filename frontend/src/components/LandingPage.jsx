@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { APP_VERSION, EXTENSION_VERSION } from '../config/constants';
 
 const DESKTOP_RELEASE = 'https://github.com/AkhilBaja3005/job-finder/releases/download/desktop-latest/';
+const MAC_CURL_CMD = 'curl -fsSL https://raw.githubusercontent.com/AkhilBaja3005/job-finder/main/macapp/install_mac.sh | bash';
 const DESKTOP_FILES = {
   'mac-arm': { name: 'Mac (Apple Silicon)', file: 'Job-Finder-arm64.dmg' },
   'mac-intel': { name: 'Mac (Intel)', file: 'Job-Finder-x86_64.dmg' },
@@ -41,9 +42,17 @@ function useDesktopPlatform() {
 }
 
 function DownloadSection({ platform }) {
+  const [copiedCmd, setCopiedCmd] = useState(false);
   const fit = DESKTOP_FILES[platform.kind];
   const isMac = platform.kind === 'mac-arm' || platform.kind === 'mac-intel';
   const otherMac = platform.kind === 'mac-intel' ? DESKTOP_FILES['mac-arm'] : DESKTOP_FILES['mac-intel'];
+  const copyMacCmd = () => {
+    try {
+      navigator.clipboard.writeText(MAC_CURL_CMD);
+      setCopiedCmd(true);
+      setTimeout(() => setCopiedCmd(false), 2000);
+    } catch (e) { /* clipboard blocked */ }
+  };
   return (
     <section id="download-app" style={{
       background: 'var(--panel-bg)',
@@ -79,12 +88,34 @@ function DownloadSection({ platform }) {
             Download for {fit.name}
           </a>
           {isMac && (
-            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              {platform.sure ? 'Wrong chip? ' : 'Mac from before 2020 (Intel chip)? '}
-              <a href={DESKTOP_RELEASE + otherMac.file} rel="noopener noreferrer" style={{ color: '#38BDF8', textDecoration: 'none' }}>
-                Download for {otherMac.name}
-              </a>
-            </div>
+            <>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                {platform.sure ? 'Wrong chip? ' : 'Mac from before 2020 (Intel chip)? '}
+                <a href={DESKTOP_RELEASE + otherMac.file} rel="noopener noreferrer" style={{ color: '#38BDF8', textDecoration: 'none' }}>
+                  Download for {otherMac.name}
+                </a>
+              </div>
+              <div style={{
+                marginTop: '4px', padding: '8px 10px', borderRadius: '8px',
+                background: 'rgba(15, 23, 42, 0.7)', border: '1px solid var(--border-color)',
+                display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '460px', flexWrap: 'wrap'
+              }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', width: '100%' }}>
+                  Or install in Terminal (no Gatekeeper warning):
+                </span>
+                <code style={{ fontSize: '0.72rem', color: '#e2e8f0', wordBreak: 'break-all', flex: '1 1 240px' }}>
+                  {MAC_CURL_CMD}
+                </code>
+                <button
+                  type="button"
+                  onClick={copyMacCmd}
+                  className="btn"
+                  style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38BDF8', border: '1px solid rgba(56, 189, 248, 0.35)', whiteSpace: 'nowrap' }}
+                >
+                  {copiedCmd ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+            </>
           )}
         </div>
       ) : (
