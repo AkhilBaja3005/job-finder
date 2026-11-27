@@ -41,7 +41,16 @@ def _as_list(value: Any) -> List[str]:
 
 
 def wanted_levels(prefs: Dict[str, Any]) -> set:
-    return {PREFERENCE_ALIASES[w.lower()] for w in _as_list(prefs.get("seniority")) if w.lower() in PREFERENCE_ALIASES}
+    """The levels the user wants. Besides the "seniority" list, a level named in the title filter or in the roles to search counts
+    too: someone who searches for "AI Engineer Intern" and requires "Intern" in the title wants interns, whatever the list says."""
+    chosen = {PREFERENCE_ALIASES[w.lower()] for w in _as_list(prefs.get("seniority")) if w.lower() in PREFERENCE_ALIASES}
+    if not chosen:
+        return chosen                               # no preference at all: no rule
+    named = _as_list(prefs.get("required_title_keywords")) + _as_list(prefs.get("target_roles"))
+    for level, pattern in LEVEL_WORDS.items():
+        if any(re.search(pattern, text, re.I) for text in named):
+            chosen.add(level)
+    return chosen
 
 
 def level_check(title: str, prefs: Dict[str, Any]) -> Tuple[bool, str]:

@@ -17,6 +17,20 @@
 - `scan --dry-run` prints the full search funnel and every dropped title and writes nothing.
 
 ### Added
+- **More questions in "About you":** how you hear about jobs, relocation, on-site/hybrid/remote, preferred name, pronouns, languages, whether
+  you are 18 or older, and consent to background checks. The agent answers "have you worked here before?" from your work history, and stops
+  with `BLOCKED:` (the job is marked needs review) instead of guessing on an age check or background-check consent you have not answered.
+  A practice run that stops this way is also marked needs review.
+- **`job-finder outcomes --questions`:** the agent reports the screening questions it met at the end of each application; the ledger keeps them
+  and this lists the most common ones with the sites they came from.
+- **Fix:** clearing an optional dropdown answer in the questions screen now removes it from the profile instead of saving an empty value.
+- **Questions a resume cannot answer.** The tour, Settings ("About you") and the first real run now ask where you can work, whether you
+  need visa sponsorship, when you can start, salary expectation, the levels you want, and the optional equal-opportunity questions.
+  The answers are saved into the profile and the agent types them instead of guessing. Without an answer the agent now declines
+  disability, veteran, gender and ethnicity questions ("Prefer not to say") instead of answering "No", and says its salary is open to
+  discussion. Applying for real is held until work rights and start date are answered.
+- **Fix:** a level named in the title filter or the roles to search (for example "Intern") now counts as chosen, so it is no longer
+  skipped when the `seniority` list says Senior, Staff and Lead.
 - **Desktop app: the bring-your-own-Supabase option is removed.** Applications sync to the signed-in job-finder.space account
   (add-only upload after each run, status changes, and the account's applications shown in the list). The sidebar says
   "Synced with job-finder.space". The Run screen's log scrolls inside its card, so the two cards keep the same size.

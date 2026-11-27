@@ -274,3 +274,14 @@ tbody tr:hover { background: var(--fill); }
 .gate-fine { color: var(--text-3); font-size: 11.5px; line-height: 1.5; margin-top: 6px; }
 .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* About you form */
+.ab-list { flex: 1 1 auto; min-height: 150px; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 2px 4px 2px 2px; margin: 0 -4px 0 -2px; }
+.ab-sec { margin-top: 8px; font-size: 11px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+.ab-sec:first-child { margin-top: 0; }
+.ab-q { display: flex; flex-direction: column; gap: 6px; }
+.ab-q label { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.ab-q .req { color: var(--accent); }
+.ab-q .d { color: var(--text-3); font-size: 12px; line-height: 1.45; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip.pick[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }

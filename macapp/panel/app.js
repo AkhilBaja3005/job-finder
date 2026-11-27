@@ -123,7 +123,7 @@
       '<div class="checklist">' + shown.map((m) => '<div class="check"><span class="tick">' + icon("alert") + '</span><div><div class="t">' + esc(m.label) + '</div><div class="d">' + esc(m.why) + "</div></div></div>").join("") +
       (pc.missing.length > shown.length ? '<div class="d" style="padding:4px 2px">and ' + (pc.missing.length - shown.length) + " more</div>" : "") +
       '<div class="d" style="padding:6px 2px">Open the profile, fill these in, save, then come back. This page updates by itself.</div></div>' +
-      '<div style="padding:0 16px 14px;display:flex;gap:8px"><button class="btn primary" data-open="profile">Edit profile</button><button class="btn" data-act="import-profile">Import profile.json…</button></div></section>';
+      '<div style="padding:0 16px 14px;display:flex;gap:8px"><button class="btn primary" data-act="edit-about">Answer the questions</button><button class="btn" data-open="profile">Edit profile</button><button class="btn" data-act="import-profile">Import profile.json…</button></div></section>';
   }
   function renderRun() {
     const f = S.form;
@@ -193,6 +193,13 @@
     const f = S.form;
     if (!f.roles.length) { toast("Add at least one role first.", "bad"); return; }
     if (f.mode === "auto_apply") {
+      const ab = S.info && S.info.about_you;
+      if (ab && ab.exists && ab.unanswered.some((k) => k === "work_authorization" || k === "requires_sponsorship" || k === "notice_period")) {
+        toast("Before applying for real, answer the questions about work rights and your start date.", "bad");
+        await openAboutYou(); await refreshInfo();
+        const again = S.info && S.info.about_you;
+        if (!again || again.unanswered.some((k) => k === "work_authorization" || k === "requires_sponsorship" || k === "notice_period")) return;
+      }
       const where = f.location || "your saved location";
       const ok = await dialog({
         title: "Apply for real?", icon: "alert", danger: true, confirm: "Start applying",
@@ -342,6 +349,8 @@
         row("Daily run", S.sched && S.sched.enabled ? "Runs every day at " + String(S.sched.hour).padStart(2, "0") + ":" + String(S.sched.minute).padStart(2, "0") + (S.sched.real ? ", applying for real." : " as a practice run (nothing is submitted).") + " The Mac must be awake; the app does not need to be open." : "Runs a search every day at a time you choose, without opening the app. Starts as a practice run.",
           '<input class="input" id="sched-time" type="time" value="' + (S.sched && S.sched.enabled ? String(S.sched.hour).padStart(2, "0") + ":" + String(S.sched.minute).padStart(2, "0") : "08:00") + '" style="width:110px" aria-label="Daily run time">' +
           (S.sched && S.sched.enabled ? '<button class="btn" data-act="sched-on">Change time</button><button class="btn" data-act="sched-off">Turn off</button>' : '<button class="btn primary" data-act="sched-on">Turn on</button>')) +
+        row("About you", (i.about_you && i.about_you.unanswered && i.about_you.unanswered.length && i.about_you.exists) ? "Still needed: where you can work, visa sponsorship, when you can start and the levels you want. Without them the agent cannot answer those questions." : "Work rights, start date, salary and the levels you want. The agent types your answers instead of guessing.",
+          ((i.about_you && i.about_you.exists && i.about_you.unanswered.length) ? badge("Needs answers", "warn") : "") + '<button class="btn" data-act="edit-about">' + ((i.about_you && i.about_you.exists && i.about_you.unanswered.length) ? "Answer…" : "Edit…") + "</button>") +
         row("Saved answers", "Answers to questions your profile does not cover, such as why you want the job. The agent uses them word for word instead of guessing.", '<button class="btn" data-act="edit-answers">Edit…</button>') +
         row("Job site sign-ins", "Opens the agent's Chrome so you can sign in to LinkedIn, Indeed and Reed once. Runs reuse the sign-ins.", '<button class="btn" data-act="open-signin">Open Chrome to sign in</button>') +
         row("Page scraper browser", br.ready ? "Installed" : br.installing ? "Downloading, about 150 MB…" : (br.error ? esc(br.error) : "Needed for some job sources. Downloaded once."), br.ready ? badge("Ready", "good") : br.installing ? badge("Installing", "accent") : '<button class="btn" data-act="install-browser">' + icon("download") + "Install</button>") +
@@ -439,6 +448,7 @@
       case "disconnect-mailbox": { await call("disconnect_mailbox"); toast("Mailbox disconnected."); await refreshInfo(); renderSettings(); return; }
       case "check-replies": { toast("Checking your mailbox…"); const r = await call("check_replies_now"); if (r && r.ok) { toast(r.updated ? plural(r.updated, "application") + " moved forward." : "No new replies found (" + r.checked + " messages read)."); await loadApps(true); await refreshInfo(); } else toast((r && r.error) || "Could not check.", "bad"); return; }
       case "edit-answers": return void openAnswersEditor();
+      case "edit-about": return void openAboutYou();
       case "start-tour": return void startTour();
       case "install-browser": await call("ensure_browser"); await refreshInfo(); renderSettings(); watchBrowser(); return;
       case "sync": { if (S.apps.syncing) return; S.apps.syncing = true; renderView(); const r = await call("sync_cloud_now"); S.apps.syncing = false;
@@ -535,10 +545,65 @@
     document.addEventListener("mouseup", stop); window.addEventListener("blur", stop);
   })();
 
+
+  /* ── About you: the questions a resume cannot answer ─────────────────────── */
+  async function openAboutYou() {
+    const data = await call("get_about_you");
+    if (!data || !data.ok) { toast("Could not open the questions.", "bad"); return false; }
+    return new Promise((resolve) => {
+      const wrap = document.createElement("div"); wrap.className = "scrim";
+      const close = (saved) => { document.removeEventListener("keydown", onKey, true); wrap.remove(); resolve(saved); };
+      const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); close(false); } };
+      document.addEventListener("keydown", onKey, true);
+      if (!data.exists) {
+        wrap.innerHTML = '<div class="dialog" role="dialog" aria-modal="true"><h2>Create your profile first</h2><p>These questions are saved into your profile, so build it from your resume first. It takes a minute, and then come back here.</p><div class="btns"><button type="button" class="btn primary" data-ab="close">OK</button></div></div>';
+        wrap.addEventListener("click", (e) => { if (e.target.closest('[data-ab="close"]') || e.target === wrap) close(false); });
+        $("#overlay").appendChild(wrap); return;
+      }
+      const values = {}; data.fields.forEach((f) => { values[f.key] = f.value !== null && f.value !== undefined && f.value !== "" ? f.value : (f.kind === "multi" ? [] : (f.default || (f.kind === "bool" ? null : ""))); });
+      const control = (f) => {
+        const id = "ab-" + f.key;
+        if (f.kind === "bool") return '<div class="seg" role="group" aria-label="' + esc(f.label) + '"><button type="button" data-ab-bool="' + f.key + ':yes" aria-pressed="' + (values[f.key] === true) + '">Yes</button><button type="button" data-ab-bool="' + f.key + ':no" aria-pressed="' + (values[f.key] === false) + '">No</button></div>';
+        if (f.kind === "multi") return '<div class="chips">' + f.options.map((o) => '<button type="button" class="chip pick" data-ab-multi="' + f.key + ":" + esc(o) + '" aria-pressed="' + values[f.key].includes(o) + '">' + esc(o) + "</button>").join("") + "</div>";
+        const list = f.options ? '<datalist id="' + id + '-dl">' + f.options.map((o) => '<option value="' + esc(o) + '">').join("") + "</datalist>" : "";
+        return '<input class="input" id="' + id + '" data-ab-text="' + f.key + '" maxlength="200" value="' + esc(values[f.key]) + '"' + (f.options ? ' list="' + id + '-dl"' : "") + ' placeholder="' + esc(f.placeholder || (f.options ? "Pick one or type your own" : "")) + '" autocomplete="off">' + list;
+      };
+      const draw = () => {
+        let last = "";
+        const body = data.fields.map((f) => {
+          const head = f.section !== last ? '<div class="ab-sec">' + esc(f.section) + "</div>" : ""; last = f.section;
+          return head + '<div class="ab-q"><label for="ab-' + f.key + '">' + esc(f.label) + (f.required ? ' <span class="req" aria-label="needed">*</span>' : "") + "</label>" + control(f) + (f.help ? '<div class="d">' + esc(f.help) + "</div>" : "") + "</div>";
+        }).join("");
+        wrap.innerHTML = '<div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="ab-title"><h2 id="ab-title">A few things your resume cannot say</h2>' +
+          "<p>Application forms ask these. The agent types exactly what you choose here, and never guesses. Stars are needed; the rest are optional.</p>" +
+          '<div class="ab-list">' + body + "</div>" +
+          '<div class="btns"><button type="button" class="btn" data-ab="close">Not now</button><button type="button" class="btn primary" data-ab="save">Save</button></div></div>';
+      };
+      const collectText = () => $all("[data-ab-text]", wrap).forEach((el) => { values[el.dataset.abText] = el.value; });
+      wrap.addEventListener("click", async (e) => {
+        const b = e.target.closest("button"); if (!b) { if (e.target === wrap) close(false); return; }
+        collectText();
+        if (b.dataset.abBool) { const [k, v] = b.dataset.abBool.split(":"), want = v === "yes"; values[k] = values[k] === want ? null : want; const list = $(".ab-list", wrap), top = list ? list.scrollTop : 0; draw(); const again = $(".ab-list", wrap); if (again) again.scrollTop = top; return; }   // pressing the chosen answer again clears it
+        if (b.dataset.abMulti) { const i = b.dataset.abMulti.indexOf(":"), k = b.dataset.abMulti.slice(0, i), o = b.dataset.abMulti.slice(i + 1); values[k] = values[k].includes(o) ? values[k].filter((x) => x !== o) : values[k].concat(o); const list = $(".ab-list", wrap), top = list ? list.scrollTop : 0; draw(); const again = $(".ab-list", wrap); if (again) again.scrollTop = top; return; }
+        if (b.dataset.ab === "close") return close(false);
+        if (b.dataset.ab === "save") {
+          const missing = data.fields.filter((f) => f.required && (f.kind === "multi" ? !values[f.key].length : f.kind === "bool" ? values[f.key] === null : !String(values[f.key]).trim()));
+          if (missing.length) { toast("Still needed: " + missing.map((f) => f.label.replace(/\?$/, "")).join(", ") + ".", "bad"); return; }
+          const r = await call("save_about_you", values);
+          if (r && r.ok) { close(true); toast("Saved to your profile."); await refreshInfo(); if (S.view === "run") renderRun(); else if (S.view === "settings") renderSettings(); }
+          else toast((r && r.error) || "Could not save.", "bad");
+        }
+      });
+      draw(); $("#overlay").appendChild(wrap);
+      const first = $("input", wrap); if (first) first.focus();
+    });
+  }
+
   /* ── Guided tour ─────────────────────────────────────────────────────────── */
   const TOUR = [
     { view: "settings", sel: "#c-gemini", title: "Add an AI key", text: "The agent needs one provider to read job pages and fill forms. Gemini has a free tier. Claude and OpenAI work too. Keys stay in a file on this Mac." },
     { view: "settings", sel: '[data-act="build-profile"], [data-act="import-profile"]', title: "Create your profile", text: "Build it from your resume, or import a profile.json you already have. Every form is filled from it, so details like work authorisation matter." },
+    { view: "settings", sel: '[data-act="edit-about"]', title: "Tell us what your resume cannot", text: "Forms ask where you can work, whether you need a visa, when you can start and what you want to earn. A resume does not say, and a wrong guess costs applications. Answer once and the agent uses it.", cta: "Answer now" },
     { view: "settings", sel: '[data-act="open-signin"]', title: "Sign in to job sites", text: "LinkedIn, Indeed and Reed work best when you are signed in. This opens the agent's own Chrome once. Sign in, close it, and every run reuses the sign-ins." },
     { view: "settings", sel: "#c-sync", title: "Save applications to your account", text: "Optional. Your Google sign-in keeps every application saved to your job-finder.space account, so it shows on the website and in the extension too. API keys and your resume file never leave this computer." },
     { view: "settings", sel: "#c-mailbox", title: "See replies automatically", text: "Optional. Connect your mailbox with an app password and employer replies, interviews and rejections are marked for you. It only reads, and ignores automatic 'we got your application' emails." },
@@ -550,13 +615,14 @@
     { view: "run", sel: "#run-btn", title: "Start with a practice run", text: "A practice run fills every form but never presses Submit, so you can check the result. Switch to Apply for real only when you trust it." },
     { view: "apps", sel: '[data-nav="apps"]', title: "Check your applications", text: "Every job the agent handled is listed here with its status. Rows marked Needs review are waiting for you." },
   ];
-  async function startTour() {
+  async function startTour(from) {
     // A step about missing profile fields only makes sense when there are some.
     const pc = S.info && S.info.profile_check, hasGaps = !!(pc && pc.exists && pc.missing.length);
     const STEPS = TOUR.filter((t) => t.sel !== "#profile-check" || hasGaps);
     const steps = []; let i = 0;
     const layer = document.createElement("div"); layer.className = "tour"; $("#overlay").appendChild(layer);
-    const finish = () => { layer.remove(); document.removeEventListener("keydown", onKey, true); window.removeEventListener("resize", place); call("save_app_prefs", { tour_done: true }); go("run"); };
+    const closeLayer = () => { layer.remove(); document.removeEventListener("keydown", onKey, true); window.removeEventListener("resize", place); };
+    const finish = () => { closeLayer(); call("save_app_prefs", { tour_done: true }); go("run"); };
     const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); finish(); } else if (e.key === "ArrowRight" || e.key === "Enter") { e.preventDefault(); next(); } else if (e.key === "ArrowLeft") { e.preventDefault(); back(); } };
     document.addEventListener("keydown", onKey, true);
     let current = null;
@@ -577,14 +643,16 @@
       const total = STEPS.length;
       layer.innerHTML = '<div class="tour-hole"></div><div class="tour-card" role="dialog" aria-label="Guided tour"><div class="tour-n">Step ' + (n + 1) + " of " + total + "</div><h3>" + esc(step.title) + "</h3><p>" + esc(step.text) + '</p><div class="tour-btns"><button class="btn quiet" data-t="skip">Skip tour</button><span class="grow"></span>' +
         (n > 0 ? '<button class="btn" data-t="back">Back</button>' : "") + '<button class="btn primary" data-t="next">' + (n === total - 1 ? "Done" : "Next") + "</button></div></div>";
+      if (step.cta) { const nx = $('[data-t="next"]', layer); nx.insertAdjacentHTML("beforebegin", '<button class="btn primary" data-t="cta">' + esc(step.cta) + "</button>"); nx.classList.remove("primary"); }
       i = n; place();
-      $('[data-t="next"]', layer).focus();
+      ($('[data-t="cta"]', layer) || $('[data-t="next"]', layer)).focus();
     }
     function next(n) { const to = typeof n === "number" ? n : i + 1; if (to >= STEPS.length) return finish(); show(to); }
     function back(n) { const to = typeof n === "number" ? n : i - 1; if (to < 0) return; show(to); }
-    layer.addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (!b) return; ({ next, back, skip: finish })[b.dataset.t](); });
+    layer.addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (!b) return; if (b.dataset.t === "cta") { const resumeAt = i + 1; closeLayer(); openAboutYou().then(() => startTour(resumeAt)); return; }
+      ({ next, back, skip: finish })[b.dataset.t](); });
     window.addEventListener("resize", place);
-    show(0);
+    show(typeof from === "number" ? from : 0);
   }
   async function init() {
     renderShell(); go("run");

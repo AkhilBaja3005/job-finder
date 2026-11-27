@@ -1761,6 +1761,7 @@ async def run_pipeline(
                     "model": _info.get("model_used"), "steps": _info.get("steps_taken"), "seconds": round(time.time() - _attempt_started),
                     "screenshot": _info.get("review_screenshot"), "final_result": final_res, "submitted_for_real": bool(disable_guardrails),
                     "usage": _info.get("usage") or {},
+                    "questions": _info.get("questions") or [],
                 })
 
                 if disable_guardrails:

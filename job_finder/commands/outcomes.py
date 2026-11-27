@@ -3,11 +3,22 @@
 import argparse
 import json
 
-from applications_tracker.outcomes import ledger_path, read_outcomes, summarize
+from applications_tracker.outcomes import ledger_path, question_counts, read_outcomes, summarize
 
 
 def run(args: argparse.Namespace):
     rows = read_outcomes()
+    if getattr(args, "questions", False):
+        ranked = question_counts(rows)
+        if getattr(args, "json", False):
+            print(json.dumps({"questions": ranked, "attempts": len(rows)}, indent=2))
+        elif not ranked:
+            print("No questions recorded yet. The agent reports the questions it meets at the end of each application.")
+        else:
+            print(f"Questions met most often, over {len(rows)} attempts\n")
+            for entry in ranked:
+                print(f"{entry['count']:>4}  {entry['question']}  ({', '.join(entry['sites']) or 'unknown site'})")
+        return
     summary = summarize(rows)
     if getattr(args, "json", False):
         print(json.dumps({"ledger": str(ledger_path()), "sites": summary, "attempts": len(rows)}, indent=2))
