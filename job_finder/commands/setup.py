@@ -399,9 +399,10 @@ def run(args: argparse.Namespace):
                     urls_to_open = [
                         "https://www.linkedin.com/login",
                         "https://uk.indeed.com/",
+                        "https://my.greenhouse.io/profile",
                         "https://mail.google.com/"
                     ]
-                    print("  Opening tabs in Automation Chrome profile: LinkedIn, Indeed, Gmail...")
+                    print("  Opening tabs in Automation Chrome profile: LinkedIn, Indeed, MyGreenhouse, Gmail...")
                     for u in urls_to_open:
                         try:
                             req = urllib.request.Request(f"{cdp_url}/json/new?{u}", data=b"", method="PUT")
