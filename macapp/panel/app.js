@@ -91,24 +91,49 @@
   }
   function badge(text, kind) { return '<span class="badge ' + (kind || "") + '">' + esc(text) + "</span>"; }
 
+  function renderInlineMd(text) {
+    return esc(text)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  }
+
   function renderMarkdown(md) {
     const lines = String(md || "").split(/\r?\n/);
-    let out = "", inList = false;
-    const closeList = () => { if (inList) { out += "</ul>"; inList = false; } };
-    for (const raw of lines) {
-      const line = raw.trimEnd();
-      if (/^###\s+/.test(line)) { closeList(); out += "<h3>" + esc(line.replace(/^###\s+/, "")) + "</h3>"; }
-      else if (/^##\s+/.test(line)) { closeList(); out += "<h2>" + esc(line.replace(/^##\s+/, "")) + "</h2>"; }
-      else if (/^#\s+/.test(line)) { closeList(); out += "<h1>" + esc(line.replace(/^#\s+/, "")) + "</h1>"; }
+    let out = "", listTag = "";
+    const closeList = () => { if (listTag) { out += "</" + listTag + ">"; listTag = ""; } };
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i].trimEnd();
+      if (/^\|/.test(line) && i + 1 < lines.length && /^\|[\s:-]+\|/.test(lines[i + 1].trim())) {
+        closeList();
+        const parseRow = (r) => r.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+        const headers = parseRow(line);
+        i += 2;
+        out += '<table style="margin:10px 0;font-size:12px"><thead><tr>' + headers.map((h) => "<th>" + renderInlineMd(h) + "</th>").join("") + "</tr></thead><tbody>";
+        while (i < lines.length && /^\|/.test(lines[i].trim())) {
+          const cells = parseRow(lines[i]);
+          out += "<tr>" + cells.map((c) => "<td>" + renderInlineMd(c) + "</td>").join("") + "</tr>";
+          i++;
+        }
+        out += "</tbody></table>";
+        continue;
+      }
+      if (/^###\s+/.test(line)) { closeList(); out += "<h3>" + renderInlineMd(line.replace(/^###\s+/, "")) + "</h3>"; }
+      else if (/^##\s+/.test(line)) { closeList(); out += "<h2>" + renderInlineMd(line.replace(/^##\s+/, "")) + "</h2>"; }
+      else if (/^#\s+/.test(line)) { closeList(); out += "<h1>" + renderInlineMd(line.replace(/^#\s+/, "")) + "</h1>"; }
       else if (/^[-*]\s+/.test(line)) {
-        if (!inList) { out += "<ul>"; inList = true; }
-        out += "<li>" + esc(line.replace(/^[-*]\s+/, "")) + "</li>";
+        if (listTag !== "ul") { closeList(); out += "<ul>"; listTag = "ul"; }
+        out += "<li>" + renderInlineMd(line.replace(/^[-*]\s+/, "")) + "</li>";
+      } else if (/^\d+\.\s+/.test(line)) {
+        if (listTag !== "ol") { closeList(); out += "<ol>"; listTag = "ol"; }
+        out += "<li>" + renderInlineMd(line.replace(/^\d+\.\s+/, "")) + "</li>";
       } else if (!line.trim()) {
         closeList();
       } else {
         closeList();
-        out += "<p>" + esc(line) + "</p>";
+        out += "<p>" + renderInlineMd(line) + "</p>";
       }
+      i++;
     }
     closeList();
     return out || '<p class="help">Empty.</p>';
