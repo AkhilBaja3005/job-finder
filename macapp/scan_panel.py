@@ -211,6 +211,22 @@ def boards_status(ws: Path) -> Dict[str, Any]:
         return {"ready": False, "updated": ""}
 
 
+def known_search(name: Any) -> str:
+    """The saved search of this name if it exists in the current workspace, else "" (call inside the workspace's environment).
+    The form can remember a name from another folder or from a search that was deleted; passing it on makes the command fail."""
+    name = str(name or "").strip()
+    if not name:
+        return ""
+    try:
+        from services import searches
+        searches.get(name)
+        return name
+    except KeyError:
+        return ""
+    except Exception:
+        return ""
+
+
 # ── the scan command ─────────────────────────────────────────────────────────────
 def build_scan_args(options: Dict[str, Any]) -> List[str]:
     """The arguments after `job-finder` for one run. A scan only searches and saves to the Excel: it never applies.
@@ -1225,6 +1241,14 @@ class Api:
         ws = workspace_dir()
         if not read_preferences(ws)["profile_exists"]:
             return {"ok": False, "error": "No profile yet. Open Settings and build or choose a profile first."}
+        form = dict(form or {})
+        stale = ""
+        with self._ws_env(ws):
+            if str(form.get("search") or "").strip() and not known_search(form.get("search")):
+                stale = str(form["search"]).strip()
+                form["search"] = ""                     # a saved search that is gone (another folder, deleted): run from the topic instead
+        if stale and not (str(form.get("topic") or "").strip() or form.get("topics") or form.get("roles")):
+            return {"ok": False, "error": f"The saved search '{stale}' is not in this app's folder any more. Type a topic and run a new search."}
         write_preferences(ws, form)
         result = self._runner.start(build_scan_args(form), {**build_run_env(form, ws), **self._dock_env()}, ws, "scan")
         self._synced_after_run = not result.get("ok")
@@ -1399,7 +1423,7 @@ class Api:
         with self._ws_env(ws):
             from services import searches
             from services.excel_tracker import ExcelTracker
-            s = searches.resolve_current(search)
+            s = searches.resolve_current(known_search(search))
             if search:
                 searches.set_current(s.name)
             rows = ExcelTracker(s.scanned).rows() if s.exists else []
@@ -1411,7 +1435,7 @@ class Api:
         with self._ws_env(ws):
             from services import approval, searches
             from services.excel_tracker import ExcelTracker
-            s = searches.resolve_current(data.get("search"))
+            s = searches.resolve_current(known_search(data.get("search")))
             ids = [int(i) for i in data["ids"]] if data.get("ids") else None
             min_ats = int(data["min_ats"]) if data.get("min_ats") is not None else None
             res = approval.approve_jobs(ExcelTracker(s.scanned), ExcelTracker(s.approved), ids=ids, min_ats=min_ats)
@@ -1423,7 +1447,7 @@ class Api:
         with self._ws_env(ws):
             from services import approval, searches
             from services.excel_tracker import ExcelTracker
-            s = searches.resolve_current(data.get("search"))
+            s = searches.resolve_current(known_search(data.get("search")))
             ids = [int(i) for i in (data.get("ids") or [])]
             res = approval.withdraw_jobs(ExcelTracker(s.scanned), ExcelTracker(s.approved), ids=ids)
             return {"ok": True, "revoked": len(res["withdrawn"])}
@@ -1607,9 +1631,8 @@ class Api:
         opts = dict(options or {})
         with self._ws_env(ws):
             from services import searches
-            s = searches.resolve_current(opts.get("search"))
-            if not s.is_main and not opts.get("search"):
-                opts["search"] = s.name
+            s = searches.resolve_current(known_search(opts.get("search")))
+            opts["search"] = "" if s.is_main else s.name
         return self._runner.start(build_apply_args(opts), {**build_run_env(opts, ws), **self._dock_env()}, ws, "apply")
 
     def refresh_boards(self) -> Dict[str, Any]:

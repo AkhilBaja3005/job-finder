@@ -429,3 +429,23 @@ def test_a_very_long_run_keeps_only_the_latest_lines(tmp_path):
     assert wait_until(lambda: runner._exit_code == 0, 30)
     polled = runner.poll(0)
     assert len(polled["lines"]) <= 5000 and polled["lines"][-1] == "row 5999"
+
+
+# ── a remembered search that no longer exists ────────────────────────────────────
+def test_a_search_name_that_is_not_in_this_folder_is_not_passed_to_the_command(tmp_path, monkeypatch):
+    api = make_api(monkeypatch, tmp_path)
+    sp.profile_path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    sp.profile_path(tmp_path).write_text(json.dumps({"candidate": {"name": "Ada"}, "search_preferences": {}}))
+    started = []
+    monkeypatch.setattr(api._runner, "start", lambda args, env, cwd, title: started.append(args) or {"ok": True})
+    ghost = "ai-engineer-5b40-experienced"
+    out = api.start_scan({"search": ghost, "topic": "ai engineer", "level": "experienced"})
+    assert out["ok"] and "--search" not in started[0] and "--topic" in started[0]          # runs from the topic instead of failing
+    out = api.start_scan({"search": ghost})
+    assert out["ok"] is False and ghost in out["error"] and len(started) == 1               # nothing to run from: say so plainly
+    monkeypatch.setenv("JOB_FINDER_ROOT", str(tmp_path))
+    from services import searches
+    searches.get_or_create(ghost, topics=["ai engineer"], level="experienced")
+    assert api.start_scan({"search": ghost})["ok"] is True and "--search" in started[-1]    # a real saved search still works
+    assert api.start_apply({"search": "gone-search"})["ok"] is True and "--search" not in started[-1]
+    assert sp.known_search("") == "" and sp.known_search(None) == ""
