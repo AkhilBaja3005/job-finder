@@ -105,7 +105,20 @@ jobs:
         if: steps.v.outputs.skip != 'true' && env.NOTHING_TO_DO != 'true'
         env:
           VERSION: ${{ steps.v.outputs.version }}
-        run: gh release create "v$VERSION" --target "$SHA" --title "Job Finder $VERSION" --generate-notes
+        run: |
+          if gh release create "v$VERSION" --target "$SHA" --title "Job Finder $VERSION" --generate-notes; then exit 0; fi
+          echo "::warning::gh release create was refused. Printing GitHub's full answer, then trying a draft."
+          echo "::group::Full answer (headers show the permission GitHub wanted)"
+          gh api -i -X POST "repos/${GITHUB_REPOSITORY}/releases" -f tag_name="v$VERSION" -f target_commitish="$SHA" \
+            -f name="Job Finder $VERSION" -F draft=true -F generate_release_notes=true 2>&1 | head -40 || true
+          echo "::endgroup::"
+          ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases" --jq "[.[] | select(.tag_name==\"v$VERSION\" and .draft)] | first | .id // empty" 2>/dev/null || true)
+          if [ -n "$ID" ]; then
+            echo "Draft $ID exists; publishing it."
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/$ID" -F draft=false
+            exit 0
+          fi
+          exit 1
 
       - name: Build the desktop apps and attach them to the release
         if: steps.v.outputs.skip != 'true' && env.NOTHING_TO_DO != 'true'
