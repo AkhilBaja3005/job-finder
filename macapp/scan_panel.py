@@ -679,65 +679,7 @@ def prune_logs(directory: Path, keep: int = 25) -> None:
             pass
 
 
-# ── Supabase (optional) ──────────────────────────────────────────────────────────
-def supabase_settings(ws: Path) -> Optional[Dict[str, str]]:
-    """The project URL and key from the .env, or None when Supabase is not set up. The secret key wins if both exist."""
-    env = read_env(ws)
-    url = env.get("SUPABASE_URL", "").rstrip("/")
-    key = env.get("SUPABASE_SERVICE_KEY") or env.get("SUPABASE_SECRET_KEY") or env.get("SUPABASE_KEY", "")
-    return {"url": url, "key": key} if url and key else None
-
-
-def _supabase_request(cfg: Dict[str, str], path: str, method: str = "GET", body: Any = None, headers: Optional[Dict[str, str]] = None, timeout: float = 20.0) -> Any:
-    request = urllib.request.Request(
-        f"{cfg['url']}/rest/v1/{path}", method=method,
-        data=json.dumps(body).encode() if body is not None else None,
-        headers={"apikey": cfg["key"], "Authorization": f"Bearer {cfg['key']}", "Content-Type": "application/json", **(headers or {})},
-    )
-    with urllib.request.urlopen(request, timeout=timeout, context=_ssl_context()) as resp:
-        raw = resp.read()
-    return json.loads(raw) if raw else None
-
-
-def cloud_user_id(ws: Path) -> int:
-    """The account id the scanner records applications under (the same rule the scanner uses)."""
-    try:
-        data = json.loads(profile_path(ws).read_text(encoding="utf-8"))
-        return int((data.get("candidate") or {}).get("user_id") or 34)
-    except (OSError, ValueError, TypeError):
-        return 34
-
-
-def supabase_status(ws: Path) -> Dict[str, Any]:
-    cfg = supabase_settings(ws)
-    if not cfg:
-        return {"configured": False, "reachable": False}
-    try:
-        _supabase_request(cfg, f"applications?select=id&limit=1&user_id=eq.{cloud_user_id(ws)}", timeout=6)
-        return {"configured": True, "reachable": True, "host": urllib.parse.urlparse(cfg["url"]).hostname or ""}
-    except urllib.error.HTTPError as exc:
-        host = urllib.parse.urlparse(cfg["url"]).hostname or ""
-        if exc.code in (401, 403):  # the project answered but will not let this key read the table
-            return {"configured": True, "reachable": False, "host": host, "denied": True,
-                    "error": "The project is locked and this key is not allowed to read it. Use the secret key (SUPABASE_SERVICE_KEY) in the .env, or connect with a sync code below instead."}
-        return {"configured": True, "reachable": False, "host": host, "error": f"The project answered with an error ({exc.code})."}
-    except Exception as exc:
-        return {"configured": True, "reachable": False, "host": urllib.parse.urlparse(cfg["url"]).hostname or "", "error": str(exc)[:120]}
-
-
-def read_cloud_applications(ws: Path, limit: int = 300) -> List[Dict[str, str]]:
-    cfg = supabase_settings(ws)
-    if not cfg:
-        return []
-    rows = _supabase_request(
-        cfg, f"applications?select=job_title,company,job_url,score,status,source_mode&user_id=eq.{cloud_user_id(ws)}&order=id.desc&limit={limit}",
-    ) or []
-    return [{
-        "company": r.get("company") or "", "title": r.get("job_title") or "", "status": r.get("status") or "",
-        "ats": f"{r['score']}%" if r.get("score") not in (None, "") else "", "platform": r.get("source_mode") or "", "url": r.get("job_url") or "",
-    } for r in rows]
-
-
+# ── applications: the folder's tracker and the account ──────────────────────────────
 def read_account_applications(ws: Path, limit: int = 20000) -> List[Dict[str, str]]:
     """The applications saved to the job-finder.space account behind the sync code (website, extension and other computers).
     The answer is kept for 30 seconds so switching screens does not ask the server every time."""
@@ -766,20 +708,6 @@ def read_account_applications(ws: Path, limit: int = 20000) -> List[Dict[str, st
     return rows
 
 
-def _cloud_urls(cfg: Dict[str, str], user_id: int) -> set:
-    """Every job URL already stored for this account (paged, because the server caps one response)."""
-    urls: set = set()
-    start, page = 0, 1000
-    while True:
-        rows = _supabase_request(
-            cfg, f"applications?select=job_url&user_id=eq.{user_id}&order=id.asc", headers={"Range-Unit": "items", "Range": f"{start}-{start + page - 1}"},
-        ) or []
-        urls.update(r.get("job_url") for r in rows if r.get("job_url"))
-        if len(rows) < page:
-            return urls
-        start += page
-
-
 def _csv_all(ws: Path) -> List[Dict[str, str]]:
     path = ws / "applications_tracker" / "job_applications_tracker.csv"
     try:
@@ -787,33 +715,6 @@ def _csv_all(ws: Path) -> List[Dict[str, str]]:
             return list(csv.DictReader(f))
     except OSError:
         return []
-
-
-def sync_missing_to_supabase(ws: Path) -> Dict[str, Any]:
-    """Adds the applications that are in the local tracker but not yet in the Supabase project. Never changes or deletes rows."""
-    cfg = supabase_settings(ws)
-    if not cfg:
-        return {"ok": False, "error": "Supabase is not set up in this folder's .env."}
-    user_id = cloud_user_id(ws)
-    try:
-        known = _cloud_urls(cfg, user_id)
-        missing, seen = [], set()
-        for row in _csv_all(ws):
-            url = (row.get("Job URL") or "").strip()
-            if not url or url in known or url in seen:
-                continue
-            seen.add(url)
-            try:
-                score = int(re.sub(r"[^0-9]", "", row.get("Overall ATS") or "") or 0)
-            except ValueError:
-                score = 0
-            missing.append({"user_id": user_id, "job_title": row.get("Job Title") or "Role", "company": row.get("Company") or "Company",
-                            "job_url": url, "score": score, "status": row.get("Status") or "saved", "source_mode": row.get("Platform") or "scanner"})
-        for i in range(0, len(missing), 50):
-            _supabase_request(cfg, "applications", "POST", missing[i:i + 50], headers={"Prefer": "return=minimal"})
-        return {"ok": True, "pushed": len(missing), "already": len(known)}
-    except Exception as exc:
-        return {"ok": False, "error": f"Sync failed: {str(exc)[:160]}"}
 
 
 def merge_results(local: List[Dict[str, str]], cloud: List[Dict[str, str]]) -> List[Dict[str, Any]]:
@@ -892,13 +793,6 @@ def set_application_stage(ws: Path, url: str, stage: str) -> Dict[str, Any]:
         writer.writeheader()
         writer.writerows(rows)
     os.replace(tmp, path)
-    cfg = supabase_settings(ws)
-    if cfg:  # best effort: the local file is the record, so a failure here is not an error
-        try:
-            quoted = urllib.parse.quote(url.strip(), safe="")
-            _supabase_request(cfg, f"applications?user_id=eq.{cloud_user_id(ws)}&job_url=eq.{quoted}", "PATCH", {"status": label}, headers={"Prefer": "return=minimal"}, timeout=8)
-        except Exception:
-            log.debug("could not update the status in Supabase", exc_info=True)
     code = account_secret(ws)
     if code:  # best effort: the account on job-finder.space follows along
         try:
@@ -998,7 +892,7 @@ def diagnostics_report(ws: Path) -> str:
     lines = [f"Job Finder {_app_version()}", f"macOS {platform.mac_ver()[0]} {platform.machine()}",
              f"Chrome found: {chrome_found()}", f"Scraper browser ready: {browser_ready()}",
              "Keys set: " + ", ".join(name for name, v in key_status(ws).items() if v["set"]) ,
-             f"Account connected: {account_kind(ws) or 'no'}", f"Supabase configured: {bool(supabase_settings(ws))}", "", "--- app.log (last 60 lines) ---"]
+             f"Account connected: {account_kind(ws) or 'no'}", "", "--- app.log (last 60 lines) ---"]
     try:
         lines += (logs_dir() / "app.log").read_text(encoding="utf-8", errors="replace").splitlines()[-60:]
     except OSError:
@@ -1042,7 +936,7 @@ class Api:
         ws = workspace_dir()
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
-            "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "mailbox": mailbox_status(ws), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "session": {**session_status(ws), "signing_in": _signin_state.get("state") == "waiting", "error": _signin_state.get("error", "") if _signin_state.get("state") == "error" else ""}, "profile_check": profile_check(ws),
+            "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "mailbox": mailbox_status(ws), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "cloud": cloud_status(ws), "session": {**session_status(ws), "signing_in": _signin_state.get("state") == "waiting", "error": _signin_state.get("error", "") if _signin_state.get("state") == "error" else ""}, "profile_check": profile_check(ws),
             "browser": {"ready": browser_ready(), **self._browser},
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
@@ -1122,15 +1016,12 @@ class Api:
             notify("Job Finder", f"Run finished: {counts['submitted']} submitted, {counts['needs_review']} to review." if result["exit_code"] in (0, None) else "The run ended with an error.")
         if not result["running"] and not self._synced_after_run:
             self._synced_after_run = True  # once per run
-            if (supabase_settings(workspace_dir()) or account_secret(workspace_dir()) or mailbox_status(workspace_dir())["configured"]) and result.get("title") == "scan":
+            if (account_secret(workspace_dir()) or mailbox_status(workspace_dir())["configured"]) and result.get("title") == "scan":
                 threading.Thread(target=self._sync_and_report, daemon=True).start()
         return result
 
     def _sync_and_report(self) -> None:
         ws = workspace_dir()
-        if supabase_settings(ws):
-            outcome = sync_missing_to_supabase(ws)
-            self._runner.add_line(f"Synced with your Supabase project: {outcome['pushed']} new application(s) added." if outcome.get("ok") else outcome.get("error", "Sync failed."))
         if mailbox_status(ws)["configured"]:
             found = check_replies(ws)
             if found.get("ok") and found.get("updated"):
@@ -1142,17 +1033,7 @@ class Api:
     def get_results(self) -> List[Dict[str, Any]]:
         ws = workspace_dir()
         local = read_tracker(ws)
-        cloud: List[Dict[str, str]] = []
-        if supabase_settings(ws):
-            try:
-                cloud = read_cloud_applications(ws)
-            except Exception:
-                cloud = []  # offline or key rejected: show the local list
-        cloud = cloud + [r for r in read_account_applications(ws) if r["url"] not in {c["url"] for c in cloud}]
-        return merge_results(local, cloud)
-
-    def sync_now(self) -> Dict[str, Any]:
-        return sync_missing_to_supabase(workspace_dir())
+        return merge_results(local, read_account_applications(ws))   # offline or signed out: the folder's own list still shows
 
     def session_check(self) -> Dict[str, Any]:
         """Asks the server again whether the sign-in is good (the sign-in screen's Try again button)."""

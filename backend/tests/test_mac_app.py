@@ -180,21 +180,6 @@ def _env(ws, **values):
         panel.write_env_value(ws, k, v)
 
 
-def test_supabase_is_off_without_url_and_key(home):
-    ws = home / "ws"
-    assert panel.supabase_settings(ws) is None
-    _env(ws, SUPABASE_URL="https://abc.supabase.co/")
-    assert panel.supabase_settings(ws) is None  # a URL alone is not enough
-    _env(ws, SUPABASE_KEY="publishable-key")
-    assert panel.supabase_settings(ws) == {"url": "https://abc.supabase.co", "key": "publishable-key"}
-    _env(ws, SUPABASE_SERVICE_KEY="secret-key")
-    assert panel.supabase_settings(ws)["key"] == "secret-key"  # the secret key wins
-
-
-def test_status_without_supabase_is_local_only(home):
-    assert panel.supabase_status(home / "ws") == {"configured": False, "reachable": False}
-
-
 def test_merge_shows_cloud_status_and_cloud_only_rows():
     local = [{"company": "A", "title": "x", "status": "Tailored & Ready", "ats": "80%", "platform": "LinkedIn", "url": "u1"},
              {"company": "B", "title": "y", "status": "applied", "ats": "70%", "platform": "LinkedIn", "url": "u2"}]
@@ -206,51 +191,18 @@ def test_merge_shows_cloud_status_and_cloud_only_rows():
     assert by_url["u2"]["synced"] is False and by_url["u3"]["synced"] is True and len(merged) == 3
 
 
-def test_sync_adds_only_missing_rows(home, monkeypatch):
+def test_results_fall_back_to_the_local_list_when_the_account_cannot_be_reached(home, monkeypatch):
     ws = home / "ws"
-    _env(ws, SUPABASE_URL="https://abc.supabase.co", SUPABASE_KEY="k")
-    (ws / "applications_tracker").mkdir(parents=True)
-    (ws / "applications_tracker" / "job_applications_tracker.csv").write_text(
-        "Company,Job Title,Platform,Overall ATS,Status,Job URL\n"
-        "Known Co,Dev,LinkedIn,70%,applied,http://known\n"
-        "New Co,ML Intern,LinkedIn,88%,Tailored & Ready,http://new\n"
-        "New Co,ML Intern,LinkedIn,88%,Tailored & Ready,http://new\n"  # a duplicate line
-        "No Url,Dev,LinkedIn,50%,saved,\n")
-    posted = []
-
-    def fake(cfg, path, method="GET", body=None, headers=None, timeout=20.0):
-        if method == "GET":
-            return [{"job_url": "http://known"}]
-        posted.extend(body or [])
-        return None
-
-    monkeypatch.setattr(panel, "_supabase_request", fake)
-    result = panel.sync_missing_to_supabase(ws)
-    assert result == {"ok": True, "pushed": 1, "already": 1}
-    assert posted[0]["job_url"] == "http://new" and posted[0]["score"] == 88 and posted[0]["user_id"] == 34
-    assert posted[0]["status"] == "Tailored & Ready" and posted[0]["company"] == "New Co"
-
-
-def test_sync_reports_a_failure_without_raising(home, monkeypatch):
-    ws = home / "ws"
-    _env(ws, SUPABASE_URL="https://abc.supabase.co", SUPABASE_KEY="k")
-    def boom(*a, **k):
-        raise OSError("offline")
-    monkeypatch.setattr(panel, "_supabase_request", boom)
-    result = panel.sync_missing_to_supabase(ws)
-    assert result["ok"] is False and "offline" in result["error"]
-    assert panel.sync_missing_to_supabase(home / "other")["ok"] is False  # not configured
-
-
-def test_results_fall_back_to_the_local_list_when_the_cloud_fails(home, monkeypatch):
-    ws = home / "ws"
-    _env(ws, SUPABASE_URL="https://abc.supabase.co", SUPABASE_KEY="k")
     (ws / "applications_tracker").mkdir(parents=True)
     (ws / "applications_tracker" / "job_applications_tracker.csv").write_text("Company,Job Title,Status,Job URL\nA,B,applied,http://a\n")
     monkeypatch.setenv("JOB_FINDER_APP_HOME", str(ws))
+    panel._store_account("11111111-2222-3333-4444-555555555555", "me@example.com")
+    panel._cloud_cache.clear()
+
     def boom(*a, **k):
         raise OSError("offline")
-    monkeypatch.setattr(panel, "_supabase_request", boom)
+
+    monkeypatch.setattr(panel, "_server_request", boom)
     rows = panel.Api([sys.executable]).get_results()
     assert [r["company"] for r in rows] == ["A"] and rows[0]["synced"] is False
 
@@ -317,9 +269,10 @@ def test_app_prefs_keep_only_known_keys(home):
 
 def test_state_reports_what_the_window_needs(home):
     state = panel.Api([sys.executable]).get_state()
-    for key in ("workspace", "prefs", "keys", "supabase", "browser", "app_prefs", "chrome_found", "version"):
+    for key in ("workspace", "prefs", "keys", "cloud", "session", "browser", "app_prefs", "chrome_found", "version"):
         assert key in state
-    assert state["supabase"] == {"configured": False, "reachable": False}
+    assert "supabase" not in state
+    assert state["cloud"] == {"configured": False, "connected": False, "signing_in": False}
 
 
 def test_runs_are_logged_to_files_and_old_logs_pruned(home, tmp_path):
@@ -761,21 +714,6 @@ def test_tour_covers_the_account_replies_answers_and_schedule_rows():
         assert selector in js, selector
 
 
-def test_locked_supabase_project_gets_a_clear_message(tmp_path, monkeypatch):
-    import urllib.error
-    import scan_panel
-    scan_panel.write_env_value(tmp_path, "SUPABASE_URL", "https://abc.supabase.co")
-    scan_panel.write_env_value(tmp_path, "SUPABASE_KEY", "sb_publishable_example")
-
-    def locked(*a, **k):
-        raise urllib.error.HTTPError("u", 401, "permission denied", {}, None)
-
-    monkeypatch.setattr(scan_panel, "_supabase_request", locked)
-    status = scan_panel.supabase_status(tmp_path)
-    assert status["configured"] and not status["reachable"] and status["denied"] is True
-    assert "SUPABASE_SERVICE_KEY" in status["error"] and "sync code" in status["error"]
-
-
 def test_dmg_holds_the_app_and_an_applications_shortcut():
     from pathlib import Path
     script = (Path(__file__).resolve().parents[2] / "macapp" / "build_mac.sh").read_text()
@@ -1113,3 +1051,20 @@ def test_the_sign_in_screen_is_in_the_page_and_there_is_no_sync_code_option():
     assert "Use a sync code" not in js and "save_sync_code" not in js and "si-email" not in js
     import scan_panel
     assert not hasattr(scan_panel, "save_sync_code") and not hasattr(scan_panel.Api, "save_sync_code")
+
+
+def test_supabase_is_gone_from_the_app():
+    from pathlib import Path
+    import scan_panel
+    root = Path(__file__).resolve().parents[2] / "macapp"
+    for name in ("supabase_settings", "supabase_status", "sync_missing_to_supabase", "read_cloud_applications", "_supabase_request"):
+        assert not hasattr(scan_panel, name), name
+    assert not hasattr(scan_panel.Api, "sync_now")
+    assert "supabase" not in (root / "panel" / "app.js").read_text().lower()
+
+
+def test_the_applications_page_syncs_to_the_account(tmp_path, monkeypatch):
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[2] / "macapp" / "panel" / "app.js").read_text()
+    assert 'case "sync":' in js and 'call("sync_cloud_now")' in js and "to your account" in js
+    assert "Synced with job-finder.space" in js

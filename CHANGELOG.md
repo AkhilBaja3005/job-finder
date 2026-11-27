@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Added
+- **Desktop app: the bring-your-own-Supabase option is removed.** Applications sync to the signed-in job-finder.space account
+  (add-only upload after each run, status changes, and the account's applications shown in the list). The sidebar says
+  "Synced with job-finder.space". The Run screen's log scrolls inside its card, so the two cards keep the same size.
 - **Desktop app: Google sign-in is required.** The app shows a sign-in screen and does nothing until a valid Google sign-in exists.
   The browser opens the website's Google login and returns to the app on its own computer with a one-time code that only this
   app can trade for a session token (OAuth with PKCE and a loopback address; the token never appears in a URL). The token is kept

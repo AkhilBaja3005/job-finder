@@ -251,7 +251,7 @@ tbody tr:hover { background: var(--fill); }
 .act-card { display: flex; flex-direction: column; }
 .act-card > .card-pad { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
 .act-card .log-wrap { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
-.act-card .log { flex: 1 1 auto; height: auto; min-height: 220px; }
+.act-card .log { flex: 1 1 0; height: 0; min-height: 220px; overflow: auto; }   /* its length never changes the card's height */
 
 /* Inline forms in Settings rows (keys, sync code, mailbox): enough room for the fields, wrapping when the window is narrow. */
 .setting:has(.keybox) { flex-wrap: wrap; }

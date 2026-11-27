@@ -20,13 +20,13 @@
     "[4/26] QUALIFIED MATCH (78% ATS): Intern, 6G Technology Research @ InterDigital", "   Tailoring 1-page LaTeX resume for keyword & skills alignment...",
     "   Submission verification failed for Intern, 6G Technology Research @ InterDigital: account creation was blocked",
     "[5/26] EXCELLENT MATCH (86% >= 80%): Data Science Internship @ targetjobs UK", "   Application verified & submitted successfully for Data Science Internship @ targetjobs UK",
-    "Synced with your Supabase project: 3 new application(s) added.",
+    "Synced with job-finder.space: 3 new application(s) added.",
   ];
   let started = 0, lineIndex = 0, running = false;
   const state = {
     workspace: "/Users/akhil/Documents/Job Finder", version: "1.9.1", running: false, chrome_found: true,
     app_prefs: { primary_ai: "auto", headless: false },
-    supabase: q.has("local") ? { configured: false, reachable: false } : { configured: true, reachable: true, host: "iileqpgzppssrsjdseia.supabase.co" },
+    cloud: { configured: true, connected: true, email: "me@example.com", kind: "google" },
     browser: { ready: !q.has("browser"), installing: false, error: "" },
     keys: q.has("fresh") ? { gemini: { set: false, hint: "" }, anthropic: { set: false, hint: "" }, openai: { set: false, hint: "" } }
                           : { gemini: { set: true, hint: "a3Kd" }, anthropic: { set: true, hint: "Qw9z" }, openai: { set: false, hint: "" } },
