@@ -59,9 +59,10 @@ def test_clean_venv_and_entrypoints(tmp_path):
     # 4. Test `job-finder scan --help`
     scan_help = subprocess.run([job_finder_bin, "scan", "--help"], capture_output=True, text=True)
     assert scan_help.returncode == 0
-    assert "--timeout" in scan_help.stdout
-    assert "--tailor-timeout" in scan_help.stdout
-    assert "--max-steps" in scan_help.stdout
+    # `scan` only discovers jobs now; timeouts and steps belong to `apply` (checked below)
+    assert "--topic" in scan_help.stdout
+    assert "--level" in scan_help.stdout
+    assert "--dry-run" in scan_help.stdout
     assert "--limit" in scan_help.stdout
     assert "--min-ats" in scan_help.stdout
 
