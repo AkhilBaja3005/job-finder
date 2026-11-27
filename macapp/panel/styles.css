@@ -292,3 +292,58 @@ tbody tr:hover { background: var(--fill); }
 .live-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 .live-url { opacity: .65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .live img { display: block; width: 100%; max-height: 320px; object-fit: contain; background: #000; }
+
+/* ── Staged workflow: Next-step banner, Review, Packs, Documents, Apply ────── */
+.next-banner { display: flex; align-items: center; gap: 14px; margin: 0 28px 10px; padding: 10px 16px; border-radius: var(--r-lg); background: var(--accent-soft); border: .5px solid color-mix(in srgb, var(--accent) 26%, transparent); flex: none; }
+.next-banner.done { background: var(--good-soft); border-color: color-mix(in srgb, var(--good) 26%, transparent); }
+.next-banner .nb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.next-banner.done .nb-dot { background: var(--good); }
+.next-banner .nb-body { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.next-banner .nb-title { font-weight: 650; color: var(--text); }
+.next-banner .nb-counts { font-size: 12px; color: var(--text-2); }
+.next-banner .btn { flex: none; }
+
+.saved-searches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip.active { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
+
+.chk-col { width: 32px; text-align: center; }
+.chk-col input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; vertical-align: middle; }
+.inline-num { width: 64px; text-align: center; }
+td.num { white-space: nowrap; }
+
+/* Documents master-detail */
+.docs-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .docs-layout { grid-template-columns: 1fr; } }
+.doc-list { display: flex; flex-direction: column; padding: 6px; gap: 4px; max-height: calc(100vh - 240px); overflow-y: auto; }
+.doc-item { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 0; border-radius: var(--r-md); background: none; text-align: left; cursor: pointer; }
+.doc-item:hover { background: var(--fill); }
+.doc-item[aria-selected="true"] { background: var(--accent-soft); }
+.doc-item .di-role { font-weight: 600; font-size: 12.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-item .di-co { font-size: 12px; color: var(--text-2); display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.doc-viewer { display: flex; flex-direction: column; min-height: 420px; }
+.doc-head { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: .5px solid var(--line); flex-wrap: wrap; }
+.doc-head .dh-info { min-width: 0; flex: 1; }
+.doc-head .dh-title { font-size: 14px; font-weight: 650; }
+.doc-head .dh-sub { font-size: 12px; color: var(--text-2); }
+.doc-head .dh-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.doc-tabs { display: flex; gap: 4px; padding: 10px 20px 0; border-bottom: .5px solid var(--line); }
+.doc-tabs button { padding: 7px 12px; border: 0; background: none; color: var(--text-2); cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500; }
+.doc-tabs button:hover { color: var(--text); }
+.doc-tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.doc-content { padding: 18px 20px; overflow-y: auto; max-height: calc(100vh - 360px); line-height: 1.55; }
+.doc-pre { white-space: pre-wrap; font-family: var(--font); font-size: 13px; color: var(--text); }
+.doc-md h1, .doc-md h2, .doc-md h3 { font-size: 14px; font-weight: 650; margin: 12px 0 6px; }
+.doc-md h1:first-child, .doc-md h2:first-child { margin-top: 0; }
+.doc-md ul { margin: 6px 0; padding-left: 18px; }
+.doc-md li { margin: 3px 0; }
+.doc-path { padding: 10px 12px; border-radius: var(--r-md); background: var(--fill); font: 12px var(--mono); color: var(--text-2); word-break: break-all; margin-bottom: 12px; }
+
+/* Apply cap & grounding audit */
+.cap-bar { display: flex; align-items: center; gap: 12px; }
+.cap-bar .progress { flex: 1; margin-top: 0; height: 6px; }
+.audit-list { display: flex; flex-direction: column; gap: 10px; }
+.audit-card { padding: 12px 14px; border-radius: var(--r-md); border: .5px solid var(--line); background: var(--fill); display: flex; flex-direction: column; gap: 6px; }
+.audit-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.audit-head b { font-weight: 600; }
+.audit-meta { font-size: 12px; color: var(--text-2); display: flex; gap: 12px; flex-wrap: wrap; }
+.audit-qs { margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: var(--text-2); }
