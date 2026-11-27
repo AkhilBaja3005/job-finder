@@ -151,6 +151,18 @@ def _main():
             ui.error(str(_e))
             sys.exit(2)
 
+    if args.subcommand in ("scan", "apply", "prepare") and not (args.subcommand == "scan" and getattr(args, "dry_run", False)):
+        from backend.services.run_lock import RunInProgress, run_lock
+        try:
+            with run_lock(args.subcommand):
+                return _dispatch(args)
+        except RunInProgress as _busy:
+            ui.error(str(_busy))
+            sys.exit(3)
+    return _dispatch(args)
+
+
+def _dispatch(args):
     if args.subcommand == "searches":
         from job_finder.commands.searches import run as _run
         _run(args)
