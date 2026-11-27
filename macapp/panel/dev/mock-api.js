@@ -307,8 +307,23 @@
       return { ok: true, url: "https://jobs.example.com/apply/4821", title: "Apply | Acme AI", image: "data:image/svg+xml;utf8," + encodeURIComponent(svg) };
     },
     get_results: async () => { await wait(200); return rows; },
+    set_status: async (url, status) => {
+      const r = rows.find((x) => x.url === url);
+      if (r) r.status = status;
+      return { ok: true };
+    },
+    review_in_chrome: async () => ({ ok: true }),
+    review_info: async () => ({ ok: true, reason: "Account creation or CAPTCHA stopped the agent before Submit.", screenshot: false }),
+    open_screenshot: async () => ({ ok: true }),
     sync_now: async () => { await wait(600); return { ok: true, pushed: 3, already: rows.length }; },
     sync_cloud_now: async () => { await wait(600); return { ok: true, pushed: 2, already: rows.length }; },
+    disconnect_sync: async () => { state.cloud.connected = false; return { ok: true }; },
+    save_mailbox: async (user) => { state.mailbox = { configured: true, user: user || "me@example.com" }; return { ok: true }; },
+    disconnect_mailbox: async () => { state.mailbox = { configured: false }; return { ok: true }; },
+    check_replies_now: async () => ({ ok: true, updated: 0, checked: 14 }),
+    open_signin: async () => ({ ok: true }),
+    problem_report: async () => ({ ok: true, text: "Job Finder 1.9.1 mock report" }),
+    choose_profile_and_import: async () => ({ ok: true, name: "Akhil Baja" }),
     save_key: async () => ({ ok: true, keys: state.keys }), open_url: async () => ({ ok: true }), open_path: async () => ({ ok: true }),
     choose_workspace: async () => ({ ok: false }), choose_resume_and_build_profile: async () => ({ ok: false }),
     get_saved_answers: async () => ({ ok: true, items: savedAnswers.slice(), suggestions: ["Why do you want to work here?", "What are your salary expectations?", "What is your notice period or earliest start date?", "Where did you hear about this role?"], max_entries: 40, max_chars: 600 }),
