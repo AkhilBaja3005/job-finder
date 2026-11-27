@@ -2,7 +2,8 @@ name: Prepare release
 
 # Step 1 of a release. Actions -> "Prepare release" -> Run workflow, choose patch, minor, major or type an exact version.
 # It bumps the version in all four files, writes the CHANGELOG.md entry from the PR titles merged since the last tag,
-# and opens a pull request. Merge it, then run "Release" (step 2).
+# and opens a pull request. By default it then waits for every check on that PR and merges it; the Release workflow
+# starts by itself after the merge. Untick auto_merge to merge the PR yourself.
 #
 # Needs the repository secret RELEASE_TOKEN: a personal access token (fine-grained, this repository only, permissions
 # Contents: read and write, Pull requests: read and write). A pull request opened with the built-in token does not start
@@ -15,6 +16,11 @@ on:
         required: true
         default: "patch"
         type: string
+      auto_merge:
+        description: "Merge the release PR by itself once every check on it has passed (then Release starts by itself)"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -23,6 +29,7 @@ jobs:
   prepare:
     name: Open the release pull request
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Check the token exists
         env:
@@ -67,3 +74,20 @@ jobs:
           git push origin "release/$VERSION"
           gh pr create --base main --head "release/$VERSION" --title "release: $VERSION" \
             --body "Version bump and changelog for $VERSION, made by the Prepare release workflow. Check the CHANGELOG.md entry, edit it if a line reads badly, merge, then run the **Release** workflow with version $VERSION."
+
+      - name: Wait for every check, then merge
+        if: ${{ inputs.auto_merge }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          BRANCH="release/$VERSION"
+          # the checks take a moment to appear after the push
+          for i in $(seq 1 20); do
+            if [ -n "$(gh pr checks "$BRANCH" 2>/dev/null || true)" ]; then break; fi
+            sleep 15
+          done
+          gh pr checks "$BRANCH" --watch --interval 30
+          gh pr merge "$BRANCH" --squash --delete-branch
+          echo "Merged $BRANCH. Release starts by itself once CI on main passes." >> "$GITHUB_STEP_SUMMARY"
