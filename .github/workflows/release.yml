@@ -1,8 +1,8 @@
 name: Release
 
 # Makes a numbered release. It starts in two ways:
-#   - Automatically: after "Prepare release" opens a `release: X.Y.Z` pull request and you merge it, this runs as soon as CI on
-#     main has passed for that merge commit.
+#   - Automatically: after a `release: X.Y.Z` pull request is merged ("Prepare release" merges it for you), this runs as soon as
+#     every check on that merge commit has passed (tests, Mac arm64 and Windows builds).
 #   - By hand: Actions -> "Release" -> Run workflow, type the version (for example 1.9.4). Use it to retry or to release a
 #     version bump that was merged some other way.
 #
@@ -11,7 +11,7 @@ name: Release
 # asked: tick the box on a manual run, or set the repository variable AUTO_PUBLISH_PYPI to "true" for automatic runs.
 on:
   workflow_run:
-    workflows: ["CI Verification & Tests"]
+    workflows: ["CI Verification & Tests", "Build desktop apps"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -78,35 +78,47 @@ jobs:
           python3 scripts/check_release_version.py "v$VERSION"
           if gh release view "v$VERSION" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "v$VERSION" >/dev/null 2>&1; then
             if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "::error::v$VERSION already exists. Bump the version first."; exit 1; fi
-            echo "::notice::v$VERSION already exists; nothing to do."; echo "EXISTS=true" >> "$GITHUB_ENV"; exit 0
+            echo "::notice::v$VERSION already exists; nothing to do."; echo "NOTHING_TO_DO=true" >> "$GITHUB_ENV"; exit 0
           fi
           SHA=$(git rev-parse HEAD)
           echo "SHA=$SHA" >> "$GITHUB_ENV"
+          # Every required check on this commit must have passed: the tests and the Mac arm64 and Windows builds.
+          # (Mac Intel may fail without blocking a release.) Two workflows trigger this one; whichever finishes
+          # last finds everything green, the earlier one stops here and waits.
+          STATE=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100" --jq '
+            [.check_runs[] | select(.name=="Distribution & Test Suite" or .name=="Mac arm64" or .name=="Windows")] as $c
+            | if ([$c[].name] | unique | length) < 3 then "waiting"
+              elif any($c[]; .status != "completed") then "waiting"
+              elif all($c[]; .conclusion == "success") then "success"
+              else "failed" end')
+          echo "Checks on ${SHA:0:7}: $STATE"
+          if [ "$STATE" = "success" ]; then exit 0; fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RESULT=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" --jq '[.check_runs[] | select(.name=="Distribution & Test Suite")] | first | if . == null then "not started" elif .status != "completed" then "still running" else .conclusion end')
-            if [ "$RESULT" != "success" ]; then echo "::error::CI on main (${SHA:0:7}) is '$RESULT'. Wait for it to pass, then run again."; exit 1; fi
+            echo "::error::Checks on main (${SHA:0:7}) are '$STATE'. Wait for them to pass, then run again."; exit 1
           fi
+          echo "::notice::Checks on ${SHA:0:7} are '$STATE'; not releasing now."
+          echo "NOTHING_TO_DO=true" >> "$GITHUB_ENV"
 
       - name: Create the GitHub release
-        if: steps.v.outputs.skip != 'true' && env.EXISTS != 'true'
+        if: steps.v.outputs.skip != 'true' && env.NOTHING_TO_DO != 'true'
         env:
           VERSION: ${{ steps.v.outputs.version }}
         run: gh release create "v$VERSION" --target "$SHA" --title "Job Finder $VERSION" --generate-notes
 
       - name: Build the desktop apps and attach them to the release
-        if: steps.v.outputs.skip != 'true' && env.EXISTS != 'true'
+        if: steps.v.outputs.skip != 'true' && env.NOTHING_TO_DO != 'true'
         env:
           VERSION: ${{ steps.v.outputs.version }}
         run: gh workflow run build_desktop_apps.yml --ref "v$VERSION" -f release_tag="v$VERSION"
 
       - name: Publish to PyPI
-        if: steps.v.outputs.skip != 'true' && env.EXISTS != 'true' && steps.v.outputs.pypi == 'true'
+        if: steps.v.outputs.skip != 'true' && env.NOTHING_TO_DO != 'true' && steps.v.outputs.pypi == 'true'
         env:
           VERSION: ${{ steps.v.outputs.version }}
         run: gh workflow run publish_pypi.yml --ref "v$VERSION" -f target=pypi
 
       - name: Summary
-        if: steps.v.outputs.skip != 'true' && env.EXISTS != 'true'
+        if: steps.v.outputs.skip != 'true' && env.NOTHING_TO_DO != 'true'
         env:
           VERSION: ${{ steps.v.outputs.version }}
           PYPI: ${{ steps.v.outputs.pypi }}
