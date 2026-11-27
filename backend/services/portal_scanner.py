@@ -385,6 +385,8 @@ class PortalScanner:
                 return True
         return False
 
+    SCAN_DEADLINE_SECONDS = 30.0
+
     async def scan_all_portals(
         self,
         target_keywords: Optional[List[str]] = None,
@@ -437,10 +439,18 @@ class PortalScanner:
                 for comp in portals_def.get("workday", []):
                     tasks.append(_safe_scan(self.scan_workday_company, comp["company_slug"], comp["name"]))
 
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for r in results:
-                if isinstance(r, list):
-                    all_jobs.extend(r)
+            # One overall deadline: whatever has answered by then is kept. (The caller's own 60 s limit used to throw away
+            # every result when a few hundred company boards stalled.)
+            futures = [asyncio.ensure_future(t) for t in tasks]
+            done, pending = await asyncio.wait(futures, timeout=self.SCAN_DEADLINE_SECONDS) if futures else (set(), set())
+            for p in pending:
+                p.cancel()
+            if pending:
+                print(f"[Portal Scanner] {len(pending)} of {len(futures)} company boards had not answered after "
+                      f"{self.SCAN_DEADLINE_SECONDS:.0f}s; using the {len(done)} that had.")
+            for f in done:
+                if not f.cancelled() and f.exception() is None and isinstance(f.result(), list):
+                    all_jobs.extend(f.result())
 
         # Apply Timeframe Filter
         if timeframe and timeframe not in ("all", "any"):
