@@ -68,6 +68,16 @@ def run_status(as_json: bool = False) -> int:
     return 0
 
 
+def _scanned_path() -> str:
+    from backend.services.excel_tracker import default_path
+    return default_path()
+
+
+def _approved_path() -> str:
+    from backend.services.excel_tracker import approved_path
+    return approved_path()
+
+
 def run_config(as_json: bool = False) -> int:
     """Show where Job Finder reads and writes things (no secret values)."""
     from job_finder.logging_setup import log_file_path
@@ -78,13 +88,16 @@ def run_config(as_json: bool = False) -> int:
     info = {
         "profile": get_profile_config_path(),
         "log_file": log_file_path(),
-        "tracker_csv": os.path.join(os.getcwd(), "applications_tracker", "job_applications_tracker.csv"),
+        "scanned_jobs_xlsx": _scanned_path(),
+        "approved_jobs_xlsx": _approved_path(),
         "environment": {k: ("set" if os.getenv(k) else "unset") for k in env_keys},
     }
     if as_json:
         ui.print_json(info)
         return 0
-    ui.print_table("Paths", ["Item", "Location"], [["Profile", info["profile"]], ["Log file", info["log_file"]], ["Tracker CSV", info["tracker_csv"]]])
+    ui.print_table("Paths", ["Item", "Location"], [["Profile", info["profile"]], ["Log file", info["log_file"]],
+                                          ["Scanned jobs (scan writes here)", info["scanned_jobs_xlsx"]],
+                                          ["Approved queue (apply reads here)", info["approved_jobs_xlsx"]]])
     ui.print_table("Environment", ["Variable", "State"], [[k, v] for k, v in info["environment"].items()], status_col=None)
     return 0
 

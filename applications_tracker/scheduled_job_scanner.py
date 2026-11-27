@@ -107,26 +107,6 @@ def format_posted_date_time(raw_post_date: Optional[str]) -> str:
     return now.strftime("%Y-%m-%d; %H:%M")
 
 
-def normalize_job_url(u: Optional[str]) -> str:
-    """
-    Normalizes a job URL for consistent deduplication across Supabase, CSV, and search results.
-    Preserves unique job keys for query-based platforms like Indeed (jk=) and LinkedIn (currentJobId=)
-    instead of stripping the query and causing all Indeed jobs to collapse into '.../viewjob'.
-    """
-    if not u or not u.strip():
-        return ""
-    raw = u.strip().rstrip("/").lower()
-    if "jk=" in raw:
-        m = re.search(r'jk=([a-f0-9]{16})', raw)
-        if m:
-            domain = "uk.indeed.com" if "uk.indeed.com" in raw else "indeed.com"
-            return f"{domain}/viewjob?jk={m.group(1)}"
-    if "currentjobid=" in raw:
-        m = re.search(r'currentjobid=(\d+)', raw)
-        if m:
-            return f"linkedin.com/jobs/view/{m.group(1)}"
-    return raw.split("?")[0].rstrip("/").lower()
-
 # pyrefly: ignore [missing-import]
 try:
     if not os.environ.get("JOB_FINDER_ROOT"):
@@ -154,6 +134,11 @@ from config.constants import (
     get_tailored_resumes_dir,
     get_tracker_csv_path
 )
+from services.excel_tracker import ExcelTracker, approved_path, normalize_job_url, record_from_payload  # noqa: E402
+from services import closing_date as closing_date_utils  # noqa: E402
+from services.role_spec import resolve_spec  # noqa: E402
+from services import fit_scorer  # noqa: E402
+from services import job_level  # noqa: E402
 
 JOB_FINDER_ROOT = resolve_workspace_root()
 BACKEND_DIR = os.path.join(JOB_FINDER_ROOT, "backend")
@@ -371,47 +356,21 @@ async def record_to_supabase_or_csv(record_data: dict):
         except Exception as se:
             print(f"[Supabase] Synced error: {se}. Falling back to CSV.")
 
-    # Record to local CSV ledger
+    # Record to the Excel tracker (source of truth)
     try:
-        os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
-        file_exists = os.path.exists(CSV_PATH)
-        csv_headers = [
-            "Company", "Job Title", "Location", "Platform", "Posted Time",
-            "Overall ATS", "Skills Match", "Experience Match", "Role Fit",
-            "Matched Skills", "Missing Skills", "Salary", "Seniority",
-            "Recruiter", "Recruiter LinkedIn", "PDF Path", "LaTeX Path",
-            "Status", "Job URL"
-        ]
-        with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            if not file_exists:
-                writer.writerow(csv_headers)
-            writer.writerow([
-                record_data.get("company", ""),
-                record_data.get("job_title", ""),
-                record_data.get("location", ""),
-                record_data.get("platform", ""),
-                record_data.get("posted_time", ""),
-                f"{record_data.get('overall_ats', 0)}%",
-                f"{record_data.get('skills_match', 0)}%",
-                f"{record_data.get('experience_match', 0)}%",
-                f"{record_data.get('role_fit', 0)}%",
-                record_data.get("matched_skills", ""),
-                record_data.get("missing_skills", ""),
-                record_data.get("salary", ""),
-                record_data.get("seniority", ""),
-                record_data.get("recruiter", ""),
-                record_data.get("recruiter_linkedin", ""),
-                record_data.get("pdf_path", ""),
-                record_data.get("latex_path", ""),
-                record_data.get("status", ""),
-                record_data.get("job_url", "")
-            ])
-
-        dest = "Supabase + CSV" if supabase_synced else "CSV Tracker"
-        print(f"   Recorded to: {dest} (Status: {record_data.get('status')})")
+        rec = record_from_payload(record_data)
+        notes = [record_data.get("notes") or ""]
+        if record_data.get("pdf_path"):
+            notes.append(f"Resume: {record_data['pdf_path']}")
+        if record_data.get("latex_path"):
+            notes.append(f"LaTeX: {record_data['latex_path']}")
+        rec["Notes"] = " | ".join(n for n in notes if n)
+        added, skipped = ExcelTracker().add_jobs([rec])
+        dest = "Supabase + Excel" if supabase_synced else "Excel tracker"
+        verb = "Recorded" if added else "Already tracked, not duplicated"
+        print(f"   {verb}: {dest} (Status: {record_data.get('status')})")
     except Exception as ce:
-        print(f"[CSV Tracker] Error saving application: {ce}")
+        print(f"[Excel Tracker] Error saving application: {ce}")
 
 
 async def update_application_status(job_url: str, new_status: str, notes: Optional[str] = None):
@@ -430,29 +389,14 @@ async def update_application_status(job_url: str, new_status: str, notes: Option
         except Exception as se:
             print(f"[Tracker] Note: Could not update status in Supabase: {se}")
 
-    # 2. Update CSV Tracker
-    if os.path.exists(CSV_PATH):
-        try:
-            rows = []
-            headers = []
-            url_norm = job_url.strip().split("?")[0].rstrip("/").lower()
-            with open(CSV_PATH, "r", encoding="utf-8") as f:
-                reader = csv.reader(f)
-                headers = next(reader, [])
-                for r in reader:
-                    if len(r) >= 19:
-                        r_url = r[18].strip().split("?")[0].rstrip("/").lower()
-                        if r_url == url_norm:
-                            r[17] = new_status
-                    rows.append(r)
-
-            if headers:
-                with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f)
-                    writer.writerow(headers)
-                    writer.writerows(rows)
-        except Exception as ce:
-            print(f"[Tracker] Note: Could not update status in CSV: {ce}")
+    # 2. Update the Excel tracker
+    try:
+        fields = {"status": new_status}
+        if notes:
+            fields["notes"] = notes
+        ExcelTracker().update(url=job_url, **fields)
+    except Exception as ce:
+        print(f"[Tracker] Note: Could not update status in Excel tracker: {ce}")
 
 
 def notify_user_of_failed_applications(failed_jobs: list, to_email: Optional[str] = None) -> bool:
@@ -635,7 +579,7 @@ def notify_user_of_applied_applications(applied_jobs: list, to_email: Optional[s
 def get_existing_tracked_urls() -> set:
     """
     Collects normalized URLs of jobs already tracked or applied to.
-    Checks both Supabase ('applications' table) and local CSV tracker.
+    Checks both Supabase ('applications' table) and the local Excel tracker.
     """
     urls = set()
 
@@ -653,19 +597,13 @@ def get_existing_tracked_urls() -> set:
         except Exception as se:
             print(f"[Tracker] Note: Could not fetch existing URLs from Supabase: {se}")
 
-    # 2. Check Local CSV tracker
-    if os.path.exists(CSV_PATH):
-        try:
-            with open(CSV_PATH, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    u = row.get("Job URL") or row.get("url")
-                    if u:
-                        norm = normalize_job_url(u)
-                        if norm:
-                            urls.add(norm)
-        except Exception as ce:
-            print(f"[Tracker] Note: Could not read CSV tracker: {ce}")
+    # 2. Check the Excel tracker
+    try:
+        scanned = ExcelTracker()
+        urls |= scanned.known_urls()
+        urls |= ExcelTracker(approved_path(scanned.path)).known_urls()
+    except Exception as ce:
+        print(f"[Tracker] Note: Could not read Excel tracker: {ce}")
 
     return urls
 
@@ -733,6 +671,672 @@ async def apply_to_job(
             "error": str(be),
             "final_result": f"SUBMISSION_FAILED: {be}"
         }
+
+
+async def discover_jobs(
+    target_roles: list,
+    location: str,
+    timeframe: str,
+    prefs: dict,
+    skip_portals: Optional[str] = None,
+    top_applicant_only: Optional[bool] = None,
+    headless: Optional[bool] = None,
+    title_filter: Optional[Any] = None,
+    use_boards: bool = True,
+):
+    """
+    Multi-source discovery (ATS portals + LinkedIn + Indeed + Reed + Jobserve + community threads).
+    Returns ``(jobs, merged_count)``. Shared by `scan` (discover only) and the legacy full pipeline.
+    """
+    keywords = ", ".join(target_roles)
+    jobs = []
+    merged_count = 0
+
+    if top_applicant_only:
+        print("[Scanner] Running in LinkedIn Top Applicant Only mode...")
+        try:
+            from applications_tracker.linkedin_top_applicant_scanner import scan_linkedin_for_top_applicant_jobs
+        except ImportError:
+            from linkedin_top_applicant_scanner import scan_linkedin_for_top_applicant_jobs  # type: ignore
+
+        tf_hours = 24 if timeframe in ("24h", "1d") else (48 if timeframe in ("48h", "2d") else 168)
+        existing_urls_pre = get_existing_tracked_urls()
+        top_jobs = await scan_linkedin_for_top_applicant_jobs(
+            keywords_list=target_roles,
+            location=location,
+            timeframe_hours=tf_hours,
+            existing_urls=existing_urls_pre,
+            headless=headless if headless is not None else False
+        )
+        for tj in top_jobs:
+            tj["is_top_applicant"] = True
+            tj["ats_score"] = 95
+            tj["source"] = "LinkedIn (Top Applicant)"
+        jobs = top_jobs
+    else:
+        # Run full multi-source web discovery (Portals + LinkedIn + Indeed + Reed)
+        excluded_list = []
+        if skip_portals:
+            if skip_portals.strip().lower() in ("none", "false", "0"):
+                excluded_list = []
+            else:
+                excluded_list.extend([p.strip().lower() for p in skip_portals.split(",") if p.strip()])
+        else:
+            p_skip = prefs.get("skip_portals") if "skip_portals" in prefs else prefs.get("exclude_portals")
+            if isinstance(p_skip, list):
+                excluded_list.extend([str(p).strip().lower() for p in p_skip if str(p).strip()])
+            elif isinstance(p_skip, str):
+                excluded_list.extend([p.strip().lower() for p in p_skip.split(",") if p.strip()])
+            elif p_skip is None:
+                # Default exclusion: targetjobs is skipped by default
+                excluded_list.append("targetjobs")
+
+            env_skip = os.getenv("SKIP_PORTALS") or os.getenv("EXCLUDE_PORTALS")
+            if env_skip:
+                excluded_list.extend([p.strip().lower() for p in env_skip.split(",") if p.strip()])
+
+        # An EMPTY list means "skip nothing" (e.g. --skip-portals none); None would fall back to the default,
+        # which silently excludes TargetJobs (a UK graduate/internship board).
+        skip_nothing = bool(skip_portals and skip_portals.strip().lower() in ("none", "false", "0")) or \
+            (not skip_portals and isinstance(prefs.get("skip_portals", prefs.get("exclude_portals")), list)
+             and not prefs.get("skip_portals", prefs.get("exclude_portals")))
+        excluded_list = list(dict.fromkeys(excluded_list)) if excluded_list else ([] if skip_nothing else None)
+        if excluded_list:
+            print(f"[Scanner] Skipping excluded portal(s): {', '.join(excluded_list)}")
+        search_res = await handle_search_jobs({
+            "keywords": keywords,
+            "location": location,
+            "timeframe": timeframe,
+            "exclude_portals": excluded_list
+        })
+
+        jobs = search_res.get("jobs", [])
+        est_jobs = search_res.get("est_jobs", [])
+        
+        # Merge Indeed est_jobs if not already present in scored jobs
+        existing_scored_urls = {normalize_job_url(j.get("url", "")) for j in jobs if j.get("url")}
+        for ej in est_jobs:
+            u_norm = normalize_job_url(ej.get("url", ""))
+            if u_norm and u_norm not in existing_scored_urls:
+                jobs.append(ej)
+                existing_scored_urls.add(u_norm)
+                merged_count += 1
+
+        # Agent-Reach: Discover unlisted community jobs (Reddit, Hacker News "Who is Hiring")
+        try:
+            from services.agent_reach_service import fetch_reddit_hiring_threads
+            comm_res = fetch_reddit_hiring_threads(role=target_roles[0] if target_roles else "Software Engineer", location=location)
+            for cjob in comm_res.get("community_jobs", []):
+                u_norm = normalize_job_url(cjob.get("url", ""))
+                if u_norm and u_norm not in existing_scored_urls:
+                    jobs.append({
+                        "title": cjob.get("title"),
+                        "company": "Reddit / Hacker News Community",
+                        "url": cjob.get("url"),
+                        "platform": "Reddit / Agent-Reach",
+                        "ats_score": 85,
+                        "description": cjob.get("excerpt", "")
+                    })
+                    existing_scored_urls.add(u_norm)
+                    merged_count += 1
+        except Exception as comm_err:
+            print(f"[Scanner] Note: Community unlisted job search skipped: {comm_err}")
+    # ── extra sources: the company-board index (thousands of Greenhouse/Lever/Ashby boards) + Adzuna (if keyed) ──
+    if not top_applicant_only:
+        have = {normalize_job_url(j.get("url", "")) for j in jobs if j.get("url")}
+        extra: list = []
+        if use_boards:
+            try:
+                from services import board_index as _bi
+                if title_filter is None:      # no topic filter: match on the words of the searched roles
+                    words = {w.lower() for r in target_roles for w in re.findall(r"[A-Za-z]{3,}", r)} - {"intern", "internship", "engineer", "senior"}
+                    title_filter = lambda t: any(w in (t or "").lower() for w in words)  # noqa: E731
+                found, st = _bi.search(title_filter, location)
+                if st["boards"] == 0:
+                    print("[Sources] Company-board index is empty: run `job-finder boards refresh` once to search "
+                          "thousands of Greenhouse / Lever / Ashby boards.")
+                else:
+                    print(f"[Sources] Company boards: {st['boards']} boards indexed, {st['local_jobs']} open jobs in "
+                          f"{location.split(',')[0]}, {st['matched']} match your topic.")
+                    age = (_bi.status().get("age_hours") or 0)
+                    if age > 72:
+                        print(f"[Sources] The company-board index is {age / 24:.0f} days old: run `job-finder boards refresh` (about 6 minutes).")
+                extra += found
+            except Exception as be:
+                print(f"[Sources] Company-board index skipped: {be}")
+        try:
+            from services import aggregators as _ag
+            if _ag.adzuna_configured():
+                az = await _ag.search_adzuna(target_roles, location, timeframe)
+                print(f"[Sources] Adzuna: {len(az)} postings.")
+                extra += az
+            else:
+                print("[Sources] Adzuna not configured (free key: ADZUNA_APP_ID / ADZUNA_APP_KEY in .env).")
+        except Exception as ae:
+            print(f"[Sources] Adzuna skipped: {ae}")
+        added_extra = 0
+        for j in extra:
+            u = normalize_job_url(j.get("url", ""))
+            if u and u not in have:
+                have.add(u)
+                jobs.append(j)
+                added_extra += 1
+        merged_count += added_extra
+    return jobs, merged_count
+
+
+_DIRECT_HOSTS = ("greenhouse.io", "lever.co", "ashbyhq.com", "workable.com", "smartrecruiters.com", "myworkdayjobs.com", "bamboohr.com")
+
+
+def _is_direct(job: dict) -> bool:
+    """A link on the employer's own applicant-tracking system (best to apply through) rather than an aggregator."""
+    u = (job.get("url") or "").lower()
+    src = str(job.get("source") or job.get("platform") or "").lower()
+    # Greenhouse/Lever often return links on the employer's OWN domain (e.g. company.com/careers?gh_jid=1), so also
+    # trust postings that came from an ATS board API rather than from an aggregator.
+    return any(h in u for h in _DIRECT_HOSTS) or any(a in src for a in ("greenhouse", "lever", "ashby", "workday", "bamboo", "workable"))
+
+
+def _dup_key(job: dict) -> str:
+    norm = lambda x: re.sub(r"[^a-z0-9]+", " ", str(x or "").lower()).strip()  # noqa: E731
+    return norm(job.get("company")) + "|" + norm(job.get("title"))
+
+
+IRRELEVANT_TITLE_KEYWORDS = (
+    "accountant", "nursing", "nurse", "sales representative", "telemarketing",
+    "cook", "chef", "cashier", "cleaner", "driver", "warehouse worker",
+    "construction", "plumber", "electrician", "retail assistant", "dental",
+    "store manager", "receptionist", "hairdresser", "security officer", "call center",
+)
+
+
+def _candidate_resume_data(candidate: dict) -> dict:
+    """Candidate profile in the shape the ATS scorer expects."""
+    return {
+        "name": candidate.get("name"),
+        "location": candidate.get("location"),
+        "skills": candidate.get("core_skills", []),
+        "experience": [
+            {"role": e.get("role", ""), "company": e.get("company", ""), "description": e.get("highlights", [])}
+            for e in candidate.get("work_experience", [])
+        ],
+        "raw_text": "",
+    }
+
+
+async def fetch_live_jd_and_score(job: dict, candidate: dict, timeout: float = 30.0) -> bool:
+    """
+    Fetch the real job description for `job` (when the listing only had a stub) and score it against
+    the candidate. Mutates `job` in place; returns True if a real JD was retrieved and scored.
+    Never opens a visible browser: bot-blocked pages are simply left with their estimated score.
+    """
+    url = job.get("url") or job.get("apply_url", "")
+    if not url:
+        return False
+    try:
+        live = await asyncio.wait_for(scrape_job_description(url), timeout=timeout)
+    except Exception:
+        return False
+    if not isinstance(live, dict) or live.get("is_bot_blocked"):
+        return False
+    jd_text = (live.get("description") or "").strip()
+    if len(jd_text) < 100:
+        return False
+
+    job["description"] = jd_text
+    invalid_titles = ("indeed job", "job posting", "unavailable", "not found", "just a moment", "target job", "cloudflare verification error")
+    scraped_title = (live.get("title") or "").strip()
+    if scraped_title and scraped_title.lower() not in invalid_titles:
+        job["title"] = scraped_title
+    scraped_company = (live.get("company") or "").strip()
+    if scraped_company and scraped_company.lower() not in ("indeed employer", "company", "not found"):
+        job["company"] = scraped_company
+
+    resume = _candidate_resume_data(candidate)
+    ats_res = compute_ats_score(resume, jd_text)
+    rf = estimate_role_fit_score(resume, jd_text)
+    score = compute_overall_score(ats_res.skills_score, ats_res.experience_score, rf)
+    job.update({
+        "ats_score": score, "score": score,
+        "matched_skills": ats_res.matched_skills, "missing_skills": ats_res.missing_skills,
+        "skills_score": ats_res.skills_score, "exp_score": ats_res.experience_score,
+        "role_fit_score": rf, "estimated": False,
+    })
+    return True
+
+
+def _print_dry_run(jobs, kept, drops, spec, queries, location, timeframe, src_of) -> None:
+    """Search-only report: where the postings came from, what each stage removed, and every dropped title with its reason."""
+    from collections import Counter
+    line = "=" * 78
+    print(f"\n{line}\nSEARCH-ONLY DRY RUN  (nothing was written to Excel, nothing was scored)\n{line}")
+    print(f"Searched : {', '.join(queries)}")
+    print(f"Where    : {location}   Window: {timeframe}")
+    if spec:
+        print(f"Filter   : {spec.describe()}")
+    by_src = Counter(src_of(j) for j in jobs)
+    print(f"\nDISCOVERED {len(jobs)} postings, by source:")
+    for src, n in by_src.most_common():
+        kept_n = sum(1 for k in kept if src_of(k) == src)
+        print(f"   {src:<28} {n:>4} found  ->  {kept_n:>3} kept")
+    stages = Counter(d[0] for d in drops)
+    print(f"\nWHERE THE {len(jobs) - len(kept)} REMOVED POSTINGS WENT:")
+    for stage, n in stages.most_common():
+        print(f"   {stage:<24} {n:>4}")
+    reasons = Counter(d[4].split(" (")[0] for d in drops if d[0] == "topic/level filter")
+    if reasons:
+        print("   of the topic/level filter:")
+        for r, n in reasons.most_common():
+            print(f"      - {r:<44} {n:>4}")
+    print(f"\nWOULD BE SAVED: {len(kept)}")
+    if spec:
+        from collections import Counter as _T
+        tiers = _T(j.get("_tier") or "Core" for j in kept)
+        print(f"   match: Core (the exact niche you asked for) {tiers.get('Core', 0)}   Related (adjacent field, labelled in the Match column) {tiers.get('Related', 0)}"
+              + ("   [use --core-only to keep only Core]" if tiers.get("Related") else ""))
+    if spec and spec.split:
+        from collections import Counter as _C
+        tally = _C(job_level.classify(j.get("title") or "", "").bucket for j in kept)
+        print("   filed by level (judged from the TITLE only in a dry run; the real scan also reads each description for the years required):")
+        print("   " + "   ".join(f"{b}: {tally.get(b, 0)}" for b in ("intern", "graduate", "experienced")))
+    for j in sorted(kept, key=lambda x: x.get("_tier") != "Core"):
+        print(f"   + {('Core   ' if j.get('_tier') == 'Core' else 'Related') if spec else ''} {str(j.get('title'))[:58]:<58} {str(j.get('company'))[:22]:<22} [{src_of(j)}]")
+    print("\nREMOVED BY THE TOPIC/LEVEL FILTER (check these: anything here that you wanted means the filter is too strict):")
+    for stage, title, company, src, why in sorted((d for d in drops if d[0] == "topic/level filter"), key=lambda d: d[4]):
+        print(f"   x {title[:58]:<58} {company[:20]:<20} [{src[:10]}] {why}")
+    others = [d for d in drops if d[0] != "topic/level filter"]
+    if others:
+        print("\nREMOVED AT OTHER STAGES:")
+        for stage, title, company, src, why in others:
+            print(f"   x {title[:58]:<58} {company[:20]:<20} [{src[:10]}] {stage}: {why}")
+    print(f"{line}\nTo save these for real, run the same command without --dry-run.\n")
+
+
+def _core_title(title: str, company: str = "") -> str:
+    """'Senior Research Scientist, AI Safety (London) - Hybrid' -> 'research scientist ai safety'."""
+    t = re.sub(r"\(.*?\)|\[.*?\]", " ", title or "")
+    t = re.split(r"\s[-–—|@]\s", t)[0]                           # drop ' - London', ' | Fintech', ' @ Company'
+    place = r"london|uk|u\.k\.|united kingdom|england|remote|hybrid|emea|europe|eu|onsite|on-site|full[- ]time|part[- ]time|contract|permanent|fixed[- ]term|ftc"
+    t = re.sub(rf"(?<![A-Za-z0-9])({place})(?![A-Za-z0-9])", " ", t, flags=re.I)
+    for w in re.findall(r"[A-Za-z0-9]{3,}", company or ""):        # the employer's own name is not a job title word
+        if w.lower() not in ("the", "and", "ltd", "limited", "labs", "group", "technologies"):
+            t = re.sub(rf"(?<![A-Za-z0-9]){re.escape(w)}(?:'s)?(?![A-Za-z0-9])", " ", t, flags=re.I)
+    strip = (r"\b(20\d\d|summer|programme|program|interns?|internships?|graduates?|grad|junior|jr|senior|sr|lead|staff|principal|placement|"
+             r"early careers?|entry[- ]level|associate|founding|ii|iii|iv|i)\b")
+    parts = [re.sub(r"\s+", " ", re.sub(r"[^A-Za-z0-9+#/ ]+", " ", re.sub(strip, " ", x, flags=re.I))).strip().lower() for x in t.split(",")]
+    whole = " ".join(x for x in parts if x)
+    out = whole if 2 <= len(whole.split()) <= 5 else (parts[0] if parts else "")
+    return out if 2 <= len(out.split()) <= 5 else ""
+
+
+def _snowball_queries(kept: list, used: set, cap: int = 8, accept=None) -> list:
+    """
+    New searches taken from the job titles that rounds so far actually found (most common first). `accept` lets the caller
+    keep only candidates that themselves name the niche, so a generic 'research scientist' can never steer the search.
+    """
+    from collections import Counter
+    counts = Counter(_core_title(j.get("title") or "", j.get("company") or "") for j in kept)
+    counts.pop("", None)
+    out = []
+    for title, _n in counts.most_common():
+        if title in used or (accept is not None and not accept(title)):
+            continue
+        out.append(title)
+        if len(out) >= cap:
+            break
+    return out
+
+
+def _known_urls(paths: list) -> set:
+    urls: set = set()
+    for pth in paths:
+        urls |= ExcelTracker(pth).known_urls()
+        urls |= ExcelTracker(approved_path(pth)).known_urls()
+    return urls
+
+
+async def run_scan(
+    role: Optional[str] = None,
+    location_override: Optional[str] = None,
+    timeframe_override: Optional[str] = None,
+    min_ats: Optional[int] = None,
+    limit: Optional[int] = None,
+    skip_portals: Optional[str] = None,
+    sponsor_only: Optional[bool] = None,
+    top_applicant_only: Optional[bool] = None,
+    headless: Optional[bool] = None,
+    enrich: bool = True,
+    concurrency: int = 5,
+    topic: Optional[str] = None,
+    level: Optional[str] = None,
+    request: Optional[str] = None,
+    loose: bool = False,
+    exact: bool = False,
+    ai_score: bool = True,
+    dry_run: bool = False,
+    use_boards: bool = True,
+    targets: Optional[Dict[str, str]] = None,
+    expand: int = 1,
+    ai_limit: int = 60,
+    ai_all: bool = False,
+    core_only: bool = False,
+) -> dict:
+    """
+    Discover jobs and save them to the Excel tracker. Nothing is tailored or submitted.
+
+    New jobs are added with Status=New, Applied=No. Already-tracked jobs (same URL, or same
+    company + role + location) are skipped. Returns a summary dict.
+
+    What to search for comes from `request` (free text like "quantum computing internships"),
+    `topic` / `level`, explicit `role` queries, or the profile's `topics` / `level` / `target_roles`
+    (see role_spec.resolve_spec). When a topic or level is in play, postings whose title doesn't fit
+    are dropped (`loose` also reads the description; `exact` skips LLM synonym expansion).
+
+    With `targets` ({"intern": path, "graduate": path, "experienced": path}) a level-"all" scan files every job into the
+    Excel for its level (judged from the title, then from the years of experience in the description); experienced jobs
+    carry the years required. `expand` rounds re-search the job titles found so far to surface related roles.
+
+    `dry_run` is search-only: it searches and filters, prints the whole funnel (every dropped title with its reason),
+    and writes nothing (no Excel, no scoring, no LLM calls beyond the topic map).
+
+    Scoring: with `ai_score` (default) each posting's full description is analysed against your profile
+    by fit_scorer (evidence-based, cached). Where that is unavailable the old keyword scorer's number is
+    kept and labelled "Keyword"; listings with no description are labelled "Listing estimate".
+    """
+    import httpx
+
+    profile = load_profile_data()
+    candidate = profile.get("candidate", {})
+    prefs = profile.get("search_preferences", {})
+
+    spec = resolve_spec(topic=topic, level=level, request=request, role=role, prefs=prefs, loose=loose, exact=exact)
+    if spec and spec.queries:
+        target_roles = spec.queries
+    elif role:
+        target_roles = [r.strip() for r in role.split(",") if r.strip()]
+    else:
+        target_roles = prefs.get("target_roles") or ["Software Engineer"]
+    target_roles = list(dict.fromkeys(target_roles))
+    locations = [location_override] if location_override else prefs.get("target_locations", ["London, UK"])
+    location = locations[0] if locations else "London, UK"
+    timeframe = normalize_timeframe(timeframe_override or prefs.get("timeframe", "48h"))
+
+    split = bool(spec and spec.split)
+    if split and not dry_run and not targets:
+        raise ValueError("a level-'all' scan needs `targets` (one Excel per level)")
+    trackers = {b: ExcelTracker(pth) for b, pth in (targets or {}).items()} if split else {}
+    tracker = ExcelTracker() if not trackers else next(iter(trackers.values()))
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Scan (discover only; nothing will be applied to)")
+    print(f"Searching: {', '.join(target_roles)}")
+    if spec:
+        shown = spec.topic_terms[:14]
+        print(f"Keeping titles that fit  [{spec.describe()}]" + (f"  matching: {', '.join(shown)}{' ...' if len(spec.topic_terms) > 14 else ''}" if shown else ""))
+    print(f"Location: {location} | Timeframe: {timeframe} | " +
+          (("Excel per level: " + ", ".join(f"{b}" for b in trackers)) if trackers else f"Tracker: {tracker.path}") + "\n")
+
+    closed = 0 if dry_run else sum(t.mark_expired() for t in (trackers.values() or [tracker]))
+    if closed:
+        print(f"[Tracker] Marked {closed} listing(s) Closed (closing date passed).")
+
+    jobs, _ = await discover_jobs(
+        target_roles=target_roles, location=location, timeframe=timeframe, prefs=prefs,
+        skip_portals=skip_portals, top_applicant_only=top_applicant_only, headless=headless,
+        title_filter=(lambda t: spec.matches(t or "")[0]) if spec else None, use_boards=use_boards,
+    )
+    print(f"\n[Scan] {len(jobs)} postings discovered across sources.")
+
+    existing = _known_urls([t.path for t in trackers.values()]) if trackers else get_existing_tracked_urls()
+    try:
+        from services import searches as _searches
+        elsewhere = _searches.handled_elsewhere(exclude_scanned=[t.path for t in (trackers.values() or [tracker])])   # url -> search where you already applied
+    except Exception:
+        elsewhere = {}
+    seen = set()
+    counts = {"duplicate": 0, "irrelevant": 0, "non_sponsor": 0, "no_url": 0, "not_a_job": 0, "off_topic": 0}
+    fresh = []
+    dropped = []  # (title, company, reason) for jobs the topic/level filter rejected, shown so you can sanity-check it
+    by_key = {}   # company+title -> the kept posting, so the same job from two sites is saved once
+    drops = []    # every job removed at any stage: (stage, title, company, source, reason)
+    src_of = lambda j: str(j.get("source") or j.get("platform") or "?")  # noqa: E731
+    check_uk_sponsor = None
+    try:
+        from services.uk_sponsor_service import check_uk_sponsor  # type: ignore
+    except Exception:
+        pass
+    def _filter_into(job_list):
+        """Run postings through every filter, adding survivors to `fresh` and every removal to `drops`."""
+        for job in job_list:
+            url = job.get("url") or job.get("apply_url", "")
+            if not url:
+                counts["no_url"] += 1
+                drops.append(("no link", job.get("title") or "", job.get("company") or "", src_of(job), "posting has no URL"))
+                continue
+            # Community threads (Reddit / HN) are leads, not postings: no company, nothing `apply` can fill in.
+            if any(tag in str(job.get("platform") or job.get("source") or "").lower() for tag in ("reddit", "agent-reach", "hacker news")):
+                counts["not_a_job"] += 1
+                drops.append(("community thread", job.get("title") or "", job.get("company") or "", src_of(job), "Reddit/HN lead, not a posting"))
+                continue
+            norm = normalize_job_url(url)
+            if norm in elsewhere and norm not in existing:
+                counts["duplicate"] += 1
+                drops.append(("applied elsewhere", job.get("title") or "", job.get("company") or "", src_of(job),
+                              f"you already applied to this in search '{elsewhere[norm]}'"))
+                continue
+            if norm in existing or norm in seen:
+                counts["duplicate"] += 1
+                drops.append(("already tracked", job.get("title") or "", job.get("company") or "", src_of(job),
+                              "already in your tracker" if norm in existing else "same job seen twice in this scan"))
+                continue
+            seen.add(norm)
+            if any(bad in (job.get("title") or "").lower() for bad in IRRELEVANT_TITLE_KEYWORDS):
+                counts["irrelevant"] += 1
+                drops.append(("irrelevant title", job.get("title") or "", job.get("company") or "", src_of(job), "non-technical title"))
+                continue
+            if spec:
+                fits, _why = spec.matches(job.get("title") or "", job.get("description") or "")
+                if fits:
+                    job["_tier"] = spec.tier(job.get("title") or "")
+                    if core_only and job["_tier"] != "Core":
+                        fits, _why = False, "related field, not the exact niche (--core-only)"
+                if not fits:
+                    counts["off_topic"] += 1
+                    dropped.append((job.get("title") or "", job.get("company") or "", _why))
+                    drops.append(("topic/level filter", job.get("title") or "", job.get("company") or "", src_of(job), _why))
+                    continue
+            sponsor = ""
+            if check_uk_sponsor:
+                try:
+                    sponsor = "Yes" if check_uk_sponsor(job.get("company") or "").get("is_sponsor") else "No"
+                except Exception:
+                    sponsor = ""
+            if sponsor_only and sponsor != "Yes":
+                counts["non_sponsor"] += 1
+                drops.append(("not a UK sponsor", job.get("title") or "", job.get("company") or "", src_of(job), "company not on the sponsor register"))
+                continue
+            job["_uk_sponsor"] = sponsor
+            key = _dup_key(job)
+            if key in by_key:
+                prev = by_key[key]
+                if _is_direct(job) and not _is_direct(prev):
+                    fresh[fresh.index(prev)] = job            # keep the employer's own link, drop the aggregator copy
+                    drops.append(("same job, other site", prev.get("title") or "", prev.get("company") or "", src_of(prev),
+                                  f"kept the direct {src_of(job)} link instead"))
+                    by_key[key] = job
+                else:
+                    drops.append(("same job, other site", job.get("title") or "", job.get("company") or "", src_of(job),
+                                  f"already have it from {src_of(prev)}"))
+                counts["duplicate"] += 1
+                continue
+            by_key[key] = job
+            fresh.append(job)
+
+    _filter_into(jobs)
+
+    # ── expansion: search the job titles the results actually contain, to find related roles you did not type ──
+    all_jobs = list(jobs)
+    if expand and spec and spec.topics and not top_applicant_only:
+        used_queries = {q.lower() for q in target_roles} | {t.lower() for t in spec.topics}
+        for rnd in range(1, expand + 1):
+            more_q = _snowball_queries([j for j in fresh if j.get("_tier", "Core") == "Core"], used_queries, cap=8,
+                                       accept=lambda q: spec.tier(q) == "Core")   # learn from the exact niche only
+            if not more_q:
+                break
+            print(f"[Expand] round {rnd}: also searching {len(more_q)} job titles found so far: {', '.join(more_q)}")
+            more, _ = await discover_jobs(
+                target_roles=more_q, location=location, timeframe=timeframe, prefs=prefs, skip_portals=skip_portals,
+                top_applicant_only=top_applicant_only, headless=headless,
+                title_filter=(lambda t: spec.matches(t or "")[0]), use_boards=False)
+            used_queries |= {q.lower() for q in more_q}
+            before = len(fresh)
+            _filter_into(more)
+            all_jobs += more
+            print(f"[Expand] round {rnd}: {len(more)} more postings, {len(fresh) - before} new relevant ones")
+    jobs = all_jobs
+
+    if dry_run:
+        _print_dry_run(jobs, fresh, drops, spec, target_roles, location, timeframe, src_of)
+        return {"added": 0, "duplicates": counts["duplicate"], "discovered": len(jobs), "would_save": len(fresh), "path": None}
+
+    # Enrich concurrently: real JD where the listing was a stub, then the level (intern / graduate / experienced + years
+    # required), AI fit analysis (intern + graduate only, to protect the LLM quota), then the closing date.
+    live_scored = 0
+    ai_scored = 0
+    ai_attempts = 0
+    done = 0
+    enriched = len(fresh) if enrich else 0
+    if enrich and fresh:
+        print(f"[Scan] Reading {len(fresh)} postings: descriptions, level and years required, fit score, closing date...")
+        sem = asyncio.Semaphore(concurrency)
+        llm_sem = asyncio.Semaphore(3)
+        async with httpx.AsyncClient(timeout=8.0, headers={"User-Agent": "Mozilla/5.0 (job-finder scan)"}) as client:
+            async def _enrich(job: dict):
+                nonlocal live_scored, ai_scored, ai_attempts, done
+                async with sem:
+                    stub = len((job.get("description") or "").strip()) < 100 or job.get("estimated", False)
+                    if stub and not job.get("is_top_applicant"):
+                        if await fetch_live_jd_and_score(job, candidate):
+                            live_scored += 1
+                    has_jd = len((job.get("description") or "").strip()) >= 100
+                    lv = job_level.classify(job.get("title") or "", job.get("description") if has_jd else "")
+                    job["_level"] = lv
+                    wants_ai = (has_jd and ai_score and not job.get("is_top_applicant")
+                                and (ai_all or lv.bucket in ("intern", "graduate")) and ai_attempts < ai_limit)
+                    if wants_ai:
+                        ai_attempts += 1
+                        async with llm_sem:
+                            if await fit_scorer.score_job(job, candidate, lv.bucket if lv.bucket in ("intern", "graduate") else None):
+                                ai_scored += 1
+                    if not job.get("scoring"):
+                        job["scoring"] = "Keyword" if has_jd else "Listing estimate"
+                    cd = closing_date_utils.from_job(job)
+                    if not cd and job.get("llm_closing_date"):
+                        cd = closing_date_utils.parse_date(job["llm_closing_date"])
+                    if not cd:
+                        cd = await closing_date_utils.fetch_closing_date(job.get("url") or "", client)
+                    if cd:
+                        job["closing_date"] = cd.isoformat()
+                    done += 1
+                    if done % 25 == 0:
+                        print(f"[Scan]   ... {done}/{len(fresh)} postings read")
+            await asyncio.gather(*[_enrich(j) for j in fresh], return_exceptions=True)
+
+    def _score(j: dict) -> int:
+        return int(j.get("ats_score") or j.get("score") or 0)
+
+    below = 0
+    if min_ats is not None:
+        kept = [j for j in fresh if _score(j) >= min_ats]
+        below = len(fresh) - len(kept)
+        fresh = kept
+    fresh.sort(key=_score, reverse=True)
+    if limit and limit > 0:
+        fresh = fresh[:limit]
+
+    records, record_buckets = [], []
+    for job in fresh:
+        stub = len((job.get("description") or "").strip()) < 100 or job.get("estimated", False)
+        lv = job.get("_level") or job_level.classify(job.get("title") or "", "" if stub else (job.get("description") or ""))
+        ms, xs = job.get("matched_skills") or [], job.get("missing_skills") or []
+        knockout = job.get("knockout")
+        note = ("ATS is an estimate from the listing (full JD not retrieved)" if stub
+                else ("Scored by the keyword engine" + (" (AI scoring unavailable)" if ai_score else "")
+                      if job.get("scoring") == "Keyword" else ""))
+        if knockout:
+            note = f"Knockout: {knockout}"
+        record_buckets.append(lv.bucket)
+        records.append(record_from_payload({
+            "company": job.get("company") or "", "job_title": job.get("title") or "",
+            "location": job.get("location") or location, "platform": job.get("source") or job.get("platform") or "Web",
+            "posted_time": format_posted_date_time(job.get("posted_date") or job.get("post_date_raw") or "Recent"),
+            "closing_date": job.get("closing_date"), "overall_ats": _score(job),
+            "skills_match": job.get("skills_score"), "experience_match": job.get("exp_score"),
+            "role_fit": job.get("role_fit_score"),
+            "matched_skills": ", ".join(ms) if isinstance(ms, list) else ms,
+            "missing_skills": ", ".join(xs) if isinstance(xs, list) else xs,
+            "uk_sponsor": job.get("_uk_sponsor"), "seniority": job.get("seniority"), "salary": job.get("salary"),
+            "role_level": lv.tag, "years_exp": lv.years_label, "match": job.get("_tier") or "",
+            "job_url": job.get("url") or job.get("apply_url"), "status": "Skipped" if knockout else "New",
+            "scored_by": job.get("scoring") or ("Listing estimate" if stub else "Keyword"),
+            "fit_summary": job.get("fit_summary") or "", "notes": note,
+        }))
+
+    by_bucket: Dict[str, list] = {}
+    dup_in_sheet = 0
+    if split:
+        grouped: Dict[str, list] = {b: [] for b in trackers}
+        for rec, b in zip(records, record_buckets):
+            grouped[b if b in grouped else "experienced"].append(rec)
+        for b, recs in grouped.items():
+            got, dups = trackers[b].add_jobs(recs) if recs else ([], 0)
+            by_bucket[b] = got
+            dup_in_sheet += dups
+        added = [r for rows in by_bucket.values() for r in rows]
+    else:
+        added, dup_in_sheet = tracker.add_jobs(records)
+
+    with_deadline = sum(1 for r in added if r.get("Closing Date"))
+    print("\n" + "=" * 60)
+    print(f"[Scan] Added {len(added)} new job(s)"
+          + (f" ({with_deadline} with a closing date)" if added else ""))
+    print(f"       Skipped: {counts['duplicate'] + dup_in_sheet} already tracked, {counts['irrelevant']} irrelevant titles"
+          + (f", {counts['off_topic']} off topic/level" if spec else "")
+          + (f", {counts['not_a_job']} community threads (not postings)" if counts["not_a_job"] else "")
+          + (f", {counts['non_sponsor']} non-sponsor" if sponsor_only else "")
+          + (f", {below} below ATS {min_ats}%" if min_ats is not None else ""))
+    if dropped:
+        print(f"       Dropped by the topic/level filter (first {min(len(dropped), 12)} of {len(dropped)}):")
+        for t, c, why in dropped[:12]:
+            print(f"         x {t[:58]:<58} {c[:22]:<22} [{why}]")
+        print("       Wrong? Try --loose (reads descriptions too), or list alternatives with commas,")
+        print("       e.g. --topic \"AI security, cyber security\" (a multi-word topic needs ALL its words in the title).")
+    if enrich:
+        print(f"       Scoring: {ai_scored} AI fit analysis, {live_scored} descriptions newly fetched, out of {enriched} new postings"
+              + ("" if ai_score else " (AI scoring off)")
+              + ("; experienced roles use the keyword score unless --score-all" if split and ai_score else "")
+              + (f"; {enriched - ai_scored} keyword/listing estimates (see 'Scored By')" if ai_score and enriched > ai_scored and not split else ""))
+        knocked = [r for r in added if r.get("Status") == "Skipped"]
+        if knocked:
+            print(f"       {len(knocked)} marked Skipped because you fail a hard requirement (see Notes).")
+    if split:
+        print("\n       FILED BY LEVEL (each has its own Excel):")
+        for b in ("intern", "graduate", "experienced"):
+            if b in trackers:
+                print(f"         {b:<12} {len(by_bucket.get(b, [])):>4} new   {trackers[b].path}")
+    else:
+        print(f"       Tracker: {tracker.path}")
+    for r in added[:10]:
+        print(f"   #{r['ID']:<4} {str(r.get('ATS %') if r.get('ATS %') is not None else '--'):>3}%  {str(r.get('Scored By') or '')[:7]:<7} {str(r.get('Company'))[:24]:<24} {str(r.get('Job Role'))[:44]}")
+    if len(added) > 10:
+        print(f"   ... and {len(added) - 10} more")
+    if added:
+        print("\nNext steps:")
+        print("  1. open an Excel and set  Approve = Yes  on the jobs you want:   ./jf open --search NAME   (./jf searches lists them)")
+        print("  2. move them into the approved queue:                            ./jf approve --search NAME")
+        print("  3. preview, then submit:                                         ./jf apply --dry-run   |   ./jf apply --submit")
+    else:
+        print("\nNothing new to review.")
+    return {"added": len(added), "duplicates": counts["duplicate"] + dup_in_sheet, "discovered": len(jobs),
+            "path": tracker.path, "by_bucket": {b: len(v) for b, v in by_bucket.items()}}
 
 
 async def run_pipeline(
@@ -844,93 +1448,15 @@ async def run_pipeline(
     print(f"Max Applications Cap: {max_apps_str}")
     print(f"Guardrails Disabled: {disable_guardrails}\n")
 
-    jobs = []
-    merged_count = 0
-
-    if top_applicant_only:
-        print("[Scanner] Running in LinkedIn Top Applicant Only mode...")
-        try:
-            from applications_tracker.linkedin_top_applicant_scanner import scan_linkedin_for_top_applicant_jobs
-        except ImportError:
-            from linkedin_top_applicant_scanner import scan_linkedin_for_top_applicant_jobs  # type: ignore
-
-        tf_hours = 24 if timeframe in ("24h", "1d") else (48 if timeframe in ("48h", "2d") else 168)
-        existing_urls_pre = get_existing_tracked_urls()
-        top_jobs = await scan_linkedin_for_top_applicant_jobs(
-            keywords_list=target_roles,
-            location=location,
-            timeframe_hours=tf_hours,
-            existing_urls=existing_urls_pre,
-            headless=headless if headless is not None else False
-        )
-        for tj in top_jobs:
-            tj["is_top_applicant"] = True
-            tj["ats_score"] = 95
-            tj["source"] = "LinkedIn (Top Applicant)"
-        jobs = top_jobs
-    else:
-        # Run full multi-source web discovery (Portals + LinkedIn + Indeed + Reed)
-        excluded_list = []
-        if skip_portals:
-            if skip_portals.strip().lower() in ("none", "false", "0"):
-                excluded_list = []
-            else:
-                excluded_list.extend([p.strip().lower() for p in skip_portals.split(",") if p.strip()])
-        else:
-            p_skip = prefs.get("skip_portals") if "skip_portals" in prefs else prefs.get("exclude_portals")
-            if isinstance(p_skip, list):
-                excluded_list.extend([str(p).strip().lower() for p in p_skip if str(p).strip()])
-            elif isinstance(p_skip, str):
-                excluded_list.extend([p.strip().lower() for p in p_skip.split(",") if p.strip()])
-            elif p_skip is None:
-                # Default exclusion: targetjobs is skipped by default
-                excluded_list.append("targetjobs")
-
-            env_skip = os.getenv("SKIP_PORTALS") or os.getenv("EXCLUDE_PORTALS")
-            if env_skip:
-                excluded_list.extend([p.strip().lower() for p in env_skip.split(",") if p.strip()])
-
-        excluded_list = list(dict.fromkeys(excluded_list)) if excluded_list else None
-        if excluded_list:
-            print(f"[Scanner] Skipping excluded portal(s): {', '.join(excluded_list)}")
-        search_res = await handle_search_jobs({
-            "keywords": keywords,
-            "location": location,
-            "timeframe": timeframe,
-            "exclude_portals": excluded_list
-        })
-
-        jobs = search_res.get("jobs", [])
-        est_jobs = search_res.get("est_jobs", [])
-        
-        # Merge Indeed est_jobs if not already present in scored jobs
-        existing_scored_urls = {normalize_job_url(j.get("url", "")) for j in jobs if j.get("url")}
-        for ej in est_jobs:
-            u_norm = normalize_job_url(ej.get("url", ""))
-            if u_norm and u_norm not in existing_scored_urls:
-                jobs.append(ej)
-                existing_scored_urls.add(u_norm)
-                merged_count += 1
-
-        # Agent-Reach: Discover unlisted community jobs (Reddit, Hacker News "Who is Hiring")
-        try:
-            from services.agent_reach_service import fetch_reddit_hiring_threads
-            comm_res = fetch_reddit_hiring_threads(role=target_roles[0] if target_roles else "Software Engineer", location=location)
-            for cjob in comm_res.get("community_jobs", []):
-                u_norm = normalize_job_url(cjob.get("url", ""))
-                if u_norm and u_norm not in existing_scored_urls:
-                    jobs.append({
-                        "title": cjob.get("title"),
-                        "company": "Reddit / Hacker News Community",
-                        "url": cjob.get("url"),
-                        "platform": "Reddit / Agent-Reach",
-                        "ats_score": 85,
-                        "description": cjob.get("excerpt", "")
-                    })
-                    existing_scored_urls.add(u_norm)
-                    merged_count += 1
-        except Exception as comm_err:
-            print(f"[Scanner] Note: Community unlisted job search skipped: {comm_err}")
+    jobs, merged_count = await discover_jobs(
+        target_roles=target_roles,
+        location=location,
+        timeframe=timeframe,
+        prefs=prefs,
+        skip_portals=skip_portals,
+        top_applicant_only=top_applicant_only,
+        headless=headless,
+    )
 
     print(f"\n[Scanner] Total unique postings discovered and queued: {len(jobs)} ({len(jobs) - merged_count} primary scored + {merged_count} from Indeed/EST)")
 

@@ -64,9 +64,21 @@ def get_tailored_resumes_dir() -> str:
     return d
 
 def get_tracker_csv_path() -> str:
-    """Returns path to the job applications CSV spreadsheet."""
+    """Returns path to the legacy job applications CSV (imported once into the Excel tracker)."""
     t_dir = get_applications_tracker_dir()
     return os.path.join(t_dir, "job_applications_tracker.csv")
+
+def get_tracker_xlsx_path() -> str:
+    """Path to the SCANNED jobs workbook: everything `scan` finds (see also get_approved_xlsx_path)."""
+    return os.path.join(get_applications_tracker_dir(), "scanned_jobs.xlsx")
+
+def get_legacy_tracker_xlsx_path() -> str:
+    """Earlier name of the scanned workbook; renamed to scanned_jobs.xlsx on first use."""
+    return os.path.join(get_applications_tracker_dir(), "job_applications_tracker.xlsx")
+
+def get_approved_xlsx_path() -> str:
+    """Path to the APPROVED workbook: the only list `apply` works from."""
+    return os.path.join(get_applications_tracker_dir(), "approved_jobs.xlsx")
 
 def get_output_dir() -> str:
     """Returns output directory for resume outputs and per-user session history."""

@@ -6,8 +6,12 @@ EXAMPLES = """\
 examples:
   job-finder setup                       first-time setup (resume, keys, browser login)
   job-finder doctor                      check keys, Chrome, CDP port and email config
-  job-finder scan --limit 5              discover, score and prepare 5 applications
-  job-finder scan --auto-apply --limit 3 submit applications (guardrails off, be sure)
+  job-finder scan                        discover jobs (topic/level from your profile) into the Excel tracker
+  job-finder scan quantum computing internships     say what you want in plain words
+  job-finder scan --topic "agentic AI, applied AI" --level intern
+  job-finder scan --role "AI Intern"     exact search string, no topic filtering
+  job-finder apply --dry-run --limit 3   fill (never submit) the top 3 open rows of the tracker
+  job-finder apply --submit --ids 4,7    submit applications for tracker rows 4 and 7
   job-finder status                      configuration and master resume overview
   job-finder tracker --status blocked    applications waiting on a CAPTCHA or login
   job-finder tracker --json | jq .summary machine-readable output
@@ -45,25 +49,41 @@ def build_parser(version: str) -> argparse.ArgumentParser:
     # 1. Scanner subcommand
     scanner_parser = subparsers.add_parser(
         "scan",
-        help="Run the automated job discovery, filtering, and resume tailoring pipeline",
+        help="Discover jobs and save them to the Excel tracker (does not apply)",
     )
-    scanner_parser.add_argument("url", nargs="?", default=None, help="Target specific job URL to process directly (optional)")
-    scanner_parser.add_argument("--auto-apply", "--auto-submit", dest="auto_apply", action="store_true", help="Enable automatic browser form submission")
-    scanner_parser.add_argument("--dry-run", action="store_true", help="Fill forms and stop at the review step; never submit (overrides --auto-apply and .env)")
-    scanner_parser.add_argument("--timeout", type=float, default=300.0, help="Autofill session timeout in seconds (default: 300s)")
-    scanner_parser.add_argument("--tailor-timeout", type=float, default=90.0, help="Resume tailoring timeout in seconds (default: 90s)")
-    scanner_parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps per application (default: 50)")
-    scanner_parser.add_argument("--limit", type=int, default=0, help="Max applications to process (default: 0 = unlimited)")
-    scanner_parser.add_argument("--min-ats", type=int, default=None, help="Minimum ATS score threshold (default: from profile)")
-    scanner_parser.add_argument("--role", type=str, default=None, help="Target role filter override")
-    scanner_parser.add_argument("--location", type=str, default=None, help="Target location filter override")
+    scanner_parser.add_argument("request", nargs="*", help="What you want, in plain words, e.g.  quantum computing internships  (overrides the profile's topics/level)")
+    scanner_parser.add_argument("--topic", type=str, default=None, help="Field(s) to look for, comma-separated, e.g. \"agentic AI, applied AI\" (default: topics in your profile)")
+    scanner_parser.add_argument("--level", type=str, default=None, help="intern | graduate | experienced | all | any. Typed a topic/titles but no level = all: every job is filed into the intern, graduate or experienced Excel (default when nothing is typed: level in your profile)")
+    scanner_parser.add_argument("--loose", action="store_true", help="Also accept postings whose job description (not just title) matches the topic/level")
+    scanner_parser.add_argument("--exact", action="store_true", help="Match only your own topic words; skip LLM synonym expansion")
+    scanner_parser.add_argument("--role", type=str, default=None, help="Exact search string(s), comma-separated; no topic filtering (default: target_roles in your profile)")
+    scanner_parser.add_argument("--location", type=str, default=None, help="Location override (default: first target_locations entry)")
     scanner_parser.add_argument("--timeframe", type=str, default=None, help="Search freshness window (e.g. 24h, 48h, 1w)")
+    scanner_parser.add_argument("--min-ats", type=int, default=None, help="Only save jobs scoring at least this ATS %% (default: save everything found)")
+    scanner_parser.add_argument("--limit", type=int, default=0, help="Max new jobs to save, best ATS first (default: 0 = no limit)")
+    scanner_parser.add_argument("--no-ai-score", action="store_true", help="Score with the old keyword engine instead of the AI fit analysis (no LLM calls)")
+    scanner_parser.add_argument("--no-enrich", action="store_true", help="Quick scan: skip fetching full job descriptions and closing dates")
     scanner_parser.add_argument("--model", type=str, default=None, help="LLM model override (gemini-*, claude-* or gpt-*; a claude-*/gpt-* name picks that provider as primary)")
     scanner_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
     scanner_parser.add_argument("--top-applicant", action="store_true", help="Scan LinkedIn specifically for Top Applicant postings and apply directly without JD scoring")
     scanner_parser.add_argument("--sponsor-only", "--sponsored", dest="sponsor_only", action="store_true", help="Filter and only apply/tailor for verified UK Visa Sponsor employers")
     scanner_parser.add_argument("--skip-portals", type=str, default=None, help="Comma-separated list of job portals/boards to skip (e.g. 'targetjobs,reed,indeed')")
     scanner_parser.add_argument("--harvest", action="store_true", help="Harvest and validate fresh ATS company slugs (Ashby, Greenhouse, Lever) before scanning")
+    # Retired: scan no longer applies. Kept (hidden) so old commands fail with a pointer to `apply`.
+    scanner_parser.add_argument("--search", type=str, default=None, metavar="NAME", help="Repeat a saved search and update ITS Excel (see `job-finder searches`)")
+    scanner_parser.add_argument("--into", type=str, default=None, metavar="NAME|FILE.xlsx", help="Add the results to this existing search / Excel file instead of the one this topic would use")
+    scanner_parser.add_argument("--name", type=str, default=None, help="Give this search's Excel a name of your choice (default: derived from topic + level)")
+    scanner_parser.add_argument("--expand", type=int, default=1, metavar="ROUNDS", help="Rounds of expansion: also search the job titles found so far to surface related roles (default 1, 0 = off)")
+    scanner_parser.add_argument("--no-expand", action="store_true", help="Search only the titles/topics you typed (same as --expand 0)")
+    scanner_parser.add_argument("--ai-limit", type=int, default=60, help="Max postings to analyse with the LLM per scan (intern + graduate first; default 60) to protect your API quota")
+    scanner_parser.add_argument("--core-only", action="store_true", help="Keep only titles that name the exact niche (Match = Core); drop adjacent-field roles (Match = Related)")
+    scanner_parser.add_argument("--score-all", action="store_true", help="Also AI-score experienced roles (default: only intern and graduate roles)")
+    scanner_parser.add_argument("--no-boards", action="store_true", help="Skip the company-board index (Greenhouse / Lever / Ashby boards)")
+    scanner_parser.add_argument("--dry-run", action="store_true", help="Search and filter only: print the whole funnel and every dropped title, write nothing, score nothing")
+    for _flag in ("--auto-apply", "--auto-submit"):
+        scanner_parser.add_argument(_flag, dest="retired_apply_flag", action="store_true", help=argparse.SUPPRESS)
+    for _flag in ("--timeout", "--tailor-timeout", "--max-steps"):
+        scanner_parser.add_argument(_flag, dest="retired_apply_opt", default=None, help=argparse.SUPPRESS)
 
     outcomes_parser = subparsers.add_parser(
         "outcomes",
@@ -77,14 +97,72 @@ def build_parser(version: str) -> argparse.ArgumentParser:
         "apply",
         help="Run ad-hoc browser auto-filler on a specific job application URL",
     )
-    apply_parser.add_argument("target", type=str, help="Job posting URL, or path to a .txt/.json/.csv file containing job URLs")
-    apply_parser.add_argument("--submit", action="store_true", help="Auto-submit the application if safe")
+    apply_parser.add_argument("target", nargs="?", default=None, help="Optional: a job URL, or a .txt/.json/.csv file of URLs. Omit to apply to the approved queue (approved_jobs.xlsx)")
+    apply_parser.add_argument("--ids", type=str, default=None, help="Queue mode: only these row IDs, comma-separated (e.g. 4,7,12)")
+    apply_parser.add_argument("--min-ats", type=int, default=None, help="Queue mode: only rows with at least this ATS %% (default: everything you approved)")
+    apply_parser.add_argument("--limit", type=int, default=0, help="Queue mode: max applications this run, best ATS first (default: 0 = the whole queue)")
+    apply_parser.add_argument("--company", type=str, default=None, help="Queue mode: only companies containing this text")
+    apply_parser.add_argument("--retry", action="store_true", help="Queue mode: also retry rows marked Needs Review")
+    apply_parser.add_argument("--no-pack", action="store_true", help="Queue mode: skip the review gate; use your master resume and let the agent write any cover letter")
+    apply_parser.add_argument("--submit", action="store_true", help="Really submit applications (default is preview: fill the form, never submit)")
+    apply_parser.add_argument("--yes", "-y", action="store_true", help="Skip the confirmation prompt before submitting")
     apply_parser.add_argument("--dry-run", action="store_true", help="Fill forms and stop at the review step; never submit (overrides --submit and .env)")
     apply_parser.add_argument("--timeout", type=float, default=300.0, help="Application timeout in seconds (default: 300s)")
     apply_parser.add_argument("--max-steps", type=int, default=50, help="Max browser-use steps (default: 50)")
     apply_parser.add_argument("--model", type=str, default="gemini-3.5-flash-lite", help="LLM model to use (default: gemini-3.5-flash-lite)")
     apply_parser.add_argument("--headless", action="store_true", help="Run browser automation headlessly without GUI")
     apply_parser.add_argument("--resume", type=str, default=None, help="Path to resume PDF to upload (default: auto-detected master resume)")
+
+    # 2b. Approve subcommand: scanned_jobs.xlsx -> approved_jobs.xlsx
+    approve_parser = subparsers.add_parser(
+        "approve",
+        help="Move jobs you chose from scanned_jobs.xlsx into the approved queue that `apply` works from",
+    )
+    approve_parser.add_argument("--ids", type=str, default=None, help="Approve (or with --revoke, withdraw) these row IDs, comma-separated")
+    approve_parser.add_argument("--min-ats", type=int, default=None, help="Approve every open row scoring at least this ATS %%")
+    approve_parser.add_argument("--revoke", action="store_true", help="Take --ids back out of the queue (not if already applied)")
+    approve_parser.add_argument("--list", action="store_true", help="Show what is waiting in the approved queue")
+    approve_parser.add_argument("--no-prepare", action="store_true", help="Don't build the application packs (tailored CV, cover letter) for newly approved jobs")
+    approve_parser.add_argument("--cover-letter", choices=["auto", "always", "never"], default="auto", help="Cover letter for new packs: auto = only when the posting mentions one (default)")
+
+    # 2b2. Topic inspector
+    topic_parser = subparsers.add_parser("topic", help="Show what a topic means to `scan` (sub-fields, look-alikes, searches) without searching")
+    topic_parser.add_argument("request", nargs="*", help="e.g.  cyber security internships")
+    topic_parser.add_argument("--topic", type=str, default=None, help="Topic(s), comma-separated")
+    topic_parser.add_argument("--level", type=str, default=None, help="intern | graduate | junior | senior | any")
+    topic_parser.add_argument("--refresh", action="store_true", help="Ask the LLM to rebuild the topic's field (replaces the cached/edited one)")
+
+    # 2b3. Prepare / review: the per-job application packs
+    prep_parser = subparsers.add_parser("prepare", help="Build the application pack for approved jobs: tailored CV, cover letter if needed, JD, fit analysis")
+    prep_parser.add_argument("--ids", type=str, default=None, help="Only these row IDs, comma-separated")
+    prep_parser.add_argument("--redo", action="store_true", help="Regenerate from scratch (discards your edits to cv.json / cover_letter.txt)")
+    prep_parser.add_argument("--render-only", action="store_true", help="Rebuild the PDFs from your edited cv.json / cover_letter.txt without calling the LLM")
+    prep_parser.add_argument("--cover-letter", choices=["auto", "always", "never"], default="auto", help="auto = only when the posting mentions a cover letter (default)")
+    review_parser = subparsers.add_parser("review", help="List application packs, open one, and sign off (Docs OK) so `apply` may use it")
+    review_parser.add_argument("--open", type=int, default=None, metavar="ID", help="Open this job's pack folder")
+    review_parser.add_argument("--ok", type=str, default=None, help="Sign off these IDs (comma-separated): you reviewed the CV / cover letter")
+    review_parser.add_argument("--revoke", type=str, default=None, help="Take the sign-off back for these IDs")
+
+    # 2b4. Company-board index
+    boards_parser = subparsers.add_parser("boards", help="Build/inspect the index of open London/UK jobs on thousands of Greenhouse, Lever and Ashby boards")
+    boards_parser.add_argument("action", choices=["refresh", "status"], help="refresh = (re)visit the boards, status = show what is indexed")
+    boards_parser.add_argument("--ats", type=str, default=None, help="Comma-separated subset: greenhouse,lever,ashby")
+    boards_parser.add_argument("--limit", type=int, default=None, help="Only visit this many boards (to try it out)")
+    boards_parser.add_argument("--force", action="store_true", help="Re-visit every board, ignoring how recently it was checked")
+    boards_parser.add_argument("--location", type=str, default=None, help="City to index (default: first target_locations entry)")
+    boards_parser.add_argument("--concurrency", type=int, default=24, help="Parallel requests (default 24)")
+
+    # 2b5. searches: one Excel per search
+    searches_parser = subparsers.add_parser("searches", help="List searches (one Excel each), switch the current one, or move jobs between them")
+    searches_parser.add_argument("action", nargs="?", choices=["list", "use", "move", "path"], default="list")
+    searches_parser.add_argument("name", nargs="?", default=None, help="Search name for `use` / `path` (a unique prefix is enough)")
+    searches_parser.add_argument("--from", dest="source", type=str, default=None, help="move: source search")
+    searches_parser.add_argument("--to", type=str, default=None, help="move: target search (created if it does not exist)")
+    searches_parser.add_argument("--ids", type=str, default=None, help="move: job IDs, e.g. 3,5,8-10")
+
+    # 2c. Open subcommand
+    open_parser = subparsers.add_parser("open", help="Open the scanned or approved Excel file")
+    open_parser.add_argument("which", nargs="?", choices=["scanned", "approved"], default="scanned", help="Which workbook (default: scanned)")
 
     # 3. Server subcommand
     server_parser = subparsers.add_parser(
@@ -148,6 +226,9 @@ def build_parser(version: str) -> argparse.ArgumentParser:
     ats_parser.add_argument("--optimize", action="store_true", help="Auto-optimize summary for ATS conversion using AI")
     ats_parser.add_argument("--jd-file", type=str, default=None, help="Score against a job description text file ('-' reads stdin)")
     ats_parser.add_argument("--jd-url", type=str, default=None, help="Score against a job posting URL")
+    ats_parser.add_argument("--keyword", action="store_true", help="Use the old fixed-keyword engine instead of the AI analysis (audit and --jd-file/--jd-url)")
+    ats_parser.add_argument("--add-skills", action="store_true", help="After the audit, add skills your profile evidences but doesn't list to core_skills (asks first, backs up)")
+    ats_parser.add_argument("--yes", "-y", action="store_true", help="With --add-skills: skip the confirmation prompt")
     ats_parser.add_argument("--json", action="store_true", help="Print results as JSON")
 
     # 9. Tracker subcommand
@@ -155,9 +236,13 @@ def build_parser(version: str) -> argparse.ArgumentParser:
         "tracker",
         help="List and inspect tracked applications, saved roles, and tailored resumes",
     )
+    tracker_parser.add_argument("--approved", action="store_true", help="Show the approved queue instead of the scanned jobs")
     tracker_parser.add_argument("--status", type=str, default="all", help="Filter by status text, case-insensitive (all, saved, applied, review, blocked, ...)")
     tracker_parser.add_argument("--limit", type=int, default=20, help="Max entries to list (default: 20, 0 = all)")
     tracker_parser.add_argument("--json", action="store_true", help="Print results as JSON")
+
+    for _p in (approve_parser, prep_parser, review_parser, apply_parser, open_parser, tracker_parser):
+        _p.add_argument("--search", type=str, default=None, metavar="NAME", help="Work on this search's Excel instead of the current one (see `job-finder searches`)")
 
     # 10. Company subcommand (Agent-Reach Culture Brief)
     company_parser = subparsers.add_parser(

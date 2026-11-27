@@ -6,6 +6,7 @@ inspect visual DOM structures, auto-populate candidate details, upload resumes, 
 """
 
 import os
+import re
 import sys
 import inspect
 import json
@@ -371,14 +372,36 @@ def _background_text(resume_data: Dict[str, Any]) -> str:
     return ("\n" + "\n".join(out)) if out else ""
 
 
+def _apply_reviewed_cover_letter(task: str, text: Optional[str], path: Optional[str]) -> str:
+    """Make the agent use the user's REVIEWED cover letter verbatim instead of improvising one."""
+    if not text and not (path and os.path.exists(path)):
+        return task
+    task = re.sub(
+        r"^(\s*)\* In a single turn, TYPE a tailored, compelling 3-paragraph cover letter.*$",
+        r"\1* Paste the REVIEWED COVER LETTER given at the end of this task EXACTLY as written (no edits, no additions) into that text area.",
+        task, flags=re.MULTILINE)
+    extra = "\n\nREVIEWED COVER LETTER (the candidate approved this text; NEVER write or alter a cover letter yourself):\n"
+    if path and os.path.exists(path):
+        extra += f"- If a cover letter FILE is requested, upload this file: {os.path.abspath(path)}\n"
+    if text:
+        extra += f"- If a cover letter TEXT box is offered, paste exactly this:\n<<<COVER_LETTER\n{text.strip()}\nCOVER_LETTER>>>\n"
+    extra += "- If no cover letter field exists on the form, do not add one.\n"
+    return task + extra
+
+
 def build_application_task_prompt(
     job_url: str,
     resume_data: Dict[str, Any],
     resume_pdf_path: Optional[str] = None,
-    auto_submit: bool = False
+    auto_submit: bool = False,
+    cover_letter_text: Optional[str] = None,
+    cover_letter_path: Optional[str] = None,
 ) -> str:
     """
     Synthesizes candidate background, strict instructions, and safety constraints into an agent prompt.
+
+    If `cover_letter_text` / `cover_letter_path` are given (a letter the user has already reviewed), the agent
+    must use exactly that text / file for any cover-letter field and never write its own.
     """
     candidate_name = resume_data.get("name") or resume_data.get("candidate", {}).get("name", "Applicant")
     email = resume_data.get("email") or resume_data.get("candidate", {}).get("email", "")
@@ -717,7 +740,7 @@ def build_application_task_prompt(
     - Stay on the employer's application flow. Do not open unrelated links, download files, or install anything.
     - Never invent an answer. If a required field asks for something that is not in the candidate profile (for example a degree, a street address, or a date), choose a "prefer not to say" / "not applicable" option if one exists. Otherwise leave it and report it in the final result as SUBMISSION_FAILED with the field name. Do not guess.
     """
-    return task
+    return _apply_reviewed_cover_letter(task, cover_letter_text, cover_letter_path)
 
 
 _shared_browser_session: Optional[Any] = None
@@ -1122,7 +1145,9 @@ async def run_browser_use_autofill(
     custom_api_key: Optional[str] = None,
     auto_submit: bool = False,
     max_steps: int = 50,
-    new_tab: bool = True
+    new_tab: bool = True,
+    cover_letter_text: Optional[str] = None,
+    cover_letter_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Runs an autonomous application filling session using browser-use and Gemini.
@@ -1195,7 +1220,9 @@ async def run_browser_use_autofill(
         job_url=target_url,
         resume_data=resume_data,
         resume_pdf_path=resolved_resume_path,
-        auto_submit=effective_auto_submit
+        auto_submit=effective_auto_submit,
+        cover_letter_text=cover_letter_text,
+        cover_letter_path=cover_letter_path,
     )
 
     browser_session = get_or_create_browser_session(headless=headless)
@@ -1204,6 +1231,8 @@ async def run_browser_use_autofill(
     nav_actions = [{"navigate": {"url": target_url, "new_tab": new_tab}}]
 
     available_paths = [os.path.abspath(resolved_resume_path)] if resolved_resume_path and os.path.exists(resolved_resume_path) else []
+    if cover_letter_path and os.path.exists(cover_letter_path):
+        available_paths.append(os.path.abspath(cover_letter_path))
 
     mode_str = "AUTO-SUBMIT (GUARDRAILS DISABLED)" if effective_auto_submit else "REVIEW ONLY (GUARDRAIL ACTIVE)"
 
