@@ -57,7 +57,12 @@ def load_app_config() -> Dict[str, Any]:
 def save_app_config(config: Dict[str, Any]) -> None:
     home = app_support_dir()
     home.mkdir(parents=True, exist_ok=True)
-    (home / "app.json").write_text(json.dumps(config, indent=2), encoding="utf-8")
+    target = home / "app.json"
+    target.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    try:
+        os.chmod(target, 0o600)  # it holds the sign-in token
+    except OSError:
+        pass
 
 
 def logs_dir() -> Path:
@@ -414,7 +419,9 @@ def import_profile_file(ws: Path, source: Path) -> Dict[str, Any]:
 
 # ── job-finder.space (sync code) ─────────────────────────────────────────────────
 DEFAULT_SERVER = "https://abaja-job-finder.hf.space"
-SYNC_CODE_VAR = "JOB_FINDER_SYNC_CODE"
+LEGACY_SYNC_VARS = ("JOB_FINDER_SYNC_CODE", "JOB_FINDER_SYNC_EMAIL")   # older versions kept a sync code here; signing out clears it
+SESSION_GRACE_SECONDS = 7 * 24 * 3600        # how long a past check lets the app open when job-finder.space cannot be reached
+SESSION_CHECK_SECONDS = 600
 _cloud_cache: Dict[str, Any] = {}
 
 
@@ -425,14 +432,42 @@ def server_url(ws: Path) -> str:
     return url if parsed.scheme == "https" or (parsed.scheme == "http" and local) else DEFAULT_SERVER  # never send the code in clear text
 
 
-def sync_code(ws: Path) -> str:
-    return read_env(ws).get(SYNC_CODE_VAR, "").strip().upper()
+def account_token(ws: Optional[Path] = None) -> str:
+    return str((load_app_config().get("account") or {}).get("token") or "").strip()
 
 
-def _server_request(ws: Path, code: str, path: str, method: str = "GET", body: Any = None, timeout: float = 20.0) -> Any:
+def account_secret(ws: Optional[Path] = None) -> str:
+    """What the app sends to the server: the Google sign-in token. There is no other way in."""
+    return account_token(ws)
+
+
+def account_email(ws: Optional[Path] = None) -> str:
+    return str((load_app_config().get("account") or {}).get("email") or "")
+
+
+def account_kind(ws: Optional[Path] = None) -> str:
+    return "google" if account_token(ws) else ""
+
+
+def _store_account(token: str, email: str) -> None:
+    cfg = load_app_config()
+    if token:
+        cfg["account"] = {"token": token, "email": email}
+    else:
+        cfg.pop("account", None)
+        cfg.pop("session_verified", None)
+    save_app_config(cfg)
+
+
+def _server_request(ws: Path, code: Optional[str], path: str, method: str = "GET", body: Any = None, timeout: float = 20.0, email: Optional[str] = None) -> Any:
+    headers = {"Content-Type": "application/json", "User-Agent": "Job-Finder-App"}
+    if code:
+        headers["Authorization"] = f"Bearer {code}"
+        given = email if email is not None else account_email(ws)
+        if given:
+            headers["X-Account-Email"] = given
     request = urllib.request.Request(
-        server_url(ws) + path, method=method, data=json.dumps(body).encode() if body is not None else None,
-        headers={"Authorization": f"Bearer {code}", "Content-Type": "application/json", "User-Agent": "Job-Finder-App"},
+        server_url(ws) + path, method=method, data=json.dumps(body).encode() if body is not None else None, headers=headers,
     )
     with urllib.request.urlopen(request, timeout=timeout, context=_ssl_context()) as resp:
         raw = resp.read()
@@ -442,7 +477,7 @@ def _server_request(ws: Path, code: str, path: str, method: str = "GET", body: A
 def _explain(exc: Exception) -> str:
     if isinstance(exc, urllib.error.HTTPError):
         if exc.code == 401:
-            return "That sync code was not recognised."
+            return "Your sign-in has ended. Sign in with Google again."
         if exc.code == 429:
             return "Too many attempts. Wait a few minutes and try again."
         return f"The server answered with an error ({exc.code})."
@@ -450,46 +485,125 @@ def _explain(exc: Exception) -> str:
 
 
 def cloud_status(ws: Path, fresh: bool = False) -> Dict[str, Any]:
-    """Whether a sync code is saved and still accepted. The answer is kept for a minute so the window stays quick."""
-    code = sync_code(ws)
+    """Whether an account (Google sign-in or sync code) is saved and still accepted. The answer is kept for a minute so the window stays quick."""
+    code = account_secret(ws)
     if not code:
-        return {"configured": False, "connected": False}
+        return {"configured": False, "connected": False, "signing_in": _signin_state.get("state") == "waiting"}
     cached = _cloud_cache.get("status")
     if cached and not fresh and cached[0] == (code, server_url(ws)) and time.time() - cached[1] < 60:
         return cached[2]
     try:
         me = _server_request(ws, code, "/user/me", timeout=8) or {}
-        result = {"configured": True, "connected": True, "email": str(me.get("email") or "")}
+        if me.get("is_guest"):
+            raise urllib.error.HTTPError("", 401, "guest", {}, None)
+        result = {"configured": True, "connected": True, "email": str(me.get("email") or account_email(ws)), "kind": account_kind(ws)}
     except Exception as exc:
-        result = {"configured": True, "connected": False, "error": _explain(exc)}
+        result = {"configured": True, "connected": False, "error": _explain(exc), "kind": account_kind(ws), "email": account_email(ws)}
     _cloud_cache["status"] = ((code, server_url(ws)), time.time(), result)
     return result
 
 
-def save_sync_code(ws: Path, raw: str) -> Dict[str, Any]:
-    code = re.sub(r"[^A-Za-z0-9]", "", raw or "").upper()
-    if not 4 <= len(code) <= 16:
-        return {"ok": False, "error": "A sync code is 6 to 10 letters and numbers. Find it on job-finder.space under your account."}
-    try:
-        me = _server_request(ws, code, "/user/me", timeout=10) or {}
-    except Exception as exc:
-        return {"ok": False, "error": _explain(exc)}
-    write_env_value(ws, SYNC_CODE_VAR, code)
-    _cloud_cache.clear()
-    return {"ok": True, "email": str(me.get("email") or "")}
-
-
 def disconnect_sync(ws: Path) -> Dict[str, Any]:
-    write_env_value(ws, SYNC_CODE_VAR, "")
+    """Signs out. A Google sign-in is ended on the server too, so the saved token stops working everywhere."""
+    token = account_token(ws)
+    if token:
+        try:
+            _server_request(ws, token, "/auth/app/revoke", "POST", {}, timeout=8)
+        except Exception:
+            log.debug("could not end the session on the server", exc_info=True)  # signing out here still works
+    for var in LEGACY_SYNC_VARS:
+        write_env_value(ws, var, "")
+    _store_account("", "")
     _cloud_cache.clear()
+    _session.update(ok=False, checked=0.0, token="")
     return {"ok": True}
+
+
+# ── the lock: nothing works without a valid Google sign-in ───────────────────────
+_session: Dict[str, Any] = {"ok": False, "checked": 0.0, "token": ""}
+GATE_ENABLED = True   # tests turn it off; the app never does
+
+
+def session_status(ws: Optional[Path] = None, fresh: bool = False) -> Dict[str, Any]:
+    """{signed_in, reason, email}. reason is "none" (never signed in), "expired" (the server no longer accepts it) or "offline"
+    (the server could not be reached and the last good check is too old). A check made in the last 7 days lets the app open offline."""
+    ws = ws or workspace_dir()
+    token = account_token(ws)
+    email = account_email(ws)
+    if not token:
+        return {"signed_in": False, "reason": "none", "email": ""}
+    now = time.time()
+    if not fresh and _session["token"] == token and _session["ok"] and now - _session["checked"] < SESSION_CHECK_SECONDS:
+        return {"signed_in": True, "reason": "", "email": email}
+    try:
+        me = _server_request(ws, token, "/user/me", timeout=8) or {}
+        if me.get("is_guest") or not me.get("email"):
+            _session.update(ok=False, checked=now, token=token)
+            return {"signed_in": False, "reason": "expired", "email": email}
+        cfg = load_app_config()
+        cfg["session_verified"] = now
+        save_app_config(cfg)
+        _session.update(ok=True, checked=now, token=token)
+        return {"signed_in": True, "reason": "", "email": str(me.get("email") or email)}
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            _session.update(ok=False, checked=now, token=token)
+            return {"signed_in": False, "reason": "expired", "email": email}
+        err: Exception = exc
+    except Exception as exc:  # noqa: BLE001
+        err = exc
+    log.debug("could not check the sign-in: %s", err)
+    if now - float(load_app_config().get("session_verified") or 0) < SESSION_GRACE_SECONDS:
+        _session.update(ok=True, checked=now - SESSION_CHECK_SECONDS + 60, token=token)   # look again in a minute
+        return {"signed_in": True, "reason": "offline", "email": email}
+    return {"signed_in": False, "reason": "offline", "email": email}
+
+
+# Calls the window may make before signing in: showing the sign-in screen, window handling, and opening links.
+OPEN_METHODS = {"get_state", "google_sign_in", "google_sign_in_status", "cancel_google_sign_in", "session_check", "drag_start", "drag_to",
+                "zoom_window", "set_theme", "open_url", "check_update"}
+
+# ── Sign in with Google ──────────────────────────────────────────────────────────
+_signin_state: Dict[str, Any] = {"state": "idle"}
+_signin_cancel = threading.Event()
+
+
+def google_sign_in_worker(ws: Path, open_browser: Any = None, timeout: float = 180.0) -> None:
+    """Runs on its own thread: opens the browser, waits for Google, and keeps the session token in the folder's .env."""
+    import account_login
+    _signin_cancel.clear()
+    _signin_state.update(state="waiting", error="", email="")
+
+    def post_json(path: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            return _server_request(ws, None, path, "POST", body, timeout=20) or {}
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429:
+                raise RuntimeError("Too many attempts. Wait a few minutes and try again.")
+            raise RuntimeError("The sign-in was refused by the server. Try again.")
+        except Exception:
+            raise RuntimeError("Could not reach job-finder.space. Check your connection.")
+
+    try:
+        result = account_login.run_google_sign_in(post_json, open_browser or webbrowser.open, timeout=timeout, cancelled=_signin_cancel)
+        _store_account(result["token"], result["email"])
+        cfg = load_app_config()
+        cfg["session_verified"] = time.time()
+        save_app_config(cfg)
+        _cloud_cache.clear()
+        _session.update(ok=True, checked=time.time(), token=result["token"])
+        _signin_state.update(state="done", email=result["email"])
+    except account_login.SignInCancelled:
+        _signin_state.update(state="idle")
+    except Exception as exc:
+        _signin_state.update(state="error", error=str(exc)[:160])
 
 
 def sync_to_cloud(ws: Path) -> Dict[str, Any]:
     """Uploads the applications in the local tracker to the account. The server skips URLs it already has."""
-    code = sync_code(ws)
+    code = account_secret(ws)
     if not code:
-        return {"ok": False, "error": "Add your sync code in Settings first."}
+        return {"ok": False, "error": "Sign in to job-finder.space in Settings first."}
     rows, seen = [], set()
     for row in _csv_all(ws):
         url = (row.get("Job URL") or "").strip()
@@ -627,7 +741,7 @@ def read_cloud_applications(ws: Path, limit: int = 300) -> List[Dict[str, str]]:
 def read_account_applications(ws: Path, limit: int = 20000) -> List[Dict[str, str]]:
     """The applications saved to the job-finder.space account behind the sync code (website, extension and other computers).
     The answer is kept for 30 seconds so switching screens does not ask the server every time."""
-    code = sync_code(ws)
+    code = account_secret(ws)
     if not code:
         return []
     key = (code, server_url(ws))
@@ -785,7 +899,7 @@ def set_application_stage(ws: Path, url: str, stage: str) -> Dict[str, Any]:
             _supabase_request(cfg, f"applications?user_id=eq.{cloud_user_id(ws)}&job_url=eq.{quoted}", "PATCH", {"status": label}, headers={"Prefer": "return=minimal"}, timeout=8)
         except Exception:
             log.debug("could not update the status in Supabase", exc_info=True)
-    code = sync_code(ws)
+    code = account_secret(ws)
     if code:  # best effort: the account on job-finder.space follows along
         try:
             _server_request(ws, code, "/applications/status", "POST", {"job_url": url.strip(), "status": label}, timeout=8)
@@ -884,7 +998,7 @@ def diagnostics_report(ws: Path) -> str:
     lines = [f"Job Finder {_app_version()}", f"macOS {platform.mac_ver()[0]} {platform.machine()}",
              f"Chrome found: {chrome_found()}", f"Scraper browser ready: {browser_ready()}",
              "Keys set: " + ", ".join(name for name, v in key_status(ws).items() if v["set"]) ,
-             f"Sync code saved: {bool(sync_code(ws))}", f"Supabase configured: {bool(supabase_settings(ws))}", "", "--- app.log (last 60 lines) ---"]
+             f"Account connected: {account_kind(ws) or 'no'}", f"Supabase configured: {bool(supabase_settings(ws))}", "", "--- app.log (last 60 lines) ---"]
     try:
         lines += (logs_dir() / "app.log").read_text(encoding="utf-8", errors="replace").splitlines()[-60:]
     except OSError:
@@ -900,6 +1014,8 @@ def _guarded(method):
     """A failure inside an Api call is logged and returned as {ok: False, error}, never raised into the window."""
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
+        if GATE_ENABLED and method.__name__ not in OPEN_METHODS and not session_status()["signed_in"]:
+            return {"ok": False, "signed_out": True, "error": "Sign in with Google to use Job Finder."}
         try:
             return method(self, *args, **kwargs)
         except Exception as exc:  # noqa: BLE001
@@ -926,7 +1042,7 @@ class Api:
         ws = workspace_dir()
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
-            "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "mailbox": mailbox_status(ws), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "profile_check": profile_check(ws),
+            "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "mailbox": mailbox_status(ws), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "supabase": supabase_status(ws), "cloud": cloud_status(ws), "session": {**session_status(ws), "signing_in": _signin_state.get("state") == "waiting", "error": _signin_state.get("error", "") if _signin_state.get("state") == "error" else ""}, "profile_check": profile_check(ws),
             "browser": {"ready": browser_ready(), **self._browser},
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
@@ -1006,7 +1122,7 @@ class Api:
             notify("Job Finder", f"Run finished: {counts['submitted']} submitted, {counts['needs_review']} to review." if result["exit_code"] in (0, None) else "The run ended with an error.")
         if not result["running"] and not self._synced_after_run:
             self._synced_after_run = True  # once per run
-            if (supabase_settings(workspace_dir()) or sync_code(workspace_dir()) or mailbox_status(workspace_dir())["configured"]) and result.get("title") == "scan":
+            if (supabase_settings(workspace_dir()) or account_secret(workspace_dir()) or mailbox_status(workspace_dir())["configured"]) and result.get("title") == "scan":
                 threading.Thread(target=self._sync_and_report, daemon=True).start()
         return result
 
@@ -1019,7 +1135,7 @@ class Api:
             found = check_replies(ws)
             if found.get("ok") and found.get("updated"):
                 self._runner.add_line(f"Mailbox: {found['updated']} application(s) moved forward after replies.")
-        if sync_code(ws):
+        if account_secret(ws):
             outcome = sync_to_cloud(ws)
             self._runner.add_line(f"Synced with job-finder.space: {outcome['pushed']} new application(s) added." if outcome.get("ok") else outcome.get("error", "Sync failed."))
 
@@ -1038,8 +1154,23 @@ class Api:
     def sync_now(self) -> Dict[str, Any]:
         return sync_missing_to_supabase(workspace_dir())
 
-    def save_sync_code(self, code: str) -> Dict[str, Any]:
-        return save_sync_code(workspace_dir(), code)
+    def session_check(self) -> Dict[str, Any]:
+        """Asks the server again whether the sign-in is good (the sign-in screen's Try again button)."""
+        return {"ok": True, **session_status(workspace_dir(), fresh=True)}
+
+    def google_sign_in(self) -> Dict[str, Any]:
+        """Opens the browser for Google. The window polls google_sign_in_status() until it is done."""
+        if _signin_state.get("state") == "waiting":
+            return {"ok": True}
+        threading.Thread(target=google_sign_in_worker, args=(workspace_dir(),), daemon=True).start()
+        return {"ok": True}
+
+    def google_sign_in_status(self) -> Dict[str, Any]:
+        return {"ok": True, **{k: _signin_state.get(k, "") for k in ("state", "error", "email")}}
+
+    def cancel_google_sign_in(self) -> Dict[str, Any]:
+        _signin_cancel.set()
+        return {"ok": True}
 
     def disconnect_sync(self) -> Dict[str, Any]:
         return disconnect_sync(workspace_dir())

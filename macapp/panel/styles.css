@@ -252,3 +252,25 @@ tbody tr:hover { background: var(--fill); }
 .act-card > .card-pad { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
 .act-card .log-wrap { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
 .act-card .log { flex: 1 1 auto; height: auto; min-height: 220px; }
+
+/* Inline forms in Settings rows (keys, sync code, mailbox): enough room for the fields, wrapping when the window is narrow. */
+.setting:has(.keybox) { flex-wrap: wrap; }
+.setting:has(.keybox) .info { flex: 1 1 260px; }
+.setting .ctl:has(.keybox) { flex: 1 1 380px; justify-content: flex-end; }
+.keybox { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; width: auto; max-width: 440px; }
+.keybox .input { width: 176px; min-width: 0; }
+
+/* The sign-in screen: covers the whole window until Google sign-in succeeds. */
+.gate { position: fixed; inset: 0; z-index: 80; background: var(--bg); display: grid; place-items: center; padding: 24px; }
+.gate[hidden] { display: none; }
+.gate-card { width: 420px; max-width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.gate-logo svg { width: 44px; height: 44px; color: var(--accent); }
+.gate-card h1 { font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+.gate-card p { color: var(--text-2); font-size: 13.5px; line-height: 1.55; }
+.gate-card .btn.lg { height: 40px; padding: 0 22px; font-size: 14px; gap: 8px; }
+.gate-card .btn.lg svg { width: 16px; height: 16px; }
+.gate-error { padding: 9px 12px; border-radius: var(--r-md); background: var(--bad-soft); color: var(--bad); font-size: 12.5px; }
+.gate-wait { display: flex; align-items: center; gap: 10px; color: var(--text-2); font-size: 13px; }
+.gate-fine { color: var(--text-3); font-size: 11.5px; line-height: 1.5; margin-top: 6px; }
+.spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

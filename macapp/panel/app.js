@@ -31,6 +31,7 @@
     await ready;
     try {
       const result = await window.pywebview.api[name](...args);
+      if (result && result.signed_out && S.info && S.info.session && S.info.session.signed_in) { S.info.session = { signed_in: false, reason: "expired" }; renderShell(); }
       if (result && result.ok === false && result.error) toast(result.error, "bad");
       return result;
     } catch (err) {
@@ -71,6 +72,7 @@
   /* ── Shell: sidebar, status, theme ───────────────────────────────────────── */
   const NAV = [["run", "Run", "play"], ["apps", "Applications", "list"], ["settings", "Settings", "sliders"]];
   function renderShell() {
+    renderGate();
     $("#brand-logo").innerHTML = icon("logo");
     $("#nav").innerHTML = NAV.map(([id, label, ic]) => '<button data-nav="' + id + '"' + (S.view === id ? ' aria-current="page"' : "") + ">" + icon(ic) + "<span>" + label + "</span>" +
       (id === "apps" && S.apps.rows ? '<span class="count num">' + S.apps.rows.length + "</span>" : "") + "</button>").join("");
@@ -287,6 +289,36 @@
 
   /* ── Settings screen ─────────────────────────────────────────────────────── */
   const PROVIDERS = [["gemini", "Gemini", "Free tier available"], ["anthropic", "Claude", "Anthropic"], ["openai", "OpenAI", "GPT models"]];
+  function watchSignIn() {
+    if (S._sw) return;
+    S._sw = setInterval(async () => {
+      const r = await call("google_sign_in_status"); if (!r || r.state === "waiting") return;
+      clearInterval(S._sw); S._sw = null;
+      if (r.state === "error") S.gateError = r.error || "Sign-in failed.";
+      await refreshInfo(); renderShell();
+      if (r.state === "done" && S.info && S.info.session && S.info.session.signed_in) { toast("Signed in as " + r.email + "."); onSignedIn(); }
+    }, 1000);
+  }
+  // Everything that waits for a signed-in user starts here.
+  async function onSignedIn() {
+    hydrateForm(); go(S.view === "settings" ? "settings" : "run");
+    call("check_update").then((x) => { if (x && x.ok) { S.update = x; renderShell(); } });
+    loadApps(true);
+    const s = S.info; if (s && !(s.app_prefs || {}).tour_done) setTimeout(() => { if (!document.querySelector(".tour")) startTour(); }, 900);
+  }
+  // The sign-in screen covers the whole window until a valid Google sign-in exists.
+  function renderGate() {
+    const el = $("#gate"), ses = S.info && S.info.session; if (!el) return;
+    const show = !!S.info && !(ses && ses.signed_in); el.hidden = !show; if (!show) { el.innerHTML = ""; return; }
+    const waiting = ses && ses.signing_in, offline = ses && ses.reason === "offline", expired = ses && ses.reason === "expired";
+    const err = S.gateError || (ses && ses.error) || "";
+    el.innerHTML = '<div class="gate-card" role="dialog" aria-modal="true" aria-labelledby="gate-t"><div class="gate-logo">' + icon("logo") + '</div><h1 id="gate-t">' + (offline ? "Cannot reach job-finder.space" : expired ? "Please sign in again" : "Sign in to Job Finder") + "</h1>" +
+      "<p>" + (offline ? "Check your internet connection and try again. You can use the app offline for up to a week after you last signed in." : waiting ? "Finish signing in with Google in your browser. This window continues by itself." : "Job Finder is free. Sign in with your Google account to keep your applications saved to your account and in sync with the website and extension.") + "</p>" +
+      (err ? '<div class="gate-error" role="alert">' + esc(err) + "</div>" : "") +
+      (waiting ? '<div class="gate-wait"><span class="spin"></span>Waiting for your browser…</div><button class="btn" data-act="cancel-signin">Cancel</button>' :
+        offline ? '<button class="btn primary lg" data-act="retry-session">Try again</button>' : '<button class="btn primary lg" data-act="google-signin">' + icon("logo") + "Sign in with Google</button>") +
+      '<div class="gate-fine">We only receive your name and email from Google. Your API keys and resume file stay on this computer.</div></div>';
+  }
   async function loadSchedule() { const r = await call("schedule_status"); if (r && r.ok) { S.sched = r; if (S.view === "settings") renderSettings(); } }
   function renderSettings() {
     const i = S.info; if (!i) { $("#view").innerHTML = head("Settings", "") + '<div class="scroll"><div class="skeleton"></div></div>'; return; }
@@ -305,8 +337,8 @@
       '<div class="sect-title">Connections</div><section class="card">' +
         row("Supabase", sb.configured ? esc(sb.host || "Configured") + (sb.reachable ? " · connected" : " · " + (sb.error ? esc(sb.error) : "cannot be reached")) : "Not set up. Add SUPABASE_URL and a key to your .env to keep applications in your own project.",
           sb.configured ? badge(sb.reachable ? "Connected" : "Unreachable", sb.reachable ? "good" : "warn") + '<button class="btn" data-act="sync">' + icon("refresh") + "Sync now</button>" : '<button class="btn" data-open="env">Open .env</button>') +
-        row("job-finder.space", cl.configured ? (cl.connected ? "Applications are saved to your account" + (cl.email ? " (" + esc(cl.email) + ")" : "") + " and show on the website and in the extension." : esc(cl.error || "Cannot be reached right now.")) : "Save your applications to your job-finder.space account with your sync code. API keys never leave this Mac.",
-          cl.configured ? badge(cl.connected ? "Connected" : "Unreachable", cl.connected ? "good" : "warn") + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Disconnect</button>' : '<button class="btn primary" data-act="add-sync">Add sync code…</button>', "c-sync") +
+        row("Your account", cl.connected ? "Signed in with Google as " + esc(cl.email || (i.session || {}).email || "") + ". Your applications are saved to your job-finder.space account and show on the website and in the extension." : esc(cl.error || "Checking your sign-in…"),
+          (cl.connected ? badge("Connected", "good") : badge("Unreachable", "warn")) + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Sign out</button>', "c-sync") +
         row("Reply detection", mb.configured ? "Reads the last 30 days of " + esc(mb.user) + " for replies from employers and marks them (reply, interview, rejected, offer). Read only: nothing is sent, deleted or marked read." : "Optional. Connect a mailbox with an app password and replies from employers are marked for you. Automated 'we got your application' mails are ignored.",
           badge("Beta", "accent") + (mb.configured ? '<button class="btn" data-act="check-replies">' + icon("refresh") + 'Check now</button><button class="btn" data-act="disconnect-mailbox">Disconnect</button>' : '<button class="btn" data-act="add-mailbox">Connect…</button>'), "c-mailbox") +
         row("Daily run", S.sched && S.sched.enabled ? "Runs every day at " + String(S.sched.hour).padStart(2, "0") + ":" + String(S.sched.minute).padStart(2, "0") + (S.sched.real ? ", applying for real." : " as a practice run (nothing is submitted).") + " The Mac must be awake; the app does not need to be open." : "Runs a search every day at a time you choose, without opening the app. Starts as a practice run.",
@@ -389,9 +421,10 @@
     switch (d.act) {
       case "start": return startRun();
       case "cancel-key": return renderSettings();
-      case "add-sync": { const ctl = $("#c-sync"); if (!ctl) return; ctl.innerHTML = '<span class="keybox"><input class="input" type="password" id="si-sync" placeholder="Your sync code" autocomplete="off" spellcheck="false" maxlength="16" aria-label="Sync code"><button class="btn primary" data-act="save-sync">Connect</button><button class="btn" data-act="cancel-key">Cancel</button></span>'; $("#si-sync").focus(); return; }
-      case "save-sync": { const r = await call("save_sync_code", $("#si-sync").value); if (r && r.ok) { toast("Connected to job-finder.space."); await refreshInfo(); renderSettings(); } else toast((r && r.error) || "Could not connect.", "bad"); return; }
-      case "disconnect-sync": { await call("disconnect_sync"); toast("Disconnected. Your applications stay on this Mac."); await refreshInfo(); renderSettings(); return; }
+      case "google-signin": { S.gateError = ""; const r = await call("google_sign_in"); if (r && r.ok) { await refreshInfo(); renderShell(); watchSignIn(); } return; }
+      case "cancel-signin": { await call("cancel_google_sign_in"); await new Promise((res) => setTimeout(res, 600)); await refreshInfo(); renderShell(); return; }
+      case "retry-session": { await call("session_check"); await refreshInfo(); renderShell(); if (S.info && S.info.session && S.info.session.signed_in) onSignedIn(); return; }
+      case "disconnect-sync": { await call("disconnect_sync"); S.apps.rows = null; toast("Signed out. Your applications stay on this computer."); await refreshInfo(); renderSettings(); return; }
       case "sync-cloud": { const r = await call("sync_cloud_now"); if (r && r.ok) toast(r.pushed ? "Added " + plural(r.pushed, "application") + " to job-finder.space." : "job-finder.space is up to date."); else toast((r && r.error) || "Sync failed.", "bad"); await refreshInfo(); renderSettings(); return; }
       case "stop": return void call("stop_scan");
       case "goto-settings": return go("settings");
@@ -509,7 +542,7 @@
     { view: "settings", sel: "#c-gemini", title: "Add an AI key", text: "The agent needs one provider to read job pages and fill forms. Gemini has a free tier. Claude and OpenAI work too. Keys stay in a file on this Mac." },
     { view: "settings", sel: '[data-act="build-profile"], [data-act="import-profile"]', title: "Create your profile", text: "Build it from your resume, or import a profile.json you already have. Every form is filled from it, so details like work authorisation matter." },
     { view: "settings", sel: '[data-act="open-signin"]', title: "Sign in to job sites", text: "LinkedIn, Indeed and Reed work best when you are signed in. This opens the agent's own Chrome once. Sign in, close it, and every run reuses the sign-ins." },
-    { view: "settings", sel: "#c-sync", title: "Save applications to your account", text: "Optional. Paste your sync code from job-finder.space and every application is saved to your account, so it shows on the website and in the extension too. API keys and your resume file never leave this computer." },
+    { view: "settings", sel: "#c-sync", title: "Save applications to your account", text: "Optional. Your Google sign-in keeps every application saved to your job-finder.space account, so it shows on the website and in the extension too. API keys and your resume file never leave this computer." },
     { view: "settings", sel: "#c-mailbox", title: "See replies automatically", text: "Optional. Connect your mailbox with an app password and employer replies, interviews and rejections are marked for you. It only reads, and ignores automatic 'we got your application' emails." },
     { view: "settings", sel: '[data-act="edit-answers"]', title: "Write answers once", text: "For questions your profile cannot answer, such as why you want the job. The agent types your answer word for word instead of guessing." },
     { view: "settings", sel: "#sched-time", title: "Run every morning", text: "Optional. Pick a time and a practice run starts by itself, even when the app is closed. The computer must be awake." },
@@ -559,11 +592,12 @@
     renderShell(); go("run");
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme); applyTheme();
     const s = await refreshInfo(); if (!s || !s.workspace) return;
-    hydrateForm(); if (s.running) { S.run.running = true; S.run.started = true; watchRun(); }
-    go("run"); if (s.browser && s.browser.installing) watchBrowser();
-    call("check_update").then((r) => { if (r && r.ok) { S.update = r; renderShell(); } });
-    loadApps(true);
-    if (!(s.app_prefs || {}).tour_done) setTimeout(() => { if (!document.querySelector(".tour")) startTour(); }, 900);
+    renderShell();
+    if (s.session && s.session.signing_in) watchSignIn();
+    if (!(s.session && s.session.signed_in)) return;      // the sign-in screen stays until Google says yes
+    if (s.running) { S.run.running = true; S.run.started = true; watchRun(); }
+    if (s.browser && s.browser.installing) watchBrowser();
+    onSignedIn();
   }
   window.__jf = { hasInfo: () => !!(S.info && S.info.workspace), go, checkUpdate: () => { go('settings'); const b = document.querySelector('[data-act="check-update"]'); if (b) b.click(); } };
   init();

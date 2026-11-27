@@ -58,6 +58,10 @@
     drag_start: async () => { (window.__dragLog = window.__dragLog || []).push(["start"]); return { ok: true }; },
     drag_to: async (dx, dy) => { (window.__dragLog = window.__dragLog || []).push(["to", dx, dy]); return { ok: true }; },
     zoom_window: async () => { (window.__dragLog = window.__dragLog || []).push(["zoom"]); return { ok: true }; },
+    google_sign_in: async () => { window.__signin = "waiting"; setTimeout(() => { window.__signin = "done"; }, 2500); return { ok: true }; },
+    google_sign_in_status: async () => ({ ok: true, state: window.__signin || "idle", error: "", email: "me@example.com" }),
+    cancel_google_sign_in: async () => { window.__signin = "idle"; return { ok: true }; },
+    session_check: async () => ({ ok: true, signed_in: true }),
     ensure_browser: async () => ({ ok: true }),
   } };
   window.dispatchEvent(new Event("pywebviewready"));

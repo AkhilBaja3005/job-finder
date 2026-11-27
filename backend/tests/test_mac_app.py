@@ -451,6 +451,17 @@ def test_browser_install_command_has_no_cli_flag(monkeypatch):
 
 
 # ── job-finder.space sync ────────────────────────────────────────────────────────
+@pytest.fixture(autouse=True)
+def _open_lock_and_private_app_folder(tmp_path_factory, monkeypatch):
+    """Most tests are about something else, so the sign-in lock is open for them and the app folder is a temporary one (never the real one)."""
+    import scan_panel
+    monkeypatch.setenv("JOB_FINDER_APP_HOME", str(tmp_path_factory.mktemp("apphome")))
+    monkeypatch.setattr(scan_panel, "GATE_ENABLED", False)
+    scan_panel._session.update(ok=False, checked=0.0, token="")
+    scan_panel._signin_state.update(state="idle", error="", email="")
+    yield
+
+
 def _ws(tmp_path):
     (tmp_path / "applications_tracker").mkdir()
     (tmp_path / "applications_tracker" / "job_applications_tracker.csv").write_text(
@@ -461,35 +472,10 @@ def _ws(tmp_path):
     return tmp_path
 
 
-def test_sync_code_is_validated_then_saved(tmp_path, monkeypatch):
-    import scan_panel
-    ws = _ws(tmp_path)
-    monkeypatch.setattr(scan_panel, "_server_request", lambda *a, **k: {"email": "me@example.com"})
-    assert scan_panel.save_sync_code(ws, "!!")["ok"] is False
-    out = scan_panel.save_sync_code(ws, " ab-12 cd ")
-    assert out == {"ok": True, "email": "me@example.com"}
-    assert scan_panel.sync_code(ws) == "AB12CD"
-    assert scan_panel.disconnect_sync(ws)["ok"] and scan_panel.sync_code(ws) == ""
-
-
-def test_wrong_sync_code_is_not_saved(tmp_path, monkeypatch):
-    import urllib.error
-    import scan_panel
-    ws = _ws(tmp_path)
-
-    def reject(*a, **k):
-        raise urllib.error.HTTPError("u", 401, "no", {}, None)
-
-    monkeypatch.setattr(scan_panel, "_server_request", reject)
-    out = scan_panel.save_sync_code(ws, "ABCDEF")
-    assert out["ok"] is False and "not recognised" in out["error"]
-    assert scan_panel.sync_code(ws) == ""
-
-
 def test_push_sends_each_url_once_and_reports_counts(tmp_path, monkeypatch):
     import scan_panel
     ws = _ws(tmp_path)
-    scan_panel.write_env_value(ws, "JOB_FINDER_SYNC_CODE", "ABCDEF")
+    scan_panel._store_account("ABCDEF", "me@example.com")
     sent = []
 
     def fake(ws_, code, path, method="GET", body=None, timeout=20.0):
@@ -842,7 +828,7 @@ def test_account_applications_are_read_with_the_sync_code_and_cached(tmp_path, m
     import scan_panel
     scan_panel._cloud_cache.clear()
     assert scan_panel.read_account_applications(tmp_path) == []          # no sync code: nothing to ask
-    scan_panel.write_env_value(tmp_path, "JOB_FINDER_SYNC_CODE", "ABCDEF")
+    scan_panel._store_account("ABCDEF", "me@example.com")
     calls = []
 
     def fake(ws, code, path, method="GET", body=None, timeout=20.0):
@@ -861,7 +847,7 @@ def test_results_merge_folder_and_account_rows(tmp_path, monkeypatch):
     import scan_panel
     scan_panel._cloud_cache.clear()
     ws = _ws(tmp_path)
-    scan_panel.write_env_value(ws, "JOB_FINDER_SYNC_CODE", "ABCDEF")
+    scan_panel._store_account("ABCDEF", "me@example.com")
     monkeypatch.setattr(scan_panel, "workspace_dir", lambda: ws)
     monkeypatch.setattr(scan_panel, "_server_request", lambda *a, **k: {"applications": [
         {"company": "Beta", "job_title": "ML Engineer", "job_url": "https://jobs.lever.co/beta/2", "status": "Interview"},
@@ -895,3 +881,235 @@ def test_top_bar_and_sidebar_are_drag_areas_and_the_page_handles_the_drag():
     panel = Path(__file__).resolve().parents[2] / "macapp" / "panel"
     html, js = (panel / "index.html").read_text(), (panel / "app.js").read_text()
     assert html.count("data-drag") >= 3 and "enableWindowDrag" in js and '"drag_to"' in js
+
+
+# ── Sign in with Google, and the email next to a sync code ───────────────────────
+def test_google_sign_in_saves_the_token_and_email(tmp_path, monkeypatch):
+    import account_login
+    import scan_panel
+    ws = _ws(tmp_path)
+    monkeypatch.setattr(account_login, "run_google_sign_in", lambda post_json, open_browser, timeout, cancelled: {"token": "11111111-2222-3333-4444-555555555555", "email": "me@example.com"})
+    scan_panel.google_sign_in_worker(ws)
+    assert scan_panel._signin_state["state"] == "done" and scan_panel._signin_state["email"] == "me@example.com"
+    assert scan_panel.account_kind(ws) == "google" and scan_panel.account_email(ws) == "me@example.com"
+
+
+def test_a_failed_or_cancelled_google_sign_in_saves_nothing(tmp_path, monkeypatch):
+    import account_login
+    import scan_panel
+    ws = _ws(tmp_path)
+
+    def fail(post_json, open_browser, timeout, cancelled):
+        raise RuntimeError("Signing in took too long. Click Sign in with Google to try again.")
+
+    monkeypatch.setattr(account_login, "run_google_sign_in", fail)
+    scan_panel.google_sign_in_worker(ws)
+    assert scan_panel._signin_state["state"] == "error" and "too long" in scan_panel._signin_state["error"]
+    assert scan_panel.account_secret(ws) == ""
+
+    def cancel(post_json, open_browser, timeout, cancelled):
+        raise account_login.SignInCancelled()
+
+    monkeypatch.setattr(account_login, "run_google_sign_in", cancel)
+    scan_panel.google_sign_in_worker(ws)
+    assert scan_panel._signin_state["state"] == "idle" and scan_panel.account_secret(ws) == ""
+
+
+def test_sign_in_server_errors_become_readable_messages(tmp_path, monkeypatch):
+    import urllib.error
+    import account_login
+    import scan_panel
+    ws = _ws(tmp_path)
+    captured = {}
+
+    def run(post_json, open_browser, timeout, cancelled):
+        captured["post"] = post_json
+        return {"token": "t", "email": "e@x.co"}
+
+    monkeypatch.setattr(account_login, "run_google_sign_in", run)
+    scan_panel.google_sign_in_worker(ws)
+
+    def busy(*a, **k):
+        raise urllib.error.HTTPError("u", 429, "slow down", {}, None)
+
+    monkeypatch.setattr(scan_panel, "_server_request", busy)
+    with pytest.raises(RuntimeError, match="Too many attempts"):
+        captured["post"]("/auth/app/begin", {})
+
+    def offline(*a, **k):
+        raise OSError("down")
+
+    monkeypatch.setattr(scan_panel, "_server_request", offline)
+    with pytest.raises(RuntimeError, match="Could not reach"):
+        captured["post"]("/auth/app/begin", {})
+
+
+
+
+# ── the lock: the app does nothing until a valid Google sign-in exists ───────────
+@pytest.fixture
+def locked(monkeypatch):
+    import scan_panel
+    monkeypatch.setattr(scan_panel, "GATE_ENABLED", True)
+    return scan_panel
+
+
+def _answers(monkeypatch, scan_panel, **by_path):
+    """Plays job-finder.space: by_path maps a path to a dict (answer) or an exception (failure)."""
+    calls = []
+
+    def fake(ws, code, path, method="GET", body=None, timeout=20.0, email=None):
+        calls.append((code, path))
+        result = by_path[path]
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(scan_panel, "_server_request", fake)
+    return calls
+
+
+def test_nothing_works_without_a_google_sign_in(locked, tmp_path, monkeypatch):
+    monkeypatch.setattr(locked, "workspace_dir", lambda: tmp_path)
+    api = locked.Api([sys.executable])
+    for call in (lambda: api.get_results(), lambda: api.start_scan({"mode": "dry_run"}), lambda: api.open_signin(), lambda: api.sync_cloud_now(),
+                 lambda: api.save_key("gemini", "AIza" + "x" * 30), lambda: api.set_status("https://x.example/1", "applied"), lambda: api.poll(0)):
+        out = call()
+        assert out["ok"] is False and out["signed_out"] is True and "Sign in with Google" in out["error"]
+    assert not (tmp_path / ".env").exists() or "AIza" not in (tmp_path / ".env").read_text()      # nothing was written
+
+
+def test_the_sign_in_screen_can_still_work_while_signed_out(locked, tmp_path, monkeypatch):
+    monkeypatch.setattr(locked, "workspace_dir", lambda: tmp_path)
+    api = locked.Api([sys.executable])
+    state = api.get_state()
+    assert state["session"]["signed_in"] is False and state["session"]["reason"] == "none"
+    for open_call in (lambda: api.google_sign_in_status(), lambda: api.cancel_google_sign_in(), lambda: api.drag_start(), lambda: api.zoom_window()):
+        assert open_call().get("signed_out") is None
+
+
+def test_a_valid_sign_in_opens_the_app(locked, tmp_path, monkeypatch):
+    monkeypatch.setattr(locked, "workspace_dir", lambda: tmp_path)
+    locked._store_account("11111111-2222-3333-4444-555555555555", "me@example.com")
+    _answers(monkeypatch, locked, **{"/user/me": {"email": "me@example.com", "is_guest": False}})
+    status = locked.session_status(tmp_path)
+    assert status == {"signed_in": True, "reason": "", "email": "me@example.com"}
+    assert locked.Api([sys.executable]).get_results() == []                                         # a normal call goes through
+
+
+def test_an_ended_sign_in_closes_the_app_again(locked, tmp_path, monkeypatch):
+    import urllib.error
+    monkeypatch.setattr(locked, "workspace_dir", lambda: tmp_path)
+    locked._store_account("11111111-2222-3333-4444-555555555555", "me@example.com")
+    _answers(monkeypatch, locked, **{"/user/me": urllib.error.HTTPError("u", 401, "no", {}, None)})
+    assert locked.session_status(tmp_path)["reason"] == "expired"
+    assert locked.Api([sys.executable]).get_results()["signed_out"] is True
+    _answers(monkeypatch, locked, **{"/user/me": {"email": "", "is_guest": True}})                  # the server answers with a guest
+    locked._session.update(ok=False, checked=0.0, token="")
+    assert locked.session_status(tmp_path, fresh=True)["reason"] == "expired"
+
+
+def test_the_server_being_down_keeps_the_app_open_for_a_week_after_a_good_check(locked, tmp_path, monkeypatch):
+    import time
+    monkeypatch.setattr(locked, "workspace_dir", lambda: tmp_path)
+    locked._store_account("11111111-2222-3333-4444-555555555555", "me@example.com")
+    _answers(monkeypatch, locked, **{"/user/me": OSError("offline")})
+    assert locked.session_status(tmp_path)["signed_in"] is False and locked.session_status(tmp_path)["reason"] == "offline"   # never verified
+    cfg = locked.load_app_config()
+    cfg["session_verified"] = time.time() - 3 * 24 * 3600
+    locked.save_app_config(cfg)
+    locked._session.update(ok=False, checked=0.0, token="")
+    assert locked.session_status(tmp_path) == {"signed_in": True, "reason": "offline", "email": "me@example.com"}
+    cfg["session_verified"] = time.time() - 8 * 24 * 3600
+    locked.save_app_config(cfg)
+    locked._session.update(ok=False, checked=0.0, token="")
+    assert locked.session_status(tmp_path)["signed_in"] is False
+
+
+def test_a_good_check_is_remembered_for_ten_minutes_so_the_app_stays_quick(locked, tmp_path, monkeypatch):
+    monkeypatch.setattr(locked, "workspace_dir", lambda: tmp_path)
+    locked._store_account("11111111-2222-3333-4444-555555555555", "me@example.com")
+    calls = _answers(monkeypatch, locked, **{"/user/me": {"email": "me@example.com"}})
+    for _ in range(5):
+        assert locked.session_status(tmp_path)["signed_in"]
+    assert len(calls) == 1
+    locked.session_status(tmp_path, fresh=True)
+    assert len(calls) == 2
+
+
+def test_the_token_is_stored_with_the_app_readable_only_by_the_user(tmp_path):
+    import os
+    import scan_panel
+    scan_panel._store_account("11111111-2222-3333-4444-555555555555", "me@example.com")
+    path = scan_panel.app_support_dir() / "app.json"
+    assert oct(os.stat(path).st_mode)[-3:] == "600"
+    assert scan_panel.account_token() == "11111111-2222-3333-4444-555555555555" and scan_panel.account_email() == "me@example.com"
+    ws = tmp_path / "other-folder"
+    assert scan_panel.account_token(ws) == scan_panel.account_token()                                 # a different folder does not sign you out
+    assert "11111111" not in (tmp_path / ".env").read_text() if (tmp_path / ".env").exists() else True
+
+
+def test_sign_in_saves_the_token_with_the_app_and_marks_the_check(tmp_path, monkeypatch):
+    import account_login
+    import scan_panel
+    ws = _ws(tmp_path)
+    monkeypatch.setattr(account_login, "run_google_sign_in", lambda post_json, open_browser, timeout, cancelled: {"token": "11111111-2222-3333-4444-555555555555", "email": "me@example.com"})
+    scan_panel.google_sign_in_worker(ws)
+    assert scan_panel._signin_state["state"] == "done"
+    assert scan_panel.account_kind() == "google" and scan_panel.account_email() == "me@example.com"
+    assert scan_panel.load_app_config()["session_verified"] > 0 and scan_panel._session["ok"] is True
+
+
+def test_requests_carry_the_token_and_the_email_and_the_first_call_carries_neither(tmp_path, monkeypatch):
+    import scan_panel
+    ws = _ws(tmp_path)
+    sent = {}
+
+    class Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"ok": true}'
+
+    def fake_urlopen(request, timeout=None, context=None):
+        sent["headers"] = {k.lower(): v for k, v in request.header_items()}
+        return Resp()
+
+    monkeypatch.setattr(scan_panel.urllib.request, "urlopen", fake_urlopen)
+    assert scan_panel.account_secret(ws) == ""
+    scan_panel._store_account("11111111-2222-3333-4444-555555555555", "google@example.com")
+    scan_panel._server_request(ws, scan_panel.account_secret(ws), "/user/me")
+    assert sent["headers"]["authorization"] == "Bearer 11111111-2222-3333-4444-555555555555" and sent["headers"]["x-account-email"] == "google@example.com"
+    scan_panel._server_request(ws, None, "/auth/app/begin", "POST", {})
+    assert "authorization" not in sent["headers"] and "x-account-email" not in sent["headers"]
+
+
+def test_signing_out_ends_the_session_on_the_server_and_forgets_everything(tmp_path, monkeypatch):
+    import scan_panel
+    ws = _ws(tmp_path)
+    scan_panel._store_account("11111111-2222-3333-4444-555555555555", "me@example.com")
+    scan_panel.write_env_value(ws, "JOB_FINDER_SYNC_CODE", "OLDCODE")           # left by an older version
+    calls = _answers(monkeypatch, scan_panel, **{"/auth/app/revoke": {}})
+    assert scan_panel.disconnect_sync(ws) == {"ok": True}
+    assert calls == [("11111111-2222-3333-4444-555555555555", "/auth/app/revoke")]
+    assert scan_panel.account_secret(ws) == "" and scan_panel.account_email(ws) == "" and scan_panel.load_app_config().get("session_verified") is None
+    assert scan_panel.read_env(ws).get("JOB_FINDER_SYNC_CODE", "") == ""
+
+
+def test_signing_out_works_even_when_the_server_is_unreachable(tmp_path, monkeypatch):
+    import scan_panel
+    ws = _ws(tmp_path)
+    scan_panel._store_account("11111111-2222-3333-4444-555555555555", "me@example.com")
+    _answers(monkeypatch, scan_panel, **{"/auth/app/revoke": OSError("down")})
+    assert scan_panel.disconnect_sync(ws) == {"ok": True} and scan_panel.account_token() == ""
+
+
+def test_the_sign_in_screen_is_in_the_page_and_there_is_no_sync_code_option():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2] / "macapp" / "panel"
+    js, html = (root / "app.js").read_text(), (root / "index.html").read_text()
+    for needle in ("renderGate", "google-signin", "google_sign_in_status", "cancel_google_sign_in", "retry-session", "Sign in with Google", "onSignedIn"):
+        assert needle in js, needle
+    assert 'id="gate"' in html
+    assert "Use a sync code" not in js and "save_sync_code" not in js and "si-email" not in js
+    import scan_panel
+    assert not hasattr(scan_panel, "save_sync_code") and not hasattr(scan_panel.Api, "save_sync_code")
