@@ -391,8 +391,8 @@ def build_application_task_prompt(
     summary = resume_data.get("summary") or resume_data.get("candidate", {}).get("experience_summary", "")
 
     # Demographic & compliance answers commonly asked on job forms
-    gender = resume_data.get("gender") or resume_data.get("candidate", {}).get("gender", "")
-    ethnicity = resume_data.get("ethnicity") or resume_data.get("candidate", {}).get("ethnicity", "")
+    gender = resume_data.get("gender") or resume_data.get("candidate", {}).get("gender") or "Prefer not to say"
+    ethnicity = resume_data.get("ethnicity") or resume_data.get("candidate", {}).get("ethnicity") or "Prefer not to say"
     citizenship = resume_data.get("citizenship") or resume_data.get("candidate", {}).get("citizenship", "")
     work_auth = resume_data.get("work_authorization") or resume_data.get("candidate", {}).get("work_authorization", "")
     requires_sponsorship = resume_data.get("requires_sponsorship", False)
@@ -400,12 +400,19 @@ def build_application_task_prompt(
         requires_sponsorship = resume_data["candidate"].get("requires_sponsorship", False)
     sponsorship_str = "Yes" if requires_sponsorship else "No"
     sponsorship_choice = "Yes" if requires_sponsorship else "No"
-    veteran_status = resume_data.get("veteran_status") or resume_data.get("candidate", {}).get("veteran_status", "No")
-    disability_status = resume_data.get("disability_status") or resume_data.get("candidate", {}).get("disability_status", "No")
+    # These are personal and sometimes legal questions. Without an answer from the user the agent declines to answer; it never says "No".
+    _decline = "Prefer not to say (choose the option that means 'I do not wish to answer' or 'Decline to self-identify')"
+    veteran_status = resume_data.get("veteran_status") or resume_data.get("candidate", {}).get("veteran_status") or _decline
+    disability_status = resume_data.get("disability_status") or resume_data.get("candidate", {}).get("disability_status") or _decline
     notice_period = (
         resume_data.get("notice_period")
         or resume_data.get("candidate", {}).get("notice_period")
         or "Available immediately"
+    )
+    salary_expectations = (
+        resume_data.get("salary_expectations")
+        or resume_data.get("candidate", {}).get("salary_expectations")
+        or "Open to discussion (negotiable)"
     )
     import datetime
     today_iso = datetime.date.today().strftime("%Y-%m-%d")
@@ -539,6 +546,7 @@ def build_application_task_prompt(
     - Work Authorization: {work_auth}
     - Requires Visa Sponsorship: {sponsorship_str}
     - Notice Period / Earliest Availability: {notice_period} (Immediate / Available immediately)
+    - Salary Expectation (use only when a form asks): {salary_expectations}
     - Protected Veteran Status: {veteran_status}
     - Disability Status: {disability_status}
     - Professional Background: {summary}{background_text}

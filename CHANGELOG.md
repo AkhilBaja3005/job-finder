@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- **Questions a resume cannot answer.** The tour, Settings ("About you") and the first real run now ask where you can work, whether you
+  need visa sponsorship, when you can start, salary expectation, the levels you want, and the optional equal-opportunity questions.
+  The answers are saved into the profile and the agent types them instead of guessing. Without an answer the agent now declines
+  disability, veteran, gender and ethnicity questions ("Prefer not to say") instead of answering "No", and says its salary is open to
+  discussion. Applying for real is held until work rights and start date are answered.
+- **Fix:** a level named in the title filter or the roles to search (for example "Intern") now counts as chosen, so it is no longer
+  skipped when the `seniority` list says Senior, Staff and Lead.
 - **Desktop app: the bring-your-own-Supabase option is removed.** Applications sync to the signed-in job-finder.space account
   (add-only upload after each run, status changes, and the account's applications shown in the list). The sidebar says
   "Synced with job-finder.space". The Run screen's log scrolls inside its card, so the two cards keep the same size.
