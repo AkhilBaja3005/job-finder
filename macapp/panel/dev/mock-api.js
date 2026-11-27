@@ -55,6 +55,9 @@
     get_saved_answers: async () => ({ ok: true, items: savedAnswers.slice(), suggestions: ["Why do you want to work here?", "What are your salary expectations?", "What is your notice period or earliest start date?", "Where did you hear about this role?"], max_entries: 40, max_chars: 600 }),
     save_saved_answers: async (items) => { savedAnswers = items.filter((i) => i.question.trim() && i.answer.trim()); return { ok: true, saved: savedAnswers.length }; },
     schedule_status: async () => ({ ok: true, enabled: false }),
+    drag_start: async () => { (window.__dragLog = window.__dragLog || []).push(["start"]); return { ok: true }; },
+    drag_to: async (dx, dy) => { (window.__dragLog = window.__dragLog || []).push(["to", dx, dy]); return { ok: true }; },
+    zoom_window: async () => { (window.__dragLog = window.__dragLog || []).push(["zoom"]); return { ok: true }; },
     ensure_browser: async () => ({ ok: true }),
   } };
   window.dispatchEvent(new Event("pywebviewready"));

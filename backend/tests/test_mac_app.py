@@ -826,3 +826,72 @@ def test_bundle_builds_a_console_program_and_ci_checks_it():
     spec = (root / "macapp" / "job_finder.spec").read_text()
     assert 'name="job-finder-cli", console=True' in spec and "COLLECT(exe, exe_cli" in spec
     assert "job-finder-cli" in (root / ".github" / "workflows" / "build_desktop_apps.yml").read_text()
+
+
+# ── the Applications list shows everything, and the account's applications too ──
+def test_tracker_is_read_in_full_not_just_the_latest_300(tmp_path):
+    import scan_panel
+    folder = tmp_path / "applications_tracker"
+    folder.mkdir()
+    lines = ["Company,Job Title,Job URL,Status,Overall ATS,Platform"] + [f"Co{i},Role,https://x.example/{i},Applied,70%,LinkedIn" for i in range(4464)]
+    (folder / "job_applications_tracker.csv").write_text("\n".join(lines) + "\n")
+    assert len(scan_panel.read_tracker(tmp_path)) == 4464
+
+
+def test_account_applications_are_read_with_the_sync_code_and_cached(tmp_path, monkeypatch):
+    import scan_panel
+    scan_panel._cloud_cache.clear()
+    assert scan_panel.read_account_applications(tmp_path) == []          # no sync code: nothing to ask
+    scan_panel.write_env_value(tmp_path, "JOB_FINDER_SYNC_CODE", "ABCDEF")
+    calls = []
+
+    def fake(ws, code, path, method="GET", body=None, timeout=20.0):
+        calls.append((code, path))
+        return {"applications": [{"company": "Acme", "job_title": "AI Engineer", "job_url": "https://x.example/1", "score": 81, "status": "applied", "source_mode": "website"},
+                                 {"company": "NoLink", "job_title": "x", "job_url": ""}]}
+
+    monkeypatch.setattr(scan_panel, "_server_request", fake)
+    rows = scan_panel.read_account_applications(tmp_path)
+    assert rows == [{"company": "Acme", "title": "AI Engineer", "status": "applied", "ats": "81%", "platform": "website", "url": "https://x.example/1"}]
+    scan_panel.read_account_applications(tmp_path)
+    assert calls == [("ABCDEF", "/applications")]                         # the second call came from the 30 second cache
+
+
+def test_results_merge_folder_and_account_rows(tmp_path, monkeypatch):
+    import scan_panel
+    scan_panel._cloud_cache.clear()
+    ws = _ws(tmp_path)
+    scan_panel.write_env_value(ws, "JOB_FINDER_SYNC_CODE", "ABCDEF")
+    monkeypatch.setattr(scan_panel, "workspace_dir", lambda: ws)
+    monkeypatch.setattr(scan_panel, "_server_request", lambda *a, **k: {"applications": [
+        {"company": "Beta", "job_title": "ML Engineer", "job_url": "https://jobs.lever.co/beta/2", "status": "Interview"},
+        {"company": "Elsewhere", "job_title": "Dev", "job_url": "https://x.example/other", "status": "applied"}]})
+    rows = scan_panel.Api.__new__(scan_panel.Api).get_results()
+    urls = {r["url"]: r for r in rows}
+    assert urls["https://jobs.lever.co/beta/2"]["status"] == "Interview" and urls["https://jobs.lever.co/beta/2"]["synced"] is True
+    assert urls["https://x.example/other"]["synced"] is True              # only on the account: it still shows
+    assert len(rows) == 4                                                  # 3 in the folder (one job listed twice) + 1 only on the account
+
+
+# ── moving the window by its top bar ─────────────────────────────────────────────
+def test_window_moves_by_the_distance_the_pointer_moved():
+    import scan_panel
+    moves = []
+
+    class Win:
+        x, y = 200, 150
+        def move(self, x, y): moves.append((x, y))
+
+    api = scan_panel.Api.__new__(scan_panel.Api)
+    api._window = Win()
+    assert api.drag_to(10, 10) == {"ok": False}            # no press yet
+    assert api.drag_start() == {"ok": True}
+    api.drag_to(40, -25)
+    assert moves == [(240, 125)]
+
+
+def test_top_bar_and_sidebar_are_drag_areas_and_the_page_handles_the_drag():
+    from pathlib import Path
+    panel = Path(__file__).resolve().parents[2] / "macapp" / "panel"
+    html, js = (panel / "index.html").read_text(), (panel / "app.js").read_text()
+    assert html.count("data-drag") >= 3 and "enableWindowDrag" in js and '"drag_to"' in js

@@ -9,15 +9,15 @@
 </head>
 <body>
 <div class="app">
-  <aside class="sidebar" aria-label="Main">
-    <div class="brand"><span id="brand-logo"></span><b>Job Finder</b></div>
+  <aside class="sidebar" aria-label="Main" data-drag>
+    <div class="brand" data-drag><span id="brand-logo"></span><b>Job Finder</b></div>
     <nav class="nav" id="nav" aria-label="Sections"></nav>
     <div class="spacer"></div>
     <button class="update-chip" id="update-chip" hidden></button>
     <div class="conn" id="conn" aria-live="polite"></div>
   </aside>
   <main class="main">
-    <div class="titlebar-space"></div>
+    <div class="titlebar-space" data-drag></div>
     <div id="view" style="display:flex;flex-direction:column;min-height:0;flex:1"></div>
   </main>
 </div>
