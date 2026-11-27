@@ -5,6 +5,7 @@ import urllib.error
 import urllib.request
 import re
 import asyncio
+from utils.loop_lock import LoopLock
 import hashlib
 import inspect
 from datetime import datetime, timezone
@@ -986,11 +987,33 @@ def _is_local_deployment() -> bool:
     frontend_url = os.getenv("FRONTEND_URL", "")
     return "localhost" in frontend_url or "127.0.0.1" in frontend_url
 
+_indeed_probe_lock = LoopLock()
+_indeed_probed = False   # True once one search finished without being blocked
+
+
 async def search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: str = "48h") -> List[JobSearchResult]:
+    """Indeed search. The first search runs alone: when Cloudflare blocks it, the other query streams (a scan starts a
+    dozen at once) skip Indeed instead of each running into the same block."""
+    global _indeed_probed
+    if _indeed_blocked_circuit_breaker:
+        log_ist("[Job Searcher] Indeed circuit breaker ACTIVE (Cloudflare block detected previously). Skipping Indeed scraping.")
+        return []
+    if _indeed_probed:
+        return await _search_indeed_jobs(keyword, location, timeframe)
+    async with _indeed_probe_lock.get():
+        if _indeed_blocked_circuit_breaker:
+            log_ist("[Job Searcher] Indeed circuit breaker ACTIVE (Cloudflare block detected previously). Skipping Indeed scraping.")
+            return []
+        found = await _search_indeed_jobs(keyword, location, timeframe)
+        if not _indeed_blocked_circuit_breaker:
+            _indeed_probed = True
+        return found
+
+
+async def _search_indeed_jobs(keyword: str, location: str = "Remote", timeframe: str = "48h") -> List[JobSearchResult]:
     """Scrapes Indeed public job postings from specified timeframe using Playwright browser emulations."""
     global _indeed_blocked_circuit_breaker
     if _indeed_blocked_circuit_breaker:
-        log_ist("[Job Searcher] Indeed circuit breaker ACTIVE (Cloudflare block detected previously). Skipping Indeed scraping.")
         return []
 
     encoded_keyword = urllib.parse.quote(keyword)

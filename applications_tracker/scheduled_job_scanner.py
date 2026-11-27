@@ -743,6 +743,7 @@ async def discover_jobs(
         excluded_list = list(dict.fromkeys(excluded_list)) if excluded_list else ([] if skip_nothing else None)
         if excluded_list:
             print(f"[Scanner] Skipping excluded portal(s): {', '.join(excluded_list)}")
+        _t_search = time.perf_counter()
         search_res = await handle_search_jobs({
             "keywords": keywords,
             "location": location,
@@ -750,6 +751,7 @@ async def discover_jobs(
             "exclude_portals": excluded_list
         })
 
+        print(f"[Sources] Job boards searched and read in {time.perf_counter() - _t_search:.0f}s.")
         jobs = search_res.get("jobs", [])
         est_jobs = search_res.get("est_jobs", [])
         
@@ -765,7 +767,11 @@ async def discover_jobs(
         # Agent-Reach: Discover unlisted community jobs (Reddit, Hacker News "Who is Hiring")
         try:
             from services.agent_reach_service import fetch_reddit_hiring_threads
-            comm_res = fetch_reddit_hiring_threads(role=target_roles[0] if target_roles else "Software Engineer", location=location)
+            if not use_boards:            # follow-up (expand) rounds: the community threads would be the same
+                raise RuntimeError("only searched in the first round")
+            # a plain blocking network call: run it off the event loop and cap how long the scan waits for it
+            comm_res = await asyncio.wait_for(
+                asyncio.to_thread(fetch_reddit_hiring_threads, target_roles[0] if target_roles else "Software Engineer", location), timeout=8.0)
             for cjob in comm_res.get("community_jobs", []):
                 u_norm = normalize_job_url(cjob.get("url", ""))
                 if u_norm and u_norm not in existing_scored_urls:
@@ -780,9 +786,11 @@ async def discover_jobs(
                     existing_scored_urls.add(u_norm)
                     merged_count += 1
         except Exception as comm_err:
-            print(f"[Scanner] Note: Community unlisted job search skipped: {comm_err}")
+            if use_boards:
+                print(f"[Scanner] Note: Community unlisted job search skipped: {comm_err or type(comm_err).__name__}")
     # ── extra sources: the company-board index (thousands of Greenhouse/Lever/Ashby boards) + Adzuna (if keyed) ──
     if not top_applicant_only:
+        _t_extra = time.perf_counter()
         have = {normalize_job_url(j.get("url", "")) for j in jobs if j.get("url")}
         extra: list = []
         if use_boards:
@@ -822,6 +830,7 @@ async def discover_jobs(
                 jobs.append(j)
                 added_extra += 1
         merged_count += added_extra
+        print(f"[Sources] Company boards and Adzuna took {time.perf_counter() - _t_extra:.0f}s.")
     return jobs, merged_count
 
 
@@ -1181,6 +1190,7 @@ async def run_scan(
                                        accept=lambda q: spec.tier(q) == "Core")   # learn from the exact niche only
             if not more_q:
                 break
+            _t_round = time.perf_counter()
             print(f"[Expand] round {rnd}: also searching {len(more_q)} job titles found so far: {', '.join(more_q)}")
             more, _ = await discover_jobs(
                 target_roles=more_q, location=location, timeframe=timeframe, prefs=prefs, skip_portals=skip_portals,
@@ -1190,7 +1200,7 @@ async def run_scan(
             before = len(fresh)
             _filter_into(more)
             all_jobs += more
-            print(f"[Expand] round {rnd}: {len(more)} more postings, {len(fresh) - before} new relevant ones")
+            print(f"[Expand] round {rnd}: {len(more)} more postings, {len(fresh) - before} new relevant ones ({time.perf_counter() - _t_round:.0f}s)")
     jobs = all_jobs
 
     if dry_run:
@@ -1199,12 +1209,15 @@ async def run_scan(
 
     # Enrich concurrently: real JD where the listing was a stub, then the level (intern / graduate / experienced + years
     # required), AI fit analysis (intern + graduate only, to protect the LLM quota), then the closing date.
+    # An experienced-level search is a search FOR those roles, so they get the AI fit score too; ai_limit still caps the LLM calls.
+    searched_level_scored = bool(spec and spec.level == "experienced")
     live_scored = 0
     ai_scored = 0
     ai_attempts = 0
     done = 0
     enriched = len(fresh) if enrich else 0
     if enrich and fresh:
+        _t_read = time.perf_counter()
         print(f"[Scan] Reading {len(fresh)} postings: descriptions, level and years required, fit score, closing date...")
         sem = asyncio.Semaphore(concurrency)
         llm_sem = asyncio.Semaphore(3)
@@ -1220,7 +1233,7 @@ async def run_scan(
                     lv = job_level.classify(job.get("title") or "", job.get("description") if has_jd else "")
                     job["_level"] = lv
                     wants_ai = (has_jd and ai_score and not job.get("is_top_applicant")
-                                and (ai_all or lv.bucket in ("intern", "graduate")) and ai_attempts < ai_limit)
+                                and (ai_all or searched_level_scored or lv.bucket in ("intern", "graduate")) and ai_attempts < ai_limit)
                     if wants_ai:
                         ai_attempts += 1
                         async with llm_sem:
@@ -1239,6 +1252,7 @@ async def run_scan(
                     if done % 25 == 0:
                         print(f"[Scan]   ... {done}/{len(fresh)} postings read")
             await asyncio.gather(*[_enrich(j) for j in fresh], return_exceptions=True)
+        print(f"[Scan] Read {len(fresh)} postings in {time.perf_counter() - _t_read:.0f}s.")
 
     def _score(j: dict) -> int:
         return int(j.get("ats_score") or j.get("score") or 0)

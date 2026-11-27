@@ -178,6 +178,19 @@ def test_ai_scoring_is_spent_on_intern_and_graduate_roles_first(ws, monkeypatch)
     assert len(asked) <= 1
 
 
+def test_an_experienced_search_gets_ai_scores_for_its_own_roles(ws, monkeypatch):
+    sc = pytest.importorskip("applications_tracker.scheduled_job_scanner")
+    _fake_discover(monkeypatch, sc)
+    asked = []
+
+    async def ai(job, cand, level=None, **k):
+        asked.append(job["company"])
+        return False
+    monkeypatch.setattr(sc.fit_scorer, "score_job", ai)
+    asyncio.run(sc.run_scan(topic="security", level="experienced", targets=_targets(ws), expand=0))
+    assert len(asked) >= 1 and "Co3" in asked        # Co3 is an experienced role: scored because the search asked for them
+
+
 # ─── expansion ────────────────────────────────────────────────────────────────
 def test_core_titles_for_snowballing():
     sc = pytest.importorskip("applications_tracker.scheduled_job_scanner")

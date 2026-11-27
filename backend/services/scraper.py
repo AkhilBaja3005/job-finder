@@ -1,5 +1,6 @@
 import os
 import asyncio
+from utils.loop_lock import LoopLock
 from typing import Any
 # pyrefly: ignore [missing-import]
 from playwright.async_api import async_playwright
@@ -35,19 +36,30 @@ async def _create_stealth_context(browser):
     await context.add_init_script(_STEALTH_INIT_SCRIPT)
     return context
 
-async def ensure_shared_browser_alive():
-    """Verifies that the shared browser is connected; automatically re-launches if disconnected or closed."""
-    global _shared_playwright, _shared_browser, _context_pool
-    try:
-        if _shared_browser is not None and _shared_browser.is_connected():
-            return _shared_browser
-    except Exception:
-        pass
+_recover_lock = LoopLock()
 
-    print("[Scraper] Shared browser disconnected/dead. Auto-recovering...")
-    await close_shared_browser()
-    await init_shared_browser()
-    return _shared_browser
+
+def _shared_browser_connected() -> bool:
+    try:
+        return _shared_browser is not None and _shared_browser.is_connected()
+    except Exception:
+        return False
+
+
+async def ensure_shared_browser_alive():
+    """Verifies that the shared browser is connected; automatically re-launches if disconnected or closed.
+    Only one caller does the relaunch: the others wait for it and reuse the new browser (a scan runs a dozen query
+    streams at once, and each used to close and relaunch Chromium on its own)."""
+    global _shared_playwright, _shared_browser, _context_pool
+    if _shared_browser_connected():
+        return _shared_browser
+    async with _recover_lock.get():
+        if _shared_browser_connected():      # another stream recovered it while this one waited
+            return _shared_browser
+        print("[Scraper] Shared browser disconnected/dead. Auto-recovering...")
+        await close_shared_browser()
+        await init_shared_browser()
+        return _shared_browser
 
 async def init_shared_browser():
     """Launch the persistent shared Playwright browser. Called once at startup or by watchdog."""
