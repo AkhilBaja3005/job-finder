@@ -106,3 +106,30 @@ def test_notify_runs_toast_on_windows_and_is_silent_on_error(monkeypatch):
     def boom(*a, **k): raise OSError("no powershell")
     monkeypatch.setattr(ps.subprocess, "run", boom)
     ps.notify("t", "m")  # never raises
+
+
+def test_live_view_only_while_running_and_survives_no_chrome(monkeypatch, tmp_path):
+    monkeypatch.setattr(panel, "GATE_ENABLED", False)
+    api = panel.Api(["x"])
+    assert api.live_view() == {"ok": False}  # nothing running
+    monkeypatch.setattr(type(api._runner), "running", property(lambda self: True))
+    monkeypatch.setattr(dock, "live_view", lambda urls: {"ok": True, "urls": urls})
+    out = api.live_view()
+    assert out["ok"] and out["urls"][0].endswith(":9223") and len(out["urls"]) == 20
+
+
+def test_live_view_returns_data_uri_from_cdp(monkeypatch):
+    import base64
+    import json as _json
+
+    class FakeWs:
+        def send(self, m): self.m = _json.loads(m)
+        def recv(self, timeout=None): return _json.dumps({"id": 1, "result": {"data": base64.b64encode(b"jpg").decode()}})
+        def close(self): pass
+    monkeypatch.setattr(dock, "_cdp_json", lambda url, path: [{"type": "page", "url": "https://x.test/a", "title": "A", "webSocketDebuggerUrl": "ws://x"}])
+    import websockets.sync.client as c
+    monkeypatch.setattr(c, "connect", lambda *a, **k: FakeWs())
+    v = dock.live_view(["http://127.0.0.1:9223"])
+    assert v["ok"] and v["image"].startswith("data:image/jpeg;base64,") and v["url"] == "https://x.test/a"
+    monkeypatch.setattr(dock, "_cdp_json", lambda url, path: (_ for _ in ()).throw(OSError("down")))
+    assert dock.live_view(["http://127.0.0.1:9223"]) == {"ok": False}

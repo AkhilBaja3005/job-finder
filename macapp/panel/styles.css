@@ -285,3 +285,10 @@ tbody tr:hover { background: var(--fill); }
 .ab-q .d { color: var(--text-3); font-size: 12px; line-height: 1.45; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip.pick[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
+
+.live { margin-top: 14px; border: 0.5px solid var(--line-strong); border-radius: 10px; overflow: hidden; background: var(--fill); }
+.live[hidden] { display: none; }
+.live-bar { display: flex; gap: 10px; align-items: baseline; padding: 8px 12px; font-size: 12px; border-bottom: 0.5px solid var(--line-strong); }
+.live-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+.live-url { opacity: .65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.live img { display: block; width: 100%; max-height: 320px; object-fit: contain; background: #000; }

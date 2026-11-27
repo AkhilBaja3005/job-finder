@@ -154,6 +154,7 @@
         '<div class="progress" id="run-bar"><i></i></div>' +
         '<div class="tiles"><div class="tile"><b class="num" id="t-checked">0</b><span>Checked</span></div><div class="tile good"><b class="num" id="t-sub">0</b><span>Submitted</span></div>' +
           '<div class="tile warn"><b class="num" id="t-rev">0</b><span>Need review</span></div><div class="tile"><b class="num" id="t-skip">0</b><span>Skipped</span></div></div>' +
+        '<div class="live" id="live" hidden><div class="live-bar"><span class="live-title" id="live-title"></span><span class="live-url" id="live-url"></span></div><img id="live-img" alt="What the agent&#39;s browser shows right now"></div>' +
         '<div class="log-wrap"><div class="log" id="log" role="log" aria-label="Run log" tabindex="0"></div></div></div></section>' +
       "</div></div></div>";
     updateModeHelp(); renderRunStatus(); renderLog(true);
@@ -219,12 +220,23 @@
   }
   const payload = () => ({ ...S.form, roles: S.form.roles.join("\n"), title_keywords: S.form.title_keywords.join(","), skip_portals: S.form.skip_portals.join(",") });
   function watchRun() { if (!S.pollTimer) S.pollTimer = setInterval(pollRun, 750); pollRun(); }
+  async function refreshLive(ended) {
+    const el = $("#live"); if (!el) return;
+    if (ended) { el.hidden = true; return; }
+    const now = Date.now(); if (S._liveBusy || now - (S._liveAt || 0) < 2500) return;
+    S._liveBusy = true; S._liveAt = now;
+    try {
+      const v = await call("live_view");
+      if (v && v.ok && $("#live")) { $("#live-img").src = v.image; $("#live-title").textContent = v.title || "Browser"; $("#live-url").textContent = v.url; $("#live").hidden = false; }
+    } finally { S._liveBusy = false; }
+  }
   async function pollRun() {
     const r = await call("poll", S.run.offset);
     if (!r || r.lines === undefined) return;
     S.run.offset = r.next; S._newLines = r.lines; S.run.lines.push(...r.lines); S.run.counts = r.counts;
     const was = S.run.running; S.run.running = r.running; S.run.exit = r.exit_code;
     if (S.view === "run") { renderLog(false); renderRunStatus(); }
+    if (r.running || was) refreshLive(!r.running);
     if (was && !r.running) {
       clearInterval(S.pollTimer); S.pollTimer = null; renderShell();
       const c = r.counts;

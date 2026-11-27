@@ -147,3 +147,33 @@ def screen_bounds(webview_module: Any = None) -> Bounds:
         return int(screen.x), int(screen.y), int(screen.width), int(screen.height)
     except Exception:
         return 0, 0, 1920, 1080
+
+
+def live_view(cdp_urls: list) -> Dict[str, Any]:
+    """A small JPEG of the page the agent has open (the first running Chrome's front tab), as a data URI, plus its address
+    and title. Read-only: nothing is clicked, typed or navigated. {"ok": False} when no Chrome answers."""
+    import base64
+    from websockets.sync.client import connect
+    for cdp_url in cdp_urls:
+        try:
+            pages = [t for t in _cdp_json(cdp_url, "/json/list") if t.get("type") == "page" and t.get("webSocketDebuggerUrl")]
+            if not pages:
+                continue
+            page = pages[0]
+            ws = connect(page["webSocketDebuggerUrl"], open_timeout=3, close_timeout=1)
+            try:
+                ws.send(json.dumps({"id": 1, "method": "Page.captureScreenshot", "params": {"format": "jpeg", "quality": 45}}))
+                reply = json.loads(ws.recv(timeout=5))
+            finally:
+                ws.close()
+            data = reply.get("result", {}).get("data")
+            if data:
+                return {"ok": True, "url": str(page.get("url", ""))[:300], "title": str(page.get("title", ""))[:120],
+                        "image": "data:image/jpeg;base64," + data}
+        except Exception:
+            log.debug("live view failed for %s", cdp_url, exc_info=True)
+    return {"ok": False}
+
+
+def port_urls(cdp_url: str, instances: int = 20) -> list:
+    return Dock._port_urls(cdp_url, instances)
