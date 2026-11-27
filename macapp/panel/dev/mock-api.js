@@ -38,18 +38,18 @@
   let currentSearch = searches.length ? searches[0].name : "";
 
   const mockJobs = empty ? [] : [
-    { id: "12", role: "AI Engineer Intern", company: "Acme AI", level: "intern", years: "not stated", fit: 91, match: "Core", closing: "2026-12-15", url: "https://example.com/jobs/12", approved: true },
-    { id: "13", role: "Machine Learning Intern", company: "DeepMind", level: "intern", years: "not stated", fit: 88, match: "Core", closing: "2026-12-20", url: "https://example.com/jobs/13", approved: true },
-    { id: "14", role: "Applied Scientist Intern", company: "Cohere", level: "intern", years: "0-1", fit: 84, match: "Core", closing: "2026-12-10", url: "https://example.com/jobs/14", approved: true },
-    { id: "15", role: "Data Science Summer Intern", company: "Revolut", level: "intern", years: "not stated", fit: 79, match: "Related", closing: "2027-01-05", url: "https://example.com/jobs/15", approved: true },
-    { id: "16", role: "AI Safety Research Intern", company: "Faculty", level: "intern", years: "not stated", fit: 82, match: "Core", closing: "2026-12-18", url: "https://example.com/jobs/16", approved: false },
-    { id: "17", role: "Software Engineering Intern", company: "Monzo", level: "intern", years: "not stated", fit: 76, match: "Related", closing: "2026-12-22", url: "https://example.com/jobs/17", approved: false },
-    { id: "18", role: "Quantitative Research Intern", company: "G-Research", level: "intern", years: "not stated", fit: 74, match: "Related", closing: "2026-12-30", url: "https://example.com/jobs/18", approved: false },
-    { id: "19", role: "NLP Engineering Intern", company: "Quantexa", level: "intern", years: "0-1", fit: 86, match: "Core", closing: "2026-12-12", url: "https://example.com/jobs/19", approved: false },
-    { id: "20", role: "Platform AI Intern", company: "Palantir", level: "intern", years: "not stated", fit: 71, match: "Related", closing: "2027-01-10", url: "https://example.com/jobs/20", approved: false },
-    { id: "21", role: "Computer Vision Intern", company: "Arm", level: "intern", years: "not stated", fit: 68, match: "Related", closing: "2026-12-28", url: "https://example.com/jobs/21", approved: false },
-    { id: "22", role: "LLM Evaluation Intern", company: "Graphcore", level: "intern", years: "not stated", fit: 80, match: "Core", closing: "2026-12-19", url: "https://example.com/jobs/22", approved: false },
-    { id: "23", role: "Research Engineer Intern", company: "Improbable", level: "intern", years: "not stated", fit: 65, match: "Related", closing: "", url: "https://example.com/jobs/23", approved: false },
+    { id: "12", role: "AI Engineer Intern", company: "Acme AI", level: "intern", years: "not stated", fit: 91, scored_by: "AI", match: "Core", closing: "2026-12-15", url: "https://example.com/jobs/12", approved: true },
+    { id: "13", role: "Machine Learning Intern", company: "DeepMind", level: "intern", years: "not stated", fit: 88, scored_by: "Keyword", match: "Core", closing: "2026-12-20", url: "https://example.com/jobs/13", approved: true },
+    { id: "14", role: "Applied Scientist Intern", company: "Cohere", level: "intern", years: "0-1", fit: 84, scored_by: "AI", match: "Core", closing: "2026-12-10", url: "https://example.com/jobs/14", approved: true },
+    { id: "15", role: "Data Science Summer Intern", company: "Revolut", level: "intern", years: "not stated", fit: 79, scored_by: "Keyword", match: "Related", closing: "2027-01-05", url: "https://example.com/jobs/15", approved: true },
+    { id: "16", role: "AI Safety Research Intern", company: "Faculty", level: "intern", years: "not stated", fit: 82, scored_by: "AI", match: "Core", closing: "2026-12-18", url: "https://example.com/jobs/16", approved: false },
+    { id: "17", role: "Software Engineering Intern", company: "Monzo", level: "intern", years: "not stated", fit: 76, scored_by: "Keyword", match: "Related", closing: "2026-12-22", url: "https://example.com/jobs/17", approved: false },
+    { id: "18", role: "Quantitative Research Intern", company: "G-Research", level: "intern", years: "not stated", fit: 74, scored_by: "AI", match: "Related", closing: "2026-12-30", url: "https://example.com/jobs/18", approved: false },
+    { id: "19", role: "NLP Engineering Intern", company: "Quantexa", level: "intern", years: "0-1", fit: 86, scored_by: "Keyword", match: "Core", closing: "2026-12-12", url: "https://example.com/jobs/19", approved: false },
+    { id: "20", role: "Platform AI Intern", company: "Palantir", level: "intern", years: "not stated", fit: 71, scored_by: "AI", match: "Related", closing: "2027-01-10", url: "https://example.com/jobs/20", approved: false },
+    { id: "21", role: "Computer Vision Intern", company: "Arm", level: "intern", years: "not stated", fit: 68, scored_by: "Keyword", match: "Related", closing: "2026-12-28", url: "https://example.com/jobs/21", approved: false },
+    { id: "22", role: "LLM Evaluation Intern", company: "Graphcore", level: "intern", years: "not stated", fit: 80, scored_by: "AI", match: "Core", closing: "2026-12-19", url: "https://example.com/jobs/22", approved: false },
+    { id: "23", role: "Research Engineer Intern", company: "Improbable", level: "intern", years: "not stated", fit: 65, scored_by: "Keyword", match: "Related", closing: "", url: "https://example.com/jobs/23", approved: false },
   ];
 
   const mockPacks = empty ? {} : {

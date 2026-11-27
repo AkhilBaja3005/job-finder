@@ -540,7 +540,7 @@
           '<td class="chk-col"><input type="checkbox" data-rev-chk="' + esc(j.id) + '"' + (rv.selected.has(j.id) ? " checked" : "") + ' aria-label="Select ' + esc(j.role) + '"></td>' +
           '<td class="job"><div class="co">' + esc(j.company) + '</div><div class="ro">' + esc(j.role) + '<span class="src"> · ' + esc(j.level) + (j.years && j.years !== "not stated" ? " · " + esc(j.years) + " yrs" : "") + "</span></div></td>" +
           "<td>" + (j.match ? badge(j.match, matchKind) : "—") + "</td>" +
-          '<td><span class="score num"><span class="bar"><i style="width:' + Math.min(100, fit) + '%"></i></span>' + fit + "%" + (j.scored_by ? '<span class="src" style="font-size:11px"> · ' + esc(j.scored_by) + "</span>" : "") + "</span></td>" +
+          '<td><span class="score num"><span class="bar"><i style="width:' + Math.min(100, fit) + '%"></i></span>' + fit + "%" + (j.scored_by ? '<span class="src' + (j.scored_by === "AI" ? " ai" : "") + '">' + esc(j.scored_by) + "</span>" : "") + "</span></td>" +
           '<td class="num">' + (j.closing ? esc(j.closing) : "—") + "</td>" +
           "<td>" + badge(j.approved ? "Approved" : "Pending", j.approved ? "good" : "") + "</td>" +
           '<td class="acts">' +
