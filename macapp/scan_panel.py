@@ -195,10 +195,10 @@ def key_status(ws: Path) -> Dict[str, Dict[str, Any]]:
 # ── the scan command ─────────────────────────────────────────────────────────────
 def build_scan_args(options: Dict[str, Any]) -> List[str]:
     """The arguments after `job-finder` for one run. A scan only searches and saves to the Excel: it never applies.
-    `mode: "practice"` adds --dry-run (search and filter only, nothing written). The old modes `dry_run` and
-    `auto_apply` both mean a normal saving scan, because `scan` no longer applies."""
+    `mode: "practice"` (or the old name `dry_run`) adds --dry-run (search and filter only, nothing written).
+    The old mode `auto_apply` is a normal saving scan, because `scan` no longer applies."""
     args = ["scan"]
-    if options.get("mode") == "practice":
+    if options.get("mode") in ("practice", "dry_run"):
         args.append("--dry-run")
     topic = str(options.get("topic") or "").strip()
     if topic:
@@ -222,6 +222,25 @@ def build_scan_args(options: Dict[str, Any]) -> List[str]:
     skip = ",".join(_split(options.get("skip_portals")))
     if skip:
         args += ["--skip-portals", skip]
+    if options.get("headless"):
+        args.append("--headless")
+    return args
+
+
+def build_apply_args(options: Dict[str, Any]) -> List[str]:
+    """The arguments after `job-finder` for an apply run over the approved, signed-off queue. It is a preview (fills the
+    form, never submits) unless `mode` is "submit" or "real", which adds --submit and --yes (the app already asked)."""
+    args = ["apply"]
+    if str(options.get("search") or "").strip():
+        args += ["--search", str(options["search"]).strip()]
+    if options.get("mode") in ("submit", "real"):
+        args += ["--submit", "--yes"]
+    try:
+        limit = int(options.get("limit"))
+        if limit > 0:
+            args += ["--limit", str(limit)]
+    except (TypeError, ValueError):
+        pass
     if options.get("headless"):
         args.append("--headless")
     return args
@@ -737,7 +756,17 @@ def _csv_path(ws: Path) -> Path:
     return ws / "applications_tracker" / "job_applications_tracker.csv"
 
 
+SYNC_SKIP = ("New", "Shortlisted", "Approved", "Closed", "Skipped")  # not applied to: the account lists applications only
+
+
 def _csv_all(ws: Path) -> List[Dict[str, str]]:
+    """The tracker rows the account sync uploads, with the old CSV column names. From the Excel workbooks (only jobs
+    that were applied to or have moved on); from the CSV when there is no workbook."""
+    excel = _excel_rows(ws)
+    if excel is not None:
+        return [{"Company": str(r.get("Company") or ""), "Job Title": str(r.get("Job Role") or ""), "Job URL": str(r.get("Job URL") or ""),
+                 "Overall ATS": str(r.get("ATS %") or ""), "Status": str(r.get("Status") or ""), "Platform": str(r.get("Platform") or "")}
+                for r in excel if str(r.get("Status") or "New") not in SYNC_SKIP]
     try:
         with _csv_path(ws).open(newline="", encoding="utf-8") as f:
             return list(csv.DictReader(f))
@@ -1288,8 +1317,8 @@ class Api:
         return {"ok": True, **scheduler.status(workspace=workspace_dir())}
 
     def set_schedule(self, enabled: bool, hour: int = 8, minute: int = 0, real: bool = False) -> Dict[str, Any]:
-        """Turns the daily run on or off. The daily run only scans and saves to the Excel; it never applies.
-        `real` is kept so older panels keep working, and is ignored."""
+        """Turns the daily run on or off. Each day it scans, then applies to the approved and signed-off jobs: a preview
+        (never submits) unless `real` is True, which adds --submit."""
         import scheduler
         if not enabled:
             return scheduler.remove(workspace=workspace_dir())
@@ -1297,10 +1326,11 @@ class Api:
         prefs = load_app_prefs()
         options = {"primary_ai": prefs.get("primary_ai"), "headless": True}
         program = list(self._launcher) + build_scan_args(options)
+        then = list(self._launcher) + build_apply_args({**options, "mode": "submit" if real else "preview"})
         env = build_run_env(options, ws, base={})
         env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_dir())
         env["HOME"] = str(Path.home())
-        return scheduler.install(int(hour), int(minute), program, ws, logs_dir() / "scheduled.log", env)
+        return scheduler.install(int(hour), int(minute), program, ws, logs_dir() / "scheduled.log", env, then=then)
 
     def get_about_you(self) -> Dict[str, Any]:
         from services.about_you import read_about_you

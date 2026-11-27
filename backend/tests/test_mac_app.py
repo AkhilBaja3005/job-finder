@@ -94,8 +94,9 @@ def test_scan_never_applies_and_practice_is_search_only():
     assert "--skip-portals" in args and args[args.index("--skip-portals") + 1] == "reed,indeed" and "--headless" in args
 
 
-def test_old_modes_are_a_saving_scan_without_apply_flags():
-    for mode in ("auto_apply", "dry_run", "", None):
+def test_old_dry_run_mode_is_practice_and_auto_apply_is_a_saving_scan():
+    assert panel.build_scan_args({"mode": "dry_run"}) == ["scan", "--dry-run"]
+    for mode in ("auto_apply", "", None):
         args = panel.build_scan_args({"mode": mode})
         assert args == ["scan"]
         assert "--auto-apply" not in args and "--dry-run" not in args
@@ -169,11 +170,11 @@ def test_tracker_rows_newest_first(home):
 
 
 def _make_workbook(ws, name, rows):
-    from services.excel_tracker import ExcelTracker
+    from services.excel_tracker import ExcelTracker, record_from_payload
     folder = ws / "applications_tracker" / "searches" / name
     folder.mkdir(parents=True)
     t = ExcelTracker(str(folder / "scanned_jobs.xlsx"))
-    t.add_jobs(rows)
+    t.add_jobs([record_from_payload(r) for r in rows])
     return t
 
 
@@ -620,18 +621,48 @@ def test_schedule_rejects_bad_times_and_reports_launchctl_failure(tmp_path, monk
     assert out["ok"] is False and "Bootstrap failed" in out["error"]
 
 
-def test_scheduled_run_only_scans_and_never_applies(tmp_path, monkeypatch):
+def test_scheduled_run_scans_then_previews_unless_real(tmp_path, monkeypatch):
     import scan_panel
     import scheduler
     seen = {}
-    monkeypatch.setattr(scheduler, "install", lambda hour, minute, program, ws, log, env=None, home=None: seen.update(program=program, env=env) or {"ok": True})
+    monkeypatch.setattr(scheduler, "install", lambda hour, minute, program, ws, log, env, **kw: seen.update(program=program, env=env, then=kw.get("then")) or {"ok": True})
     monkeypatch.setattr(scan_panel, "workspace_dir", lambda: tmp_path)
     api = scan_panel.Api.__new__(scan_panel.Api)
     api._launcher = ["/App/Job Finder", "--cli"]
     assert api.set_schedule(True, 9, 0)["ok"]
     assert seen["program"][2] == "scan" and "--auto-apply" not in seen["program"] and "--dry-run" not in seen["program"]
-    assert api.set_schedule(True, 9, 0, real=True)["ok"] and "--auto-apply" not in seen["program"]
+    assert seen["then"][:3] == ["/App/Job Finder", "--cli", "apply"] and "--submit" not in seen["then"]
+    assert api.set_schedule(True, 9, 0, real=True)["ok"] and "--submit" in seen["then"] and "--yes" in seen["then"]
     assert seen["env"]["JOB_FINDER_ROOT"] == str(tmp_path)
+
+
+def test_apply_args_preview_by_default_and_submit_is_explicit():
+    assert panel.build_apply_args({}) == ["apply"]
+    assert panel.build_apply_args({"mode": "preview", "limit": 5, "headless": True}) == ["apply", "--limit", "5", "--headless"]
+    args = panel.build_apply_args({"mode": "submit", "limit": "3", "search": " ai-intern "})
+    assert args == ["apply", "--search", "ai-intern", "--submit", "--yes", "--limit", "3"]
+    assert "--limit" not in panel.build_apply_args({"limit": "0"}) and "--limit" not in panel.build_apply_args({"limit": "x"})
+
+
+def test_sync_reads_excel_applied_rows_only(home):
+    ws = home / "ws"
+    t = _make_workbook(ws, "ai-intern", [{"company": "Acme", "job_title": "AI Intern", "job_url": "http://acme.example/1", "overall_ats": 82},
+                                         {"company": "Zed", "job_title": "SOC", "job_url": "http://zed.example/2"}])
+    t.update(url="http://acme.example/1", Status="Applied")
+    rows = panel._csv_all(ws)
+    assert [r["Company"] for r in rows] == ["Acme"] and rows[0]["Overall ATS"] == "82" and rows[0]["Job URL"] == "http://acme.example/1"
+
+
+def test_scheduler_two_commands_mac_and_windows(tmp_path):
+    import plistlib
+    import scheduler
+    data = plistlib.loads(scheduler.build_plist(7, 0, ["/App/Job Finder", "--cli", "scan"], tmp_path, tmp_path / "s.log", then=["/App/Job Finder", "--cli", "apply", "--submit", "--yes"]))
+    assert data["ProgramArguments"][:2] == ["/bin/sh", "-c"]
+    assert data["ProgramArguments"][2] == "'/App/Job Finder' --cli scan; '/App/Job Finder' --cli apply --submit --yes"
+    assert scheduler.is_real(data["ProgramArguments"]) and not scheduler.is_real(["x", "apply"])
+    script = scheduler.build_cmd_script(["C:\\J F\\j.exe", "scan"], tmp_path, tmp_path / "s.log", {"A": "1"}, then=["C:\\J F\\j.exe", "apply"])
+    assert script.count(">>") == 2 and script.index("scan") < script.index("apply")
+
 
 
 # ── Windows support ──────────────────────────────────────────────────────────────
