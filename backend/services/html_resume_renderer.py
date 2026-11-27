@@ -25,7 +25,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <style>
   @page {
     size: A4;
-    margin: 12mm 15mm;
+    margin: 11mm 14mm;
   }
   * {
     box-sizing: border-box;
@@ -33,97 +33,97 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     padding: 0;
   }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    color: #1e293b;
-    line-height: 1.4;
-    font-size: 10pt;
+    font-family: "Times New Roman", Georgia, "Liberation Serif", Times, serif;
+    color: #111111;
+    line-height: 1.32;
+    font-size: 9.8pt;
     background: #fff;
   }
   .header {
     text-align: center;
-    border-bottom: 2px solid #0284c7;
-    padding-bottom: 8px;
-    margin-bottom: 12px;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
   }
   .name {
-    font-size: 20pt;
-    font-weight: 800;
-    color: #0f172a;
-    letter-spacing: -0.5px;
+    font-size: 19pt;
+    font-weight: 700;
+    color: #000000;
+    letter-spacing: 0.4px;
   }
   .contact-bar {
-    font-size: 9pt;
-    color: #475569;
-    margin-top: 4px;
+    font-size: 8.8pt;
+    color: #222222;
+    margin-top: 3px;
   }
   .contact-bar a {
-    color: #0284c7;
-    text-decoration: none;
+    color: #111111;
+    text-decoration: underline;
   }
   .section-title {
-    font-size: 11pt;
-    font-weight: 800;
-    color: #0284c7;
+    font-size: 10pt;
+    font-weight: 700;
+    color: #000000;
     text-transform: uppercase;
-    border-bottom: 1px solid #cbd5e1;
-    padding-bottom: 2px;
-    margin-top: 10px;
-    margin-bottom: 6px;
+    border-bottom: 0.8pt solid #111111;
+    padding-bottom: 1.5px;
+    margin-top: 8px;
+    margin-bottom: 4px;
     letter-spacing: 0.5px;
   }
   .summary-text {
-    font-size: 9.5pt;
-    color: #334155;
+    font-size: 9.3pt;
+    color: #111111;
     text-align: justify;
   }
   .job-header, .edu-header {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    margin-top: 6px;
+    margin-top: 5px;
   }
   .job-company, .edu-school {
-    font-weight: 800;
-    color: #0f172a;
-    font-size: 10pt;
+    font-weight: 700;
+    color: #000000;
+    font-size: 9.6pt;
   }
   .job-role, .edu-degree {
-    font-weight: 700;
-    color: #334155;
-    font-size: 9.5pt;
+    font-weight: 600;
+    color: #111111;
+    font-size: 9.3pt;
+    font-style: italic;
   }
   .job-dates, .edu-dates {
     font-size: 9pt;
-    color: #64748b;
+    color: #222222;
     font-style: italic;
   }
   .tech-line {
     font-size: 8.5pt;
-    color: #475569;
+    color: #333333;
     font-style: italic;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
   }
   ul.bullets {
-    padding-left: 16px;
+    padding-left: 15px;
     margin-top: 2px;
   }
   ul.bullets li {
-    font-size: 9.2pt;
-    color: #334155;
-    margin-bottom: 2px;
-    line-height: 1.35;
+    font-size: 9.1pt;
+    color: #111111;
+    margin-bottom: 1.8px;
+    line-height: 1.3;
   }
   .skills-category {
-    font-size: 9.2pt;
-    margin-bottom: 3px;
-    color: #334155;
+    font-size: 9.1pt;
+    margin-bottom: 2.5px;
+    color: #111111;
   }
   .skills-category strong {
-    color: #0f172a;
+    color: #000000;
   }
   .metric-bold {
     font-weight: 700;
-    color: #0f172a;
+    color: #000000;
   }
 </style>
 </head>
@@ -148,6 +148,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 </body>
 </html>"""
+
+
+_METRIC_RE = re.compile(r"\b(\d[\d,\.]*\s*(?:%|x|\+|Cr\+|K\+|M\+)(?=\b|\s|[.,;)]))")
+
+
+def _bold_metrics(text: str) -> str:
+    return _METRIC_RE.sub(r'<strong class="metric-bold">\1</strong>', text)
 
 
 def render_html_resume(resume_data: Dict[str, Any]) -> str:
@@ -177,7 +184,7 @@ def render_html_resume(resume_data: Dict[str, Any]) -> str:
             tech = exp.get("technologies", "")
             tech_line = f'<div class="tech-line">Technologies: {tech}</div>' if tech else ""
             
-            bullets = "".join([f"<li>{b}</li>" for b in exp.get("description", [])])
+            bullets = "".join([f"<li>{_bold_metrics(b)}</li>" for b in exp.get("description", [])])
             exp_sec += f"""
 <div class="job-item">
   <div class="job-header">
