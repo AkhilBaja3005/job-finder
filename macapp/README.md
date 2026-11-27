@@ -147,13 +147,16 @@ Setting: Run, Advanced, Browser window, "Dock beside this window". The agent's C
 
 ## Making a numbered release
 
-1. Bump the version in `pyproject.toml`, `backend/config/constants.py`, `job_finder/__init__.py` and `backend/job_finder_mcp/__init__.py`, add a `CHANGELOG.md` entry, and merge the PR to main. Wait for CI on main.
-2. GitHub, Actions, **Release**, Run workflow: type the version (for example `1.9.4`); tick *Also publish to PyPI* if the command line tool should ship too.
-3. The workflow checks the version matches `pyproject.toml` and the tag is new and CI on main passed, creates the release and tag, builds the Mac (arm64, Intel) and Windows apps and attaches them, and starts the PyPI publish when asked. Installed apps then show "update available".
+Two workflows, both run from the GitHub Actions page:
+
+1. **Prepare release** (choose patch, minor or major): bumps the version in `pyproject.toml`, `backend/config/constants.py`, `job_finder/__init__.py` and `backend/job_finder_mcp/__init__.py`, writes the `CHANGELOG.md` entry from the PR titles merged since the last tag, opens a `release: X.Y.Z` PR, waits for every check on it and merges it. Needs the repository secret `RELEASE_TOKEN` (a fine-grained personal access token for this repository only, with Contents and Pull requests set to read and write).
+2. **Release** starts by itself once the tests, Mac arm64 and Windows builds have passed on that merge commit (or run it by hand with the version). In one run it:
+   - checks the version matches `pyproject.toml`, the tag is new and the checks passed on the commit that set the version;
+   - creates the GitHub release as a **pre-release** (the in-app update check ignores those);
+   - builds the Mac (arm64, Intel) and Windows apps and attaches `Job-Finder-X.Y.Z-*` to it;
+   - publishes the command line tool to PyPI through "Build & Publish to PyPI" and waits for it (always on a manual run with the box ticked; on an automatic run only when the repository variable `AUTO_PUBLISH_PYPI` is `true`);
+   - only when the apps and PyPI succeeded, turns the pre-release into the latest release. Installed apps then show "update available".
+
+If a step fails the release stays a pre-release: fix the cause and run again (delete the pre-release and its tag first), or delete it. PyPI trusts the file name `publish_pypi.yml`, so that workflow is started by the release rather than merged into it.
 
 The `desktop-latest` pre-release is separate: it is rebuilt on every app change for the website's download buttons, and the in-app update check ignores it.
-
-### Preparing the release automatically
-
-Actions, **Prepare release**, Run workflow (patch, minor, major or an exact version) does step 1 for you: it bumps the four version files, writes the `CHANGELOG.md` entry from the PR titles merged since the last tag (`feat:` under Added, `fix:` under Fixed, the rest under Changed; `ci:`, `test:`, `docs:`, `chore:` and merge commits are left out) and opens a `release/X.Y.Z` PR. By default it then waits for every check on that PR (tests, Mac, Windows) and merges it itself (untick `auto_merge` to merge by hand). Once every check on the merge commit has passed, **Release** starts by itself for that `release: X.Y.Z` commit (set the repository variable `AUTO_PUBLISH_PYPI` to `true` to publish to PyPI automatically too). Run **Release** by hand only to retry or for a version bumped another way.
-It needs the repository secret `RELEASE_TOKEN`: a fine-grained personal access token for this repository only, with Contents and Pull requests set to read and write (GitHub, Settings, Developer settings, Personal access tokens). The built-in token is not enough because pull requests it opens do not start the required checks. The same script runs locally: `python scripts/bump_version.py patch --dry-run`.

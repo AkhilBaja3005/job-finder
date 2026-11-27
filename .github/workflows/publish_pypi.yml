@@ -19,6 +19,15 @@ on:
         description: "Optional version override (e.g. 0.2.0). Leave blank to use pyproject.toml."
         required: false
         default: ""
+      ref:
+        description: "Tag or commit to build and publish (the Release workflow passes the release tag). Blank: the branch you ran it on."
+        required: false
+        default: ""
+      create_release:
+        description: "Also create or update the GitHub release (the Release workflow turns this off: it makes the release itself)"
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────────
@@ -33,6 +42,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.inputs.ref }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -180,7 +190,7 @@ jobs:
     name: Create GitHub Release
     needs: publish-pypi
     runs-on: ubuntu-latest
-    if: github.event.inputs.target == 'pypi'
+    if: github.event.inputs.target == 'pypi' && github.event.inputs.create_release != 'false'
     permissions:
       contents: write
 
