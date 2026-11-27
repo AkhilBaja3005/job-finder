@@ -1332,6 +1332,17 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
     (folder / "cv.html").write_text("<html><body>CV</body></html>", encoding="utf-8")
     assert "<body>CV</body>" in api.pack_documents("1")["cv_html"]
 
+    # Verify save_pack_cv updates cv.json and triggers prepare --render-only
+    (folder / "cv.json").write_text(json.dumps({"summary": "Old", "experience": [{"role": "SWE", "company": "Acme", "description": ["A"]}]}), encoding="utf-8")
+    assert api.save_pack_cv("1", {"summary": "New summary", "experience": [["Bullet 1", "Bullet 2"]]}) == {"ok": True}
+    saved_cv = json.loads((folder / "cv.json").read_text(encoding="utf-8"))
+    assert saved_cv["summary"] == "New summary" and saved_cv["experience"][0]["description"] == ["Bullet 1", "Bullet 2"]
+    assert "--render-only" in called_cmds[-1][0]
+
+    # Verify open_pack_folder validates workspace containment
+    assert api.open_pack_folder(str(folder)) == {"ok": True}
+    assert api.open_pack_folder("/etc")["ok"] is False
+
     # 6. Portal password stored in .env + scan_args flags + closing date cleanup
     assert api.get_state()["portal_password"]["set"] is False
     pw_res = api.save_portal_password("SuperSecret#99")

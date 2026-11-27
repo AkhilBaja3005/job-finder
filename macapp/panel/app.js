@@ -677,8 +677,14 @@
       } else if (d.tab === "fit") {
         content = '<div class="doc-md">' + renderMarkdown(doc.fit || "No fit analysis recorded.") + "</div>";
       } else if (d.tab === "cv") {
+        const cj = doc.cv_json;
+        const editorHtml = cj ? '<details class="disclosure" style="margin-bottom:12px"><summary>' + icon("chevron") + 'Edit summary &amp; bullets (cv.json)</summary><div class="inner">' +
+          '<div class="field"><label for="cv-sum">Professional Summary</label><textarea class="input" id="cv-sum" rows="3">' + esc(cj.summary || "") + '</textarea></div>' +
+          (cj.experience || []).map((ex, idx) => '<div class="field"><label>' + esc((ex.role || "") + " @ " + (ex.company || "")) + ' (one bullet per line)</label><textarea class="input" data-cv-exp="' + idx + '" rows="3">' + esc((ex.description || []).join("\n")) + '</textarea></div>').join("") +
+          '<div><button class="btn primary" data-act="save-cv-json" data-id="' + esc(sel.id) + '">Save &amp; Re-render PDF</button></div></div></details>' : "";
         content = '<div class="doc-path" style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span>' + esc(doc.cv_pdf || "No cv.pdf path") + '</span>' +
           '<button class="btn primary" data-open-pack="' + esc(sel.id) + ':cv" style="flex:none">' + icon("external") + "Open CV PDF</button></div>" +
+          editorHtml +
           (doc.cv_html ? '<iframe title="Tailored CV preview" sandbox="" srcdoc="' + esc(doc.cv_html) + '" style="width:100%;height:520px;border:.5px solid var(--line);border-radius:8px;background:#fff"></iframe>' : "");
       }
 
@@ -887,6 +893,7 @@
           '<td><span class="score num">' + (r.ats ? '<span class="bar"><i style="width:' + Math.min(100, ats) + '%"></i></span>' + esc(r.ats) : "—") + "</span></td>" +
           '<td title="' + (r.synced ? "Saved to your account" : "Only on this computer") + '">' + icon(r.synced ? "cloud" : "cloudOff", ' class="cloud-ic' + (r.synced ? "" : " off") + '"') + "</td>" +
           '<td class="acts">' + (r.grounding ? '<button class="btn quiet" data-audit-idx="' + idx + '">Audit</button>' : "") +
+          (r.pack ? '<button class="btn quiet" data-pack-dir="' + esc(r.pack) + '">Pack</button>' : "") +
           (r.url ? '<button class="btn quiet" data-url="' + esc(r.url) + '" aria-label="Open ' + esc(r.title) + '">Open</button>' : "") +
           (r.url && k === "review" ? '<button class="btn quiet" data-detail="' + esc(r.url) + '">Why</button><button class="btn quiet" data-review="' + esc(r.url) + '">Review</button>' : "") +
           (r.url ? '<select class="select stage" data-stage="' + esc(r.url) + '" aria-label="Update status of ' + esc(r.title) + '"><option value="">Update…</option>' + STAGES.map(([v, l]) => '<option value="' + v + '">' + l + "</option>").join("") + "</select>" : "") + "</td></tr>";
@@ -1144,6 +1151,7 @@
     if (d.filter) { S.apps.filter = d.filter; S.apps.limit = 100; renderApps(); return; }
     if (d.sort) { const s = S.apps.sort; s.dir = s.key === d.sort ? -s.dir : 1; s.key = d.sort; renderAppsBody(); return; }
     if (d.url) return void call("open_url", d.url);
+    if (d.packDir) return void call("open_pack_folder", d.packDir);
     if (d.open) return void call("open_path", d.open);
     if (d.key) return keyEditor(d.key);
     if (d.savekey) {
@@ -1198,6 +1206,17 @@
         if (r && r.ok) {
           Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
           S.stick = true; go("packs"); watchRun();
+        }
+        return;
+      }
+      case "save-cv-json": {
+        const summary = ($("#cv-sum") || {}).value || "";
+        const experience = $all("[data-cv-exp]").map((el) => el.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean));
+        const r = await call("save_pack_cv", d.id, { summary, experience });
+        if (r && r.ok) {
+          toast("Saved cv.json — re-rendering PDF…");
+          Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
+          S.stick = true; watchRun();
         }
         return;
       }

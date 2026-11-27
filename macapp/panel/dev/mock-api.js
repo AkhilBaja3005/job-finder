@@ -356,6 +356,8 @@
       { key: "disability_status", section: "Optional: equal-opportunity forms", label: "Disability", kind: "choice", required: false, options: ["Prefer not to say", "Yes", "No"], default: "Prefer not to say", value: null } ] }),
     save_about_you: async (answers) => { window.__aboutSaved = answers; return { ok: true, unanswered: [] }; },
     ensure_browser: async () => ({ ok: true }),
+    save_pack_cv: async () => ({ ok: true }),
+    open_pack_folder: async () => ({ ok: true }),
     refresh_boards: async () => { activeTask = "scan"; activeScript = ["[Boards] Refreshing Greenhouse/Lever/Ashby index...", "[Boards] Indexed 8,412 company boards."]; running = true; started = Date.now(); lineIndex = 0; return { ok: true }; },
   } };
   window.dispatchEvent(new Event("pywebviewready"));

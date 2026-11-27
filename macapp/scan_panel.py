@@ -897,6 +897,7 @@ def read_tracker(ws: Path, limit: int = 20000) -> List[Dict[str, str]]:
         return [{
             "company": str(r.get("Company") or ""), "title": str(r.get("Job Role") or ""), "status": str(r.get("Status") or ""),
             "ats": _ats_text(r.get("ATS %")), "platform": str(r.get("Platform") or ""), "url": str(r.get("Job URL") or ""),
+            "pack": str(r.get("Pack Folder") or ""),
         } for r in reversed(excel[-limit:])]
     try:
         with _csv_path(ws).open(newline="", encoding="utf-8") as f:
@@ -1485,14 +1486,62 @@ class Api:
                 p = folder / name
                 return p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
             cv_pdf = folder / "cv.pdf"
+            cv_json_raw = _read("cv.json")
+            try:
+                cv_json = json.loads(cv_json_raw) if cv_json_raw else None
+            except Exception:
+                cv_json = None
             return {
                 "ok": True,
                 "cv_pdf": str(cv_pdf) if cv_pdf.is_file() else "",
                 "cv_html": _read("cv.html"),
+                "cv_json": cv_json,
                 "cover_letter": _read("cover_letter.txt"),
                 "review_md": _read("REVIEW.md"),
                 "fit": _read("fit_analysis.md"),
             }
+
+    def save_pack_cv(self, job_id: str, cv_data: Dict[str, Any]) -> Dict[str, Any]:
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            s = searches.resolve_current()
+            row = self._find_approved_row(s, str(job_id))
+            if not row:
+                return {"ok": False, "error": f"Approved job #{job_id} not found."}
+            cv_path = self._pack_folder(s, row) / "cv.json"
+            if not cv_path.is_file():
+                return {"ok": False, "error": "cv.json has not been generated yet."}
+            cur = json.loads(cv_path.read_text(encoding="utf-8"))
+            if "summary" in cv_data:
+                cur["summary"] = str(cv_data["summary"] or "")
+            if isinstance(cv_data.get("experience"), list):
+                for idx, bullets in enumerate(cv_data["experience"]):
+                    if idx < len(cur.get("experience", [])) and isinstance(bullets, list):
+                        cur["experience"][idx]["description"] = [str(b) for b in bullets if str(b).strip()]
+            cv_path.write_text(json.dumps(cur, indent=2, ensure_ascii=False), encoding="utf-8")
+            args = ["prepare", "--render-only", "--ids", str(job_id)]
+            if not s.is_main:
+                args += ["--search", s.name]
+        return self._runner.start(args, {**build_run_env({}, ws), **self._dock_env()}, ws, "prepare")
+
+    def open_pack_folder(self, pack_path: str) -> Dict[str, Any]:
+        ws = workspace_dir().resolve()
+        raw = str(pack_path or "").strip()
+        if not raw:
+            return {"ok": False, "error": "No pack folder recorded."}
+        target = Path(raw)
+        if not target.is_absolute():
+            target = ws / target
+        target = target.resolve()
+        try:
+            target.relative_to(ws)
+        except ValueError:
+            return {"ok": False, "error": "Pack folder is outside the workspace."}
+        if not target.is_dir():
+            return {"ok": False, "error": "Pack folder not found."}
+        platform_support.open_path(str(target), False)
+        return {"ok": True}
 
     def open_pack_file(self, job_id: str, kind: str) -> Dict[str, Any]:
         files = {"cv": "cv.pdf", "cover": "cover_letter.txt", "jd": "job_description.txt", "review": "REVIEW.md"}
