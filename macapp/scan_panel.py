@@ -194,6 +194,11 @@ def key_status(ws: Path) -> Dict[str, Dict[str, Any]]:
     return status
 
 
+def portal_password_status(ws: Path) -> Dict[str, Any]:
+    value = read_env(ws).get("PORTALS_PASSWORD", "")
+    return {"set": bool(value), "hint": value[-4:] if len(value) > 8 else ""}
+
+
 # ── the scan command ─────────────────────────────────────────────────────────────
 def build_scan_args(options: Dict[str, Any]) -> List[str]:
     """The arguments after `job-finder` for one run. A scan only searches and saves to the Excel: it never applies.
@@ -226,6 +231,10 @@ def build_scan_args(options: Dict[str, Any]) -> List[str]:
         args += ["--skip-portals", skip]
     if options.get("headless"):
         args.append("--headless")
+    if options.get("score_all"):
+        args.append("--score-all")
+    if options.get("sponsor_only"):
+        args.append("--sponsor-only")
     return args
 
 
@@ -245,6 +254,10 @@ def build_apply_args(options: Dict[str, Any]) -> List[str]:
         pass
     if options.get("headless"):
         args.append("--headless")
+    if options.get("score_all"):
+        args.append("--score-all")
+    if options.get("sponsor_only"):
+        args.append("--sponsor-only")
     return args
 
 
@@ -1080,7 +1093,7 @@ class Api:
     def get_state(self) -> Dict[str, Any]:
         ws = workspace_dir()
         return {
-            "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
+            "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws), "portal_password": portal_password_status(ws),
             "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "mailbox": mailbox_status(ws), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "cloud": cloud_status(ws), "session": {**session_status(ws), "signing_in": _signin_state.get("state") == "waiting", "error": _signin_state.get("error", "") if _signin_state.get("state") == "error" else ""}, "profile_check": profile_check(ws), "about_you": _about_state(ws),
             "browser": {"ready": browser_ready(), **self._browser},
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
@@ -1145,6 +1158,11 @@ class Api:
                 config[key] = values[key]
         save_app_config(config)
         return {"ok": True}
+
+    def save_portal_password(self, value: str) -> Dict[str, Any]:
+        ws = workspace_dir()
+        write_env_value(ws, "PORTALS_PASSWORD", str(value or "").strip())
+        return {"ok": True, "portal_password": portal_password_status(ws)}
 
     def set_theme(self, dark: bool) -> Dict[str, Any]:
         """Lets the window's title bar match the page colours."""
@@ -1253,8 +1271,9 @@ class Api:
             "level": str(r.get("Role Level") or r.get("Level") or ""),
             "years": str(r.get("Years Exp") or "not stated") or "not stated",
             "fit": fit,
+            "scored_by": str(r.get("Scored By") or ""),
             "match": str(r.get("Match") or ""),
-            "closing": str(r.get("Closing Date") or ""),
+            "closing": str(r.get("Closing Date") or "").replace(" 00:00:00", ""),
             "url": str(r.get("Job URL") or ""),
             "approved": str(r.get("Approve") or "").strip().lower() == "yes" or str(r.get("Status") or "") == "Approved",
         }

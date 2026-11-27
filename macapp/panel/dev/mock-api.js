@@ -135,6 +135,7 @@
     browser: { ready: !q.has("browser"), installing: false, error: "" },
     keys: q.has("fresh") ? { gemini: { set: false, hint: "" }, anthropic: { set: false, hint: "" }, openai: { set: false, hint: "" } }
                           : { gemini: { set: true, hint: "a3Kd" }, anthropic: { set: true, hint: "Qw9z" }, openai: { set: false, hint: "" } },
+    portal_password: { set: !q.has("fresh"), hint: q.has("fresh") ? "" : "x9Kp" },
     prefs: { profile_exists: !q.has("fresh"), candidate_name: "Akhil Baja", roles: ["Machine Learning Engineer Intern", "Data Science Intern", "AI Engineer Intern"],
       location: "London, UK", timeframe: "1m", min_ats: 70, title_keywords: ["intern", "internship", "placement"], skip_portals: ["targetjobs", "workday"] },
   };
@@ -324,7 +325,8 @@
     open_signin: async () => ({ ok: true }),
     problem_report: async () => ({ ok: true, text: "Job Finder 1.9.1 mock report" }),
     choose_profile_and_import: async () => ({ ok: true, name: "Akhil Baja" }),
-    save_key: async () => ({ ok: true, keys: state.keys }), open_url: async () => ({ ok: true }), open_path: async () => ({ ok: true }),
+    save_key: async () => ({ ok: true, keys: state.keys }),
+    save_portal_password: async (v) => { state.portal_password = { set: Boolean(v), hint: v && v.length > 8 ? v.slice(-4) : "" }; return { ok: true, portal_password: state.portal_password }; }, open_url: async () => ({ ok: true }), open_path: async () => ({ ok: true }),
     choose_workspace: async () => ({ ok: false }), choose_resume_and_build_profile: async () => ({ ok: false }),
     get_saved_answers: async () => ({ ok: true, items: savedAnswers.slice(), suggestions: ["Why do you want to work here?", "What are your salary expectations?", "What is your notice period or earliest start date?", "Where did you hear about this role?"], max_entries: 40, max_chars: 600 }),
     save_saved_answers: async (items) => { savedAnswers = items.filter((i) => i.question.trim() && i.answer.trim()); return { ok: true, saved: savedAnswers.length }; },

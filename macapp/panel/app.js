@@ -19,9 +19,9 @@
     searches: [],         // from api.list_searches()
     currentSearch: "",
     form: {
-      topic: "", level: "all", search: "", into: "",
+      topic: "", topics: [], level: "all", search: "", into: "",
       roles: [], location: "", timeframe: "1m", min_ats: 65, limit: 0,
-      title_keywords: [], skip_portals: [], primary_ai: "auto", headless: false, mode: "scan",
+      title_keywords: [], skip_portals: ["indeed", "jobserve"], primary_ai: "auto", headless: false, score_all: true, mode: "scan",
     },
     run: {
       kind: "scan",       // "scan" | "prepare" | "apply"
@@ -254,11 +254,12 @@
     if (r && r.ok) {
       S.searches = r.searches || [];
       S.currentSearch = r.current || "";
-      if (!S.form.topic && S.searches.length) {
+      if (!S.form.topics.length && !S.form.topic && S.searches.length) {
         const cur = S.searches.find((s) => s.name === S.currentSearch) || S.searches[0];
         if (cur) {
           S.form.search = cur.name;
           S.form.topic = cur.topic || "";
+          S.form.topics = (cur.topic || "").split(",").map((x) => x.trim()).filter(Boolean);
           S.form.level = cur.level || "all";
           if (!S.form.location && cur.location) S.form.location = cur.location;
         }
@@ -281,7 +282,7 @@
       '<div class="scroll"><div class="stack">' + checklist() + profileCard() + '<div class="cols">' +
       '<section class="card card-pad form" aria-label="Search settings">' +
         savedChips +
-        '<div class="field"><label for="f-topic">Topic or role</label><input class="input" id="f-topic" value="' + esc(f.topic) + '" placeholder="e.g. applied AI, cyber security" autocomplete="off"><div class="help">Every search gets its own Excel workbook.</div></div>' +
+        '<div class="field"><label>Topics or roles</label>' + tagsInput("topics", f.topics, "Add a topic or role and press Return") + '<div class="help">Add one or more roles/topics. Every search gets its own Excel workbook.</div></div>' +
         '<div class="field"><span class="label">Level</span><div class="seg" role="group" aria-label="Level">' +
           [["all", "All"], ["intern", "Intern"], ["graduate", "Graduate"], ["experienced", "Experienced"]].map(([v, l]) => '<button type="button" data-level="' + v + '" aria-pressed="' + (f.level === v) + '">' + l + "</button>").join("") + "</div></div>" +
         '<div class="two"><div class="field"><label for="f-location">Location</label><input class="input" id="f-location" value="' + esc(f.location) + '" placeholder="London, UK" autocomplete="off"></div>' +
@@ -299,7 +300,8 @@
           '<div class="field"><label>Skip these job sites</label>' + tagsInput("skip_portals", f.skip_portals, "e.g. workday") + "</div>" +
           '<div class="two"><div class="field"><label for="f-ai">AI model</label><select class="select" id="f-ai">' +
             [["auto", "Automatic"], ["gemini", "Gemini"], ["anthropic", "Claude"], ["openai", "OpenAI"]].map(([v, l]) => '<option value="' + v + '"' + (f.primary_ai === v ? " selected" : "") + ">" + l + "</option>").join("") + "</select></div>" +
-          '<div class="field"><span class="label">Browser window</span><label class="row-between" style="font-weight:400;color:var(--text)"><span>Hide while running</span><span class="switch"><input type="checkbox" id="f-headless"' + (f.headless ? " checked" : "") + '><i></i></span></label></div></div>' +
+          '<div class="field"><span class="label">Browser window</span><label class="row-between" style="font-weight:400;color:var(--text)"><span>Hide while running</span><span class="switch"><input type="checkbox" id="f-headless"' + (f.headless ? " checked" : "") + '><i></i></span></label>' +
+            '<label class="row-between" style="font-weight:400;color:var(--text)"><span>AI-score all levels</span><span class="switch"><input type="checkbox" id="f-score-all"' + (f.score_all ? " checked" : "") + '><i></i></span></label></div></div>' +
         "</div></details>" +
       "</section>" +
       '<section class="card act-card" aria-label="Activity"><div class="card-head"><h2>Activity</h2><div class="right"><button class="btn quiet" data-act="copy-log">Copy</button><button class="btn quiet" data-act="open-logs">Open log files</button></div></div>' +
@@ -371,8 +373,8 @@
   /* ── Running tasks & polling ─────────────────────────────────────────────── */
   async function startScan() {
     const f = S.form;
-    if (!f.topic.trim() && !f.roles.length && !f.search) {
-      toast("Enter a topic, add a role, or pick a saved search.", "bad"); return;
+    if (!f.topics.length && !f.topic.trim() && !f.roles.length && !f.search) {
+      toast("Add a topic/role, or pick a saved search.", "bad"); return;
     }
     const res = await call("start_scan", payload());
     if (!res || !res.ok) return;
@@ -382,6 +384,7 @@
 
   const payload = () => ({
     ...S.form,
+    topic: S.form.topics.length ? S.form.topics.join(", ") : S.form.topic,
     roles: S.form.roles.join("\n"),
     title_keywords: S.form.title_keywords.join(","),
     skip_portals: S.form.skip_portals.join(","),
@@ -507,7 +510,7 @@
           '<td class="chk-col"><input type="checkbox" data-rev-chk="' + esc(j.id) + '"' + (rv.selected.has(j.id) ? " checked" : "") + ' aria-label="Select ' + esc(j.role) + '"></td>' +
           '<td class="job"><div class="co">' + esc(j.company) + '</div><div class="ro">' + esc(j.role) + '<span class="src"> · ' + esc(j.level) + (j.years && j.years !== "not stated" ? " · " + esc(j.years) + " yrs" : "") + "</span></div></td>" +
           "<td>" + (j.match ? badge(j.match, matchKind) : "—") + "</td>" +
-          '<td><span class="score num"><span class="bar"><i style="width:' + Math.min(100, fit) + '%"></i></span>' + fit + "%</span></td>" +
+          '<td><span class="score num"><span class="bar"><i style="width:' + Math.min(100, fit) + '%"></i></span>' + fit + "%" + (j.scored_by ? '<span class="src" style="font-size:11px"> · ' + esc(j.scored_by) + "</span>" : "") + "</span></td>" +
           '<td class="num">' + (j.closing ? esc(j.closing) : "—") + "</td>" +
           "<td>" + badge(j.approved ? "Approved" : "Pending", j.approved ? "good" : "") + "</td>" +
           '<td class="acts">' +
@@ -890,7 +893,7 @@
   async function loadSchedule() { const r = await call("schedule_status"); if (r && r.ok) { S.sched = r; if (S.view === "settings") renderSettings(); } }
   function renderSettings() {
     const i = S.info; if (!i) { $("#view").innerHTML = head("Settings", "") + '<div class="scroll"><div class="skeleton"></div></div>'; return; }
-    const br = i.browser, cl = i.cloud || {}, mb = i.mailbox || {};
+    const br = i.browser, cl = i.cloud || {}, mb = i.mailbox || {}, pp = i.portal_password || {};
     const row = (t, d, ctl, id) => '<div class="setting"><div class="info"><div class="t">' + t + '</div><div class="d">' + d + '</div></div><div class="ctl"' + (id ? ' id="' + id + '"' : "") + ">" + ctl + "</div></div>";
     $("#view").innerHTML = head("Settings", "Your folder, AI providers and connections.") + nextBannerHtml() + '<div class="scroll"><div class="stack" style="max-width:820px">' +
       '<div class="sect-title">General</div><section class="card">' +
@@ -914,6 +917,8 @@
           ((i.about_you && i.about_you.exists && i.about_you.unanswered.length) ? badge("Needs answers", "warn") : "") + '<button class="btn" data-act="edit-about">' + ((i.about_you && i.about_you.exists && i.about_you.unanswered.length) ? "Answer…" : "Edit…") + "</button>") +
         row("Saved answers", "Answers to questions your profile does not cover, such as why you want the job. The agent uses them word for word instead of guessing.", '<button class="btn" data-act="edit-answers">Edit…</button>') +
         row("Job site sign-ins", "Opens the agent's Chrome so you can sign in to LinkedIn, Indeed and Reed once. Runs reuse the sign-ins.", '<button class="btn" data-act="open-signin">Open Chrome to sign in</button>') +
+        row("Portal sign-up password", "Optional. Used when a job portal (like Workday or Reed) requires creating an account or signing in with email + password. Stored in .env only.",
+          (pp.set ? badge("Saved" + (pp.hint ? " ···" + pp.hint : ""), "good") : badge("Not set")) + '<button class="btn" data-act="edit-portal-pw">' + (pp.set ? "Replace…" : "Add password…") + "</button>", "c-portal-pw") +
         row("Page scraper browser", br.ready ? "Installed" : br.installing ? "Downloading, about 150 MB…" : (br.error ? esc(br.error) : "Needed for some job sources. Downloaded once."), br.ready ? badge("Ready", "good") : br.installing ? badge("Installing", "accent") : '<button class="btn" data-act="install-browser">' + icon("download") + "Install</button>") +
       "</section>" +
       '<div class="sect-title">About</div><section class="card">' +
@@ -1015,6 +1020,7 @@
     }
     if (t.id === "f-ai") { S.form.primary_ai = t.value; call("save_app_prefs", { primary_ai: t.value }); }
     else if (t.id === "f-headless") { S.form.headless = t.checked; call("save_app_prefs", { headless: t.checked }); }
+    else if (t.id === "f-score-all") { S.form.score_all = t.checked; }
     else if (t.id === "ap-headless") { S.apply.headless = t.checked; }
   });
 
@@ -1031,10 +1037,14 @@
     if (d.level) { S.form.level = d.level; renderSearch(); return; }
     if (d.scanMode) { S.form.mode = d.scanMode; renderSearch(); return; }
     if (d.search !== undefined) {
-      if (!d.search) { S.form.search = ""; }
+      if (!d.search) { S.form.search = ""; S.form.topics = []; S.form.topic = ""; }
       else {
         const s = S.searches.find((x) => x.name === d.search);
-        if (s) { S.form.search = s.name; S.form.topic = s.topic || ""; S.form.level = s.level || "all"; S.form.location = s.location || S.form.location; }
+        if (s) {
+          S.form.search = s.name; S.form.topic = s.topic || "";
+          S.form.topics = (s.topic || "").split(",").map((x) => x.trim()).filter(Boolean);
+          S.form.level = s.level || "all"; S.form.location = s.location || S.form.location;
+        }
       }
       renderSearch(); return;
     }
@@ -1137,6 +1147,8 @@
         return;
       }
       case "cancel-key": return renderSettings();
+      case "edit-portal-pw": { const ctl = $("#c-portal-pw"); if (!ctl) return; ctl.innerHTML = '<span class="keybox"><input class="input" type="password" id="ki-portal-pw" placeholder="Portal sign-up password" autocomplete="off" spellcheck="false" aria-label="Portal sign-up password"><button class="btn primary" data-act="save-portal-pw">Save</button><button class="btn" data-act="cancel-key">Cancel</button></span>'; $("#ki-portal-pw").focus(); return; }
+      case "save-portal-pw": { const r = await call("save_portal_password", ($("#ki-portal-pw") || {}).value || ""); if (r && r.ok) { toast("Portal password saved."); await refreshInfo(); renderSettings(); } return; }
       case "google-signin": { S.gateError = ""; const r = await call("google_sign_in"); if (r && r.ok) { await refreshInfo(); renderShell(); watchSignIn(); } return; }
       case "cancel-signin": { await call("cancel_google_sign_in"); await new Promise((res) => setTimeout(res, 600)); await refreshInfo(); renderShell(); return; }
       case "retry-session": { await call("session_check"); await refreshInfo(); renderShell(); if (S.info && S.info.session && S.info.session.signed_in) onSignedIn(); return; }
@@ -1314,11 +1326,12 @@
     { view: "settings", sel: '[data-act="build-profile"], [data-act="import-profile"]', title: "Create your profile", text: "Build it from your resume, or import a profile.json you already have. Every form and tailored CV is grounded in it." },
     { view: "settings", sel: '[data-act="edit-about"]', title: "Tell us what your resume cannot", text: "Forms ask where you can work, whether you need a visa, when you can start and what you want to earn. Answer once and the agent uses it.", cta: "Answer now" },
     { view: "settings", sel: '[data-act="open-signin"]', title: "Sign in to job sites", text: "LinkedIn, Indeed and Reed work best when you are signed in. Open Chrome once, sign in, and future runs reuse it." },
+    { view: "settings", sel: "#c-portal-pw", title: "Portal sign-up password", text: "Optional. Stored privately in .env for portals like Workday or Reed that require creating an account with email and password." },
     { view: "settings", sel: "#c-sync", title: "Save applications to your account", text: "Optional. Your Google sign-in keeps every application saved to your job-finder.space account, so it shows on the website and in the extension too." },
     { view: "settings", sel: "#c-mailbox", title: "See replies automatically", text: "Optional. Connect your mailbox with an app password and employer replies, interviews and rejections are marked for you." },
     { view: "settings", sel: '[data-act="edit-answers"]', title: "Write answers once", text: "For questions your profile cannot answer, such as why you want the job. The agent types your answer word for word instead of guessing." },
     { view: "settings", sel: "#sched-time", title: "Run every morning", text: "Optional. Pick a time and a daily run starts by itself, even when the app is closed." },
-    { view: "search", sel: "#f-topic", title: "1. Search for jobs", text: "Enter a topic, level, and location. Use Dry-run to inspect the search funnel, or Run to save scored jobs into an Excel workbook." },
+    { view: "search", sel: '[data-tags="topics"]', title: "1. Search for jobs", text: "Add one or more topics/roles, pick a level and location. Use Dry-run to inspect the search funnel, or Run to save scored jobs into an Excel workbook." },
     { view: "review", sel: '[data-nav="review"]', title: "2. Review and approve", text: "Tick the jobs you want to apply for, or approve everything above a minimum ATS score." },
     { view: "packs", sel: '[data-nav="packs"]', title: "3. Prepare application packs", text: "Each approved job gets its own folder with a tailored 1-page CV, fit analysis, and cover letter when requested." },
     { view: "documents", sel: '[data-nav="documents"]', title: "4. Review documents & sign off", text: "Inspect the tailored CV, cover letter, and REVIEW.md checklist, then click Docs OK before applying." },

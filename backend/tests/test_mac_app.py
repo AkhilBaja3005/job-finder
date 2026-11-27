@@ -1292,3 +1292,13 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
     _profile_file(tmp_path)
     assert api.start_apply({"mode": "submit", "limit": 3, "headless": True}) == {"ok": True}
     assert called_cmds[-1][1] == "apply" and "--submit" in called_cmds[-1][0] and "--yes" in called_cmds[-1][0]
+
+    # 6. Portal password stored in .env + scan_args flags + closing date cleanup
+    assert api.get_state()["portal_password"]["set"] is False
+    pw_res = api.save_portal_password("SuperSecret#99")
+    assert pw_res["ok"] and pw_res["portal_password"]["set"] is True
+    assert "PORTALS_PASSWORD" in (tmp_path / ".env").read_text()
+    scan_args = scan_panel.build_scan_args({"score_all": True, "sponsor_only": True})
+    assert "--score-all" in scan_args and "--sponsor-only" in scan_args
+    assert api._job_dict({"Closing Date": "2026-12-02 00:00:00", "Scored By": "AI"})["closing"] == "2026-12-02"
+    assert api._job_dict({"Scored By": "Keyword"})["scored_by"] == "Keyword"
