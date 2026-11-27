@@ -159,6 +159,16 @@ def _compile(terms: Iterable[str]) -> Optional[re.Pattern]:
     return re.compile(rf"(?<![a-z0-9])(?:{'|'.join(parts)})(?![a-z0-9])", re.I)
 
 
+_ABBREVIATIONS = {"machine learning": "ml", "artificial intelligence": "ai", "natural language processing": "nlp",
+                  "large language model": "llm", "large language models": "llm", "computer vision": "cv"}
+
+
+def _abbreviations(terms: Iterable[str]) -> List[str]:
+    """Short forms that job titles use for the long terms in a topic family, e.g. 'ML Engineer' for machine learning."""
+    joined = " | ".join(t.lower() for t in terms)
+    return [short for long, short in _ABBREVIATIONS.items() if re.search(rf"(?<![a-z]){re.escape(long)}(?![a-z])", joined)]
+
+
 def _distinctive(topic: str) -> List[str]:
     words = [w for w in re.split(r"[^a-z0-9+#.]+", topic.strip().lower()) if w]
     return [w for w in words if w not in _GENERIC and len(w) >= 2]
@@ -505,7 +515,7 @@ def resolve_spec(
             searches.append([q for q in fam.search if q.lower() != t.lower()])
         if _all_of(t):
             groups.append(_all_of(t))
-    terms = list(dict.fromkeys(terms))
+    terms = list(dict.fromkeys(terms + _abbreviations(terms)))
     return RoleSpec(topics=topics, level=lvl, queries=build_queries(topics, queries_level, searches) if topics else [],
                     topic_terms=terms, topic_all_of=groups, split=split, core_terms=list(dict.fromkeys(cores)),
                     topic_exclude=[e for e in dict.fromkeys(excludes) if e not in terms], loose=loose)
