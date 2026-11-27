@@ -88,39 +88,44 @@ function DownloadSection({ platform }) {
             Download for {fit.name}
           </a>
           {isMac && (
-            <>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                {platform.sure ? 'Wrong chip? ' : 'Mac from before 2020 (Intel chip)? '}
-                <a href={DESKTOP_RELEASE + otherMac.file} rel="noopener noreferrer" style={{ color: '#38BDF8', textDecoration: 'none' }}>
-                  Download for {otherMac.name}
-                </a>
-              </div>
-              <div style={{
-                marginTop: '4px', padding: '8px 10px', borderRadius: '8px',
-                background: 'rgba(15, 23, 42, 0.7)', border: '1px solid var(--border-color)',
-                display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '460px', flexWrap: 'wrap'
-              }}>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', width: '100%' }}>
-                  Or install in Terminal (no Gatekeeper warning):
-                </span>
-                <code style={{ fontSize: '0.72rem', color: '#e2e8f0', wordBreak: 'break-all', flex: '1 1 240px' }}>
-                  {MAC_CURL_CMD}
-                </code>
-                <button
-                  type="button"
-                  onClick={copyMacCmd}
-                  className="btn"
-                  style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38BDF8', border: '1px solid rgba(56, 189, 248, 0.35)', whiteSpace: 'nowrap' }}
-                >
-                  {copiedCmd ? 'Copied!' : 'Copy'}
-                </button>
-              </div>
-            </>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              {platform.sure ? 'Wrong chip? ' : 'Mac from before 2020 (Intel chip)? '}
+              <a href={DESKTOP_RELEASE + otherMac.file} rel="noopener noreferrer" style={{ color: '#38BDF8', textDecoration: 'none' }}>
+                Download for {otherMac.name}
+              </a>
+            </div>
           )}
         </div>
       ) : (
         <div style={{ maxWidth: '300px', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
           The desktop app is for Mac and Windows computers. Open this page on your computer to download it.
+        </div>
+      )}
+      {isMac && (
+        <div style={{
+          flex: '1 0 100%', paddingTop: '14px', borderTop: '1px solid var(--border-color)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap'
+        }}>
+          <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            Terminal install (no Gatekeeper warning):
+          </span>
+          <div style={{
+            flex: '1 1 360px', display: 'flex', alignItems: 'center', gap: '8px',
+            padding: '6px 10px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.7)',
+            border: '1px solid var(--border-color)', minWidth: 0
+          }}>
+            <code style={{ fontSize: '0.74rem', color: '#e2e8f0', whiteSpace: 'nowrap', overflowX: 'auto', flex: 1 }}>
+              {MAC_CURL_CMD}
+            </code>
+            <button
+              type="button"
+              onClick={copyMacCmd}
+              className="btn"
+              style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38BDF8', border: '1px solid rgba(56, 189, 248, 0.35)', whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              {copiedCmd ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
         </div>
       )}
     </section>

@@ -8176,7 +8176,7 @@ function App() {
                 display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'
               }}>
                 <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>Mac Terminal install (no Gatekeeper warning):</span>
-                <code style={{ fontSize: '0.72rem', color: '#e2e8f0', wordBreak: 'break-all', flex: '1 1 260px' }}>
+                <code style={{ fontSize: '0.72rem', color: '#e2e8f0', whiteSpace: 'nowrap', overflowX: 'auto', flex: '1 1 260px', minWidth: 0 }}>
                   curl -fsSL https://raw.githubusercontent.com/AkhilBaja3005/job-finder/main/macapp/install_mac.sh | bash
                 </code>
                 <button
