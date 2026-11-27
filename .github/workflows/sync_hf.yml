@@ -38,6 +38,7 @@ jobs:
           git rm -r -q --cached docs/chrome-store || true
           # The Mac app (icon.icns and the rest of macapp/) is built by its own workflow; the server image does not use it.
           git rm -r -q --cached macapp || true
+          git rm -q --cached backend/.coverage || true
           git commit -q -m "Sync from GitHub ${GITHUB_SHA} [skip ci]"
           git push hf hf-snapshot:main --force
 

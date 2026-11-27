@@ -51,3 +51,8 @@ applications_tracker/*.bak*
 # Mac app build output
 .macbuild/
 dist-mac/
+
+# coverage data
+.coverage
+.coverage.*
+htmlcov/
