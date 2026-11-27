@@ -6,8 +6,46 @@ from typing import Any, Dict, Optional
 from job_finder import ui
 
 
-def score_against_jd(candidate: Dict[str, Any], jd_text: str) -> Dict[str, Any]:
-    """Run the deterministic scorer and return a JSON-friendly result."""
+def score_against_jd(candidate: Dict[str, Any], jd_text: str, keyword: bool = False,
+                     title: str = "", company: str = "") -> Dict[str, Any]:
+    """
+    Score `candidate` against one job description. Uses the evidence-based AI analysis; falls back to the
+    keyword engine (clearly labelled) if the LLM is unavailable or `keyword=True`.
+    """
+    if not keyword:
+        try:
+            try:
+                from backend.services.fit_scorer import analyze_fit, FitUnavailable
+            except ImportError:  # pragma: no cover
+                from services.fit_scorer import analyze_fit, FitUnavailable
+            try:
+                res = analyze_fit(candidate, title, company, jd_text)
+            except FitUnavailable as e:
+                reason = str(e)
+            else:
+                if not res.eligible:
+                    return {"engine": "ai", "eligible": False, "reason": res.knockout_reason, "overall": 0,
+                            "summary": res.summary, "requirements": res.requirements}
+                return {
+                    "engine": "ai", "eligible": True, "overall": res.overall, "skills": res.skills_score,
+                    "experience": res.experience_score, "role_fit": res.role_fit, "summary": res.summary,
+                    "matched_skills": res.matched, "missing_skills": res.missing, "requirements": res.requirements,
+                    "closing_date": res.closing_date.isoformat() if res.closing_date else None,
+                }
+        except Exception as e:  # pragma: no cover - never lose the keyword fallback
+            reason = f"{type(e).__name__}: {e}"
+        fallback_note = f"AI analysis unavailable ({reason}); showing the keyword engine instead."
+    else:
+        fallback_note = None
+    out = _keyword_score(candidate, jd_text)
+    out["engine"] = "keyword"
+    if fallback_note:
+        out["note"] = fallback_note
+    return out
+
+
+def _keyword_score(candidate: Dict[str, Any], jd_text: str) -> Dict[str, Any]:
+    """The old deterministic keyword scorer (fixed skill taxonomy)."""
     try:
         from backend.services.ats_scorer import compute_ats_score, compute_overall_score, estimate_role_fit_score
     except ImportError:  # pragma: no cover - alternate import root
@@ -56,8 +94,24 @@ def render(result: Dict[str, Any], as_json: bool = False) -> int:
         return 0 if result.get("eligible") else 1
     if not result.get("eligible"):
         ui.error(f"Not eligible for this role: {result.get('reason')}")
+        if result.get("requirements"):
+            ui.info(result.get("summary") or "")
         return 1
-    ui.key_values("ATS score for this job", {
+    if result.get("engine") == "ai":
+        ui.key_values("Fit for this job (AI analysis, evidence-based)", {
+            "Overall": f"{result['overall']}/100", "Skills": result["skills"],
+            "Experience / education": result["experience"], "Role fit": result["role_fit"],
+            "Closing date": result.get("closing_date") or "not stated",
+            "Verdict": result.get("summary") or "-",
+        })
+        sym = {"yes": "met", "partial": "partial", "no": "NOT met"}
+        ui.print_table("Requirements", ["Requirement", "Need", "Your profile", "Evidence"],
+                       [[r["text"][:44], r["importance"], sym.get(r["verdict"], r["verdict"]), (r["evidence"] or "-")[:60]]
+                        for r in result["requirements"]], status_col=None)
+        return 0
+    if result.get("note"):
+        ui.warn(result["note"])
+    ui.key_values("ATS score for this job (keyword engine)", {
         "Overall": f"{result['overall']}/100",
         "Skills": result["skills"],
         "Experience": f"{result['experience']} ({result['candidate_years']}y vs {result['required_years']}y required)",

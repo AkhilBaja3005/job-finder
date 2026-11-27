@@ -175,7 +175,7 @@ def main():
         # Test C: job-finder scan --help
         res = run_cmd([venv_py, "-m", "job_finder.cli", "scan", "--help"], cwd=tmp_dir, env=setup_env)
         assert "--min-ats" in res.stdout
-        assert "--auto-apply" in res.stdout
+        assert "--topic" in res.stdout and "--dry-run" in res.stdout      # `scan` only discovers jobs; applying is `apply`
         print("  `job-finder scan --help` executed cleanly")
 
         # Test D: job-finder apply --help

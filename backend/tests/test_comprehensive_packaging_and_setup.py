@@ -86,10 +86,10 @@ def test_dynamic_master_resume_resolution(tmp_path):
 
 
 def test_offline_tracker_fallback(tmp_path):
-    """Validates that application tracking writes to local CSV cleanly when Supabase is unconfigured."""
+    """Validates that application tracking writes to the local Excel tracker cleanly when Supabase is unconfigured."""
     import applications_tracker.scheduled_job_scanner as scanner
 
-    temp_csv = str(tmp_path / "test_tracker.csv")
+    temp_xlsx = str(tmp_path / "test_tracker.xlsx")
     dummy_payload = {
         "company": "Offline Corp",
         "job_title": "Systems Architect",
@@ -112,18 +112,18 @@ def test_offline_tracker_fallback(tmp_path):
         "job_url": "https://example.com/jobs/123"
     }
 
-    with patch.object(scanner, "CSV_PATH", temp_csv):
+    with patch.dict(os.environ, {"JOB_FINDER_TRACKER_XLSX": temp_xlsx}), patch.object(scanner, "CSV_PATH", str(tmp_path / "legacy.csv")):
         with patch.object(scanner, "SUPABASE_URL", ""):
             with patch.object(scanner, "SUPABASE_KEY", ""):
                 import asyncio
                 asyncio.run(scanner.record_to_supabase_or_csv(dummy_payload))
 
-    assert os.path.exists(temp_csv)
-    with open(temp_csv, "r", encoding="utf-8") as f:
-        content = f.read()
-    assert "Offline Corp" in content
-    assert "Systems Architect" in content
-    assert "https://example.com/jobs/123" in content
+    assert os.path.exists(temp_xlsx)
+    from backend.services.excel_tracker import ExcelTracker
+    text = " ".join(str(v) for r in ExcelTracker(temp_xlsx).rows() for v in r.values())
+    assert "Offline Corp" in text
+    assert "Systems Architect" in text
+    assert "https://example.com/jobs/123" in text
 
 
 def test_browser_use_task_prompt_portal_password_handling():
