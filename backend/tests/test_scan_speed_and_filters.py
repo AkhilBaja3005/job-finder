@@ -122,7 +122,8 @@ def test_indeed_runs_in_parallel_once_it_is_known_to_work(monkeypatch):
 def test_portal_scan_keeps_what_answered_when_some_boards_stall(monkeypatch):
     from services.portal_scanner import PortalScanner
     sc = PortalScanner()
-    monkeypatch.setattr(PortalScanner, "SCAN_DEADLINE_SECONDS", 0.3)
+    monkeypatch.setattr(PortalScanner, "SCAN_DEADLINE_SECONDS", 5.0)
+    monkeypatch.setattr(PortalScanner, "TAIL_GRACE_SECONDS", 0.5)
     monkeypatch.setattr(sc, "_get_active_portals_for_scan", lambda *a, **k: {
         "greenhouse": [{"company_slug": "fast", "name": "Fast"}, {"company_slug": "stuck", "name": "Stuck"}]})
 
@@ -137,8 +138,11 @@ def test_portal_scan_keeps_what_answered_when_some_boards_stall(monkeypatch):
 
     async def run():
         return await sc.scan_all_portals(target_keywords=["AI Engineer"], timeframe="48h", location="London", exclude_portals=[])
+    import time as _t
+    t0 = _t.monotonic()
     out = asyncio.run(asyncio.wait_for(run(), timeout=10))
     assert [j["company"] for j in out] == ["Fast"]
+    assert _t.monotonic() - t0 < 4          # a stuck tail waits only the grace period, not the whole deadline
 
 
 def test_browser_launch_failure_is_not_retried_by_every_caller(monkeypatch):

@@ -14,6 +14,7 @@ try:
 except ImportError:
     yaml = None
 import asyncio
+import time
 # pyrefly: ignore [missing-import]
 import httpx
 from typing import List, Dict, Any, Optional
@@ -386,6 +387,7 @@ class PortalScanner:
         return False
 
     SCAN_DEADLINE_SECONDS = 30.0
+    TAIL_GRACE_SECONDS = 3.0
 
     async def scan_all_portals(
         self,
@@ -442,12 +444,26 @@ class PortalScanner:
             # One overall deadline: whatever has answered by then is kept. (The caller's own 60 s limit used to throw away
             # every result when a few hundred company boards stalled.)
             futures = [asyncio.ensure_future(t) for t in tasks]
-            done, pending = await asyncio.wait(futures, timeout=self.SCAN_DEADLINE_SECONDS) if futures else (set(), set())
+            done: set = set()
+            pending: set = set(futures)
+            started = time.monotonic()
+            tail_since: Optional[float] = None
+            while pending:
+                just_done, pending = await asyncio.wait(pending, timeout=0.5)
+                done |= just_done
+                now = time.monotonic()
+                if now - started >= self.SCAN_DEADLINE_SECONDS:
+                    break
+                # A handful of boards that hang must not hold up the other ~1250: give the tail a few seconds, then go on.
+                if pending and len(pending) <= max(3, len(futures) // 100):
+                    tail_since = tail_since or now
+                    if now - tail_since >= self.TAIL_GRACE_SECONDS:
+                        break
             for p in pending:
                 p.cancel()
             if pending:
-                print(f"[Portal Scanner] {len(pending)} of {len(futures)} company boards had not answered after "
-                      f"{self.SCAN_DEADLINE_SECONDS:.0f}s; using the {len(done)} that had.")
+                print(f"[Portal Scanner] {len(pending)} of {len(futures)} company boards had not answered; "
+                      f"using the {len(done)} that had.")
             for f in done:
                 if not f.cancelled() and f.exception() is None and isinstance(f.result(), list):
                     all_jobs.extend(f.result())
