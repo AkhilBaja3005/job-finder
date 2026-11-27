@@ -5,7 +5,8 @@ import services.job_searcher as js
 from services import role_spec
 
 
-def test_ats_search_stops_after_every_key_is_429_on_the_first_model():
+def test_ats_search_stops_after_every_key_is_429_on_the_first_model(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k1111111")
     js._ats_grounding_quota_exhausted = False
     calls = []
     with patch("services.job_searcher.genai.Client") as client_cls, \
@@ -20,7 +21,8 @@ def test_ats_search_stops_after_every_key_is_429_on_the_first_model():
     js._ats_grounding_quota_exhausted = False
 
 
-def test_ats_search_bails_out_when_another_stream_flipped_the_breaker():
+def test_ats_search_bails_out_when_another_stream_flipped_the_breaker(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "k1111111")
     js._ats_grounding_quota_exhausted = False
     with patch("services.job_searcher.genai.Client") as client_cls, \
          patch("services.gemini_client.get_gemini_api_keys", return_value=["k1111111", "k2222222"]):
