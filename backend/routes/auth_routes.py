@@ -106,6 +106,17 @@ async def auth_callback(code: str, request: Request, state: Optional[str] = None
             if not state.startswith("//"):
                 dest_path = state
 
+        # A desktop app started this sign-in: hand the browser back to the app on this computer, with a one-time code.
+        if dest_path.startswith("/app/login-done?"):
+            from urllib.parse import parse_qs
+            from fastapi.responses import HTMLResponse
+            from services import app_login
+            login_id = (parse_qs(dest_path.split("?", 1)[1]).get("cid") or [""])[0]
+            target = app_login.complete(login_id, token)
+            if not target:
+                return HTMLResponse("<h3>This sign-in link has expired.</h3><p>Go back to Job Finder and click Sign in again.</p>", status_code=400)
+            return RedirectResponse(url=target, status_code=302)
+
         # /oauth/* pages are served by this backend, not the SPA dev server
         if dest_path.startswith("/oauth/"):
             frontend_url = base_url
@@ -330,13 +341,16 @@ async def auth_mock(request: dict):
 
 
 @router.get("/user/me")
-async def user_me(authorization: Optional[str] = Header(None)):
+async def user_me(authorization: Optional[str] = Header(None), x_account_email: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
     token = authorization.split(" ")[1]
     user = await async_get_user_by_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
+    if user.get("id") and not str(user["id"]).startswith("guest_"):
+        from services.app_auth import check_email_for_sync_code
+        check_email_for_sync_code(token, user, x_account_email, strict=False)
     if not user.get("sync_code") and user.get("id"):
         sync_code = generate_user_sync_code(user["id"])
         user["sync_code"] = sync_code
@@ -372,6 +386,68 @@ async def user_me(authorization: Optional[str] = Header(None)):
     safe = {k: v for k, v in user.items() if k != "gemini_api_key"}
     safe.update(mask_secret(user.get("gemini_api_key")))
     return safe
+
+
+class AppLoginBegin(BaseModel):
+    challenge: str
+    port: int
+    state: str
+
+
+class AppLoginExchange(BaseModel):
+    code: str
+    verifier: str
+
+
+_APP_LOGIN_RATE: Dict[str, List[float]] = {}
+
+
+@router.post("/auth/app/begin")
+async def app_login_begin(payload: AppLoginBegin, request: Request):
+    """The desktop app starts a Google sign-in. Returns the address to open in the browser."""
+    import time
+    from urllib.parse import quote
+    from services import app_login
+    ip = (request.headers.get("cf-connecting-ip") or request.headers.get("x-real-ip")
+          or (request.headers.get("x-forwarded-for", "").split(",")[0].strip() or None) or (request.client.host if request.client else "unknown"))
+    now = time.time()
+    recent = [t for t in _APP_LOGIN_RATE.get(ip, []) if now - t < 600]
+    if len(recent) >= 20:
+        raise HTTPException(status_code=429, detail="Too many sign-in attempts. Try again in a few minutes.")
+    _APP_LOGIN_RATE[ip] = recent + [now]
+    try:
+        login_id = app_login.begin(payload.challenge, payload.port, payload.state)
+    except app_login.AppLoginError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", str(request.base_url.netloc)))
+    base_url = f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+    return {"login_url": f"{base_url}/auth/url?redirect_to={quote('/app/login-done?cid=' + login_id, safe='')}"}
+
+
+@router.post("/auth/app/exchange")
+async def app_login_exchange(payload: AppLoginExchange):
+    """The app trades its one-time code and verifier for the account's session token."""
+    from services import app_login
+    token = app_login.exchange(payload.code, payload.verifier)
+    user = await async_get_user_by_token(token) if token else None
+    if not token or not user or not user.get("id") or str(user["id"]).startswith("guest_"):
+        raise HTTPException(status_code=401, detail="The sign-in code is not valid or has expired")
+    return {"token": token, "email": user.get("email")}
+
+
+@router.post("/auth/app/revoke")
+async def app_login_revoke(authorization: Optional[str] = Header(None)):
+    """Signs the app out: the session token stops working everywhere. Sync codes are not touched."""
+    from services.app_auth import bearer_token, is_sync_code
+    token = bearer_token(authorization)
+    if not token or is_sync_code(token):
+        raise HTTPException(status_code=401, detail="Sign in first")
+    import urllib.parse
+    from services.auth import supabase_request
+    await asyncio.to_thread(supabase_request, f"sessions?token=eq.{urllib.parse.quote(token)}", "DELETE")
+    invalidate_token_cache(token)
+    return {"status": "signed out"}
 
 
 @router.get("/user/sync_code")

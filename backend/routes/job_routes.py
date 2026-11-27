@@ -450,8 +450,13 @@ async def scan_portals_endpoint(request: ScanPortalsRequest, authorization: Opti
 # Applications & Automation
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/applications")
-async def get_applications(authorization: Optional[str] = Header(None)):
+async def get_applications(authorization: Optional[str] = Header(None), x_account_email: Optional[str] = Header(None)):
     token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
+    if token:  # a sync code with another account's email is refused; with REQUIRE_SYNC_EMAIL=1 a bare code is too
+        user = await async_get_user_by_token(token)
+        if user and user.get("id") and not str(user["id"]).startswith("guest_"):
+            from services.app_auth import check_email_for_sync_code
+            check_email_for_sync_code(token, user, x_account_email, strict=False)
     return {"applications": await asyncio.to_thread(list_applications, token)}
 
 
@@ -469,13 +474,12 @@ class SyncApplicationsRequest(BaseModel):
 
 
 @router.post("/applications/sync")
-async def sync_applications(request: SyncApplicationsRequest, authorization: Optional[str] = Header(None)):
-    """Adds applications from the Mac app to the signed-in account. Add-only: a job URL that is already stored is skipped,
-    and nothing is changed or deleted. Needs a real account (sync code or session), never a guest."""
-    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
-    user = await async_get_user_by_token(token) if token else None
-    if not user or not user.get("id") or str(user["id"]).startswith("guest_"):
-        raise HTTPException(status_code=401, detail="Invalid sync code")
+async def sync_applications(request: SyncApplicationsRequest, authorization: Optional[str] = Header(None), x_account_email: Optional[str] = Header(None)):
+    """Adds applications from the desktop app to the signed-in account. Add-only: a job URL that is already stored is skipped,
+    and nothing is changed or deleted. Needs a real account: a Google sign-in token, or a sync code together with the
+    account's email. Never a guest."""
+    from services.app_auth import user_for_app
+    token, user = await user_for_app(authorization, x_account_email)
     known = {a.get("job_url") for a in await asyncio.to_thread(list_applications, token) if a.get("job_url")}
     added = 0
     for item in request.applications:
@@ -500,12 +504,10 @@ ALLOWED_PROGRESS_STATUSES = {"Applied (manual)", "Replied", "Interview", "Offer"
 
 
 @router.post("/applications/status")
-async def set_application_progress(request: ApplicationStatusRequest, authorization: Optional[str] = Header(None)):
+async def set_application_progress(request: ApplicationStatusRequest, authorization: Optional[str] = Header(None), x_account_email: Optional[str] = Header(None)):
     """Moves one of the account's applications along (reply, interview, offer ...). Only a fixed list of statuses is accepted."""
-    token = authorization.split(" ")[1] if authorization and authorization.startswith("Bearer ") else None
-    user = await async_get_user_by_token(token) if token else None
-    if not user or not user.get("id") or str(user["id"]).startswith("guest_"):
-        raise HTTPException(status_code=401, detail="Invalid sync code")
+    from services.app_auth import user_for_app
+    token, user = await user_for_app(authorization, x_account_email)
     if request.status not in ALLOWED_PROGRESS_STATUSES:
         raise HTTPException(status_code=422, detail="Unknown status")
     changed = await asyncio.to_thread(update_application_status, token, request.job_url.strip(), request.status)
