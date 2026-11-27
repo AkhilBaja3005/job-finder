@@ -25,7 +25,7 @@
   let started = 0, lineIndex = 0, running = false;
   const state = {
     workspace: "/Users/akhil/Documents/Job Finder", version: "1.9.1", running: false, chrome_found: true,
-    app_prefs: { primary_ai: "auto", headless: false },
+    app_prefs: { primary_ai: "auto", headless: false, dock_browser: false },
     cloud: { configured: true, connected: true, email: "me@example.com", kind: "google" },
     browser: { ready: !q.has("browser"), installing: false, error: "" },
     keys: q.has("fresh") ? { gemini: { set: false, hint: "" }, anthropic: { set: false, hint: "" }, openai: { set: false, hint: "" } }

@@ -261,9 +261,9 @@ def test_update_check_failure_is_a_message_not_an_exception():
 
 def test_app_prefs_keep_only_known_keys(home):
     api = panel.Api([sys.executable])
-    assert panel.load_app_prefs() == {"primary_ai": "auto", "headless": False, "tour_done": False}
+    assert panel.load_app_prefs() == {"primary_ai": "auto", "headless": False, "tour_done": False, "dock_browser": False}
     api.save_app_prefs({"primary_ai": "anthropic", "headless": True, "workspace": "/etc", "evil": 1})
-    assert panel.load_app_prefs() == {"primary_ai": "anthropic", "headless": True, "tour_done": False}
+    assert panel.load_app_prefs() == {"primary_ai": "anthropic", "headless": True, "tour_done": False, "dock_browser": False}
     assert panel.load_app_config().get("workspace") != "/etc"  # a window call cannot repoint the folder
 
 
