@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.9.3
+
+### Added
+- **Dock the agent's Chrome beside the app window** (Run, Advanced, "Dock beside this window"; off by default). Chrome opens against the window and follows it when it moves or resizes, on Mac and Windows. Real embedding is not possible with pywebview.
+- **Live view** on the Run page: a refreshed screenshot of the agent's browser with the page title and address while a run is going.
+- Windows "run finished" notifications. The Fit column's Keyword / AI label stays on one line.
+- Releases are checked: a release tag must match the app version before the desktop apps build.
+
+### Fixed
+- Scans: no more 429 storms across query streams, real jobs no longer rejected as "fee-based", ML titles match AI topics, one browser relaunch and one Indeed probe instead of one per query, partial results from company boards instead of a 60 s all-or-nothing wait, AI fit scores for experienced searches.
+
 ## Unreleased
 
 ### Added
