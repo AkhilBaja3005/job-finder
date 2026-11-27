@@ -1256,7 +1256,7 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
     called_cmds = []
     monkeypatch.setattr(api._runner, "start", lambda args, env, cwd, title="scan": (called_cmds.append((args, title)) or {"ok": True}))
     assert api.prepare_packs({"ids": ["1"]}) == {"ok": True}
-    assert called_cmds[-1][1] == "prepare" and "--ids" in called_cmds[-1][0]
+    assert called_cmds[-1][1] == "prepare" and "--ids" in called_cmds[-1][0] and ["--cover-letter", "always"] == called_cmds[-1][0][1:3]
 
     # Simulate generated pack files
     row = ExcelTracker(s.approved).rows()[0]
@@ -1286,9 +1286,69 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
 
     ready = api.list_ready()
     assert ready["ok"] and len(ready["jobs"]) == 1 and ready["cap"]["limit"] == 20
+    # Verify list_ready sorts signed-off jobs by descending fit score
+    ExcelTracker(s.approved).add_jobs([
+        {"Company": "TopCo", "Job Role": "Staff AI", "ATS %": 96, "Status": "Approved", "Approve": "Yes", "Docs OK": "Yes", "Job URL": "https://example.com/top"},
+    ])
+    top_ready = api.list_ready()
+    assert [j["company"] for j in top_ready["jobs"]] == ["TopCo", "Acme"]
+    api.save_app_prefs({"daily_cap": 35})
+    assert api.list_ready()["cap"]["limit"] == 35
 
     # start_apply requires profile
     assert api.start_apply({"mode": "preview"})["ok"] is False
     _profile_file(tmp_path)
     assert api.start_apply({"mode": "submit", "limit": 3, "headless": True}) == {"ok": True}
     assert called_cmds[-1][1] == "apply" and "--submit" in called_cmds[-1][0] and "--yes" in called_cmds[-1][0]
+
+    # Verify poll() surfaces apply_run_audit.jsonl as applied_rows when apply finishes
+    (tmp_path / "applications_tracker").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "applications_tracker" / "apply_run_audit.jsonl").write_text(
+        json.dumps({"id": "1", "role": "AI Intern", "company": "Acme", "status": "Applied",
+                    "grounding": {"answered_from_profile": 5, "verified": True}, "questions": []}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api._runner, "poll", lambda offset=0: {"lines": [], "next": 0, "running": False, "exit_code": 0, "title": "apply", "counts": {}})
+    polled = api.poll(0)
+    assert polled["applied_rows"][0]["grounding"]["answered_from_profile"] == 5
+
+    # Verify delete_account calls DELETE /user/account and clears local token
+    called_del = []
+    monkeypatch.setattr(scan_panel, "account_token", lambda ws=None: "tok-123")
+    monkeypatch.setattr(scan_panel, "_server_request", lambda ws, tok, path, method="GET", body=None, timeout=20: called_del.append((path, method, body)) or {"status": "deleted"})
+    assert api.delete_account("")["ok"] is False
+    assert api.delete_account("ada@example.com") == {"ok": True}
+    assert called_del == [("/user/account", "DELETE", {"confirm_email": "ada@example.com"})]
+
+    # Verify boards_status, refresh_boards, prepare_packs redo, and cv_html
+    assert api.get_state()["boards"]["ready"] is False
+    (tmp_path / "data").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "data" / "board_index.db").write_bytes(b"sqlite")
+    assert api.get_state()["boards"]["ready"] is True
+    assert api.refresh_boards() == {"ok": True}
+    assert called_cmds[-1][1] == "boards" and called_cmds[-1][0] == ["boards", "refresh"]
+    assert api.prepare_packs({"ids": ["1"], "redo": True}) == {"ok": True}
+    assert "--redo" in called_cmds[-1][0]
+    (folder / "cv.html").write_text("<html><body>CV</body></html>", encoding="utf-8")
+    assert "<body>CV</body>" in api.pack_documents("1")["cv_html"]
+
+    # Verify save_pack_cv updates cv.json and triggers prepare --render-only
+    (folder / "cv.json").write_text(json.dumps({"summary": "Old", "experience": [{"role": "SWE", "company": "Acme", "description": ["A"]}]}), encoding="utf-8")
+    assert api.save_pack_cv("1", {"summary": "New summary", "experience": [["Bullet 1", "Bullet 2"]]}) == {"ok": True}
+    saved_cv = json.loads((folder / "cv.json").read_text(encoding="utf-8"))
+    assert saved_cv["summary"] == "New summary" and saved_cv["experience"][0]["description"] == ["Bullet 1", "Bullet 2"]
+    assert "--render-only" in called_cmds[-1][0]
+
+    # Verify open_pack_folder validates workspace containment
+    assert api.open_pack_folder(str(folder)) == {"ok": True}
+    assert api.open_pack_folder("/etc")["ok"] is False
+
+    # 6. Portal password stored in .env + scan_args flags + closing date cleanup
+    assert api.get_state()["portal_password"]["set"] is False
+    pw_res = api.save_portal_password("SuperSecret#99")
+    assert pw_res["ok"] and pw_res["portal_password"]["set"] is True
+    assert "PORTALS_PASSWORD" in (tmp_path / ".env").read_text()
+    scan_args = scan_panel.build_scan_args({"score_all": True, "sponsor_only": True})
+    assert "--score-all" in scan_args and "--sponsor-only" in scan_args
+    assert api._job_dict({"Closing Date": "2026-12-02 00:00:00", "Scored By": "AI"})["closing"] == "2026-12-02"
+    assert api._job_dict({"Scored By": "Keyword"})["scored_by"] == "Keyword"

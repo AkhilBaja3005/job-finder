@@ -79,7 +79,7 @@ def install_browser() -> int:
     return subprocess.run([str(node), str(cli), "install", "chromium"], env=get_driver_env(), check=False).returncode
 
 
-SIGNIN_PAGES = ("https://www.linkedin.com/login", "https://secure.indeed.com/auth", "https://www.reed.co.uk/account/signin")
+SIGNIN_PAGES = ("https://www.linkedin.com/login", "https://secure.indeed.com/auth", "https://www.reed.co.uk/account/signin", "https://my.greenhouse.io/profile")
 
 
 def open_in_agent_chrome(url: str) -> int:

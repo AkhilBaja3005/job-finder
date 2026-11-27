@@ -19,9 +19,9 @@
     searches: [],         // from api.list_searches()
     currentSearch: "",
     form: {
-      topic: "", level: "all", search: "", into: "",
+      topic: "", topics: [], level: "all", search: "", into: "",
       roles: [], location: "", timeframe: "1m", min_ats: 65, limit: 0,
-      title_keywords: [], skip_portals: [], primary_ai: "auto", headless: false, mode: "scan",
+      title_keywords: [], skip_portals: ["indeed", "jobserve"], primary_ai: "auto", headless: false, score_all: true, mode: "scan",
     },
     run: {
       kind: "scan",       // "scan" | "prepare" | "apply"
@@ -91,24 +91,49 @@
   }
   function badge(text, kind) { return '<span class="badge ' + (kind || "") + '">' + esc(text) + "</span>"; }
 
+  function renderInlineMd(text) {
+    return esc(text)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  }
+
   function renderMarkdown(md) {
     const lines = String(md || "").split(/\r?\n/);
-    let out = "", inList = false;
-    const closeList = () => { if (inList) { out += "</ul>"; inList = false; } };
-    for (const raw of lines) {
-      const line = raw.trimEnd();
-      if (/^###\s+/.test(line)) { closeList(); out += "<h3>" + esc(line.replace(/^###\s+/, "")) + "</h3>"; }
-      else if (/^##\s+/.test(line)) { closeList(); out += "<h2>" + esc(line.replace(/^##\s+/, "")) + "</h2>"; }
-      else if (/^#\s+/.test(line)) { closeList(); out += "<h1>" + esc(line.replace(/^#\s+/, "")) + "</h1>"; }
+    let out = "", listTag = "";
+    const closeList = () => { if (listTag) { out += "</" + listTag + ">"; listTag = ""; } };
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i].trimEnd();
+      if (/^\|/.test(line) && i + 1 < lines.length && /^\|[\s:-]+\|/.test(lines[i + 1].trim())) {
+        closeList();
+        const parseRow = (r) => r.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+        const headers = parseRow(line);
+        i += 2;
+        out += '<table style="margin:10px 0;font-size:12px"><thead><tr>' + headers.map((h) => "<th>" + renderInlineMd(h) + "</th>").join("") + "</tr></thead><tbody>";
+        while (i < lines.length && /^\|/.test(lines[i].trim())) {
+          const cells = parseRow(lines[i]);
+          out += "<tr>" + cells.map((c) => "<td>" + renderInlineMd(c) + "</td>").join("") + "</tr>";
+          i++;
+        }
+        out += "</tbody></table>";
+        continue;
+      }
+      if (/^###\s+/.test(line)) { closeList(); out += "<h3>" + renderInlineMd(line.replace(/^###\s+/, "")) + "</h3>"; }
+      else if (/^##\s+/.test(line)) { closeList(); out += "<h2>" + renderInlineMd(line.replace(/^##\s+/, "")) + "</h2>"; }
+      else if (/^#\s+/.test(line)) { closeList(); out += "<h1>" + renderInlineMd(line.replace(/^#\s+/, "")) + "</h1>"; }
       else if (/^[-*]\s+/.test(line)) {
-        if (!inList) { out += "<ul>"; inList = true; }
-        out += "<li>" + esc(line.replace(/^[-*]\s+/, "")) + "</li>";
+        if (listTag !== "ul") { closeList(); out += "<ul>"; listTag = "ul"; }
+        out += "<li>" + renderInlineMd(line.replace(/^[-*]\s+/, "")) + "</li>";
+      } else if (/^\d+\.\s+/.test(line)) {
+        if (listTag !== "ol") { closeList(); out += "<ol>"; listTag = "ol"; }
+        out += "<li>" + renderInlineMd(line.replace(/^\d+\.\s+/, "")) + "</li>";
       } else if (!line.trim()) {
         closeList();
       } else {
         closeList();
-        out += "<p>" + esc(line) + "</p>";
+        out += "<p>" + renderInlineMd(line) + "</p>";
       }
+      i++;
     }
     closeList();
     return out || '<p class="help">Empty.</p>';
@@ -254,11 +279,12 @@
     if (r && r.ok) {
       S.searches = r.searches || [];
       S.currentSearch = r.current || "";
-      if (!S.form.topic && S.searches.length) {
+      if (!S.form.topics.length && !S.form.topic && S.searches.length) {
         const cur = S.searches.find((s) => s.name === S.currentSearch) || S.searches[0];
         if (cur) {
           S.form.search = cur.name;
           S.form.topic = cur.topic || "";
+          S.form.topics = (cur.topic || "").split(",").map((x) => x.trim()).filter(Boolean);
           S.form.level = cur.level || "all";
           if (!S.form.location && cur.location) S.form.location = cur.location;
         }
@@ -281,7 +307,7 @@
       '<div class="scroll"><div class="stack">' + checklist() + profileCard() + '<div class="cols">' +
       '<section class="card card-pad form" aria-label="Search settings">' +
         savedChips +
-        '<div class="field"><label for="f-topic">Topic or role</label><input class="input" id="f-topic" value="' + esc(f.topic) + '" placeholder="e.g. applied AI, cyber security" autocomplete="off"><div class="help">Every search gets its own Excel workbook.</div></div>' +
+        '<div class="field"><label>Topics or roles</label>' + tagsInput("topics", f.topics, "Add a topic or role and press Return") + '<div class="help">Add one or more roles/topics. Every search gets its own Excel workbook.</div></div>' +
         '<div class="field"><span class="label">Level</span><div class="seg" role="group" aria-label="Level">' +
           [["all", "All"], ["intern", "Intern"], ["graduate", "Graduate"], ["experienced", "Experienced"]].map(([v, l]) => '<button type="button" data-level="' + v + '" aria-pressed="' + (f.level === v) + '">' + l + "</button>").join("") + "</div></div>" +
         '<div class="two"><div class="field"><label for="f-location">Location</label><input class="input" id="f-location" value="' + esc(f.location) + '" placeholder="London, UK" autocomplete="off"></div>' +
@@ -299,10 +325,11 @@
           '<div class="field"><label>Skip these job sites</label>' + tagsInput("skip_portals", f.skip_portals, "e.g. workday") + "</div>" +
           '<div class="two"><div class="field"><label for="f-ai">AI model</label><select class="select" id="f-ai">' +
             [["auto", "Automatic"], ["gemini", "Gemini"], ["anthropic", "Claude"], ["openai", "OpenAI"]].map(([v, l]) => '<option value="' + v + '"' + (f.primary_ai === v ? " selected" : "") + ">" + l + "</option>").join("") + "</select></div>" +
-          '<div class="field"><span class="label">Browser window</span><label class="row-between" style="font-weight:400;color:var(--text)"><span>Hide while running</span><span class="switch"><input type="checkbox" id="f-headless"' + (f.headless ? " checked" : "") + '><i></i></span></label></div></div>' +
+          '<div class="field"><span class="label">Browser window</span><label class="row-between" style="font-weight:400;color:var(--text)"><span>Hide while running</span><span class="switch"><input type="checkbox" id="f-headless"' + (f.headless ? " checked" : "") + '><i></i></span></label>' +
+            '<label class="row-between" style="font-weight:400;color:var(--text)"><span>AI-score all levels</span><span class="switch"><input type="checkbox" id="f-score-all"' + (f.score_all ? " checked" : "") + '><i></i></span></label></div></div>' +
         "</div></details>" +
       "</section>" +
-      '<section class="card act-card" aria-label="Activity"><div class="card-head"><h2>Activity</h2><div class="right"><button class="btn quiet" data-act="copy-log">Copy</button><button class="btn quiet" data-act="open-logs">Open log files</button></div></div>' +
+      '<section class="card act-card" aria-label="Activity"><div class="card-head"><h2>Activity</h2><span id="rate-badge"></span><div class="right"><button class="btn quiet" data-act="copy-log">Copy</button><button class="btn quiet" data-act="open-logs">Open log files</button></div></div>' +
         '<div class="card-pad"><div class="status-line" aria-live="polite"><span class="dot" id="run-dot"></span><span class="state" id="run-state"></span><span class="detail" id="run-detail"></span></div>' +
         '<div class="progress" id="run-bar"><i></i></div>' +
         '<div class="tiles"><div class="tile"><b class="num" id="t-found">0</b><span>Found</span></div><div class="tile"><b class="num" id="t-checked">0</b><span>Checked</span></div>' +
@@ -342,6 +369,11 @@
     if ($("#t-skip")) $("#t-skip").textContent = active ? c.skipped : 0;
     if ($("#t-rev")) $("#t-rev").textContent = active ? c.needs_review : 0;
     if ($("#t-sub")) $("#t-sub").textContent = active ? c.submitted : 0;
+    const rb = $("#rate-badge");
+    if (rb) {
+      const limited = active && r.lines.some((ln) => /quota limit reached|429/i.test(ln));
+      rb.innerHTML = limited ? badge("Rate-limited — rotating keys", "warn") : "";
+    }
     const btn = $("#run-btn");
     if (btn) btn.innerHTML = S.view === "apply" ? applyButton() : scanButton();
   }
@@ -371,8 +403,8 @@
   /* ── Running tasks & polling ─────────────────────────────────────────────── */
   async function startScan() {
     const f = S.form;
-    if (!f.topic.trim() && !f.roles.length && !f.search) {
-      toast("Enter a topic, add a role, or pick a saved search.", "bad"); return;
+    if (!f.topics.length && !f.topic.trim() && !f.roles.length && !f.search) {
+      toast("Add a topic/role, or pick a saved search.", "bad"); return;
     }
     const res = await call("start_scan", payload());
     if (!res || !res.ok) return;
@@ -382,6 +414,7 @@
 
   const payload = () => ({
     ...S.form,
+    topic: S.form.topics.length ? S.form.topics.join(", ") : S.form.topic,
     roles: S.form.roles.join("\n"),
     title_keywords: S.form.title_keywords.join(","),
     skip_portals: S.form.skip_portals.join(","),
@@ -507,7 +540,7 @@
           '<td class="chk-col"><input type="checkbox" data-rev-chk="' + esc(j.id) + '"' + (rv.selected.has(j.id) ? " checked" : "") + ' aria-label="Select ' + esc(j.role) + '"></td>' +
           '<td class="job"><div class="co">' + esc(j.company) + '</div><div class="ro">' + esc(j.role) + '<span class="src"> · ' + esc(j.level) + (j.years && j.years !== "not stated" ? " · " + esc(j.years) + " yrs" : "") + "</span></div></td>" +
           "<td>" + (j.match ? badge(j.match, matchKind) : "—") + "</td>" +
-          '<td><span class="score num"><span class="bar"><i style="width:' + Math.min(100, fit) + '%"></i></span>' + fit + "%</span></td>" +
+          '<td><span class="score num"><span class="bar"><i style="width:' + Math.min(100, fit) + '%"></i></span>' + fit + "%" + (j.scored_by ? '<span class="src" style="font-size:11px"> · ' + esc(j.scored_by) + "</span>" : "") + "</span></td>" +
           '<td class="num">' + (j.closing ? esc(j.closing) : "—") + "</td>" +
           "<td>" + badge(j.approved ? "Approved" : "Pending", j.approved ? "good" : "") + "</td>" +
           '<td class="acts">' +
@@ -642,10 +675,17 @@
           ? '<div class="doc-pre">' + esc(doc.cover_letter) + "</div>"
           : '<p class="help">No cover letter required for this posting.</p>';
       } else if (d.tab === "fit") {
-        content = '<div class="doc-pre">' + esc(doc.fit || "No fit analysis recorded.") + "</div>";
+        content = '<div class="doc-md">' + renderMarkdown(doc.fit || "No fit analysis recorded.") + "</div>";
       } else if (d.tab === "cv") {
-        content = '<div class="doc-path">' + esc(doc.cv_pdf || "No cv.pdf path") + "</div>" +
-          '<button class="btn primary" data-open-pack="' + esc(sel.id) + ':cv">' + icon("external") + "Open CV PDF</button>";
+        const cj = doc.cv_json;
+        const editorHtml = cj ? '<details class="disclosure" style="margin-bottom:12px"><summary>' + icon("chevron") + 'Edit summary &amp; bullets (cv.json)</summary><div class="inner">' +
+          '<div class="field"><label for="cv-sum">Professional Summary</label><textarea class="input" id="cv-sum" rows="3">' + esc(cj.summary || "") + '</textarea></div>' +
+          (cj.experience || []).map((ex, idx) => '<div class="field"><label>' + esc((ex.role || "") + " @ " + (ex.company || "")) + ' (one bullet per line)</label><textarea class="input" data-cv-exp="' + idx + '" rows="3">' + esc((ex.description || []).join("\n")) + '</textarea></div>').join("") +
+          '<div><button class="btn primary" data-act="save-cv-json" data-id="' + esc(sel.id) + '">Save &amp; Re-render PDF</button></div></div></details>' : "";
+        content = '<div class="doc-path" style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span>' + esc(doc.cv_pdf || "No cv.pdf path") + '</span>' +
+          '<button class="btn primary" data-open-pack="' + esc(sel.id) + ':cv" style="flex:none">' + icon("external") + "Open CV PDF</button></div>" +
+          editorHtml +
+          (doc.cv_html ? '<iframe title="Tailored CV preview" sandbox="" srcdoc="' + esc(doc.cv_html) + '" style="width:100%;height:520px;border:.5px solid var(--line);border-radius:8px;background:#fff"></iframe>' : "");
       }
 
       bodyHtml = '<div class="docs-layout">' +
@@ -660,6 +700,8 @@
             (doc && doc.cover_letter ? '<button class="btn" data-open-pack="' + esc(sel.id) + ':cover">' + icon("external") + "Cover</button>" : "") +
             '<button class="btn" data-open-pack="' + esc(sel.id) + ':jd">' + icon("external") + "JD</button>" +
             '<button class="btn" data-open-pack="' + esc(sel.id) + ':review">' + icon("external") + "REVIEW</button>" +
+            '<button class="btn" data-act="redo-pack" data-id="' + esc(sel.id) + '">Regenerate</button>' +
+            '<button class="btn" data-act="revoke-pack" data-id="' + esc(sel.id) + '">Revoke</button>' +
             '<button class="btn ' + (isSigned ? "" : "primary") + '" data-act="signoff-pack" data-id="' + esc(sel.id) + '"' + (isSigned ? " disabled" : "") + ">" + icon("check") + (isSigned ? "Signed off" : "Docs OK") + "</button>" +
           "</div></div>" +
           '<div class="doc-tabs" role="tablist">' +
@@ -742,7 +784,9 @@
       nextBannerHtml() +
       '<div class="scroll"><div class="stack">' +
       '<section class="card card-pad form">' +
-        '<div class="cap-bar"><span class="label">Daily cap</span><div class="progress"><i style="width:' + pct + '%"></i></div><span class="num" style="font-size:12px;color:var(--text-2)">' + cap.used + " / " + cap.limit + " used today</span></div>" +
+        '<div class="cap-bar"><span class="label">Daily cap</span><div class="progress"><i style="width:' + pct + '%"></i></div>' +
+          '<span class="num" style="font-size:12px;color:var(--text-2);display:inline-flex;align-items:center;gap:6px">' + cap.used + " / " +
+          '<input class="input num inline-num" id="ap-cap" type="number" min="1" max="200" value="' + esc(cap.limit) + '" aria-label="Daily cap limit" style="height:24px"> used today</span></div>' +
         '<div class="cols" style="align-items:center">' +
           '<div class="field"><span class="label">Mode</span><div class="seg real" role="group" aria-label="Apply mode">' +
             '<button type="button" data-apply-mode="preview" aria-pressed="' + (ap.mode === "preview") + '">Preview (stop before Submit)</button>' +
@@ -849,6 +893,7 @@
           '<td><span class="score num">' + (r.ats ? '<span class="bar"><i style="width:' + Math.min(100, ats) + '%"></i></span>' + esc(r.ats) : "—") + "</span></td>" +
           '<td title="' + (r.synced ? "Saved to your account" : "Only on this computer") + '">' + icon(r.synced ? "cloud" : "cloudOff", ' class="cloud-ic' + (r.synced ? "" : " off") + '"') + "</td>" +
           '<td class="acts">' + (r.grounding ? '<button class="btn quiet" data-audit-idx="' + idx + '">Audit</button>' : "") +
+          (r.pack ? '<button class="btn quiet" data-pack-dir="' + esc(r.pack) + '">Pack</button>' : "") +
           (r.url ? '<button class="btn quiet" data-url="' + esc(r.url) + '" aria-label="Open ' + esc(r.title) + '">Open</button>' : "") +
           (r.url && k === "review" ? '<button class="btn quiet" data-detail="' + esc(r.url) + '">Why</button><button class="btn quiet" data-review="' + esc(r.url) + '">Review</button>' : "") +
           (r.url ? '<select class="select stage" data-stage="' + esc(r.url) + '" aria-label="Update status of ' + esc(r.title) + '"><option value="">Update…</option>' + STAGES.map(([v, l]) => '<option value="' + v + '">' + l + "</option>").join("") + "</select>" : "") + "</td></tr>";
@@ -890,7 +935,7 @@
   async function loadSchedule() { const r = await call("schedule_status"); if (r && r.ok) { S.sched = r; if (S.view === "settings") renderSettings(); } }
   function renderSettings() {
     const i = S.info; if (!i) { $("#view").innerHTML = head("Settings", "") + '<div class="scroll"><div class="skeleton"></div></div>'; return; }
-    const br = i.browser, cl = i.cloud || {}, mb = i.mailbox || {};
+    const br = i.browser, cl = i.cloud || {}, mb = i.mailbox || {}, pp = i.portal_password || {};
     const row = (t, d, ctl, id) => '<div class="setting"><div class="info"><div class="t">' + t + '</div><div class="d">' + d + '</div></div><div class="ctl"' + (id ? ' id="' + id + '"' : "") + ">" + ctl + "</div></div>";
     $("#view").innerHTML = head("Settings", "Your folder, AI providers and connections.") + nextBannerHtml() + '<div class="scroll"><div class="stack" style="max-width:820px">' +
       '<div class="sect-title">General</div><section class="card">' +
@@ -904,7 +949,7 @@
       "</section>" +
       '<div class="sect-title">Connections</div><section class="card">' +
         row("Your account", cl.connected ? "Signed in with Google as " + esc(cl.email || (i.session || {}).email || "") + ". Your applications are saved to your job-finder.space account and show on the website and in the extension." : esc(cl.error || "Checking your sign-in…"),
-          (cl.connected ? badge("Connected", "good") : badge("Unreachable", "warn")) + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Sign out</button>', "c-sync") +
+          (cl.connected ? badge("Connected", "good") : badge("Unreachable", "warn")) + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Sign out</button><button class="btn danger" data-act="delete-account">Delete account…</button>', "c-sync") +
         row("Reply detection", mb.configured ? "Reads the last 30 days of " + esc(mb.user) + " for replies from employers and marks them (reply, interview, rejected, offer). Read only: nothing is sent, deleted or marked read." : "Optional. Connect a mailbox with an app password and replies from employers are marked for you. Automated 'we got your application' mails are ignored.",
           badge("Beta", "accent") + (mb.configured ? '<button class="btn" data-act="check-replies">' + icon("refresh") + 'Check now</button><button class="btn" data-act="disconnect-mailbox">Disconnect</button>' : '<button class="btn" data-act="add-mailbox">Connect…</button>'), "c-mailbox") +
         row("Daily run", S.sched && S.sched.enabled ? "Runs every day at " + String(S.sched.hour).padStart(2, "0") + ":" + String(S.sched.minute).padStart(2, "0") + (S.sched.real ? ", applying for real." : " as a practice run (nothing is submitted).") + " The Mac must be awake; the app does not need to be open." : "Runs a search every day at a time you choose, without opening the app. Starts as a practice run.",
@@ -913,8 +958,11 @@
         row("About you", (i.about_you && i.about_you.unanswered && i.about_you.unanswered.length && i.about_you.exists) ? "Still needed: where you can work, visa sponsorship, when you can start and the levels you want. Without them the agent cannot answer those questions." : "Work rights, start date, salary and the levels you want. The agent types your answers instead of guessing.",
           ((i.about_you && i.about_you.exists && i.about_you.unanswered.length) ? badge("Needs answers", "warn") : "") + '<button class="btn" data-act="edit-about">' + ((i.about_you && i.about_you.exists && i.about_you.unanswered.length) ? "Answer…" : "Edit…") + "</button>") +
         row("Saved answers", "Answers to questions your profile does not cover, such as why you want the job. The agent uses them word for word instead of guessing.", '<button class="btn" data-act="edit-answers">Edit…</button>') +
-        row("Job site sign-ins", "Opens the agent's Chrome so you can sign in to LinkedIn, Indeed and Reed once. Runs reuse the sign-ins.", '<button class="btn" data-act="open-signin">Open Chrome to sign in</button>') +
+        row("Job site sign-ins", "Opens the agent's Chrome so you can sign in to LinkedIn, Indeed, Reed and MyGreenhouse once. Runs reuse the sign-ins.", '<button class="btn" data-act="open-signin">Open Chrome to sign in</button>') +
+        row("Portal sign-up password", "Optional. Used when a job portal (like Workday or Reed) requires creating an account or signing in with email + password. Stored in .env only.",
+          (pp.set ? badge("Saved" + (pp.hint ? " ···" + pp.hint : ""), "good") : badge("Not set")) + '<button class="btn" data-act="edit-portal-pw">' + (pp.set ? "Replace…" : "Add password…") + "</button>", "c-portal-pw") +
         row("Page scraper browser", br.ready ? "Installed" : br.installing ? "Downloading, about 150 MB…" : (br.error ? esc(br.error) : "Needed for some job sources. Downloaded once."), br.ready ? badge("Ready", "good") : br.installing ? badge("Installing", "accent") : '<button class="btn" data-act="install-browser">' + icon("download") + "Install</button>") +
+        row("Company boards index", (i.boards && i.boards.ready) ? "Indexed local Greenhouse/Lever/Ashby boards (updated " + esc(i.boards.updated) + ")." : "Not built yet. Indexes ~8,500 company boards for fast direct-link searches.", ((i.boards && i.boards.ready) ? badge("Ready", "good") : badge("Not built")) + '<button class="btn" data-act="refresh-boards">' + icon("refresh") + "Refresh</button>") +
       "</section>" +
       '<div class="sect-title">About</div><section class="card">' +
         row("Job Finder " + esc(i.version), S.update && S.update.newer ? "Version " + esc(S.update.latest) + " is available." : S.update ? "You are up to date." : "Check for a newer version.", '<button class="btn" data-act="check-update">Check for updates</button>' + (S.update && S.update.newer ? '<button class="btn primary" data-url="' + esc(S.update.url) + '">Download</button>' : "")) +
@@ -968,6 +1016,7 @@
     const t = e.target, f = S.form;
     if (t.id === "f-topic") { f.topic = t.value; return; }
     if (t.id === "f-into") { f.into = t.value; return; }
+    if (t.id === "del-confirm-email") { S._delEmail = t.value; return; }
     if (t.id === "f-location") f.location = t.value;
     else if (t.id === "f-ats") f.min_ats = t.value;
     else if (t.id === "f-limit") f.limit = t.value;
@@ -1015,7 +1064,13 @@
     }
     if (t.id === "f-ai") { S.form.primary_ai = t.value; call("save_app_prefs", { primary_ai: t.value }); }
     else if (t.id === "f-headless") { S.form.headless = t.checked; call("save_app_prefs", { headless: t.checked }); }
+    else if (t.id === "f-score-all") { S.form.score_all = t.checked; }
     else if (t.id === "ap-headless") { S.apply.headless = t.checked; }
+    else if (t.id === "ap-cap") {
+      const val = Math.max(1, Math.min(200, Number(t.value) || 20));
+      S.apply.cap.limit = val;
+      call("save_app_prefs", { daily_cap: val }).then(() => loadApply());
+    }
   });
 
   document.addEventListener("toggle", (e) => { if (e.target.classList && e.target.classList.contains("disclosure")) S.advOpen = e.target.open; }, true);
@@ -1031,10 +1086,14 @@
     if (d.level) { S.form.level = d.level; renderSearch(); return; }
     if (d.scanMode) { S.form.mode = d.scanMode; renderSearch(); return; }
     if (d.search !== undefined) {
-      if (!d.search) { S.form.search = ""; }
+      if (!d.search) { S.form.search = ""; S.form.topics = []; S.form.topic = ""; }
       else {
         const s = S.searches.find((x) => x.name === d.search);
-        if (s) { S.form.search = s.name; S.form.topic = s.topic || ""; S.form.level = s.level || "all"; S.form.location = s.location || S.form.location; }
+        if (s) {
+          S.form.search = s.name; S.form.topic = s.topic || "";
+          S.form.topics = (s.topic || "").split(",").map((x) => x.trim()).filter(Boolean);
+          S.form.level = s.level || "all"; S.form.location = s.location || S.form.location;
+        }
       }
       renderSearch(); return;
     }
@@ -1092,6 +1151,7 @@
     if (d.filter) { S.apps.filter = d.filter; S.apps.limit = 100; renderApps(); return; }
     if (d.sort) { const s = S.apps.sort; s.dir = s.key === d.sort ? -s.dir : 1; s.key = d.sort; renderAppsBody(); return; }
     if (d.url) return void call("open_url", d.url);
+    if (d.packDir) return void call("open_pack_folder", d.packDir);
     if (d.open) return void call("open_path", d.open);
     if (d.key) return keyEditor(d.key);
     if (d.savekey) {
@@ -1133,14 +1193,69 @@
       case "signoff-pack": {
         const id = d.id;
         const r = await call("signoff_pack", id);
-        if (r && r.ok) { toast("Signed off for Apply."); await loadDocuments(id); await refreshNextStep(); }
+        if (r && r.ok) {
+          toast("Signed off for Apply.");
+          const nextNeed = (S.docs.packs || []).find((p) => p.id !== id && (p.state === "needs_signoff" || p.state === "ready"));
+          await loadDocuments(nextNeed ? nextNeed.id : id);
+          await refreshNextStep();
+        }
+        return;
+      }
+      case "redo-pack": {
+        const r = await call("prepare_packs", { ids: [d.id], redo: true });
+        if (r && r.ok) {
+          Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
+          S.stick = true; go("packs"); watchRun();
+        }
+        return;
+      }
+      case "save-cv-json": {
+        const summary = ($("#cv-sum") || {}).value || "";
+        const experience = $all("[data-cv-exp]").map((el) => el.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean));
+        const r = await call("save_pack_cv", d.id, { summary, experience });
+        if (r && r.ok) {
+          toast("Saved cv.json — re-rendering PDF…");
+          Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
+          S.stick = true; watchRun();
+        }
+        return;
+      }
+      case "revoke-pack": {
+        const r = await call("revoke_jobs", { ids: [d.id] });
+        if (r && r.ok) { toast("Revoked from queue."); S.docs.selectedId = null; await loadDocuments(); await refreshNextStep(); }
+        return;
+      }
+      case "refresh-boards": {
+        const r = await call("refresh_boards");
+        if (r && r.ok) {
+          Object.assign(S.run, { kind: "scan", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 0, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
+          S.stick = true; go("search"); watchRun();
+        }
         return;
       }
       case "cancel-key": return renderSettings();
+      case "edit-portal-pw": { const ctl = $("#c-portal-pw"); if (!ctl) return; ctl.innerHTML = '<span class="keybox"><input class="input" type="password" id="ki-portal-pw" placeholder="Portal sign-up password" autocomplete="off" spellcheck="false" aria-label="Portal sign-up password"><button class="btn primary" data-act="save-portal-pw">Save</button><button class="btn" data-act="cancel-key">Cancel</button></span>'; $("#ki-portal-pw").focus(); return; }
+      case "save-portal-pw": { const r = await call("save_portal_password", ($("#ki-portal-pw") || {}).value || ""); if (r && r.ok) { toast("Portal password saved."); await refreshInfo(); renderSettings(); } return; }
       case "google-signin": { S.gateError = ""; const r = await call("google_sign_in"); if (r && r.ok) { await refreshInfo(); renderShell(); watchSignIn(); } return; }
       case "cancel-signin": { await call("cancel_google_sign_in"); await new Promise((res) => setTimeout(res, 600)); await refreshInfo(); renderShell(); return; }
       case "retry-session": { await call("session_check"); await refreshInfo(); renderShell(); if (S.info && S.info.session && S.info.session.signed_in) onSignedIn(); return; }
       case "disconnect-sync": { await call("disconnect_sync"); S.apps.rows = null; toast("Signed out. Your applications stay on this computer."); await refreshInfo(); renderSettings(); return; }
+      case "delete-account": {
+        const email = (S.info && (S.info.cloud && S.info.cloud.email || S.info.session && S.info.session.email)) || "";
+        S._delEmail = "";
+        const ok = await dialog({
+          title: "Delete your account?", icon: "alert", danger: true, confirm: "Delete account",
+          body: "<p>This permanently removes your account, saved resumes, and synced application history from job-finder.space. Local files on this computer stay intact.</p>" +
+            '<div class="field" style="margin-top:12px"><label for="del-confirm-email">Type your email (' + esc(email) + ') to confirm</label>' +
+            '<input class="input" id="del-confirm-email" type="email" placeholder="' + esc(email) + '" autocomplete="off"></div>',
+        });
+        if (!ok) return;
+        const typed = S._delEmail || "";
+        if (!typed.trim()) { toast("Type your email to confirm.", "bad"); return; }
+        const r = await call("delete_account", typed.trim());
+        if (r && r.ok) { S.apps.rows = null; toast("Account deleted from job-finder.space."); await refreshInfo(); renderShell(); }
+        return;
+      }
       case "sync-cloud": { const r = await call("sync_cloud_now"); if (r && r.ok) toast(r.pushed ? "Added " + plural(r.pushed, "application") + " to job-finder.space." : "job-finder.space is up to date."); else toast((r && r.error) || "Sync failed.", "bad"); await refreshInfo(); renderSettings(); return; }
       case "stop": return void call("stop_scan");
       case "goto-settings": return go("settings");
@@ -1313,12 +1428,13 @@
     { view: "settings", sel: "#c-gemini", title: "Add an AI key", text: "The agent needs one provider to read job pages and tailor CVs. Gemini has a free tier. Keys stay in a file on this Mac." },
     { view: "settings", sel: '[data-act="build-profile"], [data-act="import-profile"]', title: "Create your profile", text: "Build it from your resume, or import a profile.json you already have. Every form and tailored CV is grounded in it." },
     { view: "settings", sel: '[data-act="edit-about"]', title: "Tell us what your resume cannot", text: "Forms ask where you can work, whether you need a visa, when you can start and what you want to earn. Answer once and the agent uses it.", cta: "Answer now" },
-    { view: "settings", sel: '[data-act="open-signin"]', title: "Sign in to job sites", text: "LinkedIn, Indeed and Reed work best when you are signed in. Open Chrome once, sign in, and future runs reuse it." },
-    { view: "settings", sel: "#c-sync", title: "Save applications to your account", text: "Optional. Your Google sign-in keeps every application saved to your job-finder.space account, so it shows on the website and in the extension too." },
+    { view: "settings", sel: '[data-act="open-signin"]', title: "Sign in to job sites", text: "LinkedIn, Indeed, Reed and MyGreenhouse work best when you are signed in. Open Chrome once, sign in, and future runs reuse it." },
+    { view: "settings", sel: "#c-portal-pw", title: "Portal sign-up password", text: "Optional. Stored privately in .env for portals like Workday or Reed that require creating an account with email and password." },
+    { view: "settings", sel: "#c-sync", title: "Saved to your account", text: "Your applications sync to your job-finder.space account automatically. Use Sync now anytime to push or refresh." },
     { view: "settings", sel: "#c-mailbox", title: "See replies automatically", text: "Optional. Connect your mailbox with an app password and employer replies, interviews and rejections are marked for you." },
     { view: "settings", sel: '[data-act="edit-answers"]', title: "Write answers once", text: "For questions your profile cannot answer, such as why you want the job. The agent types your answer word for word instead of guessing." },
     { view: "settings", sel: "#sched-time", title: "Run every morning", text: "Optional. Pick a time and a daily run starts by itself, even when the app is closed." },
-    { view: "search", sel: "#f-topic", title: "1. Search for jobs", text: "Enter a topic, level, and location. Use Dry-run to inspect the search funnel, or Run to save scored jobs into an Excel workbook." },
+    { view: "search", sel: '[data-tags="topics"]', title: "1. Search for jobs", text: "Add one or more topics/roles, pick a level and location. Use Dry-run to inspect the search funnel, or Run to save scored jobs into an Excel workbook." },
     { view: "review", sel: '[data-nav="review"]', title: "2. Review and approve", text: "Tick the jobs you want to apply for, or approve everything above a minimum ATS score." },
     { view: "packs", sel: '[data-nav="packs"]', title: "3. Prepare application packs", text: "Each approved job gets its own folder with a tailored 1-page CV, fit analysis, and cover letter when requested." },
     { view: "documents", sel: '[data-nav="documents"]', title: "4. Review documents & sign off", text: "Inspect the tailored CV, cover letter, and REVIEW.md checklist, then click Docs OK before applying." },
@@ -1338,7 +1454,7 @@
       if (!current) return; const r = current.el.getBoundingClientRect(), pad = 6;
       const hole = $(".tour-hole", layer), card = $(".tour-card", layer);
       Object.assign(hole.style, { left: r.left - pad + "px", top: r.top - pad + "px", width: r.width + pad * 2 + "px", height: r.height + pad * 2 + "px" });
-      const cw = 320, ch = card.offsetHeight || 170;
+      const cw = 370, ch = card.offsetHeight || 170;
       let left = Math.min(Math.max(12, r.left), window.innerWidth - cw - 12), top = r.bottom + 16;
       if (top + ch > window.innerHeight - 12) top = Math.max(12, r.top - ch - 16);
       Object.assign(card.style, { left: left + "px", top: top + "px", width: cw + "px" });

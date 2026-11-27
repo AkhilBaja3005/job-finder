@@ -234,7 +234,7 @@ Return JSON:
   "highly motivated", "passionate", "proven", "dynamic", "leveraging", "fast-paced". Do not call the candidate a "student"
   unless the CV says so. Do not mention job keywords the candidate has no evidence for.
 - experience: for EVERY role (exp_index 0..N) the list `keep` of bullet indices to show, most relevant to the job first.
-  Keep at least 1 bullet per role. Drop bullets that are irrelevant to this job, keep the strongest evidence.
+  Keep up to 3–4 strong bullets per role so the 1-page resume stays rich and balanced; only drop bullets that are clearly off-topic.
 - rewrites: optional, at most 3. Re-phrase ONE existing bullet (exp_index, bullet_index) only to put the job's relevant
   terms first, and only when it stays exactly as true and specific. KEEP every number and tool name of the original, add
   no new claim or soft-skill wording, and use only words already in the CV. When in doubt, do not rewrite.
@@ -322,7 +322,7 @@ def _apply_plan(master: Dict[str, Any], plan: Dict[str, Any]):
     for i, exp in enumerate(cv["experience"]):
         orig = master["experience"][i]["description"]
         keep = [j for j in (plans.get(i) or []) if isinstance(j, int) and 0 <= j < len(orig)]
-        keep = list(dict.fromkeys(keep)) or list(range(min(len(orig), 2)))      # never leave a role empty
+        keep = list(dict.fromkeys(keep)) or list(range(min(len(orig), 3)))      # never leave a role empty
         if not orig:
             continue
         remaining_roles = len(cv["experience"]) - i - 1

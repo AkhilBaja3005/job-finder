@@ -74,7 +74,7 @@ def logs_dir() -> Path:
     return Path(override) / "logs" if override else platform_support.logs_base(APP_NAME)
 
 
-APP_PREF_KEYS = ("primary_ai", "headless", "tour_done", "dock_browser")
+APP_PREF_KEYS = ("primary_ai", "headless", "tour_done", "dock_browser", "daily_cap")
 
 
 def load_app_prefs() -> Dict[str, Any]:
@@ -194,6 +194,23 @@ def key_status(ws: Path) -> Dict[str, Dict[str, Any]]:
     return status
 
 
+def portal_password_status(ws: Path) -> Dict[str, Any]:
+    value = read_env(ws).get("PORTALS_PASSWORD", "")
+    return {"set": bool(value), "hint": value[-4:] if len(value) > 8 else ""}
+
+
+def boards_status(ws: Path) -> Dict[str, Any]:
+    db = ws / "data" / "board_index.db"
+    if not db.is_file():
+        return {"ready": False, "updated": ""}
+    try:
+        import datetime as _dt
+        ts = _dt.datetime.fromtimestamp(db.stat().st_mtime).strftime("%Y-%m-%d")
+        return {"ready": True, "updated": ts}
+    except OSError:
+        return {"ready": False, "updated": ""}
+
+
 # ── the scan command ─────────────────────────────────────────────────────────────
 def build_scan_args(options: Dict[str, Any]) -> List[str]:
     """The arguments after `job-finder` for one run. A scan only searches and saves to the Excel: it never applies.
@@ -226,6 +243,10 @@ def build_scan_args(options: Dict[str, Any]) -> List[str]:
         args += ["--skip-portals", skip]
     if options.get("headless"):
         args.append("--headless")
+    if options.get("score_all"):
+        args.append("--score-all")
+    if options.get("sponsor_only"):
+        args.append("--sponsor-only")
     return args
 
 
@@ -245,6 +266,10 @@ def build_apply_args(options: Dict[str, Any]) -> List[str]:
         pass
     if options.get("headless"):
         args.append("--headless")
+    if options.get("score_all"):
+        args.append("--score-all")
+    if options.get("sponsor_only"):
+        args.append("--sponsor-only")
     return args
 
 
@@ -556,6 +581,32 @@ def disconnect_sync(ws: Path) -> Dict[str, Any]:
     return {"ok": True}
 
 
+def delete_account_on_server(ws: Path, confirm_email: str) -> Dict[str, Any]:
+    """Permanently deletes the user's account and synced data from the server, then signs out locally."""
+    token = account_token(ws)
+    if not token:
+        return {"ok": False, "error": "Sign in to delete your account."}
+    email = str(confirm_email or "").strip()
+    if not email:
+        return {"ok": False, "error": "Type your account email to confirm."}
+    try:
+        _server_request(ws, token, "/user/account", "DELETE", {"confirm_email": email}, timeout=25)
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = json.loads(exc.read().decode("utf-8", errors="replace")).get("detail", "")
+        except Exception:
+            detail = ""
+        return {"ok": False, "error": detail or f"Could not delete account (HTTP {exc.code})."}
+    except Exception as exc:
+        return {"ok": False, "error": _explain(exc)}
+    for var in LEGACY_SYNC_VARS:
+        write_env_value(ws, var, "")
+    _store_account("", "")
+    _cloud_cache.clear()
+    _session.update(ok=False, checked=0.0, token="")
+    return {"ok": True}
+
+
 def _about_state(ws: Path) -> Dict[str, Any]:
     try:
         from services.about_you import read_about_you
@@ -846,6 +897,7 @@ def read_tracker(ws: Path, limit: int = 20000) -> List[Dict[str, str]]:
         return [{
             "company": str(r.get("Company") or ""), "title": str(r.get("Job Role") or ""), "status": str(r.get("Status") or ""),
             "ats": _ats_text(r.get("ATS %")), "platform": str(r.get("Platform") or ""), "url": str(r.get("Job URL") or ""),
+            "pack": str(r.get("Pack Folder") or ""),
         } for r in reversed(excel[-limit:])]
     try:
         with _csv_path(ws).open(newline="", encoding="utf-8") as f:
@@ -1080,9 +1132,9 @@ class Api:
     def get_state(self) -> Dict[str, Any]:
         ws = workspace_dir()
         return {
-            "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
+            "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws), "portal_password": portal_password_status(ws),
             "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "mailbox": mailbox_status(ws), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "cloud": cloud_status(ws), "session": {**session_status(ws), "signing_in": _signin_state.get("state") == "waiting", "error": _signin_state.get("error", "") if _signin_state.get("state") == "error" else ""}, "profile_check": profile_check(ws), "about_you": _about_state(ws),
-            "browser": {"ready": browser_ready(), **self._browser},
+            "browser": {"ready": browser_ready(), **self._browser}, "boards": boards_status(ws),
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
 
@@ -1146,6 +1198,11 @@ class Api:
         save_app_config(config)
         return {"ok": True}
 
+    def save_portal_password(self, value: str) -> Dict[str, Any]:
+        ws = workspace_dir()
+        write_env_value(ws, "PORTALS_PASSWORD", str(value or "").strip())
+        return {"ok": True, "portal_password": portal_password_status(ws)}
+
     def set_theme(self, dark: bool) -> Dict[str, Any]:
         """Lets the window's title bar match the page colours."""
         try:
@@ -1186,6 +1243,22 @@ class Api:
 
     def poll(self, offset: int = 0) -> Dict[str, Any]:
         result = self._runner.poll(int(offset))
+        if not result["running"] and result.get("title") == "apply":
+            ws = workspace_dir()
+            candidates = [ws / "applications_tracker" / "apply_run_audit.jsonl"]
+            with self._ws_env(ws):
+                try:
+                    from services import searches
+                    candidates.insert(0, Path(searches.resolve_current().folder) / "apply_run_audit.jsonl")
+                except Exception:
+                    pass
+            for audit_file in candidates:
+                if audit_file.is_file():
+                    try:
+                        result["applied_rows"] = [json.loads(ln) for ln in audit_file.read_text(encoding="utf-8").splitlines() if ln.strip()]
+                        break
+                    except Exception:
+                        pass
         if not result["running"] and not self._notified and result.get("title") == "scan":
             self._notified = True
             counts = result["counts"]
@@ -1253,8 +1326,9 @@ class Api:
             "level": str(r.get("Role Level") or r.get("Level") or ""),
             "years": str(r.get("Years Exp") or "not stated") or "not stated",
             "fit": fit,
+            "scored_by": str(r.get("Scored By") or ""),
             "match": str(r.get("Match") or ""),
-            "closing": str(r.get("Closing Date") or ""),
+            "closing": str(r.get("Closing Date") or "").replace(" 00:00:00", ""),
             "url": str(r.get("Job URL") or ""),
             "approved": str(r.get("Approve") or "").strip().lower() == "yes" or str(r.get("Status") or "") == "Approved",
         }
@@ -1377,7 +1451,9 @@ class Api:
     def prepare_packs(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         ws = workspace_dir()
         data = payload or {}
-        args = ["prepare"]
+        args = ["prepare", "--cover-letter", "always"]
+        if data.get("redo"):
+            args.append("--redo")
         ids = data.get("ids") or []
         if ids:
             args += ["--ids", ",".join(str(i) for i in ids)]
@@ -1410,13 +1486,62 @@ class Api:
                 p = folder / name
                 return p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
             cv_pdf = folder / "cv.pdf"
+            cv_json_raw = _read("cv.json")
+            try:
+                cv_json = json.loads(cv_json_raw) if cv_json_raw else None
+            except Exception:
+                cv_json = None
             return {
                 "ok": True,
                 "cv_pdf": str(cv_pdf) if cv_pdf.is_file() else "",
+                "cv_html": _read("cv.html"),
+                "cv_json": cv_json,
                 "cover_letter": _read("cover_letter.txt"),
                 "review_md": _read("REVIEW.md"),
                 "fit": _read("fit_analysis.md"),
             }
+
+    def save_pack_cv(self, job_id: str, cv_data: Dict[str, Any]) -> Dict[str, Any]:
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            s = searches.resolve_current()
+            row = self._find_approved_row(s, str(job_id))
+            if not row:
+                return {"ok": False, "error": f"Approved job #{job_id} not found."}
+            cv_path = self._pack_folder(s, row) / "cv.json"
+            if not cv_path.is_file():
+                return {"ok": False, "error": "cv.json has not been generated yet."}
+            cur = json.loads(cv_path.read_text(encoding="utf-8"))
+            if "summary" in cv_data:
+                cur["summary"] = str(cv_data["summary"] or "")
+            if isinstance(cv_data.get("experience"), list):
+                for idx, bullets in enumerate(cv_data["experience"]):
+                    if idx < len(cur.get("experience", [])) and isinstance(bullets, list):
+                        cur["experience"][idx]["description"] = [str(b) for b in bullets if str(b).strip()]
+            cv_path.write_text(json.dumps(cur, indent=2, ensure_ascii=False), encoding="utf-8")
+            args = ["prepare", "--render-only", "--ids", str(job_id)]
+            if not s.is_main:
+                args += ["--search", s.name]
+        return self._runner.start(args, {**build_run_env({}, ws), **self._dock_env()}, ws, "prepare")
+
+    def open_pack_folder(self, pack_path: str) -> Dict[str, Any]:
+        ws = workspace_dir().resolve()
+        raw = str(pack_path or "").strip()
+        if not raw:
+            return {"ok": False, "error": "No pack folder recorded."}
+        target = Path(raw)
+        if not target.is_absolute():
+            target = ws / target
+        target = target.resolve()
+        try:
+            target.relative_to(ws)
+        except ValueError:
+            return {"ok": False, "error": "Pack folder is outside the workspace."}
+        if not target.is_dir():
+            return {"ok": False, "error": "Pack folder not found."}
+        platform_support.open_path(str(target), False)
+        return {"ok": True}
 
     def open_pack_file(self, job_id: str, kind: str) -> Dict[str, Any]:
         files = {"cv": "cv.pdf", "cover": "cover_letter.txt", "jd": "job_description.txt", "review": "REVIEW.md"}
@@ -1462,14 +1587,16 @@ class Api:
                 and str(r.get("Docs OK") or "").strip().lower() == "yes"
                 and str(r.get("Applied") or "No") != "Yes"
             ]
+            ready.sort(key=lambda j: j.get("fit", 0), reverse=True)
             today_str = date.today().isoformat()
             used = sum(
                 1 for r in rows
                 if str(r.get("Applied") or "No") == "Yes" and str(r.get("Date Applied") or "").startswith(today_str)
             )
             try:
-                cap_limit = int(os.environ.get("JOB_FINDER_DAILY_CAP") or 20)
-            except ValueError:
+                pref_cap = load_app_config().get("daily_cap")
+                cap_limit = int(pref_cap or os.environ.get("JOB_FINDER_DAILY_CAP") or 20)
+            except (TypeError, ValueError):
                 cap_limit = 20
             return {"ok": True, "jobs": ready, "cap": {"used": used, "limit": cap_limit}}
 
@@ -1484,6 +1611,10 @@ class Api:
             if not s.is_main and not opts.get("search"):
                 opts["search"] = s.name
         return self._runner.start(build_apply_args(opts), {**build_run_env(opts, ws), **self._dock_env()}, ws, "apply")
+
+    def refresh_boards(self) -> Dict[str, Any]:
+        ws = workspace_dir()
+        return self._runner.start(["boards", "refresh"], {**build_run_env({}, ws), **self._dock_env()}, ws, "boards")
 
     def session_check(self) -> Dict[str, Any]:
         """Asks the server again whether the sign-in is good (the sign-in screen's Try again button)."""
@@ -1505,6 +1636,9 @@ class Api:
 
     def disconnect_sync(self) -> Dict[str, Any]:
         return disconnect_sync(workspace_dir())
+
+    def delete_account(self, confirm_email: str) -> Dict[str, Any]:
+        return delete_account_on_server(workspace_dir(), confirm_email)
 
     def sync_cloud_now(self) -> Dict[str, Any]:
         outcome = sync_to_cloud(workspace_dir())

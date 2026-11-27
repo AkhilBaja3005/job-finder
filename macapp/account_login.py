@@ -15,12 +15,34 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Callable, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
-DONE_PAGE = (b"<!doctype html><meta charset='utf-8'><title>Job Finder</title>"
-             b"<body style='font:16px -apple-system,Segoe UI,sans-serif;text-align:center;margin-top:18vh'>"
-             b"<h2>You are signed in</h2><p>You can close this tab and go back to Job Finder.</p></body>")
-FAILED_PAGE = (b"<!doctype html><meta charset='utf-8'><title>Job Finder</title>"
-               b"<body style='font:16px -apple-system,Segoe UI,sans-serif;text-align:center;margin-top:18vh'>"
-               b"<h2>That did not work</h2><p>Go back to Job Finder and click Sign in again.</p></body>")
+_LOGO_SVG = (
+    b"<svg viewBox='0 0 24 24' width='40' height='40' fill='none' stroke='#38bdf8' "
+    b"stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' style='margin-bottom:14px'>"
+    b"<path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/>"
+    b"<polyline points='14 2 14 8 20 8'/><line x1='16' y1='13' x2='8' y2='13'/>"
+    b"<line x1='16' y1='17' x2='8' y2='17'/><polyline points='10 9 9 9 8 9'/></svg>"
+)
+_SHELL = (
+    b"<!doctype html><meta charset='utf-8'><title>Job Finder</title>"
+    b"<body style='margin:0;min-height:100vh;display:grid;place-items:center;"
+    b"background:radial-gradient(circle at top,#172554,#0b1120 65%);"
+    b"font:15px/1.5 -apple-system,BlinkMacSystemFont,\"SF Pro Text\",Segoe UI,sans-serif;color:#f1f5f9'>"
+    b"<div style='max-width:400px;padding:32px 28px;border-radius:16px;text-align:center;"
+    b"background:rgba(15,23,42,0.85);border:1px solid rgba(56,189,248,0.28);"
+    b"box-shadow:0 20px 50px rgba(0,0,0,0.45)'>"
+)
+DONE_PAGE = (
+    _SHELL + _LOGO_SVG
+    + b"<div style='font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#38bdf8;margin-bottom:6px'>Job Finder</div>"
+    + b"<h2 style='margin:0 0 8px;font-size:20px;font-weight:700;color:#fff'>You are signed in</h2>"
+    + b"<p style='margin:0;color:#94a3b8'>You can close this tab and go back to Job Finder.</p></div></body>"
+)
+FAILED_PAGE = (
+    _SHELL + _LOGO_SVG
+    + b"<div style='font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#f87171;margin-bottom:6px'>Job Finder</div>"
+    + b"<h2 style='margin:0 0 8px;font-size:20px;font-weight:700;color:#fff'>That did not work</h2>"
+    + b"<p style='margin:0;color:#94a3b8'>Go back to Job Finder and click Sign in again.</p></div></body>"
+)
 
 
 def make_pkce() -> Dict[str, str]:

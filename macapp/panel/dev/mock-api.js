@@ -81,7 +81,7 @@
   };
 
   let capUsed = empty ? 0 : 3;
-  const capLimit = 20;
+  let capLimit = 20;
 
   const scanScript = [
     "[Scanner] Starting search: applied AI (intern) in London...",
@@ -133,8 +133,10 @@
     app_prefs: { primary_ai: "auto", headless: false, dock_browser: false, tour_done: true },
     cloud: { configured: true, connected: true, email: "me@example.com", kind: "google" },
     browser: { ready: !q.has("browser"), installing: false, error: "" },
+    boards: { ready: !q.has("fresh"), updated: q.has("fresh") ? "" : "2026-11-27" },
     keys: q.has("fresh") ? { gemini: { set: false, hint: "" }, anthropic: { set: false, hint: "" }, openai: { set: false, hint: "" } }
                           : { gemini: { set: true, hint: "a3Kd" }, anthropic: { set: true, hint: "Qw9z" }, openai: { set: false, hint: "" } },
+    portal_password: { set: !q.has("fresh"), hint: q.has("fresh") ? "" : "x9Kp" },
     prefs: { profile_exists: !q.has("fresh"), candidate_name: "Akhil Baja", roles: ["Machine Learning Engineer Intern", "Data Science Intern", "AI Engineer Intern"],
       location: "London, UK", timeframe: "1m", min_ats: 70, title_keywords: ["intern", "internship", "placement"], skip_portals: ["targetjobs", "workday"] },
   };
@@ -266,7 +268,8 @@
       }
       return { ok: true };
     },
-    save_prefs: async () => ({ ok: true }), save_app_prefs: async () => ({ ok: true }), set_theme: async () => ({ ok: true }),
+    save_prefs: async () => ({ ok: true }),
+    save_app_prefs: async (vals) => { if (vals && vals.daily_cap) capLimit = Number(vals.daily_cap) || 20; return { ok: true }; }, set_theme: async () => ({ ok: true }),
     check_update: async () => ({ ok: true, current: "1.9.1", latest: q.has("update") ? "1.10.0" : "1.9.1", newer: q.has("update"), url: "https://github.com" }),
     start_scan: async (options) => {
       activeTask = options && options.mode === "practice" ? "practice" : "scan";
@@ -318,13 +321,19 @@
     sync_now: async () => { await wait(600); return { ok: true, pushed: 3, already: rows.length }; },
     sync_cloud_now: async () => { await wait(600); return { ok: true, pushed: 2, already: rows.length }; },
     disconnect_sync: async () => { state.cloud.connected = false; return { ok: true }; },
+    delete_account: async (confirmEmail) => {
+      if (String(confirmEmail || "").trim().toLowerCase() !== "me@example.com") return { ok: false, error: "The email does not match this account" };
+      state.cloud.connected = false; window.__signin = "idle";
+      return { ok: true };
+    },
     save_mailbox: async (user) => { state.mailbox = { configured: true, user: user || "me@example.com" }; return { ok: true }; },
     disconnect_mailbox: async () => { state.mailbox = { configured: false }; return { ok: true }; },
     check_replies_now: async () => ({ ok: true, updated: 0, checked: 14 }),
     open_signin: async () => ({ ok: true }),
     problem_report: async () => ({ ok: true, text: "Job Finder 1.9.1 mock report" }),
     choose_profile_and_import: async () => ({ ok: true, name: "Akhil Baja" }),
-    save_key: async () => ({ ok: true, keys: state.keys }), open_url: async () => ({ ok: true }), open_path: async () => ({ ok: true }),
+    save_key: async () => ({ ok: true, keys: state.keys }),
+    save_portal_password: async (v) => { state.portal_password = { set: Boolean(v), hint: v && v.length > 8 ? v.slice(-4) : "" }; return { ok: true, portal_password: state.portal_password }; }, open_url: async () => ({ ok: true }), open_path: async () => ({ ok: true }),
     choose_workspace: async () => ({ ok: false }), choose_resume_and_build_profile: async () => ({ ok: false }),
     get_saved_answers: async () => ({ ok: true, items: savedAnswers.slice(), suggestions: ["Why do you want to work here?", "What are your salary expectations?", "What is your notice period or earliest start date?", "Where did you hear about this role?"], max_entries: 40, max_chars: 600 }),
     save_saved_answers: async (items) => { savedAnswers = items.filter((i) => i.question.trim() && i.answer.trim()); return { ok: true, saved: savedAnswers.length }; },
@@ -347,6 +356,9 @@
       { key: "disability_status", section: "Optional: equal-opportunity forms", label: "Disability", kind: "choice", required: false, options: ["Prefer not to say", "Yes", "No"], default: "Prefer not to say", value: null } ] }),
     save_about_you: async (answers) => { window.__aboutSaved = answers; return { ok: true, unanswered: [] }; },
     ensure_browser: async () => ({ ok: true }),
+    save_pack_cv: async () => ({ ok: true }),
+    open_pack_folder: async () => ({ ok: true }),
+    refresh_boards: async () => { activeTask = "scan"; activeScript = ["[Boards] Refreshing Greenhouse/Lever/Ashby index...", "[Boards] Indexed 8,412 company boards."]; running = true; started = Date.now(); lineIndex = 0; return { ok: true }; },
   } };
   window.dispatchEvent(new Event("pywebviewready"));
 })();
