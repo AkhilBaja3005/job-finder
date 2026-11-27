@@ -1,24 +1,25 @@
 # Handoff status
 
-Last updated by: Claude Code (setup only, no app code changed)
+Last updated by: Antigravity on branch `feat/app-staged-ui`
 
 ## Where things stand
-- PR 125 (staged Excel workflow: scan, approve, prepare, review, apply) is merged on `main`.
-- The desktop app (`macapp/`) was NOT updated for it and is broken: a real run only discovers jobs, the Applications screen and sync read the old CSV, the daily schedule never applies.
-- Nothing from `APP_STAGED_UI.md` has been built yet.
-
-## Plan
-- Phase 0 (logic agent, small PR): fix arg builders, Excel tracker read/write, scheduler.
-- Phase 1 (UI agent + logic agent): tabs Search, Review, Packs, Documents, Apply, plus a "next step" banner. Contract in `API_CONTRACT.md`.
-- Phase 2 (logic agent): sync from Excel, cover letter only from the reviewed pack, grounding audit on Apply.
+- **Phase 0 (PR #133)**: Merged on `main` (`build_scan_args`, `build_apply_args`, Excel tracker read/write, `scheduler.py`).
+- **Phase 1 (PR #134 on `feat/app-staged-ui`)**: Complete:
+  - UI (`macapp/panel/app.js`, `macapp/panel/styles.css`, `macapp/panel/dev/mock-api.js`): Search, Review, Packs, Documents, Apply, Applications, Settings tabs, `next_step()` banner, and updated guided tour.
+  - Python bridge (`macapp/scan_panel.py`): All 12 `API_CONTRACT.md` methods (`next_step`, `list_searches`, `list_jobs`, `approve_jobs`, `revoke_jobs`, `list_packs`, `prepare_packs`, `pack_documents`, `open_pack_file`, `signoff_pack`, `list_ready`, `start_apply`).
+  - Tests (`backend/tests/test_mac_app.py`): Added `test_staged_api_workflow_end_to_end`; all `97` tests in `test_mac_app.py` pass locally.
+- **Phase 2**: Verified in place:
+  - Account sync (`_csv_all` / `sync_to_cloud`) reads Excel workbooks (`_excel_rows`), CSV fallback only when no workbook exists.
+  - `job_finder/commands/apply.py` reads `cover_letter.txt` / `cover_letter.pdf` only from the reviewed pack (`ap.read_cover_letter`).
+  - `backend/services/browser_use_agent.py` runs `services.grounding` and attaches `"grounding": grounding_audit.summary()`.
+  - Google sign-in gate (`_guarded` in `macapp/scan_panel.py`) covers all 12 new `Api` methods.
 
 ## Next step
-Logic agent: do Phase 0 on branch `feat/app-staged-logic`. UI agent: start Phase 1 against the mock in `macapp/panel/dev/mock-api.js` on branch `feat/app-staged-ui`, after reading `API_CONTRACT.md`.
+- Wait for CI checks on PR #134 (`CI Verification & Tests`, `Mac arm64`, `Mac x64`, `Windows`) to finish green, then merge PR #134.
 
 ## Known problems / not verified
-- Nothing in the staged flow has been tried on a real Mac or Windows PC.
-- Live `apply` submission through the staged path is unverified (PR 125 notes this too).
+- Live `apply` submission and the live `pywebview` desktop window on Mac/Windows have not been exercised against real job sites.
 
 ## How to run
-- Tests: `python -m pytest backend/tests -q`
-- UI preview: open `macapp/panel/dev/index.html` in a browser.
+- Tests: `python3 -m pytest backend/tests -q`
+- UI preview: serve `macapp/panel/` (`python3 -m http.server`) and open `dev/index.html` (or `dev/index.html?empty`) in a browser.

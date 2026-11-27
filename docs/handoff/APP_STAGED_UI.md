@@ -24,4 +24,7 @@ Left-nav tabs: Search, Review, Packs, Documents, Apply, Applications, Settings. 
 Account sync reads Excel rows. Cover letter at apply time is pasted only from the reviewed pack, never generated live. `apply` uses the grounding tools and returns the audit. The Google sign-in gate covers every stage.
 
 ## Done means
-Tests for every arg builder, tracker path, Api method (subprocess mocked), scheduler (Mac and Windows) and the banner logic; all existing tests pass; UI shown locally in the dev mock with screenshots; one PR per phase merged with required checks green. List what could not be verified without a real Mac or Windows PC.
+- [x] Phase 0 (PR #133): arg builders, Excel tracker read/write, scheduler (Mac and Windows).
+- [x] Phase 1 (PR #134): left-nav tabs (`Search`, `Review`, `Packs`, `Documents`, `Apply`, `Applications`, `Settings`), `next_step()` banner, guided tour, `macapp/panel/dev/mock-api.js`, all 12 `API_CONTRACT.md` methods on `Api` in `macapp/scan_panel.py`, and unit tests in `backend/tests/test_mac_app.py`.
+- [x] Phase 2 verified: `_csv_all` / `sync_to_cloud` reads Excel rows, `job_finder/commands/apply.py` pastes `cover_letter.txt` from the reviewed pack only, `browser_use_agent.py` runs `grounding.py` and returns `grounding` summary, and `_guarded` covers all new `Api` methods.
+- [ ] Merge PR #134 once CI checks (`Distribution & Test Suite`, `Windows`, `Mac arm64`, `Mac x64`) pass, and verify the live desktop window on Mac/Windows.

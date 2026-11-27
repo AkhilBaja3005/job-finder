@@ -6,6 +6,14 @@ so the results are identical. You do not need a terminal.
 
 ## Install
 
+### Option 1: Terminal (no Gatekeeper quarantine warning)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AkhilBaja3005/job-finder/main/macapp/install_mac.sh | bash
+```
+
+### Option 2: `.dmg` download
+
 1. Download `Job-Finder-<version>-arm64.dmg` from the latest GitHub release (or from a "Build Mac app" run).
 2. Open it and drag **Job Finder** to Applications.
 3. The app is not signed yet, so macOS blocks the first launch. **Right-click the app, choose Open, then Open again.**

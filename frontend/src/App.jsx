@@ -8170,6 +8170,27 @@ function App() {
                 )}
               </div>
 
+              <div style={{
+                padding: '8px 12px', borderRadius: '8px',
+                background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(148, 163, 184, 0.25)',
+                display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'
+              }}>
+                <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>Mac Terminal install (no Gatekeeper warning):</span>
+                <code style={{ fontSize: '0.72rem', color: '#e2e8f0', whiteSpace: 'nowrap', overflowX: 'auto', flex: '1 1 260px', minWidth: 0 }}>
+                  curl -fsSL https://raw.githubusercontent.com/AkhilBaja3005/job-finder/main/macapp/install_mac.sh | bash
+                </code>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ padding: '4px 10px', fontSize: '0.72rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.35)', whiteSpace: 'nowrap' }}
+                  onClick={() => {
+                    try { navigator.clipboard.writeText('curl -fsSL https://raw.githubusercontent.com/AkhilBaja3005/job-finder/main/macapp/install_mac.sh | bash'); } catch (e) {}
+                  }}
+                >
+                  Copy
+                </button>
+              </div>
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                   <span style={{ background: '#0284c7', color: '#fff', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.75rem', flexShrink: 0, marginTop: '2px' }}>1</span>
