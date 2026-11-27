@@ -1211,3 +1211,84 @@ def test_the_page_asks_the_questions_in_the_tour_in_settings_and_before_applying
     for needle in ("openAboutYou", "get_about_you", "save_about_you", 'data-act="edit-about"', "Tell us what your resume cannot", 'cta: "Answer now"',
                    "closeLayer(); openAboutYou().then(() => startTour(resumeAt))", "Before applying for real, answer the questions"):
         assert needle in js, needle
+
+
+def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
+    import scan_panel
+    from services import searches
+    from services.excel_tracker import ExcelTracker
+
+    monkeypatch.setattr(scan_panel, "workspace_dir", lambda: tmp_path)
+    monkeypatch.setenv("JOB_FINDER_ROOT", str(tmp_path))
+    api = scan_panel.Api([sys.executable])
+
+    # 1. Empty workspace -> next_step says search
+    ns = api.next_step()
+    assert ns["ok"] and ns["stage"] == "search" and ns["counts"]["scanned"] == 0
+
+    # 2. Create a saved search and populate scanned_jobs.xlsx
+    s, _ = searches.get_or_create("ai-intern", topic="applied AI", level="intern", location="London")
+    searches.set_current(s.name)
+    ExcelTracker(s.scanned).add_jobs([
+        {"Company": "Acme", "Job Role": "AI Intern", "ATS %": 88, "Match": "Core", "Role Level": "intern", "Job URL": "https://example.com/1"},
+        {"Company": "Beta", "Job Role": "ML Intern", "ATS %": 72, "Match": "Related", "Role Level": "intern", "Job URL": "https://example.com/2"},
+    ])
+    ls = api.list_searches()
+    assert ls["ok"] and ls["current"] == "ai-intern" and ls["searches"][0]["jobs"] == 2
+    assert api.next_step()["stage"] == "review"
+
+    jobs = api.list_jobs("ai-intern")
+    assert jobs["ok"] and len(jobs["jobs"]) == 2 and jobs["jobs"][0]["fit"] == 88
+
+    # 3. Approve >= 80% -> 1 approved -> next_step says packs
+    app_res = api.approve_jobs({"min_ats": 80})
+    assert app_res == {"ok": True, "approved": 1}
+    assert api.next_step()["stage"] == "packs"
+
+    # Approve and revoke by ID
+    assert api.approve_jobs({"ids": ["2"]}) == {"ok": True, "approved": 1}
+    assert api.revoke_jobs({"ids": ["2"]}) == {"ok": True, "revoked": 1}
+
+    # 4. Packs & Documents
+    packs = api.list_packs()
+    assert packs["ok"] and len(packs["packs"]) == 1 and packs["packs"][0]["state"] == "not_started"
+
+    called_cmds = []
+    monkeypatch.setattr(api._runner, "start", lambda args, env, cwd, title="scan": (called_cmds.append((args, title)) or {"ok": True}))
+    assert api.prepare_packs({"ids": ["1"]}) == {"ok": True}
+    assert called_cmds[-1][1] == "prepare" and "--ids" in called_cmds[-1][0]
+
+    # Simulate generated pack files
+    row = ExcelTracker(s.approved).rows()[0]
+    folder = api._pack_folder(s, row)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "REVIEW.md").write_text("# Checklist\n- ok", encoding="utf-8")
+    (folder / "cover_letter.txt").write_text("Dear Acme,", encoding="utf-8")
+    (folder / "fit_analysis.md").write_text("Fit 88%", encoding="utf-8")
+    (folder / "cv.pdf").write_bytes(b"%PDF-1.4")
+
+    assert api.next_step()["stage"] == "documents"
+    docs = api.pack_documents("1")
+    assert docs["ok"] and "Dear Acme" in docs["cover_letter"] and "Checklist" in docs["review_md"]
+    assert api.pack_documents("999")["ok"] is False
+
+    opened = []
+    monkeypatch.setattr(scan_panel.platform_support, "open_path", lambda p, as_text: opened.append((p, as_text)))
+    assert api.open_pack_file("1", "cv") == {"ok": True}
+    assert api.open_pack_file("1", "review") == {"ok": True}
+    assert api.open_pack_file("1", "bad")["ok"] is False
+    assert len(opened) == 2
+
+    # 5. Sign off & Apply
+    assert api.signoff_pack("1") == {"ok": True}
+    assert api.signoff_pack("999")["ok"] is False
+    assert api.next_step()["stage"] == "apply"
+
+    ready = api.list_ready()
+    assert ready["ok"] and len(ready["jobs"]) == 1 and ready["cap"]["limit"] == 20
+
+    # start_apply requires profile
+    assert api.start_apply({"mode": "preview"})["ok"] is False
+    _profile_file(tmp_path)
+    assert api.start_apply({"mode": "submit", "limit": 3, "headless": True}) == {"ok": True}
+    assert called_cmds[-1][1] == "apply" and "--submit" in called_cmds[-1][0] and "--yes" in called_cmds[-1][0]

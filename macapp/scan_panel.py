@@ -24,6 +24,8 @@ import urllib.parse
 import urllib.request
 import webbrowser
 from collections import deque
+from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional
 
@@ -1208,6 +1210,280 @@ class Api:
         ws = workspace_dir()
         local = read_tracker(ws)
         return merge_results(local, read_account_applications(ws))   # offline or signed out: the folder's own list still shows
+
+    @contextmanager
+    def _ws_env(self, ws: Path):
+        prev = os.environ.get("JOB_FINDER_ROOT")
+        os.environ["JOB_FINDER_ROOT"] = str(ws)
+        try:
+            yield
+        finally:
+            if prev is None:
+                os.environ.pop("JOB_FINDER_ROOT", None)
+            else:
+                os.environ["JOB_FINDER_ROOT"] = prev
+
+    def _pack_folder(self, s: Any, row: Dict[str, Any]) -> Path:
+        folder = str(row.get("Pack Folder") or "").strip()
+        if folder:
+            p = Path(folder)
+            if p.is_absolute() or p.exists():
+                return p
+            return workspace_dir() / p
+        from services.application_pack import pack_folder_for
+        return Path(pack_folder_for(row, base=s.packs))
+
+    def _pack_state(self, s: Any, row: Dict[str, Any]) -> str:
+        if str(row.get("Docs OK") or "").strip().lower() == "yes":
+            return "signed_off"
+        folder = self._pack_folder(s, row)
+        if folder.is_dir() and ((folder / "REVIEW.md").is_file() or (folder / "cv.pdf").is_file()):
+            return "needs_signoff"
+        return "not_started"
+
+    def _job_dict(self, r: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            fit = int(float(r.get("ATS %") or 0))
+        except (TypeError, ValueError):
+            fit = 0
+        return {
+            "id": str(r.get("ID") or ""),
+            "role": str(r.get("Job Role") or ""),
+            "company": str(r.get("Company") or ""),
+            "level": str(r.get("Role Level") or r.get("Level") or ""),
+            "years": str(r.get("Years Exp") or "not stated") or "not stated",
+            "fit": fit,
+            "match": str(r.get("Match") or ""),
+            "closing": str(r.get("Closing Date") or ""),
+            "url": str(r.get("Job URL") or ""),
+            "approved": str(r.get("Approve") or "").strip().lower() == "yes" or str(r.get("Status") or "") == "Approved",
+        }
+
+    def next_step(self) -> Dict[str, Any]:
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            from services.excel_tracker import ExcelTracker
+            s = searches.resolve_current()
+            scanned_rows = ExcelTracker(s.scanned).rows() if s.exists else []
+            approved_rows = ExcelTracker(s.approved).rows() if os.path.isfile(s.approved) else []
+            active_approved = [r for r in approved_rows if str(r.get("Status") or "") == "Approved" and str(r.get("Applied") or "No") != "Yes"]
+            not_started = packs_ready = needs_signoff = ready_to_apply = 0
+            for r in active_approved:
+                st = self._pack_state(s, r)
+                if st == "not_started":
+                    not_started += 1
+                elif st == "needs_signoff":
+                    packs_ready += 1
+                    needs_signoff += 1
+                elif st == "signed_off":
+                    packs_ready += 1
+                    ready_to_apply += 1
+            scanned = len(scanned_rows)
+            approved = len(active_approved)
+            applied = sum(1 for r in scanned_rows if str(r.get("Applied") or "No") == "Yes" or str(r.get("Status") or "") == "Applied")
+        counts = {
+            "scanned": scanned, "approved": approved, "packs_ready": packs_ready,
+            "needs_signoff": needs_signoff, "ready_to_apply": ready_to_apply, "applied": applied,
+        }
+        if scanned == 0:
+            return {"ok": True, "stage": "search", "title": "No jobs scanned yet", "button": "Run a search", "goto": "search", "counts": counts}
+        if approved == 0:
+            return {"ok": True, "stage": "review", "title": f"{scanned} jobs found", "button": "Review them", "goto": "review", "counts": counts}
+        if not_started > 0 and needs_signoff == 0 and ready_to_apply == 0:
+            return {"ok": True, "stage": "packs", "title": f"{approved} approved", "button": "Prepare packs", "goto": "packs", "counts": counts}
+        if needs_signoff > 0:
+            noun = "pack needs" if needs_signoff == 1 else "packs need"
+            return {"ok": True, "stage": "documents", "title": f"{needs_signoff} {noun} sign-off", "button": "Review docs", "goto": "documents", "counts": counts}
+        if ready_to_apply > 0:
+            return {"ok": True, "stage": "apply", "title": f"{ready_to_apply} ready to apply", "button": "Apply", "goto": "apply", "counts": counts}
+        return {"ok": True, "stage": "done", "title": f"All caught up ({applied} applied)", "button": "New search", "goto": "search", "counts": counts}
+
+    def list_searches(self) -> Dict[str, Any]:
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            cur = searches.current_name() or ""
+            items = []
+            for s in searches.list_searches():
+                meta = s.meta or {}
+                c = searches.counts(s)
+                topics = meta.get("topics")
+                topic = meta.get("topic") or (", ".join(topics) if isinstance(topics, list) else str(topics or ""))
+                items.append({
+                    "name": s.name,
+                    "topic": topic,
+                    "level": meta.get("level") or "all",
+                    "location": meta.get("location") or "",
+                    "jobs": c["jobs"],
+                    "updated": str(meta.get("updated") or meta.get("created") or "")[:10],
+                })
+            return {"ok": True, "current": cur or (items[0]["name"] if items else ""), "searches": items}
+
+    def list_jobs(self, search: Optional[str] = None) -> Dict[str, Any]:
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            from services.excel_tracker import ExcelTracker
+            s = searches.resolve_current(search)
+            if search:
+                searches.set_current(s.name)
+            rows = ExcelTracker(s.scanned).rows() if s.exists else []
+            return {"ok": True, "jobs": [self._job_dict(r) for r in rows]}
+
+    def approve_jobs(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        ws = workspace_dir()
+        data = payload or {}
+        with self._ws_env(ws):
+            from services import approval, searches
+            from services.excel_tracker import ExcelTracker
+            s = searches.resolve_current(data.get("search"))
+            ids = [int(i) for i in data["ids"]] if data.get("ids") else None
+            min_ats = int(data["min_ats"]) if data.get("min_ats") is not None else None
+            res = approval.approve_jobs(ExcelTracker(s.scanned), ExcelTracker(s.approved), ids=ids, min_ats=min_ats)
+            return {"ok": True, "approved": len(res["approved"])}
+
+    def revoke_jobs(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        ws = workspace_dir()
+        data = payload or {}
+        with self._ws_env(ws):
+            from services import approval, searches
+            from services.excel_tracker import ExcelTracker
+            s = searches.resolve_current(data.get("search"))
+            ids = [int(i) for i in (data.get("ids") or [])]
+            res = approval.withdraw_jobs(ExcelTracker(s.scanned), ExcelTracker(s.approved), ids=ids)
+            return {"ok": True, "revoked": len(res["withdrawn"])}
+
+    def list_packs(self) -> Dict[str, Any]:
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            from services.excel_tracker import ExcelTracker
+            s = searches.resolve_current()
+            rows = ExcelTracker(s.approved).rows() if os.path.isfile(s.approved) else []
+            packs = []
+            for r in rows:
+                if str(r.get("Status") or "") != "Approved" or str(r.get("Applied") or "No") == "Yes":
+                    continue
+                packs.append({
+                    "id": str(r.get("ID") or ""),
+                    "role": str(r.get("Job Role") or ""),
+                    "company": str(r.get("Company") or ""),
+                    "state": self._pack_state(s, r),
+                    "error": "",
+                })
+            return {"ok": True, "packs": packs}
+
+    def prepare_packs(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        ws = workspace_dir()
+        data = payload or {}
+        args = ["prepare"]
+        ids = data.get("ids") or []
+        if ids:
+            args += ["--ids", ",".join(str(i) for i in ids)]
+        with self._ws_env(ws):
+            from services import searches
+            s = searches.resolve_current()
+            if not s.is_main:
+                args += ["--search", s.name]
+        return self._runner.start(args, {**build_run_env({}, ws), **self._dock_env()}, ws, "prepare")
+
+    def _find_approved_row(self, s: Any, job_id: str) -> Optional[Dict[str, Any]]:
+        from services.excel_tracker import ExcelTracker
+        if not os.path.isfile(s.approved):
+            return None
+        for r in ExcelTracker(s.approved).rows():
+            if str(r.get("ID") or "") == str(job_id):
+                return r
+        return None
+
+    def pack_documents(self, job_id: str) -> Dict[str, Any]:
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            s = searches.resolve_current()
+            row = self._find_approved_row(s, str(job_id))
+            if not row:
+                return {"ok": False, "error": f"Approved job #{job_id} not found."}
+            folder = self._pack_folder(s, row)
+            def _read(name: str) -> str:
+                p = folder / name
+                return p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
+            cv_pdf = folder / "cv.pdf"
+            return {
+                "ok": True,
+                "cv_pdf": str(cv_pdf) if cv_pdf.is_file() else "",
+                "cover_letter": _read("cover_letter.txt"),
+                "review_md": _read("REVIEW.md"),
+                "fit": _read("fit_analysis.md"),
+            }
+
+    def open_pack_file(self, job_id: str, kind: str) -> Dict[str, Any]:
+        files = {"cv": "cv.pdf", "cover": "cover_letter.txt", "jd": "job_description.txt", "review": "REVIEW.md"}
+        fname = files.get(str(kind))
+        if not fname:
+            return {"ok": False, "error": f"Unknown document type: {kind}"}
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            s = searches.resolve_current()
+            row = self._find_approved_row(s, str(job_id))
+            if not row:
+                return {"ok": False, "error": f"Approved job #{job_id} not found."}
+            target = self._pack_folder(s, row) / fname
+            if not target.is_file():
+                return {"ok": False, "error": f"{fname} has not been generated yet."}
+            platform_support.open_path(str(target), kind != "cv")
+            return {"ok": True}
+
+    def signoff_pack(self, job_id: str) -> Dict[str, Any]:
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            from services.excel_tracker import ExcelTracker
+            s = searches.resolve_current()
+            if not os.path.isfile(s.approved):
+                return {"ok": False, "error": "No approved jobs workbook found."}
+            ok = ExcelTracker(s.approved).update(row_id=int(job_id), docs_ok="Yes")
+            if not ok:
+                return {"ok": False, "error": f"Approved job #{job_id} not found."}
+            return {"ok": True}
+
+    def list_ready(self) -> Dict[str, Any]:
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            from services.excel_tracker import ExcelTracker
+            s = searches.resolve_current()
+            rows = ExcelTracker(s.approved).rows() if os.path.isfile(s.approved) else []
+            ready = [
+                self._job_dict(r) for r in rows
+                if str(r.get("Status") or "") == "Approved"
+                and str(r.get("Docs OK") or "").strip().lower() == "yes"
+                and str(r.get("Applied") or "No") != "Yes"
+            ]
+            today_str = date.today().isoformat()
+            used = sum(
+                1 for r in rows
+                if str(r.get("Applied") or "No") == "Yes" and str(r.get("Date Applied") or "").startswith(today_str)
+            )
+            try:
+                cap_limit = int(os.environ.get("JOB_FINDER_DAILY_CAP") or 20)
+            except ValueError:
+                cap_limit = 20
+            return {"ok": True, "jobs": ready, "cap": {"used": used, "limit": cap_limit}}
+
+    def start_apply(self, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        ws = workspace_dir()
+        if not read_preferences(ws)["profile_exists"]:
+            return {"ok": False, "error": "No profile yet. Open Settings and build or choose a profile first."}
+        opts = dict(options or {})
+        with self._ws_env(ws):
+            from services import searches
+            s = searches.resolve_current(opts.get("search"))
+            if not s.is_main and not opts.get("search"):
+                opts["search"] = s.name
+        return self._runner.start(build_apply_args(opts), {**build_run_env(opts, ws), **self._dock_env()}, ws, "apply")
 
     def session_check(self) -> Dict[str, Any]:
         """Asks the server again whether the sign-in is good (the sign-in screen's Try again button)."""
