@@ -71,6 +71,7 @@ def build_parser(version: str) -> argparse.ArgumentParser:
     )
     outcomes_parser.add_argument("--json", action="store_true", help="Print results as JSON")
     outcomes_parser.add_argument("--recent", type=int, default=0, help="Also list the last N attempts with their reason and screenshot")
+    outcomes_parser.add_argument("--questions", action="store_true", help="List the form questions the agent met most often")
 
     # 2. Apply subcommand
     apply_parser = subparsers.add_parser(

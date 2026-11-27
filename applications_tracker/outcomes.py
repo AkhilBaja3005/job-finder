@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -77,6 +78,29 @@ def submitted_today(workspace: Optional[str] = None) -> int:
     """How many applications went out today (local date). Used for the daily cap."""
     today = time.strftime("%Y-%m-%d")
     return sum(1 for r in read_outcomes(workspace) if r.get("outcome") == SUBMITTED and str(r.get("time", "")).startswith(today))
+
+
+def _normalise_question(text: str) -> str:
+    text = re.sub(r"[*?:]+", " ", str(text or "").lower())
+    text = re.sub(r"\(.*?\)", " ", text)               # "(required)" and similar
+    return re.sub(r"\s+", " ", text).strip(" .-")
+
+
+def question_counts(rows: List[Dict[str, Any]], top: int = 30) -> List[Dict[str, Any]]:
+    """The questions the agent met most often, from the ledger. Spelling variants of the same question are counted together."""
+    counts: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        seen_here = set()
+        for q in row.get("questions") or []:
+            key = _normalise_question(q)
+            if len(key) < 4 or key in seen_here:
+                continue
+            seen_here.add(key)                      # a question counts once per application
+            entry = counts.setdefault(key, {"question": str(q).strip(), "count": 0, "sites": set()})
+            entry["count"] += 1
+            entry["sites"].add(row.get("site") or site_of(row.get("url", "")))
+    ranked = sorted(counts.values(), key=lambda e: (-e["count"], e["question"].lower()))[:max(0, top)]
+    return [{"question": e["question"], "count": e["count"], "sites": sorted(s for s in e["sites"] if s)} for e in ranked]
 
 
 def usage_today(workspace: Optional[str] = None) -> Dict[str, float]:

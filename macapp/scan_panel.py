@@ -364,6 +364,7 @@ PROFILE_FIELDS = (
     ("candidate", "work_experience", "Work experience", "Roles, companies and dates.", True),
     ("candidate", "education", "Education", "Degrees, schools and dates.", True),
     ("candidate", "core_skills", "Skills", "Used to score jobs and fill skill boxes.", True),
+    ("candidate", "notice_period", "Notice period", "Asked on most forms. Without it the agent would say you can start immediately.", True),
     ("candidate", "linkedin", "LinkedIn link", "Many forms have a LinkedIn field.", False),
     ("candidate", "github", "GitHub link", "Asked on engineering roles.", False),
     ("search_preferences", "target_roles", "Roles to search", "What the scan looks for. You can also set it on the Run page.", True),
@@ -517,6 +518,15 @@ def disconnect_sync(ws: Path) -> Dict[str, Any]:
     _cloud_cache.clear()
     _session.update(ok=False, checked=0.0, token="")
     return {"ok": True}
+
+
+def _about_state(ws: Path) -> Dict[str, Any]:
+    try:
+        from services.about_you import read_about_you
+        got = read_about_you(str(profile_path(ws)))
+        return {"exists": got["exists"], "unanswered": got["unanswered"]}
+    except Exception:
+        return {"exists": False, "unanswered": []}
 
 
 # ── the lock: nothing works without a valid Google sign-in ───────────────────────
@@ -936,7 +946,7 @@ class Api:
         ws = workspace_dir()
         return {
             "workspace": str(ws), "prefs": read_preferences(ws), "keys": key_status(ws),
-            "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "mailbox": mailbox_status(ws), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "cloud": cloud_status(ws), "session": {**session_status(ws), "signing_in": _signin_state.get("state") == "waiting", "error": _signin_state.get("error", "") if _signin_state.get("state") == "error" else ""}, "profile_check": profile_check(ws),
+            "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "mailbox": mailbox_status(ws), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "cloud": cloud_status(ws), "session": {**session_status(ws), "signing_in": _signin_state.get("state") == "waiting", "error": _signin_state.get("error", "") if _signin_state.get("state") == "error" else ""}, "profile_check": profile_check(ws), "about_you": _about_state(ws),
             "browser": {"ready": browser_ready(), **self._browser},
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
@@ -1155,6 +1165,18 @@ class Api:
         env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_dir())
         env["HOME"] = str(Path.home())
         return scheduler.install(int(hour), int(minute), program, ws, logs_dir() / "scheduled.log", env)
+
+    def get_about_you(self) -> Dict[str, Any]:
+        from services.about_you import read_about_you
+        return {"ok": True, **read_about_you(str(profile_path(workspace_dir())))}
+
+    def save_about_you(self, answers: Dict[str, Any]) -> Dict[str, Any]:
+        from services.about_you import AboutYouError, read_about_you, save_about_you
+        try:
+            save_about_you(str(profile_path(workspace_dir())), answers)
+        except AboutYouError as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "unanswered": read_about_you(str(profile_path(workspace_dir())))["unanswered"]}
 
     def get_saved_answers(self) -> Dict[str, Any]:
         from services.saved_answers import SUGGESTIONS, MAX_ENTRIES, MAX_CHARS, load_saved_answers

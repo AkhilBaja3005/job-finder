@@ -10,7 +10,6 @@ import email
 import email.header
 import imaplib
 import re
-import time
 from datetime import datetime, timedelta
 from email.utils import parseaddr
 from typing import Any, Dict, Iterable, List, Optional

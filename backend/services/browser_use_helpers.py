@@ -3,7 +3,8 @@
 import base64
 import hashlib
 import os
-from typing import Any, Optional
+import re
+from typing import Any, List, Optional
 
 CAPTCHA_MARKERS = (
     "captcha", "recaptcha", "hcaptcha", "turnstile", "verify you are human",
@@ -24,6 +25,24 @@ def detect_blocker(text: str) -> Optional[str]:
     if any(m in lowered for m in LOGIN_MARKERS):
         return "login"
     return None
+
+
+_QUESTIONS_LINE = re.compile(r"(?im)^\s*QUESTIONS:\s*(.+)$")
+
+
+def extract_questions(text: str, limit: int = 25) -> List[str]:
+    """The screening questions the agent reports on its last "QUESTIONS: a | b | c" line. Short, no answers, never raises."""
+    found = _QUESTIONS_LINE.findall(text or "")
+    if not found:
+        return []
+    out: List[str] = []
+    for part in found[-1].split("|"):
+        question = re.sub(r"\s+", " ", part).strip(" .;:-*")[:140]
+        if len(question) >= 4 and question.lower() not in {q.lower() for q in out}:
+            out.append(question)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def get_run_timeout(default: float = 600.0) -> float:

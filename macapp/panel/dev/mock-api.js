@@ -68,6 +68,15 @@
     google_sign_in_status: async () => ({ ok: true, state: window.__signin || "idle", error: "", email: "me@example.com" }),
     cancel_google_sign_in: async () => { window.__signin = "idle"; return { ok: true }; },
     session_check: async () => ({ ok: true, signed_in: true }),
+    get_about_you: async () => ({ ok: true, exists: true, unanswered: ["work_authorization", "requires_sponsorship", "notice_period", "seniority"], fields: [
+      { key: "work_authorization", section: "Work rights", label: "Where can you work?", kind: "choice", required: true, options: ["Authorised to work in the UK without restriction", "I need a visa to work (sponsorship)"], help: "Almost every form asks. Pick one, or type your own.", value: null },
+      { key: "requires_sponsorship", section: "Work rights", label: "Will you need visa sponsorship, now or later?", kind: "bool", required: true, help: "Answered Yes or No on forms.", value: null },
+      { key: "notice_period", section: "Availability and pay", label: "When can you start?", kind: "choice", required: true, options: ["Immediately", "2 weeks", "1 month"], value: null },
+      { key: "salary_expectations", section: "Availability and pay", label: "Salary expectation", kind: "text", required: false, placeholder: "e.g. 35,000 to 40,000 GBP a year", value: null },
+      { key: "seniority", section: "What you are looking for", label: "Which levels?", kind: "multi", required: true, options: ["Intern", "Junior", "Mid", "Senior", "Staff", "Lead", "Manager"], value: [] },
+      { key: "gender", section: "Optional: equal-opportunity forms", label: "Gender", kind: "choice", required: false, options: ["Prefer not to say", "Female", "Male", "Non-binary"], default: "Prefer not to say", value: null },
+      { key: "disability_status", section: "Optional: equal-opportunity forms", label: "Disability", kind: "choice", required: false, options: ["Prefer not to say", "Yes", "No"], default: "Prefer not to say", value: null } ] }),
+    save_about_you: async (answers) => { window.__aboutSaved = answers; return { ok: true, unanswered: [] }; },
     ensure_browser: async () => ({ ok: true }),
   } };
   window.dispatchEvent(new Event("pywebviewready"));

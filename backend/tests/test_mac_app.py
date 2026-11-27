@@ -1068,3 +1068,58 @@ def test_the_applications_page_syncs_to_the_account(tmp_path, monkeypatch):
     js = (Path(__file__).resolve().parents[2] / "macapp" / "panel" / "app.js").read_text()
     assert 'case "sync":' in js and 'call("sync_cloud_now")' in js and "to your account" in js
     assert "Synced with job-finder.space" in js
+
+
+# ── About you: the questions a resume cannot answer ──────────────────────────────
+def _profile_file(ws):
+    path = scan_panel_profile_path(ws)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"candidate": {"name": "Ada", "email": "ada@example.com"}, "search_preferences": {"target_roles": ["AI Engineer Intern"]}}))
+    return path
+
+
+def scan_panel_profile_path(ws):
+    import scan_panel
+    return scan_panel.profile_path(ws)
+
+
+def test_the_bridge_reads_and_saves_the_answers(tmp_path, monkeypatch):
+    import scan_panel
+    monkeypatch.setattr(scan_panel, "workspace_dir", lambda: tmp_path)
+    api = scan_panel.Api.__new__(scan_panel.Api)
+    assert api.get_about_you()["exists"] is False                                           # no profile yet
+    assert api.save_about_you({"notice_period": "2 weeks"})["ok"] is False and "Create your profile" in api.save_about_you({"notice_period": "2 weeks"})["error"]
+    path = _profile_file(tmp_path)
+    got = api.get_about_you()
+    assert got["exists"] and {"work_authorization", "requires_sponsorship", "notice_period", "seniority"} <= set(got["unanswered"])
+    out = api.save_about_you({"work_authorization": "Authorised to work in the UK without restriction", "requires_sponsorship": False, "notice_period": "1 month", "seniority": ["Intern"]})
+    assert out == {"ok": True, "unanswered": []}
+    data = json.loads(path.read_text())
+    assert data["candidate"]["requires_sponsorship"] is False and data["search_preferences"]["seniority"] == ["Intern"] and data["candidate"]["name"] == "Ada"
+    bad = api.save_about_you({"requires_sponsorship": "perhaps"})
+    assert bad["ok"] is False and "Yes or No" in bad["error"]
+
+
+def test_state_says_which_questions_are_still_open(tmp_path, monkeypatch):
+    import scan_panel
+    monkeypatch.setattr(scan_panel, "workspace_dir", lambda: tmp_path)
+    api = scan_panel.Api([sys.executable])
+    assert api.get_state()["about_you"] == {"exists": False, "unanswered": []}
+    _profile_file(tmp_path)
+    state = api.get_state()["about_you"]
+    assert state["exists"] and "work_authorization" in state["unanswered"]
+
+
+def test_missing_fields_card_lists_notice_period_as_needed(tmp_path):
+    import scan_panel
+    _profile_file(tmp_path)
+    notice = next(m for m in scan_panel.profile_check(tmp_path)["missing"] if m["field"] == "notice_period")
+    assert notice["needed"] is True
+
+
+def test_the_page_asks_the_questions_in_the_tour_in_settings_and_before_applying_for_real():
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[2] / "macapp" / "panel" / "app.js").read_text()
+    for needle in ("openAboutYou", "get_about_you", "save_about_you", 'data-act="edit-about"', "Tell us what your resume cannot", 'cta: "Answer now"',
+                   "closeLayer(); openAboutYou().then(() => startTour(resumeAt))", "Before applying for real, answer the questions"):
+        assert needle in js, needle
