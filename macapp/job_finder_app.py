@@ -193,6 +193,8 @@ def run_window() -> int:
 
     def on_closing() -> None:
         api.stop_scan()
+        if api._dock is not None:
+            api._dock.stop()
     window.events.closing += on_closing
 
     def show(page_js: str) -> None:

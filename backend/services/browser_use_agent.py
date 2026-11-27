@@ -874,6 +874,15 @@ def find_browser_executable() -> str:
     return "chrome"
 
 
+def _docked_window_args(value: Optional[str]) -> List[str]:
+    """--window-position / --window-size from "x,y,w,h"; nothing when the value is missing or malformed."""
+    try:
+        x, y, w, h = (int(p) for p in str(value or "").split(","))
+    except ValueError:
+        return []
+    return [f"--window-position={x},{y}", f"--window-size={w},{h}"] if w >= 200 and h >= 200 else []
+
+
 def ensure_persistent_browser(headless: bool = False, port: Optional[int] = None, user_data_dir: Optional[str] = None) -> str:
     """
     Ensures a dedicated Chrome browser process is running in the background with CDP enabled.
@@ -910,6 +919,9 @@ def ensure_persistent_browser(headless: bool = False, port: Optional[int] = None
     ]
     if headless:
         launch_args.append("--headless=new")
+    else:
+        # The desktop app's "dock browser" setting hands over where its window is, so Chrome opens right beside it.
+        launch_args.extend(_docked_window_args(os.getenv("JOB_FINDER_DOCK_BOUNDS")))
 
     print(f"[browser-use] Launching persistent Chrome instance ({chrome_path}) on port {port}...")
     popen_kwargs: Dict[str, Any] = {

@@ -71,12 +71,13 @@ def logs_dir() -> Path:
     return Path(override) / "logs" if override else platform_support.logs_base(APP_NAME)
 
 
-APP_PREF_KEYS = ("primary_ai", "headless", "tour_done")
+APP_PREF_KEYS = ("primary_ai", "headless", "tour_done", "dock_browser")
 
 
 def load_app_prefs() -> Dict[str, Any]:
     cfg = load_app_config()
     return {"primary_ai": cfg.get("primary_ai", "auto"), "headless": bool(cfg.get("headless", False)),
+            "dock_browser": bool(cfg.get("dock_browser", False)),
             "tour_done": bool(cfg.get("tour_done")) or os.environ.get("JOB_FINDER_APP_SELFTEST") == "1"}
 
 
@@ -938,6 +939,7 @@ class Api:
         self._notified = True
         self._browser: Dict[str, Any] = {"installing": False, "error": ""}
         self._launcher = launcher
+        self._dock: Any = None
 
     def _bind(self, window: Any) -> None:
         self._window = window
@@ -950,6 +952,29 @@ class Api:
             "browser": {"ready": browser_ready(), **self._browser},
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
         }
+
+    def _dock_env(self) -> Dict[str, str]:
+        """With "dock browser" on, tells Chrome where to open (beside this window) and starts keeping it there.
+        Empty when the setting is off, the run is hidden, or there is no window (tests, command line)."""
+        prefs = load_app_prefs()
+        if not prefs["dock_browser"] or prefs["headless"] or self._window is None:
+            return {}
+        try:
+            import browser_dock as dock
+            try:
+                import webview
+            except ImportError:
+                webview = None
+            screen = dock.screen_bounds(webview)
+            win = (int(self._window.x), int(self._window.y), int(self._window.width), int(self._window.height))
+            bounds = dock.dock_bounds(win, screen)
+            if self._dock is None:
+                self._dock = dock.Dock(self._window, f"http://127.0.0.1:{os.environ.get('JOB_FINDER_CDP_PORT', '9223')}", screen)
+            self._dock.start()
+            return {"JOB_FINDER_DOCK_BOUNDS": dock.bounds_env(bounds)}
+        except Exception:
+            log.exception("could not dock the browser")
+            return {}
 
     def ensure_browser(self) -> Dict[str, Any]:
         """Downloads the page scraper's Chromium if it is missing (about 150 MB, once). Safe to call again."""
@@ -1003,7 +1028,7 @@ class Api:
         if not read_preferences(ws)["profile_exists"]:
             return {"ok": False, "error": "No profile yet. Open Settings and build or choose a profile first."}
         write_preferences(ws, form)
-        result = self._runner.start(build_scan_args(form), build_run_env(form, ws), ws, "scan")
+        result = self._runner.start(build_scan_args(form), {**build_run_env(form, ws), **self._dock_env()}, ws, "scan")
         self._synced_after_run = not result.get("ok")
         self._notified = not result.get("ok")
         return result
@@ -1013,7 +1038,7 @@ class Api:
         if name not in ("doctor", "profile"):
             return {"ok": False, "error": "Unknown command."}
         ws = workspace_dir()
-        return self._runner.start([name] + list(extra or []), build_run_env({}, ws), ws, name)
+        return self._runner.start([name] + list(extra or []), {**build_run_env({}, ws), **self._dock_env()}, ws, name)
 
     def stop_scan(self) -> Dict[str, Any]:
         return self._runner.stop()
@@ -1109,7 +1134,7 @@ class Api:
         if not chrome_found():
             return {"ok": False, "error": "Google Chrome was not found. Install it first."}
         try:
-            proc = subprocess.run([a for a in self._launcher if a != "--cli"] + ["--signin"], capture_output=True, text=True, timeout=60)
+            proc = subprocess.run([a for a in self._launcher if a != "--cli"] + ["--signin"], capture_output=True, text=True, timeout=60, env={**os.environ, **self._dock_env()})
         except Exception as exc:
             return {"ok": False, "error": str(exc)[:160]}
         return {"ok": proc.returncode == 0, "error": "" if proc.returncode == 0 else "Chrome did not start. See the log files."}
@@ -1134,7 +1159,7 @@ class Api:
         if self._runner.running:
             return {"ok": False, "error": "A run is in progress. Stop it first, or open the job from the Open button."}
         try:
-            proc = subprocess.run([a for a in self._launcher if a != "--cli"] + ["--open", url], capture_output=True, text=True, timeout=60)
+            proc = subprocess.run([a for a in self._launcher if a != "--cli"] + ["--open", url], capture_output=True, text=True, timeout=60, env={**os.environ, **self._dock_env()})
         except Exception as exc:
             return {"ok": False, "error": str(exc)[:160]}
         return {"ok": proc.returncode == 0, "error": "" if proc.returncode == 0 else "Chrome did not open the page. See the log files."}
