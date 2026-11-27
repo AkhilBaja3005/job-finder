@@ -624,6 +624,34 @@ def read_cloud_applications(ws: Path, limit: int = 300) -> List[Dict[str, str]]:
     } for r in rows]
 
 
+def read_account_applications(ws: Path, limit: int = 20000) -> List[Dict[str, str]]:
+    """The applications saved to the job-finder.space account behind the sync code (website, extension and other computers).
+    The answer is kept for 30 seconds so switching screens does not ask the server every time."""
+    code = sync_code(ws)
+    if not code:
+        return []
+    key = (code, server_url(ws))
+    cached = _cloud_cache.get("applications")
+    if cached and cached[0] == key and time.time() - cached[1] < 30:
+        return cached[2]
+    try:
+        data = _server_request(ws, code, "/applications", timeout=30) or {}
+    except Exception:
+        log.debug("could not read the account's applications", exc_info=True)
+        return cached[2] if cached and cached[0] == key else []
+    rows = []
+    for r in (data.get("applications") or [])[:limit]:
+        if not isinstance(r, dict) or not r.get("job_url"):
+            continue
+        score = r.get("score")
+        rows.append({
+            "company": r.get("company") or "", "title": r.get("job_title") or "", "status": r.get("status") or "",
+            "ats": f"{score}%" if score not in (None, "") else "", "platform": r.get("source_mode") or "", "url": r.get("job_url") or "",
+        })
+    _cloud_cache["applications"] = (key, time.time(), rows)
+    return rows
+
+
 def _cloud_urls(cfg: Dict[str, str], user_id: int) -> set:
     """Every job URL already stored for this account (paged, because the server caps one response)."""
     urls: set = set()
@@ -691,7 +719,7 @@ def merge_results(local: List[Dict[str, str]], cloud: List[Dict[str, str]]) -> L
 
 
 # ── results ──────────────────────────────────────────────────────────────────────
-def read_tracker(ws: Path, limit: int = 300) -> List[Dict[str, str]]:
+def read_tracker(ws: Path, limit: int = 20000) -> List[Dict[str, str]]:
     path = ws / "applications_tracker" / "job_applications_tracker.csv"
     try:
         with path.open(newline="", encoding="utf-8") as f:
@@ -1004,6 +1032,7 @@ class Api:
                 cloud = read_cloud_applications(ws)
             except Exception:
                 cloud = []  # offline or key rejected: show the local list
+        cloud = cloud + [r for r in read_account_applications(ws) if r["url"] not in {c["url"] for c in cloud}]
         return merge_results(local, cloud)
 
     def sync_now(self) -> Dict[str, Any]:
@@ -1122,6 +1151,27 @@ class Api:
     def save_saved_answers(self, items: List[Dict[str, str]]) -> Dict[str, Any]:
         from services.saved_answers import save_saved_answers
         return {"ok": True, **save_saved_answers(str(workspace_dir()), items)}
+
+    # Moving the window by its top bar. The page reports how far the pointer has moved since the press.
+    def drag_start(self) -> Dict[str, Any]:
+        w = self._window
+        self._drag_origin = (int(w.x), int(w.y)) if w is not None else None
+        return {"ok": self._drag_origin is not None}
+
+    def drag_to(self, dx: float, dy: float) -> Dict[str, Any]:
+        origin = getattr(self, "_drag_origin", None)
+        if origin is None or self._window is None:
+            return {"ok": False}
+        self._window.move(origin[0] + int(dx), origin[1] + int(dy))
+        return {"ok": True}
+
+    def zoom_window(self) -> Dict[str, Any]:
+        if platform_support.IS_MAC:
+            import native
+            native.toggle_zoom(self._window)
+        elif self._window is not None:
+            self._window.toggle_fullscreen()
+        return {"ok": True}
 
     def problem_report(self) -> Dict[str, Any]:
         return {"ok": True, "text": diagnostics_report(workspace_dir())}
