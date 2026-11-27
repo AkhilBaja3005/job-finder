@@ -98,10 +98,13 @@ jobs:
             if [ -n "$FOUND" ]; then SHA="$FOUND"; fi
           fi
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          # The tests and the Mac arm64 and Windows builds must all have passed on that commit (Mac Intel may fail). Two
+          # The tests and the Mac arm64 and Windows builds must all have passed on that commit (Mac Intel may fail). Cancelled runs
+          # say nothing about the code and are ignored; the newest other result per check counts. Two
           # workflows trigger this one; whichever finishes last finds everything green, the earlier one waits.
           STATE=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100" --jq '
-            [.check_runs[] | select(.name=="Distribution & Test Suite" or .name=="Mac arm64" or .name=="Windows")] as $c
+            [.check_runs[] | select(.name=="Distribution & Test Suite" or .name=="Mac arm64" or .name=="Windows")
+                           | select(.conclusion != "cancelled")]
+            | group_by(.name) | map(max_by(.id)) as $c
             | if ([$c[].name] | unique | length) < 3 then "waiting"
               elif any($c[]; .status != "completed") then "waiting"
               elif all($c[]; .conclusion == "success") then "success"
