@@ -71,8 +71,9 @@ def test_the_app_refuses_to_start_while_another_run_holds_the_lock(tmp_path, mon
     assert sp._other_run_holder(tmp_path / "nowhere") is None
 
 
-def test_an_excel_file_open_elsewhere_gives_a_plain_message():
+def test_an_excel_file_open_elsewhere_gives_a_plain_message(monkeypatch):
     import scan_panel as sp
+    monkeypatch.setattr(sp, "GATE_ENABLED", False)          # no Google session on a build machine
 
     class TrackerLockedError(RuntimeError):
         pass
