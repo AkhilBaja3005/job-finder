@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.4
+
+- Maintenance release.
+
 ## 1.9.3
 
 ### Added
