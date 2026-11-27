@@ -770,6 +770,13 @@
     const ap = S.apply;
     if (!ap.jobs || !ap.jobs.length) { toast("No signed-off jobs ready.", "bad"); return; }
     if (ap.mode === "submit") {
+      const ab = S.info && S.info.about_you;
+      if (ab && ab.exists && ab.unanswered.some((k) => k === "work_authorization" || k === "requires_sponsorship" || k === "notice_period")) {
+        toast("Before applying for real, answer the questions about work rights and your start date.", "bad");
+        await openAboutYou(); await refreshInfo();
+        const again = S.info && S.info.about_you;
+        if (!again || again.unanswered.some((k) => k === "work_authorization" || k === "requires_sponsorship" || k === "notice_period")) return;
+      }
       const count = Math.min(ap.jobs.length, Number(ap.limit) || ap.jobs.length);
       const ok = await dialog({
         title: "Submit " + plural(count, "application") + "?", icon: "alert", danger: true, confirm: "Submit now",
@@ -1310,6 +1317,10 @@
     { view: "settings", sel: '[data-act="build-profile"], [data-act="import-profile"]', title: "Create your profile", text: "Build it from your resume, or import a profile.json you already have. Every form and tailored CV is grounded in it." },
     { view: "settings", sel: '[data-act="edit-about"]', title: "Tell us what your resume cannot", text: "Forms ask where you can work, whether you need a visa, when you can start and what you want to earn. Answer once and the agent uses it.", cta: "Answer now" },
     { view: "settings", sel: '[data-act="open-signin"]', title: "Sign in to job sites", text: "LinkedIn, Indeed and Reed work best when you are signed in. Open Chrome once, sign in, and future runs reuse it." },
+    { view: "settings", sel: "#c-sync", title: "Save applications to your account", text: "Optional. Your Google sign-in keeps every application saved to your job-finder.space account, so it shows on the website and in the extension too." },
+    { view: "settings", sel: "#c-mailbox", title: "See replies automatically", text: "Optional. Connect your mailbox with an app password and employer replies, interviews and rejections are marked for you." },
+    { view: "settings", sel: '[data-act="edit-answers"]', title: "Write answers once", text: "For questions your profile cannot answer, such as why you want the job. The agent types your answer word for word instead of guessing." },
+    { view: "settings", sel: "#sched-time", title: "Run every morning", text: "Optional. Pick a time and a daily run starts by itself, even when the app is closed." },
     { view: "search", sel: "#f-topic", title: "1. Search for jobs", text: "Enter a topic, level, and location. Use Dry-run to inspect the search funnel, or Run to save scored jobs into an Excel workbook." },
     { view: "review", sel: '[data-nav="review"]', title: "2. Review and approve", text: "Tick the jobs you want to apply for, or approve everything above a minimum ATS score." },
     { view: "packs", sel: '[data-nav="packs"]', title: "3. Prepare application packs", text: "Each approved job gets its own folder with a tailored 1-page CV, fit analysis, and cover letter when requested." },
