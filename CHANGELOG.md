@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.5
+
+- Maintenance release.
+
 ## 1.9.4
 
 - Maintenance release.
