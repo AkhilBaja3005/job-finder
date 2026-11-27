@@ -83,10 +83,14 @@ def test_open_path_per_system(monkeypatch):
     assert started == ["C:\\x\\folder"] and ran[-1] == ["notepad.exe", "C:\\x\\.env"]
 
 
-def test_notifications_only_on_a_mac_and_never_raise(monkeypatch):
+def test_notifications_on_mac_and_windows_and_never_raise(monkeypatch):
     ran = []
     monkeypatch.setattr(ps.subprocess, "run", lambda cmd, **kw: ran.append(cmd) or done())
     as_platform(monkeypatch, "windows")
+    ps.notify("Job Finder", "hello")
+    assert ran[0][0] == "powershell.exe"
+    ran.clear()
+    as_platform(monkeypatch, "linux")
     ps.notify("Job Finder", "hello")
     assert ran == []
     as_platform(monkeypatch, "mac")

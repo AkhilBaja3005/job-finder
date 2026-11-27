@@ -60,14 +60,30 @@ def open_path(path: str, as_text: bool = False) -> None:
         os.startfile(path)  # type: ignore[attr-defined]
 
 
+def windows_toast_command(title: str, message: str) -> List[str]:
+    """PowerShell command that shows a Windows toast. Text goes in as environment-free single-quoted literals."""
+    def lit(text: str) -> str:
+        return "'" + str(text).replace("'", "''").replace("\r", " ").replace("\n", " ") + "'"
+    script = (
+        "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; "
+        "$x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); "
+        f"$t = $x.GetElementsByTagName('text'); $t.Item(0).AppendChild($x.CreateTextNode({lit(title)})) | Out-Null; "
+        f"$t.Item(1).AppendChild($x.CreateTextNode({lit(message)})) | Out-Null; "
+        "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Job Finder').Show([Windows.UI.Notifications.ToastNotification]::new($x))"
+    )
+    return ["powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script]
+
+
 def notify(title: str, message: str) -> None:
-    """A system notification where one is easy; silently nothing elsewhere. It is a nicety, never an error."""
-    if not IS_MAC:
-        return
+    """A system notification on macOS and Windows; silently nothing elsewhere. It is a nicety, never an error."""
     try:
-        import json
-        script = f"display notification {json.dumps(message)} with title {json.dumps(title)}"
-        subprocess.run(["osascript", "-e", script], check=False, timeout=5, capture_output=True)
+        if IS_MAC:
+            import json
+            script = f"display notification {json.dumps(message)} with title {json.dumps(title)}"
+            subprocess.run(["osascript", "-e", script], check=False, timeout=5, capture_output=True)
+        elif IS_WINDOWS:
+            subprocess.run(windows_toast_command(title, message), check=False, timeout=10, capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except Exception:
         pass
 

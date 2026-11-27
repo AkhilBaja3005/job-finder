@@ -43,7 +43,7 @@ def test_tick_moves_only_when_window_moves(monkeypatch):
     calls = []
     monkeypatch.setattr(dock, "move_chrome", lambda url, b: calls.append(b) or True)
     win = MagicMock(x=0, y=0, width=1000, height=700)
-    d = dock.Dock(win, "http://127.0.0.1:1", SCREEN)
+    d = dock.Dock(win, "http://127.0.0.1:1", SCREEN, instances=1)
     assert d.tick() is True and d.tick() is False
     win.x = 50
     assert d.tick() is True and len(calls) == 2
@@ -70,3 +70,39 @@ def test_api_docks_only_when_enabled(monkeypatch, tmp_path):
     assert dock.parse_bounds_env(env["JOB_FINDER_DOCK_BOUNDS"]) and started
     api.save_app_prefs({"headless": True})
     assert api._dock_env() == {}  # hidden run: nothing to dock
+
+
+def test_dock_follows_every_chrome_instance(monkeypatch):
+    seen = {}
+    running = {"http://127.0.0.1:9223", "http://127.0.0.1:9225"}
+    def fake_move(url, b):
+        if url in running:
+            seen[url] = b
+            return True
+        return False
+    monkeypatch.setattr(dock, "move_chrome", fake_move)
+    win = MagicMock(x=0, y=0, width=1000, height=700)
+    d = dock.Dock(win, "http://127.0.0.1:9223", SCREEN)
+    assert d.tick() is True and set(seen) == running
+    running.add("http://127.0.0.1:9224")  # a new Chrome starts later and gets placed on the next check
+    assert d.tick() is True and "http://127.0.0.1:9224" in seen
+    assert d.tick() is False
+
+
+def test_windows_toast_command_quotes_text(monkeypatch):
+    import platform_support as ps
+    cmd = ps.windows_toast_command("Job Finder", "it's done\nnow")
+    assert cmd[0] == "powershell.exe" and "'it''s done now'" in cmd[-1]
+
+
+def test_notify_runs_toast_on_windows_and_is_silent_on_error(monkeypatch):
+    import platform_support as ps
+    calls = []
+    monkeypatch.setattr(ps, "IS_MAC", False)
+    monkeypatch.setattr(ps, "IS_WINDOWS", True)
+    monkeypatch.setattr(ps.subprocess, "run", lambda *a, **k: calls.append(a[0]))
+    ps.notify("t", "m")
+    assert calls and calls[0][0] == "powershell.exe"
+    def boom(*a, **k): raise OSError("no powershell")
+    monkeypatch.setattr(ps.subprocess, "run", boom)
+    ps.notify("t", "m")  # never raises

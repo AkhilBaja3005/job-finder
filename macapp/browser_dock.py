@@ -86,10 +86,13 @@ def move_chrome(cdp_url: str, bounds: Bounds) -> bool:
 class Dock:
     """Watches the app window and keeps Chrome docked to it while docking is switched on."""
 
-    def __init__(self, window: Any, cdp_url: str, screen: Bounds, interval: float = 0.6):
+    def __init__(self, window: Any, cdp_url: str, screen: Bounds, interval: float = 0.6, instances: int = 20):
+        """cdp_url is the first Chrome; the agent starts another one on the next port when a Chrome holds too many tabs,
+        so ports up to `instances` above it are docked too."""
         self.window, self.cdp_url, self.screen, self.interval = window, cdp_url, screen, interval
+        self._ports = self._port_urls(cdp_url, instances)
         self._stop = threading.Event()
-        self._last: Optional[Bounds] = None
+        self._last: Dict[str, Bounds] = {}
         self._thread: Optional[threading.Thread] = None
 
     def current_bounds(self) -> Optional[Bounds]:
@@ -98,14 +101,28 @@ class Dock:
         except Exception:
             return None
 
+    @staticmethod
+    def _port_urls(cdp_url: str, instances: int) -> list:
+        head, _, port = cdp_url.rpartition(":")
+        try:
+            return [f"{head}:{int(port) + i}" for i in range(instances)]
+        except ValueError:
+            return [cdp_url]
+
     def tick(self) -> bool:
-        """One check: move Chrome if the app window moved since last time. True when Chrome was moved."""
+        """One check: move every running Chrome that is not at the docked position yet. True when one was moved."""
         bounds = self.current_bounds()
-        if bounds is None or bounds == self._last:
+        if bounds is None:
             return False
-        moved = move_chrome(self.cdp_url, bounds)
-        if moved:
-            self._last = bounds
+        moved = False
+        for url in self._ports:
+            if self._last.get(url) == bounds:
+                continue
+            if move_chrome(url, bounds):
+                self._last[url] = bounds
+                moved = True
+            else:
+                self._last.pop(url, None)  # not running (yet), or restarted: place it when it answers
         return moved
 
     def start(self) -> None:
