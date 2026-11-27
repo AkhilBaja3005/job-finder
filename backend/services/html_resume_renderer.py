@@ -132,7 +132,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <div class="header">
   <div class="name">{{NAME}}</div>
   <div class="contact-bar">
-    {{EMAIL}} | {{PHONE}} | {{LINKS}}
+    {{CONTACT}}
   </div>
 </div>
 
@@ -237,9 +237,7 @@ def render_html_resume(resume_data: Dict[str, Any]) -> str:
     html = (
         HTML_TEMPLATE
         .replace("{{NAME}}", name)
-        .replace("{{EMAIL}}", email)
-        .replace("{{PHONE}}", phone)
-        .replace("{{LINKS}}", link_html)
+        .replace("{{CONTACT}}", " | ".join(part for part in (email, phone, link_html) if part))
         .replace("{{SUMMARY_SECTION}}", summary_sec)
         .replace("{{EXPERIENCE_SECTION}}", exp_sec)
         .replace("{{SKILLS_SECTION}}", skills_sec)

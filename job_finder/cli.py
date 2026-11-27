@@ -130,7 +130,7 @@ def _main():
     if args.subcommand != "mcp":
         check_for_updates()
 
-    if args.subcommand in ("scan", "apply") and getattr(args, "dry_run", False):
+    if args.subcommand == "apply" and getattr(args, "dry_run", False):
         # Dry run: fill and review only. Overrides .env and any auto-submit flag so nothing is submitted.
         os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "0"
         os.environ["BROWSER_USE_DISABLE_GUARDRAILS"] = "0"
@@ -139,7 +139,23 @@ def _main():
             args.submit = False
         ui.info("Dry run: applications will be filled but never submitted.")
 
-    if args.subcommand == "scan":
+    if args.subcommand in ("approve", "prepare", "review", "apply", "open", "tracker"):
+        # These all work on ONE search's Excel: `--search NAME`, else the search you scanned last.
+        try:
+            from backend.services import searches as _searches
+            _s = _searches.resolve_current(getattr(args, "search", None))
+            _searches.activate(_s)
+            if args.subcommand != "tracker" or not getattr(args, "json", False):
+                ui.info(f"Search: {_s.name}")
+        except KeyError as _e:
+            ui.error(str(_e))
+            sys.exit(2)
+
+    if args.subcommand == "searches":
+        from job_finder.commands.searches import run as _run
+        _run(args)
+
+    elif args.subcommand == "scan":
         from job_finder.commands.scan import run as _run
         _run(args)
 
@@ -150,6 +166,30 @@ def _main():
     elif args.subcommand == "outcomes":
         load_workspace_env()
         from job_finder.commands.outcomes import run as _run
+        _run(args)
+
+    elif args.subcommand == "approve":
+        from job_finder.commands.approve import run as _run
+        _run(args)
+
+    elif args.subcommand == "boards":
+        from job_finder.commands.boards import run as _run
+        _run(args)
+
+    elif args.subcommand == "prepare":
+        from job_finder.commands.prepare import run as _run
+        _run(args)
+
+    elif args.subcommand == "review":
+        from job_finder.commands.review import run as _run
+        _run(args)
+
+    elif args.subcommand == "topic":
+        from job_finder.commands.topic import run as _run
+        _run(args)
+
+    elif args.subcommand == "open":
+        from job_finder.commands.open_files import run as _run
         _run(args)
 
     elif args.subcommand == "server":

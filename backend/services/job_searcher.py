@@ -1,6 +1,7 @@
 import os
 import json
 import urllib.parse
+import urllib.error
 import urllib.request
 import re
 import asyncio
@@ -80,7 +81,7 @@ def generate_search_queries_from_resume(resume_data: dict, custom_api_key: Optio
     recent_roles = [exp.get("role", "") for exp in resume_data.get("experience", [])[:2]]
     
     prompt = f"""Given the candidate skills and recent job roles, generate 3-5 high-converting job search queries (keywords) for hiring search engines.
-    Make sure to cover related job domains including Data Science, Machine Learning, AI Engineering, and Data Engineering to discover similar listings.
+    Cover the candidate's own field and closely related job titles so similar listings are discovered.
     
     Skills: {', '.join(skills)}
     Recent Roles: {', '.join(recent_roles)}
@@ -319,6 +320,37 @@ Do not wrap in explanatory text. Only return the JSON array."""
 
 # ─── LinkedIn Scraper (Unauthenticated API) ───────────────────────────────
 
+# LinkedIn's guest API answers HTTP 429 when many searches arrive at once. Allow only a few requests in flight and
+# retry politely, otherwise whole queries silently come back with 0 results.
+import threading as _threading
+_LINKEDIN_GATE = _threading.BoundedSemaphore(3)
+
+
+def _linkedin_get(url: str, headers: dict, attempts: int = 4) -> str:
+    """GET with a concurrency cap and backoff on 429/5xx. Raises the last error if every attempt fails."""
+    import time as _time
+    last: Optional[Exception] = None
+    for attempt in range(1, attempts + 1):
+        try:
+            with _LINKEDIN_GATE:
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=12) as response:
+                    body = response.read().decode("utf-8")
+                _time.sleep(0.3)                    # small pause while holding the gate keeps the overall request rate polite
+                return body
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code not in (429, 500, 502, 503, 504, 999) or attempt == attempts:
+                break
+            _time.sleep(1.5 * attempt + 0.5)       # 2s, 3.5s, 5s: let the rate limit window pass
+        except Exception as e:                      # network hiccup: one quick retry
+            last = e
+            if attempt == attempts:
+                break
+            _time.sleep(1.0)
+    raise last if last else RuntimeError("LinkedIn request failed")
+
+
 def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str = "48h", max_results: int = 75) -> List[JobSearchResult]:
     """
     Scrapes LinkedIn's guest job search API with pagination (start=0, 25, 50, ...)
@@ -355,10 +387,8 @@ def search_linkedin_jobs(keyword: str, location: str = "Remote", timeframe: str 
         log_ist(f"[Job Searcher] Fetching LinkedIn offset {start_offset}: {url}")
         
         try:
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, context=SSL_CONTEXT, timeout=12) as response:
-                html = response.read().decode("utf-8")
-                
+            html = _linkedin_get(url, headers)
+
             soup = BeautifulSoup(html, "html.parser")
             cards = soup.select("li")
             if not cards:
@@ -1692,7 +1722,7 @@ async def find_matching_jobs(
         should_ind = (not platform_filter_active or "indeed" in target_plats) and not any(x in "indeed" for x in excluded_clean)
         should_ats = (not platform_filter_active or "direct ats" in target_plats) and not any(x in "ats" for x in excluded_clean)
 
-        li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=25) if should_li else asyncio.sleep(0, result=[])
+        li_task = _safe_run(search_linkedin_jobs, q, location, timeframe, timeout=150)   # throttled to 3 requests at a time, so allow time to queue if should_li else asyncio.sleep(0, result=[])
         reed_task = _safe_run(search_reed_jobs, q, location, timeframe, timeout=12) if should_reed else asyncio.sleep(0, result=[])
         jobserve_task = _safe_run(search_jobserve_jobs, q, location, timeframe, browser, timeout=15) if should_js else asyncio.sleep(0, result=[])
         targetjobs_task = _safe_run(search_targetjobs_uk, q, location, timeframe, timeout=8) if should_tj else asyncio.sleep(0, result=[])

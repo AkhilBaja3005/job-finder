@@ -3,6 +3,20 @@
 ## Unreleased
 
 ### Added
+- **Staged, Excel-driven job search** (see `docs/STAGED_WORKFLOW.md`). `scan` only discovers jobs and writes them to an Excel; `approve` copies the
+  rows you mark Approve = Yes into `approved_jobs.xlsx`, builds a folder per job (tailored CV, cover letter only if the posting asks for one, job
+  description, fit analysis, `REVIEW.md`); `review --ok ID` signs a pack off; `apply` only handles approved and signed-off jobs. `scan` no longer applies.
+- One Excel per search (`searches`, `scan --search/--into/--name`), and one scan with typed roles and no level files every job into three Excels:
+  intern, graduate and experienced, with Role Level, Years Exp and Core/Related Match columns. Title variants are sampled from an LLM topic map and
+  expanded in rounds that learn only from exact-niche titles (`--expand`, `--core-only`, `topic`).
+- Evidence-based fit scoring (`fit_scorer.py`): each requirement gets a yes/partial/no verdict with profile evidence, scores are arithmetic over those,
+  with caching, knockouts and a degree gate; the keyword scorer stays as the labelled fallback (`--no-ai-score`). Master-resume audit in `ats`.
+- Company-board index (about 8,500 public Greenhouse, Lever and Ashby boards; `boards refresh`), an Adzuna adapter, throttled LinkedIn requests,
+  and de-duplication across sites that keeps the employer's own link.
+- CV tailoring that cannot invent facts (plan over your own bullets, verified in code), rendered through HTML and Chromium (no LaTeX needed).
+- `scan --dry-run` prints the full search funnel and every dropped title and writes nothing.
+
+### Added
 - **More questions in "About you":** how you hear about jobs, relocation, on-site/hybrid/remote, preferred name, pronouns, languages, whether
   you are 18 or older, and consent to background checks. The agent answers "have you worked here before?" from your work history, and stops
   with `BLOCKED:` (the job is marked needs review) instead of guessing on an age check or background-check consent you have not answered.

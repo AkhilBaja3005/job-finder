@@ -322,18 +322,20 @@ async def test_top_applicant_bypasses_jd_scoring_and_tailoring():
 
 
 def test_cli_top_applicant_flag_parsing():
-    """Validates that CLI parsers in both job-finder scan and scanner_cli recognize --top-applicant."""
+    """`scan --top-applicant` is recognised and only DISCOVERS (scan never applies; `apply` does that for approved jobs)."""
     from unittest.mock import AsyncMock, patch
     from job_finder import cli
 
     test_args = ["scan", "--top-applicant", "--headless"]
     with patch("sys.argv", ["job-finder"] + test_args), \
-         patch("applications_tracker.scheduled_job_scanner.run_pipeline", new_callable=AsyncMock) as mock_pipeline:
+         patch("applications_tracker.scheduled_job_scanner.run_scan", new_callable=AsyncMock) as mock_pipeline, \
+         patch("applications_tracker.scheduled_job_scanner.run_pipeline", new_callable=AsyncMock) as mock_apply:
         try:
             cli.main()
         except SystemExit:
             pass
         mock_pipeline.assert_called_once()
+        mock_apply.assert_not_called()
         call_kwargs = mock_pipeline.call_args[1]
         assert call_kwargs.get("top_applicant_only") is True
         assert call_kwargs.get("headless") is True

@@ -37,6 +37,7 @@ def _row(a: Dict[str, Any]) -> Dict[str, Any]:
         "ats": _score(a),
         "status": a.get("status") or "saved",
         "date": str(a.get("updated_at") or a.get("created_at") or "")[:10],
+        "closes": str(a.get("closing_date") or "")[:10],
         "url": a.get("job_url") or a.get("url") or "",
     }
 
@@ -69,7 +70,7 @@ def render_tracker(apps: List[Dict[str, Any]], status: Optional[str] = "all", li
     rows = []
     for a in shown:
         r = _row(a)
-        rows.append([str(r["company"])[:28], str(r["title"])[:48], f"{r['ats']}%" if r["ats"] is not None else "n/a", r["status"], r["date"]])
+        rows.append([str(r["company"])[:28], str(r["title"])[:44], f"{r['ats']}%" if r["ats"] is not None else "n/a", r["status"], r["closes"] or "-", r["date"]])
     title = f"Applications ({len(shown)} of {len(selected)})" + (f" matching '{status}'" if status and status.lower() != "all" else "")
-    ui.print_table(title, ["Company", "Role", "ATS", "Status", "Updated"], rows, status_col=3)
+    ui.print_table(title, ["Company", "Role", "ATS", "Status", "Closes", "Updated"], rows, status_col=3)
     return 0

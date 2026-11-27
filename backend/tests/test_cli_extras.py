@@ -33,7 +33,7 @@ def test_export_csv_and_json_with_filter(tmp_path):
 
 def test_score_against_jd_has_breakdown():
     jd = GOLDEN["cases"][0]["jd"]
-    result = ats_view.score_against_jd(GOLDEN["resume"], jd)
+    result = ats_view.score_against_jd(GOLDEN["resume"], jd, keyword=True)   # the offline engine: no LLM call in a unit test
     assert result["eligible"] and 0 <= result["overall"] <= 100
     assert "python" in result["matched_skills"]
     assert set(result) >= {"skills", "experience", "role_fit", "missing_skills", "breakdown"}
