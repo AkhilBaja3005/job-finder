@@ -56,3 +56,64 @@ def test_ml_titles_match_an_ai_topic(tmp_path, monkeypatch):
     assert spec.matches("Software ML Engineer (C++, Python)")[0]
     assert not spec.matches("HTML Developer")[0]
     assert role_spec._abbreviations(["machine learning", "natural language processing", "deep learning"]) == ["ml", "nlp"]
+
+
+import asyncio  # noqa: E402
+
+
+def test_browser_recovery_launches_once_for_many_callers(monkeypatch):
+    import services.scraper as sc
+    launched = []
+
+    class FakeBrowser:
+        def __init__(self): self.up = True
+        def is_connected(self): return self.up
+
+    async def fake_close(): sc._shared_browser = None
+    async def fake_init():
+        await asyncio.sleep(0.05)
+        launched.append(1)
+        sc._shared_browser = FakeBrowser()
+        return sc._shared_browser
+    monkeypatch.setattr(sc, "_shared_browser", None)
+    monkeypatch.setattr(sc, "close_shared_browser", fake_close)
+    monkeypatch.setattr(sc, "init_shared_browser", fake_init)
+
+    async def run():
+        return await asyncio.gather(*[sc.ensure_shared_browser_alive() for _ in range(12)])
+    results = asyncio.run(run())
+    assert len(launched) == 1 and all(r is results[0] for r in results)
+
+
+def test_indeed_block_is_probed_once_not_per_query(monkeypatch):
+    monkeypatch.setattr(js, "_indeed_blocked_circuit_breaker", False)
+    monkeypatch.setattr(js, "_indeed_probed", False)
+    calls = []
+
+    async def fake(keyword, location="x", timeframe="48h"):
+        calls.append(keyword)
+        await asyncio.sleep(0.02)
+        js._indeed_blocked_circuit_breaker = True       # the first search hits Cloudflare
+        return []
+    monkeypatch.setattr(js, "_search_indeed_jobs", fake)
+
+    async def run():
+        await asyncio.gather(*[js.search_indeed_jobs(f"q{i}", "London") for i in range(12)])
+    asyncio.run(run())
+    assert calls == ["q0"]
+
+
+def test_indeed_runs_in_parallel_once_it_is_known_to_work(monkeypatch):
+    monkeypatch.setattr(js, "_indeed_blocked_circuit_breaker", False)
+    monkeypatch.setattr(js, "_indeed_probed", False)
+    calls = []
+
+    async def fake(keyword, location="x", timeframe="48h"):
+        calls.append(keyword)
+        return []
+    monkeypatch.setattr(js, "_search_indeed_jobs", fake)
+
+    async def run():
+        await asyncio.gather(*[js.search_indeed_jobs(f"q{i}", "London") for i in range(5)])
+    asyncio.run(run())
+    assert len(calls) == 5 and js._indeed_probed is True
