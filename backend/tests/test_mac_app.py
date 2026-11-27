@@ -1312,6 +1312,14 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
     polled = api.poll(0)
     assert polled["applied_rows"][0]["grounding"]["answered_from_profile"] == 5
 
+    # Verify delete_account calls DELETE /user/account and clears local token
+    called_del = []
+    monkeypatch.setattr(scan_panel, "account_token", lambda ws=None: "tok-123")
+    monkeypatch.setattr(scan_panel, "_server_request", lambda ws, tok, path, method="GET", body=None, timeout=20: called_del.append((path, method, body)) or {"status": "deleted"})
+    assert api.delete_account("")["ok"] is False
+    assert api.delete_account("ada@example.com") == {"ok": True}
+    assert called_del == [("/user/account", "DELETE", {"confirm_email": "ada@example.com"})]
+
     # 6. Portal password stored in .env + scan_args flags + closing date cleanup
     assert api.get_state()["portal_password"]["set"] is False
     pw_res = api.save_portal_password("SuperSecret#99")

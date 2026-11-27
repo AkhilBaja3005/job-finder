@@ -934,7 +934,7 @@
       "</section>" +
       '<div class="sect-title">Connections</div><section class="card">' +
         row("Your account", cl.connected ? "Signed in with Google as " + esc(cl.email || (i.session || {}).email || "") + ". Your applications are saved to your job-finder.space account and show on the website and in the extension." : esc(cl.error || "Checking your sign-in…"),
-          (cl.connected ? badge("Connected", "good") : badge("Unreachable", "warn")) + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Sign out</button>', "c-sync") +
+          (cl.connected ? badge("Connected", "good") : badge("Unreachable", "warn")) + '<button class="btn" data-act="sync-cloud">' + icon("refresh") + 'Sync now</button><button class="btn" data-act="disconnect-sync">Sign out</button><button class="btn danger" data-act="delete-account">Delete account…</button>', "c-sync") +
         row("Reply detection", mb.configured ? "Reads the last 30 days of " + esc(mb.user) + " for replies from employers and marks them (reply, interview, rejected, offer). Read only: nothing is sent, deleted or marked read." : "Optional. Connect a mailbox with an app password and replies from employers are marked for you. Automated 'we got your application' mails are ignored.",
           badge("Beta", "accent") + (mb.configured ? '<button class="btn" data-act="check-replies">' + icon("refresh") + 'Check now</button><button class="btn" data-act="disconnect-mailbox">Disconnect</button>' : '<button class="btn" data-act="add-mailbox">Connect…</button>'), "c-mailbox") +
         row("Daily run", S.sched && S.sched.enabled ? "Runs every day at " + String(S.sched.hour).padStart(2, "0") + ":" + String(S.sched.minute).padStart(2, "0") + (S.sched.real ? ", applying for real." : " as a practice run (nothing is submitted).") + " The Mac must be awake; the app does not need to be open." : "Runs a search every day at a time you choose, without opening the app. Starts as a practice run.",
@@ -1000,6 +1000,7 @@
     const t = e.target, f = S.form;
     if (t.id === "f-topic") { f.topic = t.value; return; }
     if (t.id === "f-into") { f.into = t.value; return; }
+    if (t.id === "del-confirm-email") { S._delEmail = t.value; return; }
     if (t.id === "f-location") f.location = t.value;
     else if (t.id === "f-ats") f.min_ats = t.value;
     else if (t.id === "f-limit") f.limit = t.value;
@@ -1190,6 +1191,22 @@
       case "cancel-signin": { await call("cancel_google_sign_in"); await new Promise((res) => setTimeout(res, 600)); await refreshInfo(); renderShell(); return; }
       case "retry-session": { await call("session_check"); await refreshInfo(); renderShell(); if (S.info && S.info.session && S.info.session.signed_in) onSignedIn(); return; }
       case "disconnect-sync": { await call("disconnect_sync"); S.apps.rows = null; toast("Signed out. Your applications stay on this computer."); await refreshInfo(); renderSettings(); return; }
+      case "delete-account": {
+        const email = (S.info && (S.info.cloud && S.info.cloud.email || S.info.session && S.info.session.email)) || "";
+        S._delEmail = "";
+        const ok = await dialog({
+          title: "Delete your account?", icon: "alert", danger: true, confirm: "Delete account",
+          body: "<p>This permanently removes your account, saved resumes, and synced application history from job-finder.space. Local files on this computer stay intact.</p>" +
+            '<div class="field" style="margin-top:12px"><label for="del-confirm-email">Type your email (' + esc(email) + ') to confirm</label>' +
+            '<input class="input" id="del-confirm-email" type="email" placeholder="' + esc(email) + '" autocomplete="off"></div>',
+        });
+        if (!ok) return;
+        const typed = S._delEmail || "";
+        if (!typed.trim()) { toast("Type your email to confirm.", "bad"); return; }
+        const r = await call("delete_account", typed.trim());
+        if (r && r.ok) { S.apps.rows = null; toast("Account deleted from job-finder.space."); await refreshInfo(); renderShell(); }
+        return;
+      }
       case "sync-cloud": { const r = await call("sync_cloud_now"); if (r && r.ok) toast(r.pushed ? "Added " + plural(r.pushed, "application") + " to job-finder.space." : "job-finder.space is up to date."); else toast((r && r.error) || "Sync failed.", "bad"); await refreshInfo(); renderSettings(); return; }
       case "stop": return void call("stop_scan");
       case "goto-settings": return go("settings");

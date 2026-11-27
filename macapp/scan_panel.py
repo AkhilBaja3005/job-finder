@@ -569,6 +569,32 @@ def disconnect_sync(ws: Path) -> Dict[str, Any]:
     return {"ok": True}
 
 
+def delete_account_on_server(ws: Path, confirm_email: str) -> Dict[str, Any]:
+    """Permanently deletes the user's account and synced data from the server, then signs out locally."""
+    token = account_token(ws)
+    if not token:
+        return {"ok": False, "error": "Sign in to delete your account."}
+    email = str(confirm_email or "").strip()
+    if not email:
+        return {"ok": False, "error": "Type your account email to confirm."}
+    try:
+        _server_request(ws, token, "/user/account", "DELETE", {"confirm_email": email}, timeout=25)
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = json.loads(exc.read().decode("utf-8", errors="replace")).get("detail", "")
+        except Exception:
+            detail = ""
+        return {"ok": False, "error": detail or f"Could not delete account (HTTP {exc.code})."}
+    except Exception as exc:
+        return {"ok": False, "error": _explain(exc)}
+    for var in LEGACY_SYNC_VARS:
+        write_env_value(ws, var, "")
+    _store_account("", "")
+    _cloud_cache.clear()
+    _session.update(ok=False, checked=0.0, token="")
+    return {"ok": True}
+
+
 def _about_state(ws: Path) -> Dict[str, Any]:
     try:
         from services.about_you import read_about_you
@@ -1542,6 +1568,9 @@ class Api:
 
     def disconnect_sync(self) -> Dict[str, Any]:
         return disconnect_sync(workspace_dir())
+
+    def delete_account(self, confirm_email: str) -> Dict[str, Any]:
+        return delete_account_on_server(workspace_dir(), confirm_email)
 
     def sync_cloud_now(self) -> Dict[str, Any]:
         outcome = sync_to_cloud(workspace_dir())

@@ -320,6 +320,11 @@
     sync_now: async () => { await wait(600); return { ok: true, pushed: 3, already: rows.length }; },
     sync_cloud_now: async () => { await wait(600); return { ok: true, pushed: 2, already: rows.length }; },
     disconnect_sync: async () => { state.cloud.connected = false; return { ok: true }; },
+    delete_account: async (confirmEmail) => {
+      if (String(confirmEmail || "").trim().toLowerCase() !== "me@example.com") return { ok: false, error: "The email does not match this account" };
+      state.cloud.connected = false; window.__signin = "idle";
+      return { ok: true };
+    },
     save_mailbox: async (user) => { state.mailbox = { configured: true, user: user || "me@example.com" }; return { ok: true }; },
     disconnect_mailbox: async () => { state.mailbox = { configured: false }; return { ok: true }; },
     check_replies_now: async () => ({ ok: true, updated: 0, checked: 14 }),
