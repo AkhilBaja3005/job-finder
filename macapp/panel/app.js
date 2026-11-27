@@ -144,7 +144,9 @@
           '<div class="field"><label>Skip these job sites</label>' + tagsInput("skip_portals", f.skip_portals, "e.g. workday") + "</div>" +
           '<div class="two"><div class="field"><label for="f-ai">AI that drives the browser</label><select class="select" id="f-ai">' +
             [["auto", "Automatic"], ["gemini", "Gemini"], ["anthropic", "Claude"], ["openai", "OpenAI"]].map(([v, l]) => '<option value="' + v + '"' + (f.primary_ai === v ? " selected" : "") + ">" + l + "</option>").join("") + "</select></div>" +
-          '<div class="field"><span class="label">Browser window</span><label class="row-between" style="font-weight:400;color:var(--text)"><span>Hide while running</span><span class="switch"><input type="checkbox" id="f-headless"' + (f.headless ? " checked" : "") + '><i></i></span></label></div></div>' +
+          '<div class="field"><span class="label">Browser window</span><label class="row-between" style="font-weight:400;color:var(--text)"><span>Hide while running</span><span class="switch"><input type="checkbox" id="f-headless"' + (f.headless ? " checked" : "") + '><i></i></span></label>' +
+            '<label class="row-between" style="font-weight:400;color:var(--text)"><span>Dock beside this window</span><span class="switch"><input type="checkbox" id="f-dock"' + (S.dock ? " checked" : "") + '><i></i></span></label>' +
+            '<div class="help">Chrome opens against this window and follows it when you move or resize it.</div></div></div>' +
         "</div></details>" +
       "</section>" +
       '<section class="card act-card" aria-label="Activity"><div class="card-head"><h2>Activity</h2><div class="right"><button class="btn quiet" data-act="copy-log">Copy</button><button class="btn quiet" data-act="open-logs">Open log files</button></div></div>' +
@@ -400,6 +402,7 @@
     if (t.dataset && t.dataset.stage) { const url = t.dataset.stage, v = t.value; t.value = ""; if (!v) return;
       call("set_status", url, v).then(async (r) => { if (r && r.ok) { toast("Status updated."); await loadApps(true); await refreshInfo(); } else toast((r && r.error) || "Could not update.", "bad"); }); return; }
     if (t.id === "f-ai") { S.form.primary_ai = t.value; call("save_app_prefs", { primary_ai: t.value }); }
+    else if (t.id === "f-dock") { S.dock = t.checked; call("save_app_prefs", { dock_browser: t.checked }); }
     else if (t.id === "f-headless") { S.form.headless = t.checked; call("save_app_prefs", { headless: t.checked }); }
   });
   document.addEventListener("toggle", (e) => { if (e.target.classList && e.target.classList.contains("disclosure")) S.advOpen = e.target.open; }, true);
@@ -470,7 +473,7 @@
   function hydrateForm() {
     const p = S.info.prefs;
     Object.assign(S.form, { roles: p.roles, location: p.location, timeframe: ["24h", "48h", "1w"].includes(p.timeframe) ? p.timeframe : "24h", min_ats: p.min_ats,
-      title_keywords: p.title_keywords, skip_portals: p.skip_portals, primary_ai: (S.info.app_prefs || {}).primary_ai || "auto", headless: !!(S.info.app_prefs || {}).headless });
+      title_keywords: p.title_keywords, skip_portals: p.skip_portals, primary_ai: (S.info.app_prefs || {}).primary_ai || "auto", headless: !!(S.info.app_prefs || {}).headless }); S.dock = !!(S.info.app_prefs || {}).dock_browser;
   }
   function watchBrowser() {
     if (S._bt) return;
