@@ -184,7 +184,10 @@ Do not wrap in explanatory text. Only return the JSON array."""
         import concurrent.futures
         all_429 = True
         for search_model in ATS_SEARCH_MODELS:
+            keys_429 = 0
             for key_candidate in available_keys:
+                if _ats_grounding_quota_exhausted:      # another query stream already found every key rate-limited
+                    return []
                 client = genai.Client(api_key=key_candidate)
                 try:
                     def _do_ats_search():
@@ -211,6 +214,7 @@ Do not wrap in explanatory text. Only return the JSON array."""
                     err_str = str(model_err).lower()
                     if "429" in err_str or "resource_exhausted" in err_str:
                         key_hint = f"...{key_candidate[-4:]}" if len(key_candidate) >= 6 else "key"
+                        keys_429 += 1
                         print(f"[Direct ATS Search] Key {key_hint} quota limit reached (429), rotating to next API key...")
                         continue
                     all_429 = False
@@ -218,10 +222,14 @@ Do not wrap in explanatory text. Only return the JSON array."""
                     break
             if raw_text:
                 break
+            if keys_429 == len(available_keys):
+                # A 429 is a per-key quota, so a second model on the same keys would fail the same way.
+                break
         if not raw_text:
             if all_429:
+                if not _ats_grounding_quota_exhausted:
+                    print("[Direct ATS Search] All candidate keys quota limited (429), flipping circuit breaker ON for session.")
                 _ats_grounding_quota_exhausted = True
-                print("[Direct ATS Search] All candidate keys quota limited (429), flipping circuit breaker ON for session.")
             return []
             
         items = []
@@ -1387,6 +1395,19 @@ def _extract_salary_and_seniority(text: str, title: str, company: Optional[str] 
     return {"seniority": seniority, "salary": salary, "company_size": company_size}
 
 
+_FEE_STRONG = ("course cost", "course fee", "course fees", "training course and fees", "refund you 100%", "fees of £", "fee of £",
+               "training cost", "payable by monthly", "per month for the course", "get your money back", "job guaranteed - complete")
+_FEE_WEAK = ("traineeship", "training course", "job guaranteed", "fees apply")
+
+
+def _looks_fee_based(jd_text: str) -> bool:
+    """True for a paid course dressed up as a job: one 'you pay' phrase, or two weaker hints together."""
+    text = (jd_text or "").lower()
+    if any(p in text for p in _FEE_STRONG):
+        return True
+    return sum(1 for p in _FEE_WEAK if p in text) >= 2
+
+
 async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, browser, semaphore: asyncio.Semaphore, on_log=None) -> Optional[dict]:
     """Fetches the real JD for a single job (with 24h TTLCache lookup) and scores it with the exact same
     deterministic engine (compute_ats_score / compute_overall_score) that the
@@ -1426,15 +1447,10 @@ async def _score_job_with_real_jd(job: JobSearchResult, resume_data: dict, brows
     if not jd_text or len(jd_text.strip()) < 20:
         return None
 
-    # Filter out paid courses / fee-based training schemes disguised as jobs inside BOTH cleaned JD and raw scraped HTML text
-    combined_text_lower = (jd_text + "\n" + raw_text).lower()
-    fee_patterns = [
-        "course cost", "course fee", "fees apply", "traineeship", "training course and fees",
-        "refund you 100%", "fees of £", "fee of £", "training cost", "payable by monthly",
-        "per month for the course", "get your money back", "job guaranteed - complete",
-        "job guaranteed", "training course", "course fees"
-    ]
-    if any(fp in combined_text_lower for fp in fee_patterns):
+    # Filter out paid courses / fee-based training schemes disguised as jobs. Only the job description is read (raw page
+    # text also holds other listings and footers), and only phrases that mean "you pay" reject on their own. Phrases that
+    # also appear in ordinary benefits sections ("training course", "traineeship") need two such hints together.
+    if _looks_fee_based(jd_text):
         print(f"[Job Searcher] Rejecting fee-based course/training listing: '{job.title}'")
         return None
 
