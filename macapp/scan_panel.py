@@ -6,6 +6,7 @@ process, and shows the output and the tracker. Everything here works without a w
 """
 from __future__ import annotations
 
+import contextlib
 import csv
 import functools
 import json
@@ -193,8 +194,21 @@ def key_status(ws: Path) -> Dict[str, Dict[str, Any]]:
 
 # ── the scan command ─────────────────────────────────────────────────────────────
 def build_scan_args(options: Dict[str, Any]) -> List[str]:
-    """The arguments after `job-finder` for one run. Always says explicitly whether to submit."""
-    args = ["scan", "--auto-apply" if options.get("mode") == "auto_apply" else "--dry-run"]
+    """The arguments after `job-finder` for one run. A scan only searches and saves to the Excel: it never applies.
+    `mode: "practice"` adds --dry-run (search and filter only, nothing written). The old modes `dry_run` and
+    `auto_apply` both mean a normal saving scan, because `scan` no longer applies."""
+    args = ["scan"]
+    if options.get("mode") == "practice":
+        args.append("--dry-run")
+    topic = str(options.get("topic") or "").strip()
+    if topic:
+        args += ["--topic", topic]
+    level = str(options.get("level") or "").strip().lower()
+    if level in ("intern", "graduate", "experienced", "all"):
+        args += ["--level", level]
+    for flag, key in (("--search", "search"), ("--into", "into")):
+        if str(options.get(key) or "").strip():
+            args += [flag, str(options[key]).strip()]
     for flag, key in (("--limit", "limit"), ("--min-ats", "min_ats")):
         try:
             value = int(options.get(key))
@@ -719,13 +733,57 @@ def read_account_applications(ws: Path, limit: int = 20000) -> List[Dict[str, st
     return rows
 
 
+def _csv_path(ws: Path) -> Path:
+    return ws / "applications_tracker" / "job_applications_tracker.csv"
+
+
 def _csv_all(ws: Path) -> List[Dict[str, str]]:
-    path = ws / "applications_tracker" / "job_applications_tracker.csv"
     try:
-        with path.open(newline="", encoding="utf-8") as f:
+        with _csv_path(ws).open(newline="", encoding="utf-8") as f:
             return list(csv.DictReader(f))
     except OSError:
         return []
+
+
+@contextlib.contextmanager
+def _workspace_env(ws: Path):
+    """The tracker code finds its folder through JOB_FINDER_ROOT; point it at this workspace for the call."""
+    old = os.environ.get("JOB_FINDER_ROOT")
+    os.environ["JOB_FINDER_ROOT"] = str(ws)
+    try:
+        yield
+    finally:
+        if old is None:
+            os.environ.pop("JOB_FINDER_ROOT", None)
+        else:
+            os.environ["JOB_FINDER_ROOT"] = old
+
+
+def excel_workbooks(ws: Path) -> List[str]:
+    """Every scanned-jobs workbook in the workspace (the original one plus one per search). Empty when there are none."""
+    try:
+        from services import searches
+        with _workspace_env(ws):
+            return [s.scanned for s in searches.list_searches() if s.exists]
+    except Exception:
+        log.debug("could not list the Excel workbooks", exc_info=True)
+        return []
+
+
+def _excel_rows(ws: Path) -> Optional[List[Dict[str, Any]]]:
+    """All rows of all workbooks, oldest first, or None when no workbook exists (the caller falls back to the CSV)."""
+    books = excel_workbooks(ws)
+    if not books:
+        return None
+    from services.excel_tracker import ExcelTracker
+    rows: List[Dict[str, Any]] = []
+    with _workspace_env(ws):
+        for path in books:
+            try:
+                rows += ExcelTracker(path).rows()
+            except Exception:
+                log.debug("could not read %s", path, exc_info=True)
+    return rows
 
 
 def merge_results(local: List[Dict[str, str]], cloud: List[Dict[str, str]]) -> List[Dict[str, Any]]:
@@ -745,10 +803,21 @@ def merge_results(local: List[Dict[str, str]], cloud: List[Dict[str, str]]) -> L
 
 
 # ── results ──────────────────────────────────────────────────────────────────────
+def _ats_text(value: Any) -> str:
+    text = str(value if value is not None else "").strip()
+    return f"{text}%" if text and not text.endswith("%") else text
+
+
 def read_tracker(ws: Path, limit: int = 20000) -> List[Dict[str, str]]:
-    path = ws / "applications_tracker" / "job_applications_tracker.csv"
+    """Applications for the Results screen, newest first. Reads the Excel workbooks; uses the old CSV only when there are none."""
+    excel = _excel_rows(ws)
+    if excel is not None:
+        return [{
+            "company": str(r.get("Company") or ""), "title": str(r.get("Job Role") or ""), "status": str(r.get("Status") or ""),
+            "ats": _ats_text(r.get("ATS %")), "platform": str(r.get("Platform") or ""), "url": str(r.get("Job URL") or ""),
+        } for r in reversed(excel[-limit:])]
     try:
-        with path.open(newline="", encoding="utf-8") as f:
+        with _csv_path(ws).open(newline="", encoding="utf-8") as f:
             rows = list(csv.DictReader(f))
     except OSError:
         return []
@@ -776,12 +845,25 @@ STAGES = {
 }
 
 
-def set_application_stage(ws: Path, url: str, stage: str) -> Dict[str, Any]:
-    """Changes the Status of the tracker row with this job URL. Only the Status cell is touched; the file is replaced in one step."""
-    label = STAGES.get(stage)
-    if not label:
-        return {"ok": False, "error": "Unknown status."}
-    path = ws / "applications_tracker" / "job_applications_tracker.csv"
+# What each stage writes into the Excel Status column. The workbook has no "Replied" status, so that one adds a note.
+EXCEL_STATUS = {"applied": "Applied", "interview": "Interview", "offer": "Offer", "rejected": "Rejected", "skipped": "Skipped"}
+
+
+def _set_stage_excel(ws: Path, url: str, stage: str, books: List[str]) -> bool:
+    from services.excel_tracker import ExcelTracker
+    changed = False
+    with _workspace_env(ws):
+        for path in books:
+            tracker = ExcelTracker(path)
+            if stage == "replied":
+                changed |= tracker.update(url=url.strip(), append_note="Replied")
+            else:
+                changed |= tracker.update(url=url.strip(), Status=EXCEL_STATUS[stage])
+    return changed
+
+
+def _set_stage_csv(ws: Path, url: str, label: str) -> Dict[str, Any]:
+    path = _csv_path(ws)
     try:
         with path.open(newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -804,6 +886,26 @@ def set_application_stage(ws: Path, url: str, stage: str) -> Dict[str, Any]:
         writer.writeheader()
         writer.writerows(rows)
     os.replace(tmp, path)
+    return {"ok": True}
+
+
+def set_application_stage(ws: Path, url: str, stage: str) -> Dict[str, Any]:
+    """Moves the application with this job URL to a new stage, in the Excel workbook(s) (CSV only when there are none)."""
+    label = STAGES.get(stage)
+    if not label:
+        return {"ok": False, "error": "Unknown status."}
+    books = excel_workbooks(ws)
+    if books:
+        try:
+            changed = _set_stage_excel(ws, url, stage, books)
+        except Exception as exc:
+            return {"ok": False, "error": f"The Excel tracker could not be updated: {exc}"}
+        if not changed:
+            return {"ok": False, "error": "That application is not in the tracker."}
+    else:
+        result = _set_stage_csv(ws, url, label)
+        if not result.get("ok"):
+            return result
     code = account_secret(ws)
     if code:  # best effort: the account on job-finder.space follows along
         try:
@@ -818,7 +920,7 @@ def stage_counts(rows: List[Dict[str, str]]) -> Dict[str, int]:
     for row in rows:
         status = (row.get("status") or row.get("Status") or "").lower()
         for key, label in STAGES.items():
-            if status == label.lower():
+            if status == label.lower() or status == EXCEL_STATUS.get(key, "").lower():
                 counts[key] += 1
     return counts
 
@@ -1186,13 +1288,14 @@ class Api:
         return {"ok": True, **scheduler.status(workspace=workspace_dir())}
 
     def set_schedule(self, enabled: bool, hour: int = 8, minute: int = 0, real: bool = False) -> Dict[str, Any]:
-        """Turns the daily run on or off. A real (submitting) run is only scheduled when `real` is True."""
+        """Turns the daily run on or off. The daily run only scans and saves to the Excel; it never applies.
+        `real` is kept so older panels keep working, and is ignored."""
         import scheduler
         if not enabled:
             return scheduler.remove(workspace=workspace_dir())
         ws = workspace_dir()
         prefs = load_app_prefs()
-        options = {"mode": "auto_apply" if real else "dry_run", "primary_ai": prefs.get("primary_ai"), "headless": True}
+        options = {"primary_ai": prefs.get("primary_ai"), "headless": True}
         program = list(self._launcher) + build_scan_args(options)
         env = build_run_env(options, ws, base={})
         env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_dir())
