@@ -300,6 +300,8 @@ def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Opt
         try:
             tailored = cv_tailor.tailor_cv(master, jd_text, title, company, level, llm=llm)
             cv = tailored.cv
+            if not tailored.tailored and tailored.warnings:
+                warnings.append(f"CV not tailored ({tailored.warnings[-1]}); using your master CV.")
             _write(os.path.join(folder, "cv_changes.md"), cv_tailor.render_changes_md(tailored, title, company))
         except cv_tailor.TailorUnavailable as e:
             cv = master
