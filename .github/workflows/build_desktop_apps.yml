@@ -117,6 +117,9 @@ jobs:
           # Opens the real window, waits for the page and the Python bridge, prints what rendered, and quits.
           JOB_FINDER_APP_SELFTEST=1 "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" | tee selftest.txt
           grep -q '"info": true' selftest.txt
+          # The LaTeX engine travels inside the app and compiles a CV from its own warmed cache.
+          "dist-mac/Job Finder.app/Contents/MacOS/Job Finder" --latex-check | tee latexcheck.txt
+          grep -q '"bundled": true' latexcheck.txt && grep -q '"ok": true' latexcheck.txt
 
       - name: Give the file a stable name
         run: cp dist-mac/Job-Finder-*.dmg "dist-mac/Job-Finder-${{ matrix.arch }}.dmg"
@@ -174,6 +177,10 @@ jobs:
           $r = Invoke-App @() 120
           Write-Host $r.Out
           if ($r.Out -notmatch '"info": true') { Write-Host $r.Err; throw "The page did not finish loading in the window" }
+          $env:JOB_FINDER_APP_SELFTEST = ""
+          $r = Invoke-App @("--latex-check") 300
+          Write-Host $r.Out
+          if ($r.Out -notmatch '"bundled": true' -or $r.Out -notmatch '"ok": true') { Write-Host $r.Err; throw "The bundled LaTeX engine did not compile a CV" }
 
       - name: Give the file a stable name
         shell: pwsh

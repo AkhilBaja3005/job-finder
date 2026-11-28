@@ -179,3 +179,25 @@ def test_api_reset_discards_edits_but_not_the_cv_pdf(api):
     (pack / "cv_latex.pdf").write_bytes(b"%PDF-x")
     r = a.reset_pack_latex("1")
     assert r["ok"] and r["source"] == "generated" and not (pack / "cv.tex").exists() and (pack / "cv.pdf").exists()
+
+
+def test_a_rebuild_does_not_replace_the_latex_pdf_the_candidate_chose(tmp_path, monkeypatch):
+    import services.application_pack as ap
+    folder = tmp_path / "pack"
+    folder.mkdir()
+    (folder / "cv.json").write_text(json.dumps(CV))
+    (folder / "cv.pdf").write_bytes(b"%PDF-LATEX-CHOICE")
+    (folder / "cv_latex.pdf").write_bytes(b"%PDF-LATEX-CHOICE")
+    (folder / "manifest.json").write_text(json.dumps({"cv_source": "latex"}))
+    rendered = []
+    monkeypatch.setattr(ap, "render_cv_pdf", lambda html, path: rendered.append(path) or True)
+    row = {"ID": 1, "Company": "Acme", "Job Role": "Engineer", "Job URL": "https://x.test/j"}
+    res = ap.build_pack(row, {"name": "Ada"}, "A long enough job description. " * 10, cover_letter="never", base_dir=str(tmp_path / "p2"))
+    # a different pack folder is built from scratch: it renders normally
+    assert rendered
+    rendered.clear()
+    monkeypatch.setattr(ap, "pack_folder_for", lambda row, base=None: str(folder))
+    res = ap.build_pack(row, {"name": "Ada"}, "A long enough job description. " * 10, cover_letter="never", render_only=True, base_dir=str(tmp_path))
+    assert rendered == [] and (folder / "cv.pdf").read_bytes() == b"%PDF-LATEX-CHOICE"
+    assert json.loads((folder / "manifest.json").read_text())["cv_source"] == "latex"
+    assert any("edited LaTeX" in w for w in res.warnings)

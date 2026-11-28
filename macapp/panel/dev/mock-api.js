@@ -59,6 +59,7 @@
     "15": { state: "not_started", error: "" },
   };
 
+  let mockConfirmed = [];
   const mockTex = String.raw`\documentclass[11pt]{resume}
 \usepackage{times}
 \name{AKHIL BAJA}
@@ -249,6 +250,14 @@ Applied AI/ML engineer with 3+ years of experience building production GenAI and
       }, 2800);
       return { ok: true };
     },
+    list_confirmed_experience: async () => ({ ok: true, items: mockConfirmed.slice() }),
+    confirm_experience: async (skill, evidence) => {
+      await wait(150);
+      if (String(evidence || "").trim().length < 20) return { ok: false, error: "Say in a sentence where you used it (at least 20 characters). It is kept as your own evidence." };
+      mockConfirmed = mockConfirmed.filter((i) => i.skill.toLowerCase() !== String(skill).toLowerCase()).concat([{ skill, evidence, group: "" }]);
+      return { ok: true, items: mockConfirmed.slice() };
+    },
+    remove_confirmed_experience: async (skill) => { mockConfirmed = mockConfirmed.filter((i) => i.skill !== skill); return { ok: true, items: mockConfirmed.slice() }; },
     get_pack_latex: async (id) => { await wait(120); return { ok: true, tex: mockTex, source: "generated", available: true, pages: [], in_use: false }; },
     reset_pack_latex: async (id) => { await wait(120); return { ok: true, tex: mockTex, source: "generated", available: true, pages: [], in_use: false }; },
     compile_pack_latex: async (id, tex) => {

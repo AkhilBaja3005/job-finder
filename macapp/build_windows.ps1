@@ -10,6 +10,10 @@ if (-not (Test-Path $venv)) { & $py -m venv $venv }
 & "$venv\Scripts\python.exe" -m pip install -q -r backend\requirements.txt -r macapp\requirements-app.txt
 if ($LASTEXITCODE -ne 0) { throw "Installing the requirements failed" }
 
+& "$venv\Scripts\python.exe" macapp\fetch_tectonic.py     # the LaTeX engine and its warmed cache go inside the app
+if ($LASTEXITCODE -ne 0) { throw "Fetching Tectonic failed" }
+$env:JOB_FINDER_REQUIRE_TECTONIC = "1"
+
 if (Test-Path dist-win) { Remove-Item dist-win -Recurse -Force }
 & "$venv\Scripts\pyinstaller.exe" macapp\job_finder.spec --noconfirm --distpath dist-win --workpath (Join-Path (Get-Location).Path ".winbuild\work")
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }
