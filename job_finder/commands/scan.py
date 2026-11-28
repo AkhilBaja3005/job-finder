@@ -11,10 +11,38 @@ logger = logging.getLogger(__name__)
 
 
 def run(args: argparse.Namespace):
+    import asyncio
+    import os
+
     request = " ".join(args.request or []).strip()
-    if request.lower().startswith(("http://", "https://")) or args.retired_apply_flag or args.retired_apply_opt:
-        ui.error("`scan` only discovers jobs now; it no longer tailors resumes or applies.")
-        ui.info("Run `job-finder scan` to fill the Excel tracker, then `job-finder apply` (or `apply <url>`) to apply.")
+    direct_mode = bool(getattr(args, "auto_apply", False) or getattr(args, "direct", False))
+    if direct_mode or request.lower().startswith(("http://", "https://")):
+        from applications_tracker.scheduled_job_scanner import run_pipeline
+        if getattr(args, "auto_apply", False):
+            os.environ["JOB_FINDER_DISABLE_GUARDRAILS"] = "1"
+        is_url = request.lower().startswith(("http://", "https://"))
+        asyncio.run(run_pipeline(
+            target_url=request if is_url else None,
+            timeout=getattr(args, "timeout", 300.0) or 300.0,
+            tailor_timeout=getattr(args, "tailor_timeout", 90.0) or 90.0,
+            max_steps=getattr(args, "max_steps", 50) or 50,
+            max_apps=args.limit if getattr(args, "limit", 0) > 0 else None,
+            min_ats=getattr(args, "min_ats", None),
+            role=getattr(args, "role", None) or (request if request and not is_url else None),
+            location_override=getattr(args, "location", None),
+            timeframe_override=getattr(args, "timeframe", None),
+            model_override=getattr(args, "model", None),
+            headless=True if getattr(args, "headless", False) else None,
+            auto_submit_override=True if getattr(args, "auto_apply", False) else None,
+            top_applicant_only=True if getattr(args, "top_applicant", False) else None,
+            sponsor_only=True if getattr(args, "sponsor_only", False) else None,
+            skip_portals=getattr(args, "skip_portals", None),
+        ))
+        return
+
+    if getattr(args, "retired_apply_flag", False) or getattr(args, "retired_apply_opt", None):
+        ui.error("`scan` only discovers jobs unless `--auto-apply` or `--direct` is passed.")
+        ui.info("Run `job-finder scan` to fill the Excel tracker, or add `--auto-apply` / `--direct` to bypass Excel.")
         sys.exit(2)
 
     try:

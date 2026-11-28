@@ -80,10 +80,11 @@ def build_parser(version: str) -> argparse.ArgumentParser:
     scanner_parser.add_argument("--score-all", action="store_true", help="Also AI-score experienced roles (default: only intern and graduate roles)")
     scanner_parser.add_argument("--no-boards", action="store_true", help="Skip the company-board index (Greenhouse / Lever / Ashby boards)")
     scanner_parser.add_argument("--dry-run", action="store_true", help="Search and filter only: print the whole funnel and every dropped title, write nothing, score nothing")
-    for _flag in ("--auto-apply", "--auto-submit"):
-        scanner_parser.add_argument(_flag, dest="retired_apply_flag", action="store_true", help=argparse.SUPPRESS)
-    for _flag in ("--timeout", "--tailor-timeout", "--max-steps"):
-        scanner_parser.add_argument(_flag, dest="retired_apply_opt", default=None, help=argparse.SUPPRESS)
+    scanner_parser.add_argument("--direct", action="store_true", help="Bypass the Excel staged workflow: scan, tailor, and apply directly in one pass")
+    scanner_parser.add_argument("--auto-apply", "--auto-submit", dest="auto_apply", action="store_true", help="Direct mode: scan and automatically submit applications without the Excel staged workflow")
+    scanner_parser.add_argument("--timeout", type=float, default=300.0, help="Direct mode autofill session timeout in seconds (default: 300s)")
+    scanner_parser.add_argument("--tailor-timeout", type=float, default=90.0, help="Direct mode resume tailoring timeout in seconds (default: 90s)")
+    scanner_parser.add_argument("--max-steps", type=int, default=50, help="Direct mode max browser-use steps per application (default: 50)")
 
     outcomes_parser = subparsers.add_parser(
         "outcomes",
