@@ -662,7 +662,8 @@
       const sel = packs.find((p) => p.id === d.selectedId) || packs[0];
       const doc = d.data;
       const isSigned = sel && sel.state === "signed_off";
-      const tabs = [["review", "REVIEW.md"], ["cover", "Cover Letter"], ["fit", "Fit Analysis"], ["cv", "Tailored CV"]];
+      const signoffBlocked = doc && doc.signoff_allowed === false;
+      const tabs = [["review", "REVIEW.md"], ["evidence", "Evidence & Risk"], ["diff", "Diff & Revert"], ["cover", "Cover Letter"], ["fit", "Fit Analysis"], ["cv", "Tailored CV"]];
       let content = "";
       if (d.loading) {
         content = '<div class="skeleton" style="margin:12px 0"></div><div class="skeleton" style="margin:12px 0;width:70%"></div>';
@@ -670,10 +671,45 @@
         content = '<p class="help">Could not load pack documents.</p>';
       } else if (d.tab === "review") {
         content = '<div class="doc-md">' + renderMarkdown(doc.review_md) + "</div>";
+      } else if (d.tab === "evidence") {
+        const ev = doc.evidence_panel || {};
+        const sc = doc.scores || {};
+        const scoreHtml = '<div class="score-strip">' +
+          '<span class="score-pill">Master score: <strong>' + esc(sc.master_score ?? "—") + "</strong></span>" +
+          '<span class="score-pill">Tailored score: <strong>' + esc(sc.tailored_score ?? "—") + "</strong></span>" +
+          '<span class="score-pill">Keywords: <strong>' + esc(sc.coverage_before ?? "—") + " → " + esc(sc.coverage_after ?? "—") + "</strong></span>" +
+          (sc.regression_blocked ? '<span class="score-pill">Regression blocked: <strong>' + esc(sc.regression_blocked) + "</strong></span>" : "") +
+          "</div>";
+        const flagsHtml = (doc.unresolved_flags && doc.unresolved_flags.length)
+          ? '<div class="flag-banner"><strong>Sign-off blocked:</strong> ' + esc(doc.unresolved_flags.join(", ")) + "</div>"
+          : "";
+        const evCards = [
+          ["Keywords Found", ev.keywords_found],
+          ["No Evidence (Never Added)", ev.keywords_missing],
+          ["Requirements Gap", ev.requirements_gap],
+          ["Knockouts", ev.knockouts],
+          ["Alias Matches", ev.alias_matches],
+          ["Entailment Results", ev.entailment_results],
+        ].map(([lbl, items]) => '<div class="ev-card"><h4>' + lbl + "</h4>" +
+          (Array.isArray(items) && items.length ? "<ul>" + items.map((x) => "<li>" + esc(x) + "</li>").join("") + "</ul>" : '<span class="help">None</span>') +
+          "</div>").join("");
+        content = scoreHtml + flagsHtml + '<div class="evidence-grid">' + evCards + "</div>";
+      } else if (d.tab === "diff") {
+        const chgs = doc.changes || [];
+        content = chgs.length
+          ? '<div class="diff-list">' + chgs.map((c) => '<div class="diff-card">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+              '<strong>' + esc(c.section || "change") + " — " + esc(c.reason || "") + "</strong>" +
+              (c.reverted
+                ? '<span class="badge">Reverted</span>'
+                : '<button class="btn" data-act="revert-change" data-id="' + esc(sel.id) + '" data-chg="' + esc(c.id) + '">Revert</button>') +
+              '</div><div class="diff-grid"><div class="diff-col"><div class="help">Master</div>' + esc(c.original || "") + '</div>' +
+              '<div class="diff-col"><div class="help">Tailored</div>' + esc(c.new_text || "") + "</div></div></div>").join("") + "</div>"
+          : '<p class="help">' + esc(doc.tailoring_message || "No rewrites recorded for this pack.") + "</p>";
       } else if (d.tab === "cover") {
         content = doc.cover_letter
           ? '<div class="doc-pre">' + esc(doc.cover_letter) + "</div>"
-          : '<p class="help">No cover letter required for this posting.</p>';
+          : '<p class="help">' + esc(doc.cover_letter_message || "Cover letter has not been generated yet.") + "</p>";
       } else if (d.tab === "fit") {
         content = '<div class="doc-md">' + renderMarkdown(doc.fit || "No fit analysis recorded.") + "</div>";
       } else if (d.tab === "cv") {
@@ -702,7 +738,7 @@
             '<button class="btn" data-open-pack="' + esc(sel.id) + ':review">' + icon("external") + "REVIEW</button>" +
             '<button class="btn" data-act="redo-pack" data-id="' + esc(sel.id) + '">Regenerate</button>' +
             '<button class="btn" data-act="revoke-pack" data-id="' + esc(sel.id) + '">Revoke</button>' +
-            '<button class="btn ' + (isSigned ? "" : "primary") + '" data-act="signoff-pack" data-id="' + esc(sel.id) + '"' + (isSigned ? " disabled" : "") + ">" + icon("check") + (isSigned ? "Signed off" : "Docs OK") + "</button>" +
+            '<button class="btn ' + (isSigned ? "" : "primary") + '" data-act="signoff-pack" data-id="' + esc(sel.id) + '"' + (isSigned || signoffBlocked ? " disabled" : "") + ' title="' + esc((doc && doc.signoff_blocked_reason) || "") + '">' + icon("check") + (isSigned ? "Signed off" : "Docs OK") + "</button>" +
           "</div></div>" +
           '<div class="doc-tabs" role="tablist">' +
             tabs.map(([k, lbl]) => '<button role="tab" data-doc-tab="' + k + '" aria-selected="' + (d.tab === k) + '">' + lbl + "</button>").join("") +
@@ -1217,6 +1253,14 @@
           toast("Saved cv.json — re-rendering PDF…");
           Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
           S.stick = true; watchRun();
+        }
+        return;
+      }
+      case "revert-change": {
+        const r = await call("revert_pack_change", d.id, d.chg);
+        if (r && r.ok) {
+          toast("Reverted change — rebuilding PDF…");
+          await loadDocuments(d.id);
         }
         return;
       }

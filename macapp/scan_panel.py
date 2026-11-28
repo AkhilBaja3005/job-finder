@@ -44,6 +44,91 @@ PROVIDER_ORDERS = {
 }
 
 
+def honest_cover_letter_message(status: str, reason: str = "") -> str:
+    """Return an honest status message for cover letter state."""
+    st = (status or "not_generated").strip().lower()
+    if st == "ready":
+        return "Cover letter ready."
+    if st == "not_asked":
+        return "Cover letter not requested for this posting."
+    if st == "skipped":
+        return f"Cover letter skipped{': ' + reason if reason else '.'}"
+    if st == "failed":
+        return f"Cover letter generation failed{': ' + reason if reason else '.'}"
+    return "Cover letter has not been generated yet."
+
+
+def honest_tailoring_message(status: str, reason: str = "") -> str:
+    """Return an honest status message for CV tailoring state."""
+    st = (status or "not_generated").strip().lower()
+    if st == "tailored":
+        return "CV tailored and verified."
+    if st == "not_tailored":
+        return f"Not tailored (using master CV){': ' + reason if reason else '.'}"
+    if st == "fallback_master":
+        return f"Reverted to master CV to prevent score/keyword regression{': ' + reason if reason else '.'}"
+    if st == "failed":
+        return f"Tailoring failed; using master CV{': ' + reason if reason else '.'}"
+    return "CV has not been tailored yet."
+
+
+def revert_cv_change_in_json(cv_path: Path, change_id: str) -> tuple[bool, str]:
+    """Revert a single tailored change in cv.json back to its original text."""
+    if not cv_path.is_file():
+        return False, "cv.json not found."
+    data = json.loads(cv_path.read_text(encoding="utf-8"))
+    changes = data.get("changes") or []
+    target = next((c for c in changes if str(c.get("id")) == str(change_id)), None)
+    if not target:
+        return False, f"Change {change_id} not found."
+    orig = target.get("original", "")
+    sec = target.get("section", "")
+    if sec == "summary":
+        data["summary"] = orig
+    elif sec == "experience":
+        r_idx = int(target.get("role_index", 0))
+        b_idx = int(target.get("bullet_index", 0))
+        exp = data.get("experience") or []
+        if r_idx < len(exp):
+            desc = exp[r_idx].get("description") or []
+            if b_idx < len(desc):
+                desc[b_idx] = orig
+    target["reverted"] = True
+    data["edited_by_user"] = True
+    cv_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return True, "Reverted change."
+
+
+def check_signoff_allowed(pack_folder: Path) -> tuple[bool, str]:
+    """Block Docs OK sign-off while any flagged claim, fact check, or bad link is unresolved."""
+    manifest_path = pack_folder / "manifest.json"
+    if not manifest_path.is_file():
+        return True, ""
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return True, ""
+    flags = manifest.get("unresolved_flags") or []
+    if flags:
+        return False, "Sign-off blocked by unresolved flags: " + ", ".join(str(f) for f in flags)
+    return True, ""
+
+
+def build_bulk_regen_summary(
+    before_scores: Dict[str, float],
+    after_scores: Dict[str, float],
+) -> List[Dict[str, Any]]:
+    """Build per-pack before/after delta table after bulk regeneration."""
+    rows: List[Dict[str, Any]] = []
+    for pack_id in sorted(set(before_scores) | set(after_scores)):
+        b = float(before_scores.get(pack_id, 0.0))
+        a = float(after_scores.get(pack_id, 0.0))
+        delta = round(a - b, 2)
+        status = "improved" if delta > 0 else "worse" if delta < 0 else "unchanged"
+        rows.append({"id": pack_id, "before": b, "after": a, "delta": delta, "status": status})
+    return rows
+
+
 # ── folders ──────────────────────────────────────────────────────────────────────
 def app_support_dir() -> Path:
     override = os.environ.get("JOB_FINDER_APP_HOME")
@@ -1530,14 +1615,36 @@ class Api:
                 cv_json = json.loads(cv_json_raw) if cv_json_raw else None
             except Exception:
                 cv_json = None
+            manifest_raw = _read("manifest.json")
+            try:
+                manifest = json.loads(manifest_raw) if manifest_raw else {}
+            except Exception:
+                manifest = {}
+            cover_text = _read("cover_letter.txt")
+            cl_status = manifest.get("cover_letter_status") or ("ready" if cover_text else "not_generated")
+            cl_reason = manifest.get("cover_letter_reason", "")
+            tailor_status = manifest.get("tailoring_status", "tailored" if cv_json else "not_generated")
+            tailor_reason = manifest.get("tailoring_reason", "")
+            allowed, block_reason = check_signoff_allowed(folder)
             return {
                 "ok": True,
                 "cv_pdf": str(cv_pdf) if cv_pdf.is_file() else "",
                 "cv_html": _read("cv.html"),
                 "cv_json": cv_json,
-                "cover_letter": _read("cover_letter.txt"),
+                "cover_letter": cover_text,
+                "cover_letter_status": cl_status,
+                "cover_letter_message": honest_cover_letter_message(cl_status, cl_reason),
+                "tailoring_status": tailor_status,
+                "tailoring_message": honest_tailoring_message(tailor_status, tailor_reason),
                 "review_md": _read("REVIEW.md"),
                 "fit": _read("fit_analysis.md"),
+                "manifest": manifest,
+                "changes": (cv_json or {}).get("changes") or manifest.get("changes") or [],
+                "evidence_panel": manifest.get("evidence_panel") or {},
+                "scores": manifest.get("scores") or {},
+                "unresolved_flags": manifest.get("unresolved_flags") or [],
+                "signoff_allowed": allowed,
+                "signoff_blocked_reason": block_reason,
             }
 
     def save_pack_cv(self, job_id: str, cv_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1558,7 +1665,25 @@ class Api:
                 for idx, bullets in enumerate(cv_data["experience"]):
                     if idx < len(cur.get("experience", [])) and isinstance(bullets, list):
                         cur["experience"][idx]["description"] = [str(b) for b in bullets if str(b).strip()]
+            cur["edited_by_user"] = True
             cv_path.write_text(json.dumps(cur, indent=2, ensure_ascii=False), encoding="utf-8")
+            args = ["prepare", "--render-only", "--ids", str(job_id)]
+            if not s.is_main:
+                args += ["--search", s.name]
+        return self._runner.start(args, {**build_run_env({}, ws), **self._dock_env()}, ws, "prepare")
+
+    def revert_pack_change(self, job_id: str, change_id: str) -> Dict[str, Any]:
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            s = searches.resolve_current()
+            row = self._find_approved_row(s, str(job_id))
+            if not row:
+                return {"ok": False, "error": f"Approved job #{job_id} not found."}
+            cv_path = self._pack_folder(s, row) / "cv.json"
+            ok, msg = revert_cv_change_in_json(cv_path, change_id)
+            if not ok:
+                return {"ok": False, "error": msg}
             args = ["prepare", "--render-only", "--ids", str(job_id)]
             if not s.is_main:
                 args += ["--search", s.name]
@@ -1608,6 +1733,11 @@ class Api:
             s = searches.resolve_current()
             if not os.path.isfile(s.approved):
                 return {"ok": False, "error": "No approved jobs workbook found."}
+            row = self._find_approved_row(s, str(job_id))
+            if row:
+                allowed, reason = check_signoff_allowed(self._pack_folder(s, row))
+                if not allowed:
+                    return {"ok": False, "error": reason}
             ok = ExcelTracker(s.approved).update(row_id=int(job_id), docs_ok="Yes")
             if not ok:
                 return {"ok": False, "error": f"Approved job #{job_id} not found."}
