@@ -1352,3 +1352,69 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
     assert "--score-all" in scan_args and "--sponsor-only" in scan_args
     assert api._job_dict({"Closing Date": "2026-12-02 00:00:00", "Scored By": "AI"})["closing"] == "2026-12-02"
     assert api._job_dict({"Scored By": "Keyword"})["scored_by"] == "Keyword"
+
+
+def test_ux_enhancements_api_and_boards_progress(tmp_path, monkeypatch):
+    import scan_panel
+    from services import board_index, searches
+    from services.excel_tracker import ExcelTracker
+
+    monkeypatch.setattr(scan_panel, "workspace_dir", lambda: tmp_path)
+    monkeypatch.setattr(scan_panel, "session_status", lambda ws, fresh=False: {"signed_in": True, "email": "ada@example.com"})
+    monkeypatch.setattr(scan_panel, "read_account_applications", lambda ws: [])
+    monkeypatch.setenv("JOB_FINDER_ROOT", str(tmp_path))
+
+    # 1. Cached update state (newer + offline resilience)
+    monkeypatch.setattr(scan_panel, "_app_version", lambda: "1.9.6")
+    scan_panel._UPDATE_CACHE.update(ts=0.0, inflight=False, data={"available": False, "latest": "", "url": ""})
+    monkeypatch.delenv("JOB_FINDER_APP_SELFTEST", raising=False)
+    up = scan_panel._cached_update_state(fetch=lambda: {"tag_name": "v1.9.9", "html_url": "https://example.com/v1.9.9"})
+    assert up == {"available": True, "latest": "1.9.9", "url": "https://example.com/v1.9.9"}
+
+    # Offline fetch never raises
+    scan_panel._UPDATE_CACHE.update(ts=0.0, inflight=False, data={"available": False, "latest": "", "url": ""})
+    def _boom():
+        raise OSError("offline")
+    assert scan_panel._cached_update_state(fetch=_boom) == {"available": False, "latest": "", "url": ""}
+
+    # 2. Boards live progress reporting
+    db_file = str(tmp_path / "data" / "board_index.db")
+    board_index._write_progress(db_file, 120, 600)
+    bs = scan_panel.boards_status(tmp_path)
+    assert bs["indexing"] is True and bs["done"] == 120 and bs["total"] == 600
+    board_index._clear_progress(db_file)
+    assert scan_panel.boards_status(tmp_path)["indexing"] is False
+
+    # 3. Bulk signoff_ready_packs
+    api = scan_panel.Api(["job-finder"])
+    assert api.signoff_ready_packs()["ok"] is False  # no approved workbook yet
+    s = searches.resolve_current()
+    tracker = ExcelTracker(s.approved)
+    pack_ok = tmp_path / "applications" / "pack_1"
+    pack_ok.mkdir(parents=True)
+    (pack_ok / "REVIEW.md").write_text("# Ready\n", encoding="utf-8")
+    pack_bad = tmp_path / "applications" / "pack_2"
+    pack_bad.mkdir(parents=True)
+    (pack_bad / "REVIEW.md").write_text("# Blocked\n", encoding="utf-8")
+    (pack_bad / "manifest.json").write_text(json.dumps({"unresolved_flags": ["Missing must-have"]}), encoding="utf-8")
+    tracker.add_jobs([
+        {"Company": "Acme", "Job Role": "AI Intern", "Job URL": "https://example.com/1", "Status": "Approved", "Approve": "Yes", "Pack Folder": str(pack_ok)},
+        {"Company": "Beta", "Job Role": "ML Intern", "Job URL": "https://example.com/2", "Status": "Approved", "Approve": "Yes", "Pack Folder": str(pack_bad)},
+    ])
+    res_so = api.signoff_ready_packs()
+    assert res_so == {"ok": True, "signed_off": 1, "skipped": 1}
+
+    # 4. Saved answers count in get_state
+    api.save_saved_answers([{"question": "Start date?", "answer": "Immediately"}])
+    assert api.get_state()["saved_answers_count"] == 1
+
+    # 5. draft_followup (offline fallback + LLM path)
+    (pack_ok / "cover_letter.txt").write_text("I built RAG pipelines at Acme Bank.", encoding="utf-8")
+    import services.gemini_client as gc
+    monkeypatch.setattr(gc, "generate_content_with_fallback", lambda prompt: (_ for _ in ()).throw(RuntimeError("no key")))
+    fu_fallback = api.draft_followup(url="https://example.com/1")
+    assert fu_fallback["ok"] is True and "Acme" in fu_fallback["body"] and "AI Intern" in fu_fallback["subject"]
+
+    monkeypatch.setattr(gc, "generate_content_with_fallback", lambda prompt: "Hi Acme team, following up on my AI Intern application.")
+    fu_llm = api.draft_followup(url="https://example.com/1")
+    assert fu_llm["ok"] is True and fu_llm["body"] == "Hi Acme team, following up on my AI Intern application."

@@ -22,6 +22,7 @@ Every method returns JSON. On failure: `{"ok": false, "error": "plain-language m
 - `pack_documents(id)` -> `{"ok": true, "cv_pdf": "path", "cover_letter": "text or empty", "review_md": "text", "fit": "text"}`
 - `open_pack_file(id, "cv|cover|jd|review")` -> `{"ok": true}`
 - `signoff_pack(id)` -> `{"ok": true}` (wraps `review --ok ID`)
+- `signoff_ready_packs()` -> `{"ok": true, "signed_off": 2, "skipped": 0}` (signs off all prepared packs passing `check_signoff_allowed`)
 
 ## Apply
 - `list_ready()` -> `{"ok": true, "jobs": [...same as list_jobs, signed off only...], "cap": {"used": 3, "limit": 20}}`
@@ -30,6 +31,13 @@ Every method returns JSON. On failure: `{"ok": false, "error": "plain-language m
 
 ## Applications (existing screen)
 Same shape as today, now read from the Excel tracker (`backend/services/excel_tracker.get_tracker()`); CSV only as a fallback when no workbook exists.
+- `set_status(url, stage)` -> `{"ok": true}`
+- `draft_followup(url="", job_id="")` -> `{"ok": true, "subject": "...", "body": "...", "company": "...", "title": "..."}`
+
+## Settings & State
+- `get_state()` also includes `update: {"available": bool, "latest": str, "url": str}`, `boards: {"ready": bool, "updated": str, "indexing": bool, "done": int, "total": int}`, and `saved_answers_count: int`.
+- `get_saved_answers()` -> `{"ok": true, "items": [...], "suggestions": [...], "max_entries": 40, "max_chars": 600}`
+- `save_saved_answers(items)` -> `{"ok": true, "saved": int}`
 
 ## LaTeX CV (Documents tab, Tailored CV)
 | Method | Returns |

@@ -164,6 +164,25 @@ async def fetch_board(client: httpx.AsyncClient, ats: str, slug: str) -> Tuple[s
 
 
 # ─── refresh ──────────────────────────────────────────────────────────────────
+def _write_progress(path: Optional[str], done: int, total: int) -> None:
+    prog = os.path.join(os.path.dirname(path or db_path()), ".boards_progress.json")
+    try:
+        os.makedirs(os.path.dirname(prog), exist_ok=True)
+        with open(prog, "w", encoding="utf-8") as f:
+            json.dump({"done": int(done), "total": int(total)}, f)
+    except OSError:
+        pass
+
+
+def _clear_progress(path: Optional[str]) -> None:
+    prog = os.path.join(os.path.dirname(path or db_path()), ".boards_progress.json")
+    try:
+        if os.path.exists(prog):
+            os.remove(prog)
+    except OSError:
+        pass
+
+
 async def refresh(ats_list: Optional[Iterable[str]] = None, limit: Optional[int] = None, force: bool = False,
                   concurrency: int = 24, location: str = "London, UK", progress: Optional[Callable[[str], None]] = print,
                   client: Optional[httpx.AsyncClient] = None, path: Optional[str] = None,
@@ -193,6 +212,7 @@ async def refresh(ats_list: Optional[Iterable[str]] = None, limit: Optional[int]
         if progress:
             progress(f"[boards] {sum(len(v) for v in seeds.values())} company boards known; visiting {len(todo)} "
                      f"(location: {location}) ...")
+        _write_progress(path, 0, len(todo))
         sem = asyncio.Semaphore(concurrency)
         stats = {"visited": 0, "ok": 0, "dead": 0, "error": 0, "jobs_total": 0, "jobs_local": 0}
         pending: List[Tuple[str, str, str, List[Dict[str, Any]]]] = []
@@ -221,12 +241,15 @@ async def refresh(ats_list: Optional[Iterable[str]] = None, limit: Optional[int]
         for i in range(0, len(todo), batch):
             await asyncio.gather(*[one(a, s) for a, s in todo[i:i + batch]])
             await flush()
+            done = min(i + batch, len(todo))
+            _write_progress(path, done, len(todo))
             if progress:
-                progress(f"[boards] {min(i + batch, len(todo))}/{len(todo)} visited  |  {stats['jobs_local']} {location.split(',')[0]} jobs found so far"
+                progress(f"[boards] {done}/{len(todo)} visited  |  {stats['jobs_local']} {location.split(',')[0]} jobs found so far"
                          f"  ({int(time.time() - started)}s)")
         stats["seconds"] = round(time.time() - started, 1)
         return stats
     finally:
+        _clear_progress(path)
         db.close()
         if own_client:
             await client.aclose()
