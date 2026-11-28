@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -14,12 +15,59 @@ ASSETS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))
 SHRINK_STEPS = ((None, 1.0), (None, 0.85), (10.4, 0.9), (10.0, 0.85), (9.6, 0.8), (9.2, 0.75))   # (font size or None, spacing scale), tried in order until one page
 
 
+def bundled_dir() -> Optional[str]:
+    """Where the desktop app carries its own Tectonic (the PyInstaller bundle), or a developer build in macapp/vendor."""
+    candidates = []
+    if getattr(sys, "frozen", False) and getattr(sys, "_MEIPASS", None):
+        candidates.append(os.path.join(sys._MEIPASS, "tectonic"))             # type: ignore[attr-defined]
+    candidates.append(os.path.join(os.path.dirname(ASSETS), "..", "macapp", "vendor", "tectonic"))
+    for c in candidates:
+        c = os.path.normpath(c)
+        if os.path.isfile(os.path.join(c, "tectonic.exe" if sys.platform == "win32" else "tectonic")):
+            return c
+    return None
+
+
 def tectonic_path() -> Optional[str]:
-    return os.environ.get("TECTONIC_PATH") or shutil.which("tectonic")
+    """TECTONIC_PATH, else the Tectonic bundled with the app, else one on PATH."""
+    explicit = os.environ.get("TECTONIC_PATH")
+    if explicit and os.path.isfile(explicit):
+        return explicit
+    bundle = bundled_dir()
+    if bundle:
+        return os.path.join(bundle, "tectonic.exe" if sys.platform == "win32" else "tectonic")
+    return shutil.which("tectonic")
 
 
 def tectonic_available() -> bool:
     return bool(tectonic_path())
+
+
+def _user_cache_dir() -> str:
+    try:
+        from config.constants import resolve_workspace_root
+    except ImportError:  # pragma: no cover
+        from backend.config.constants import resolve_workspace_root
+    return os.path.join(resolve_workspace_root(), "data", "tectonic-cache")
+
+
+def prepare_cache(bundle: Optional[str] = None) -> Optional[str]:
+    """With the bundled Tectonic: copy its warmed package cache into the user's folder once (the app folder may be read-only)
+    and return that folder. None when there is no bundled cache; Tectonic then uses its own default cache and the network."""
+    bundle = bundle or bundled_dir()
+    src = os.path.join(bundle, "cache") if bundle else ""
+    if not src or not os.path.isdir(src):
+        return None
+    dest = _user_cache_dir()
+    marker = os.path.join(dest, ".seeded")
+    if not os.path.isfile(marker):
+        try:
+            shutil.copytree(src, dest, dirs_exist_ok=True)
+            with open(marker, "w") as f:
+                f.write("1")
+        except OSError:
+            return None
+    return dest
 
 
 def cv_to_latex(cv: Dict[str, Any]) -> str:
@@ -53,9 +101,16 @@ def compile_latex(tex: str, out_pdf: str, timeout: int = 180) -> Tuple[bool, str
         src = os.path.join(tmp, "cv.tex")
         with open(src, "w", encoding="utf-8") as f:
             f.write(tex)
+        env = dict(os.environ)
+        cache = prepare_cache() if bundled_dir() and exe.startswith(bundled_dir() or "\0") else None
+        if cache:
+            env["TECTONIC_CACHE_DIR"] = cache
         try:
-            run = subprocess.run([exe, "-X", "compile", src, "--outdir", tmp] if _supports_v2(exe) else [exe, src, "--outdir", tmp],
-                                 cwd=tmp, capture_output=True, text=True, timeout=timeout)
+            run = None
+            if cache:     # the warmed cache has everything the template needs: work offline first, go online only if something is missing
+                run = subprocess.run([exe, "--only-cached", src, "--outdir", tmp], cwd=tmp, env=env, capture_output=True, text=True, timeout=timeout)
+            if run is None or run.returncode != 0 or not os.path.isfile(os.path.join(tmp, "cv.pdf")):
+                run = subprocess.run([exe, src, "--outdir", tmp], cwd=tmp, env=env, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             return False, f"LaTeX took longer than {timeout} seconds (the first run downloads fonts and packages; try again)."
         except OSError as exc:
@@ -68,12 +123,37 @@ def compile_latex(tex: str, out_pdf: str, timeout: int = 180) -> Tuple[bool, str
     return True, ""
 
 
-def _supports_v2(exe: str) -> bool:
+def self_check() -> Dict[str, Any]:
+    """Used by the built app's `--latex-check`: where the engine is, its version, and whether a CV compiles from the bundled cache
+    alone (no network). {"ok": bool, ...}."""
+    exe = tectonic_path()
+    info: Dict[str, Any] = {"ok": False, "path": exe, "bundled": bool(exe and bundled_dir() and exe.startswith(bundled_dir() or "\0"))}
+    if not exe:
+        return info
     try:
-        out = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=10).stdout
-        return bool(re.search(r"\b0\.(1[5-9]|[2-9]\d)", out)) and False      # the classic "tectonic file.tex" works on every version
-    except Exception:
-        return False
+        info["version"] = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=30).stdout.strip()
+    except OSError as exc:
+        info["error"] = str(exc)
+        return info
+    cache = prepare_cache() if info["bundled"] else None
+    with tempfile.TemporaryDirectory(prefix="jf_check_") as tmp:
+        cls = _find_class_file()
+        if cls:
+            shutil.copy(cls, os.path.join(tmp, "resume.cls"))
+        tex = cv_to_latex({"name": "Check", "email": "a@b.co", "summary": "Engineer.", "experience": [], "education": [], "projects": [], "skills": ["Python"]})
+        with open(os.path.join(tmp, "cv.tex"), "w", encoding="utf-8") as f:
+            f.write(tex)
+        env = dict(os.environ)
+        cmd = [exe, "cv.tex"]
+        if cache:
+            env["TECTONIC_CACHE_DIR"] = cache
+            cmd = [exe, "--only-cached", "cv.tex"]
+        run = subprocess.run(cmd, cwd=tmp, env=env, capture_output=True, text=True, timeout=300)
+        info["offline"] = bool(cache)
+        info["ok"] = run.returncode == 0 and os.path.isfile(os.path.join(tmp, "cv.pdf"))
+        if not info["ok"]:
+            info["error"] = summarize_error(run.stderr + "\n" + run.stdout)
+    return info
 
 
 def summarize_error(log: str) -> str:

@@ -12,6 +12,9 @@ source "$VENV/bin/activate"
 pip install -q --upgrade pip
 pip install -q -r backend/requirements.txt -r macapp/requirements-app.txt
 
+python macapp/fetch_tectonic.py          # the LaTeX engine and its warmed cache go inside the app
+export JOB_FINDER_REQUIRE_TECTONIC=1
+
 rm -rf dist-mac
 pyinstaller macapp/job_finder.spec --noconfirm --distpath dist-mac --workpath .macbuild/work
 
@@ -28,6 +31,8 @@ DMG="dist-mac/Job-Finder-${VERSION}-${ARCH}.dmg"
 # without a warning. Without them the build is unsigned (right-click -> Open the first time).
 if [ -n "${SIGN_IDENTITY:-}" ]; then
   echo "Signing with: $SIGN_IDENTITY"
+  # the bundled LaTeX engine is a nested executable: sign it first, then the app around it
+  find "dist-mac/Job Finder.app" -type f -name tectonic -perm -u+x -exec codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" {} \;
   codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" "dist-mac/Job Finder.app"
   codesign --verify --deep --strict "dist-mac/Job Finder.app"
 fi

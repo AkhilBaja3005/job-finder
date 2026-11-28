@@ -56,3 +56,5 @@ dist-mac/
 .coverage
 .coverage.*
 htmlcov/
+
+macapp/vendor/

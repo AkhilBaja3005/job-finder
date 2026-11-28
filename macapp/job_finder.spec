@@ -1,6 +1,7 @@
 # PyInstaller spec for Job Finder: "Job Finder.app" on a Mac (macapp/build_mac.sh), a "Job Finder" folder with Job Finder.exe on Windows (macapp/build_windows.ps1).
 import re
 import sys
+import os
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
@@ -29,6 +30,13 @@ datas += [(str(ROOT / ".env.example"), ".")]
 datas += [(str(ROOT / ".macbuild" / "VERSION"), ".")]
 datas += [(str(p), str(Path("macapp/panel") / p.relative_to(ROOT / "macapp" / "panel").parent))
           for p in (ROOT / "macapp" / "panel").rglob("*") if p.is_file() and "dev" not in p.relative_to(ROOT / "macapp" / "panel").parts]
+
+# The LaTeX engine (Tectonic) and its warmed package cache, fetched by macapp/fetch_tectonic.py, so the LaTeX CV compiles offline.
+_tectonic = ROOT / "macapp" / "vendor" / "tectonic"
+if _tectonic.is_dir():
+    datas += [(str(f), str(Path("tectonic") / f.relative_to(_tectonic).parent)) for f in _tectonic.rglob("*") if f.is_file()]
+elif os.environ.get("JOB_FINDER_REQUIRE_TECTONIC") == "1":
+    raise SystemExit("macapp/vendor/tectonic is missing: run python macapp/fetch_tectonic.py first")
 
 binaries = []
 hiddenimports = ["scan_panel", "scheduler", "platform_support", "browser_dock", "websockets.sync.client"]

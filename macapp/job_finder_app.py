@@ -10,6 +10,7 @@ Pick roles and limits, press Start, and watch the agent search and fill applicat
 from __future__ import annotations
 
 import platform_support
+import json
 import logging
 import logging.handlers
 import os
@@ -239,6 +240,12 @@ def main(argv: list[str] | None = None) -> int:
         return open_in_agent_chrome(argv[1])
     if argv and argv[0] == "--signin":
         return open_signin_browser()
+    if argv and argv[0] == "--latex-check":      # for checking a build: does the bundled LaTeX engine compile a CV from its own cache?
+        prepare_environment()
+        from services import cv_latex
+        info = cv_latex.self_check()
+        print("LATEX", json.dumps(info), flush=True)
+        return 0 if info.get("ok") and info.get("bundled") else 1
     return run_window()
 
 

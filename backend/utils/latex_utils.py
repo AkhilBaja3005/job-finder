@@ -700,7 +700,7 @@ def generate_latex_from_json(
                 meta_parts.append(dates)
             if loc:
                 meta_parts.append(loc)
-            elif gpa:
+            if gpa:
                 meta_parts.append(gpa)
             meta_line = " $|$ ".join(meta_parts)
 
