@@ -552,14 +552,6 @@ def _apply_plan(master: Dict[str, Any], plan: Dict[str, Any],
                 if len(keep) < room:
                     keep.insert(0, best_j)
                     changes.append(f"KEPT highest-scoring must-have bullet in {exp['role']} at {exp['company']} (model plan had dropped it).")
-            # Top up the primary role (to 3 bullets when available and room permits) so page fill stays rich
-            min_floor = min(len(allowed_indices), 3, room) if i == 0 else 0
-            if len(keep) < min_floor:
-                for _, _, cand_j in sorted(scored, reverse=True):
-                    if len(keep) >= min_floor:
-                        break
-                    if cand_j not in keep:
-                        keep.append(cand_j)
             # Ensure the highest-scoring bullet leads the role
             if len(keep) > 1:
                 lead_j = max(keep, key=lambda k: (cv_selector.score_item(orig[k], jd_analysis), -k))
