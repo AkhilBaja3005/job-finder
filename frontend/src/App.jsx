@@ -9,6 +9,7 @@ const SkeletonLoader = lazy(() => import('./components/SkeletonLoader').then(m =
 const OutreachModal = lazy(() => import('./components/OutreachModal'));
 const DocsGuide = lazy(() => import('./components/DocsGuide'));
 const LandingPage = lazy(() => import('./components/LandingPage'));
+const DesktopAppPage = lazy(() => import('./components/DesktopAppPage'));
 const ContactPage = lazy(() => import('./components/ContactPage'));
 import LatexCodeViewer from './components/LatexCodeViewer';
 import LiveLatexEditor from './components/LiveLatexEditor';
@@ -199,6 +200,9 @@ function App() {
       if (path.startsWith('/docs') || path.startsWith('/guide')) {
         return 'docs';
       }
+      if (path.startsWith('/app')) {
+        return 'desktop-app';
+      }
       if (path.startsWith('/platform')) {
         return sessionStorage.getItem('dashboard_mode') || 'tailor';
       }
@@ -231,8 +235,10 @@ function App() {
         setDashboardMode('contact');
       } else if (path.startsWith('/docs') || path.startsWith('/guide')) {
         setDashboardMode('docs');
+      } else if (path.startsWith('/app')) {
+        setDashboardMode('desktop-app');
       } else if (path.startsWith('/platform')) {
-        setDashboardMode(prev => (prev === 'intro' || prev === 'docs' || prev === 'contact') ? 'tailor' : prev);
+        setDashboardMode(prev => (prev === 'intro' || prev === 'docs' || prev === 'contact' || prev === 'desktop-app') ? 'tailor' : prev);
       } else if (path === '/' || path.startsWith('/intro')) {
         setDashboardMode('intro');
       }
@@ -2943,6 +2949,23 @@ function App() {
             onOpenDocs={() => {
               setDashboardMode('docs');
               window.history.pushState(null, '', '/docs');
+            }}
+            onOpenApp={() => {
+              setDashboardMode('desktop-app');
+              window.history.pushState(null, '', '/app');
+            }}
+          />
+        </Suspense>
+      ) : dashboardMode === 'desktop-app' ? (
+        <Suspense fallback={<div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading Desktop App...</div>}>
+          <DesktopAppPage
+            onBack={() => {
+              setDashboardMode('intro');
+              window.history.pushState(null, '', '/');
+            }}
+            onLaunchPlatform={() => {
+              setDashboardMode(user ? 'tailor' : 'app');
+              window.history.pushState(null, '', '/platform');
             }}
           />
         </Suspense>

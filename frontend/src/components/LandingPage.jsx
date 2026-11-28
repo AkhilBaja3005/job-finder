@@ -41,7 +41,7 @@ function useDesktopPlatform() {
   return platform;
 }
 
-function DownloadSection({ platform }) {
+function DownloadSection({ platform, onOpenApp }) {
   const [copiedCmd, setCopiedCmd] = useState(false);
   const fit = DESKTOP_FILES[platform.kind];
   const isMac = platform.kind === 'mac-arm' || platform.kind === 'mac-intel';
@@ -73,9 +73,18 @@ function DownloadSection({ platform }) {
         <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#FFFFFF', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
           Run it on your own computer
         </h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.6, margin: 0 }}>
-          Search jobs and fill applications with your own browser. Free, and it starts with a practice run that never submits.
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.6, margin: '0 0 10px' }}>
+          Staged <strong>Search → Review → Documents → Apply</strong> workflow on Mac &amp; Windows with your own Chrome browser, zero-hallucination CV tailoring, and an offline bundled <strong>Tectonic</strong> LaTeX editor &amp; PDF preview.
         </p>
+        {onOpenApp && (
+          <a
+            href="/app"
+            onClick={(e) => { e.preventDefault(); onOpenApp(); }}
+            style={{ color: '#38BDF8', fontSize: '0.82rem', fontWeight: 600, textDecoration: 'none' }}
+          >
+            See full Desktop App guide &amp; all downloads →
+          </a>
+        )}
       </div>
       {fit ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
@@ -174,7 +183,7 @@ function AnimatedCounter({ target, suffix = '', duration = 1800 }) {
  *  3. System Capabilities (Discovery, Scoring, Tailoring, Autofill, UK Sponsors)
  *  4. Quick Navigation Actions (Launch App, Setup Guide, Full Docs)
  */
-export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
+export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo, onOpenApp }) {
   const desktopPlatform = useDesktopPlatform();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedDemoTab, setSelectedDemoTab] = useState('matching');
@@ -700,7 +709,7 @@ export default function LandingPage({ onLaunchApp, onOpenDocs, onLaunchDemo }) {
         </div>
       </section>
 
-      <DownloadSection platform={desktopPlatform} />
+      <DownloadSection platform={desktopPlatform} onOpenApp={onOpenApp} />
 
       {/* Contact & Developer Feedback Section */}
       <section style={{

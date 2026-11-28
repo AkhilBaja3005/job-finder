@@ -1489,7 +1489,7 @@ class Api:
         if approved == 0:
             return {"ok": True, "stage": "review", "title": f"{scanned} jobs found", "button": "Review them", "goto": "review", "counts": counts}
         if not_started > 0 and needs_signoff == 0 and ready_to_apply == 0:
-            return {"ok": True, "stage": "packs", "title": f"{approved} approved", "button": "Prepare packs", "goto": "packs", "counts": counts}
+            return {"ok": True, "stage": "documents", "title": f"{approved} approved", "button": "Prepare packs", "goto": "documents", "counts": counts}
         if needs_signoff > 0:
             noun = "pack needs" if needs_signoff == 1 else "packs need"
             return {"ok": True, "stage": "documents", "title": f"{needs_signoff} {noun} sign-off", "button": "Review docs", "goto": "documents", "counts": counts}

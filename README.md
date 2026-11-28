@@ -22,9 +22,10 @@
 An AI-powered job search, resume tailoring, and application assistant. Upload a resume once (in `.pdf`, `.docx`, or `.tex`), then let it discover matching job postings across **23,000+ verified direct ATS company boards** (Ashby, Greenhouse, Lever, BambooHR, Workday), **Jobserve**, **LinkedIn**, **Indeed**, and **Reed**, score your ATS fit against job descriptions, tailor a pixel-perfect one-page LaTeX resume and cover letter for specific roles, generate personalized recruiter outreach messages, and auto-fill applications directly on the web.
 
 The project includes:
-1. **Full-Stack Web App** — Modular FastAPI backend + React 19 (Vite) dashboard with live streaming ATS discovery and portal exclusion controls.
-2. **Autonomous CLI & Scanner** — Unified terminal dispatcher (`job-finder scan`, `job-finder jobserve`, `job-finder targetjobs`, `job-finder apply`).
-3. **Chrome Extension (`Job Finder ATS Tailor`)** — Persistent Chrome Side Panel to score jobs, tailor resumes, auto-fill forms with multimodal intelligence, and dispatch delivery packages on LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday, and custom career sites.
+1. **Desktop App (`macapp/`, macOS & Windows)** — Staged **Search → Review → Documents → Apply** workflow with live scan/prepare/apply logs, an in-app LaTeX CV editor & PDF preview powered by bundled offline **Tectonic**, Chrome dock, and application tracking.
+2. **Full-Stack Web App** — Modular FastAPI backend + React 19 (Vite) dashboard with live streaming ATS discovery and portal exclusion controls.
+3. **Autonomous CLI & Scanner** — Unified terminal dispatcher (`job-finder scan`, `job-finder jobserve`, `job-finder targetjobs`, `job-finder apply`).
+4. **Chrome Extension (`Job Finder ATS Tailor`)** — Persistent Chrome Side Panel to score jobs, tailor resumes, auto-fill forms with multimodal intelligence, and dispatch delivery packages on LinkedIn, Indeed, Greenhouse, Lever, Ashby, Workday, and custom career sites.
 
 ---
 
@@ -42,6 +43,8 @@ The project includes:
 - **Top Missing Keywords Selector**: Click missing skill chips to explicitly authorize and weave them into your tailored resume with intelligent category routing.
 
 ### 3. One-Page LaTeX Resume & Cover Letter Tailoring
+- **Zero-Hallucination Tailoring**: Models only select, reorder, and rephrase existing profile/resume facts; every claim, number, tool, title, and `never_say`/`always_keep` rule is verified in code (`cv_tailor.py`, `cv_verifier.py`, `cv_writer.py`, `cv_selector.py`). Skills absent from the resume only appear if you explicitly confirm them via **"I have this"** (`confirm_experience`).
+- **Custom `.tex` Template & In-App LaTeX Editor**: Import your own `.tex` template (`import_latex_template`) or use the built-in `resume.cls`, edit LaTeX live in **Documents → Tailored CV** with offline bundled **Tectonic** PDF preview, and switch back to the standard CV anytime (`use_standard_cv_pdf`).
 - **Strict One-Page Multi-Pass Budgeting**: Automatically optimizes `linespread` and `spacing_scale` via Tectonic PDF compilation to guarantee a single-page document.
 - **Automated Recruiter Review Loop**: Multi-attempt validation loop evaluating 4 criteria: ATS fit, measurable impact metrics, strict truthfulness against original experience, and conciseness.
 - **Overleaf Integration**: One-click direct export to Overleaf for both tailored and original master resumes.
