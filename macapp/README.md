@@ -35,9 +35,12 @@ Start with **Practice run**: the agent fills every form but never presses Submit
 
 | Screen | What it does |
 |---|---|
-| **Run** | Roles (type and press Return), location, how recent, practice or real. **Advanced** has the minimum ATS score, a limit, title keywords, sites to skip, and which AI drives the browser. Activity shows progress, counts, and the live log. |
-| **Applications** | Every job recorded, with status, ATS match and a cloud mark for rows in your Supabase project. Search, filter, sort, open the job page, **Sync now**. |
-| **Settings** | Your folder, profile, AI keys, Supabase, the scraper browser, updates and log files. |
+| **Search** | Topics/roles, level, location, dry-run or live scan. **Advanced** has minimum ATS score, limit, title keywords, sites to skip, and which AI drives the browser. Activity shows progress, counts, and the live log. |
+| **Review** | Inspect scanned jobs with ATS scores and links; **Approve** or **Revoke** jobs before spending API credits on tailoring. |
+| **Documents** | Prepare application packs for approved jobs (**Prepare packs** / **Prepare this pack** with live progress & log), inspect `REVIEW.md`, **Evidence & Risk** (including *"I have this"*), **Diff & Revert**, **Cover Letter**, **Fit Analysis**, and **Tailored CV** (with offline bundled **Tectonic** LaTeX editor & PDF preview), and click **Docs OK** to sign off. |
+| **Apply** | Shows only signed-off jobs. Start with **Preview apply** to watch the agent fill forms, then **Submit applications** when ready. |
+| **Applications** | Every job recorded, with status, ATS match and a cloud mark for rows in your Supabase / `job-finder.space` project. Search, filter, sort, open the job page, **Sync now**. |
+| **Settings** | Your folder, profile, AI keys, Supabase, Chrome sign-in & dock, schedule, updates, and log files. |
 
 Shortcuts: Cmd+Return start or stop, Cmd+. stop, Cmd+1/2/3 switch screens, Cmd+, settings. The usual Edit shortcuts (copy, paste, select all, undo) work in every field.
 
