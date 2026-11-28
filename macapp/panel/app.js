@@ -143,7 +143,6 @@
   const NAV = [
     ["search", "Search", "search"],
     ["review", "Review", "check"],
-    ["packs", "Packs", "folder"],
     ["documents", "Documents", "logo"],
     ["apply", "Apply", "play"],
     ["apps", "Applications", "list"],
@@ -155,8 +154,7 @@
     if (id === "apps" && S.apps.rows) return S.apps.rows.length;
     if (!c) return 0;
     if (id === "review") return c.scanned || 0;
-    if (id === "packs") return c.approved || 0;
-    if (id === "documents") return c.needs_signoff || 0;
+    if (id === "documents") return c.approved || 0;
     if (id === "apply") return c.ready_to_apply || 0;
     if (id === "apps") return c.applied || 0;
     return 0;
@@ -217,12 +215,12 @@
   }
 
   function go(view) {
+    if (view === "packs") view = "documents";
     S.view = view;
     renderShell();
     renderView();
     if (view === "search") loadSearches();
     if (view === "review") { loadSearches(); loadReview(); }
-    if (view === "packs") loadPacks();
     if (view === "documents") loadDocuments();
     if (view === "apply") loadApply();
     if (view === "apps" && S.apps.rows === null) loadApps();
@@ -234,7 +232,6 @@
     const map = {
       search: renderSearch,
       review: renderReview,
-      packs: renderPacks,
       documents: renderDocuments,
       apply: renderApply,
       apps: renderApps,
@@ -349,7 +346,7 @@
 
   function renderRunStatus() {
     const r = S.run, c = r.counts;
-    const expectedKind = S.view === "apply" ? "apply" : S.view === "packs" ? "prepare" : "scan";
+    const expectedKind = S.view === "apply" ? "apply" : S.view === "documents" ? "prepare" : "scan";
     const active = r.kind === expectedKind;
     if (!$("#run-state")) return;
     const dot = $("#run-dot"); dot.className = "dot" + (active && r.running ? " good pulse" : "");
@@ -388,7 +385,7 @@
   }
   function renderLog(full) {
     const el = $("#log"); if (!el) return;
-    const expectedKind = S.view === "apply" ? "apply" : S.view === "packs" ? "prepare" : "scan";
+    const expectedKind = S.view === "apply" ? "apply" : S.view === "documents" ? "prepare" : "scan";
     if (S.run.kind !== expectedKind) {
       el.innerHTML = '<div class="empty">The activity log appears here.</div>';
       return;
@@ -441,14 +438,14 @@
     if (Array.isArray(r.applied_rows) && r.applied_rows.length) {
       S.apply.results = r.applied_rows;
     }
-    if (S.view === "search" || S.view === "packs" || S.view === "apply") { renderLog(false); renderRunStatus(); }
+    if (S.view === "search" || S.view === "documents" || S.view === "apply") { renderLog(false); renderRunStatus(); }
     if (r.running || was) refreshLive(!r.running);
     if (was && !r.running) {
       clearInterval(S.pollTimer); S.pollTimer = null; renderShell();
       const c = S.run.counts;
       if (S.run.kind === "prepare") {
         toast("Packs prepared.");
-        await loadPacks();
+        await loadDocuments(S.docs.selectedId);
       } else if (S.run.kind === "apply") {
         toast(r.exit_code === 0 || r.exit_code === null ? "Apply finished: " + plural(c.submitted, "application") + " submitted." : "Apply ended with an error.", r.exit_code ? "bad" : "");
         await loadApply();
@@ -622,19 +619,20 @@
       "</tbody></table></div>";
   }
 
-  /* ── Documents screen ────────────────────────────────────────────────────── */
+  /* ── Documents screen (approved jobs: prepare, inspect, edit & sign off) ──── */
   async function loadDocuments(selectId) {
     const r = await call("list_packs");
     const all = r && r.ok && Array.isArray(r.packs) ? r.packs : [];
-    const ready = all.filter((p) => p.state !== "not_started" && p.state !== "preparing");
-    S.docs.packs = ready;
-    if (selectId) S.docs.selectedId = selectId;
-    else if (!S.docs.selectedId || !ready.some((p) => p.id === S.docs.selectedId)) {
-      const need = ready.find((p) => p.state === "needs_signoff" || p.state === "ready");
-      S.docs.selectedId = (need || ready[0] || {}).id || null;
+    S.docs.packs = all;
+    if (selectId && all.some((p) => p.id === selectId)) S.docs.selectedId = selectId;
+    else if (!S.docs.selectedId || !all.some((p) => p.id === S.docs.selectedId)) {
+      const need = all.find((p) => p.state === "needs_signoff" || p.state === "ready");
+      const prep = all.find((p) => p.state !== "not_started" && p.state !== "preparing");
+      S.docs.selectedId = (need || prep || all[0] || {}).id || null;
     }
-    if (S.docs.selectedId) {
-      await loadPackDocs(S.docs.selectedId);
+    const sel = all.find((p) => p.id === S.docs.selectedId);
+    if (sel && sel.state !== "not_started" && sel.state !== "preparing") {
+      await loadPackDocs(sel.id);
     } else {
       S.docs.data = null;
       if (S.view === "documents") renderDocuments();
@@ -657,19 +655,37 @@
   function renderDocuments() {
     const d = S.docs;
     const packs = d.packs;
+    const prepBusy = S.run.running && S.run.kind === "prepare";
+    const unprepped = (packs || []).filter((p) => p.state === "not_started");
+    const prepBtn = '<button class="btn primary" data-act="prepare-packs"' + (!(packs && packs.length) || prepBusy ? " disabled" : "") + ">" +
+      icon("play") + (unprepped.length ? "Prepare packs (" + unprepped.length + ")" : "Prepare all") + "</button>";
+    const progressCard = (prepBusy || (S.run.started && S.run.kind === "prepare"))
+      ? '<section class="card card-pad"><div class="status-line"><span class="dot" id="run-dot"></span><span class="state" id="run-state"></span><span class="detail" id="run-detail"></span></div>' +
+        '<div class="progress" id="run-bar"><i></i></div>' +
+        '<div class="log-wrap"><div class="log" id="log" style="height:140px" role="log" aria-label="Pack log" tabindex="0"></div></div></section>'
+      : "";
+
     let bodyHtml = "";
     if (!packs) {
       bodyHtml = '<section class="card card-pad">' + [1, 2, 3].map(() => '<div class="skeleton" style="margin:14px 0"></div>').join("") + "</section>";
     } else if (!packs.length) {
-      bodyHtml = '<section class="card"><div class="empty-state">' + icon("logo") + '<h3>No prepared packs yet</h3><p>Prepare packs for your approved jobs first, then review the tailored CV and cover letter here.</p><button class="btn primary" data-goto="packs" style="margin-top:8px">Go to Packs</button></div></section>';
+      bodyHtml = '<section class="card"><div class="empty-state">' + icon("logo") + '<h3>No approved jobs yet</h3><p>Approve jobs on the Review tab first, then prepare and inspect their tailored CV and cover letter here.</p><button class="btn primary" data-goto="review" style="margin-top:8px">Go to Review</button></div></section>';
     } else {
       const sel = packs.find((p) => p.id === d.selectedId) || packs[0];
+      const isUnprepared = sel && (sel.state === "not_started" || sel.state === "preparing");
       const doc = d.data;
       const isSigned = sel && sel.state === "signed_off";
       const signoffBlocked = doc && doc.signoff_allowed === false;
       const tabs = [["review", "REVIEW.md"], ["evidence", "Evidence & Risk"], ["diff", "Diff & Revert"], ["cover", "Cover Letter"], ["fit", "Fit Analysis"], ["cv", "Tailored CV"]];
       let content = "";
-      if (d.loading) {
+      if (isUnprepared) {
+        content = '<div style="padding:36px 20px;text-align:center">' +
+          '<h3 style="margin:0 0 6px;font-size:15px">Pack not prepared yet</h3>' +
+          '<p class="help" style="margin:0 0 14px">Click Prepare this pack to tailor the 1-page CV, fit analysis, and cover letter for this job.</p>' +
+          '<div style="display:flex;gap:8px;justify-content:center">' +
+          '<button class="btn primary" data-prep-one="' + esc(sel.id) + '"' + (prepBusy ? " disabled" : "") + '>' + icon("play") + "Prepare this pack</button>" +
+          '<button class="btn" data-act="revoke-pack" data-id="' + esc(sel.id) + '">Revoke</button></div></div>';
+      } else if (d.loading) {
         content = '<div class="skeleton" style="margin:12px 0"></div><div class="skeleton" style="margin:12px 0;width:70%"></div>';
       } else if (!doc) {
         content = '<p class="help">Could not load pack documents.</p>';
@@ -756,13 +772,13 @@
       }
 
       bodyHtml = '<div class="docs-layout">' +
-        '<section class="card"><div class="doc-list" role="listbox" aria-label="Prepared packs">' +
+        '<section class="card"><div class="doc-list" role="listbox" aria-label="Approved packs">' +
           packs.map((p) => '<button class="doc-item" role="option" data-doc-sel="' + esc(p.id) + '" aria-selected="' + (sel && sel.id === p.id) + '">' +
-            '<div class="di-role">' + esc(p.role) + '</div><div class="di-co"><span>' + esc(p.company) + "</span>" + packBadge(p.state) + "</div></button>").join("") +
+            '<div class="di-role">' + esc(p.role) + '</div><div class="di-co"><span>' + esc(p.company) + "</span>" + packBadge(p.state) + (p.cv_edited ? ' <span class="badge warn" title="Uses your hand-edited LaTeX PDF">Hand-edited CV</span>' : "") + "</div></button>").join("") +
         "</div></section>" +
         '<section class="card doc-viewer">' +
-          '<div class="doc-head"><div class="dh-info"><div class="dh-title">' + esc(sel.role) + " @ " + esc(sel.company) + '</div><div class="dh-sub">Pack #' + esc(sel.id) + " · " + (isSigned ? "Signed off for Apply" : "Waiting for your sign-off") + "</div></div>" +
-          '<div class="dh-acts">' +
+          '<div class="doc-head"><div class="dh-info"><div class="dh-title">' + esc(sel.role) + " @ " + esc(sel.company) + '</div><div class="dh-sub">Pack #' + esc(sel.id) + " · " + (isUnprepared ? "Not prepared yet" : isSigned ? "Signed off for Apply" : "Waiting for your sign-off") + "</div></div>" +
+          (isUnprepared ? "" : '<div class="dh-acts">' +
             '<button class="btn" data-open-pack="' + esc(sel.id) + ':cv">' + icon("external") + "CV</button>" +
             (doc && doc.cover_letter ? '<button class="btn" data-open-pack="' + esc(sel.id) + ':cover">' + icon("external") + "Cover</button>" : "") +
             '<button class="btn" data-open-pack="' + esc(sel.id) + ':jd">' + icon("external") + "JD</button>" +
@@ -771,17 +787,18 @@
             '<button class="btn" data-act="new-draft" data-id="' + esc(sel.id) + '" title="Ask the AI again for a different draft">New draft</button>' +
             '<button class="btn" data-act="revoke-pack" data-id="' + esc(sel.id) + '">Revoke</button>' +
             '<button class="btn ' + (isSigned ? "" : "primary") + '" data-act="signoff-pack" data-id="' + esc(sel.id) + '"' + (isSigned || signoffBlocked ? " disabled" : "") + ' title="' + esc((doc && doc.signoff_blocked_reason) || "") + '">' + icon("check") + (isSigned ? "Signed off" : "Docs OK") + "</button>" +
-          "</div></div>" +
-          '<div class="doc-tabs" role="tablist">' +
+          "</div>") + "</div>" +
+          (isUnprepared ? "" : '<div class="doc-tabs" role="tablist">' +
             tabs.map(([k, lbl]) => '<button role="tab" data-doc-tab="' + k + '" aria-selected="' + (d.tab === k) + '">' + lbl + "</button>").join("") +
-          "</div>" +
+          "</div>") +
           '<div class="doc-content">' + content + "</div>" +
         "</section></div>";
     }
 
-    $("#view").innerHTML = head("Documents", "Inspect tailored CVs, cover letters, and checklists before signing off.") +
+    $("#view").innerHTML = head("Documents", packs ? plural(packs.length, "approved job") : "Prepare & inspect tailored CVs, cover letters, and checklists.", prepBtn) +
       nextBannerHtml() +
-      '<div class="scroll"><div class="stack">' + bodyHtml + "</div></div>";
+      '<div class="scroll"><div class="stack">' + progressCard + bodyHtml + "</div></div>";
+    if (progressCard) { renderRunStatus(); renderLog(true); }
   }
 
   /* ── Apply screen ────────────────────────────────────────────────────────── */
@@ -1180,12 +1197,18 @@
       const r = await call("prepare_packs", { ids: [d.prepOne] });
       if (r && r.ok) {
         Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
-        S.stick = true; renderPacks(); watchRun();
+        S.stick = true; renderDocuments(); watchRun();
       }
       return;
     }
     if (d.viewDoc) { S.docs.selectedId = d.viewDoc; go("documents"); return; }
-    if (d.docSel) { S.docs.selectedId = d.docSel; loadPackDocs(d.docSel); return; }
+    if (d.docSel) {
+      S.docs.selectedId = d.docSel;
+      const p = (S.docs.packs || []).find((x) => x.id === d.docSel);
+      if (p && p.state !== "not_started" && p.state !== "preparing") loadPackDocs(d.docSel);
+      else { S.docs.data = null; renderDocuments(); }
+      return;
+    }
     if (d.docTab) { S.docs.tab = d.docTab; renderDocuments(); return; }
     if (d.openPack) {
       const [id, kind] = d.openPack.split(":");
@@ -1249,12 +1272,12 @@
         return;
       }
       case "prepare-packs": {
-        const ids = [...S.packs.selected];
+        const unprepped = (S.docs.packs || []).filter((p) => p.state === "not_started").map((p) => p.id);
+        const ids = unprepped.length ? unprepped : (S.docs.packs || []).map((p) => p.id);
         const r = await call("prepare_packs", { ids });
         if (r && r.ok) {
-          S.packs.selected.clear();
           Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: ids.length || 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
-          S.stick = true; renderPacks(); watchRun();
+          S.stick = true; renderDocuments(); watchRun();
         }
         return;
       }
@@ -1273,7 +1296,7 @@
         const r = await call("prepare_packs", { ids: [d.id], redo: true, fresh: d.act === "new-draft" });
         if (r && r.ok) {
           Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
-          S.stick = true; go("packs"); watchRun();
+          S.stick = true; go("documents"); watchRun();
         }
         return;
       }
@@ -1303,7 +1326,7 @@
             body: "<p>" + esc(d.skill) + " is saved. Rebuild this pack to put it on the CV. Your edits to this pack's cv.json are replaced.</p>" });
           if (again) {
             const q = await call("prepare_packs", { ids: [d.id], redo: true });
-            if (q && q.ok) { Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } }); S.stick = true; go("packs"); watchRun(); }
+            if (q && q.ok) { Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } }); S.stick = true; go("documents"); watchRun(); }
           } else { await loadDocuments(d.id); }
         }
         else toast((r && r.error) || "Could not save.", "bad");
@@ -1574,10 +1597,9 @@
     { view: "settings", sel: "#sched-time", title: "Run every morning", text: "Optional. Pick a time and a daily run starts by itself, even when the app is closed." },
     { view: "search", sel: '[data-tags="topics"]', title: "1. Search for jobs", text: "Add one or more topics/roles, pick a level and location. Use Dry-run to inspect the search funnel, or Run to save scored jobs into an Excel workbook." },
     { view: "review", sel: '[data-nav="review"]', title: "2. Review and approve", text: "Tick the jobs you want to apply for, or approve everything above a minimum ATS score." },
-    { view: "packs", sel: '[data-nav="packs"]', title: "3. Prepare application packs", text: "Each approved job gets its own folder with a tailored 1-page CV, fit analysis, and cover letter when requested." },
-    { view: "documents", sel: '[data-nav="documents"]', title: "4. Review documents & sign off", text: "Inspect the tailored CV, cover letter, and REVIEW.md checklist, then click Docs OK before applying." },
-    { view: "apply", sel: '[data-nav="apply"]', title: "5. Preview and Apply", text: "Only signed-off jobs appear here. Start with Preview to watch the agent fill forms, then Submit when ready." },
-    { view: "apps", sel: '[data-nav="apps"]', title: "6. Track applications", text: "Every submitted or in-progress application is tracked here and synced to your account." },
+    { view: "documents", sel: '[data-nav="documents"]', title: "3. Prepare & review documents", text: "Prepare tailored 1-page CVs, fit analyses, and cover letters for approved jobs, inspect them, and click Docs OK before applying." },
+    { view: "apply", sel: '[data-nav="apply"]', title: "4. Preview and Apply", text: "Only signed-off jobs appear here. Start with Preview to watch the agent fill forms, then Submit when ready." },
+    { view: "apps", sel: '[data-nav="apps"]', title: "5. Track applications", text: "Every submitted or in-progress application is tracked here and synced to your account." },
   ];
 
   async function startTour(from) {

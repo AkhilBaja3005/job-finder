@@ -1240,10 +1240,10 @@ def test_staged_api_workflow_end_to_end(tmp_path, monkeypatch):
     jobs = api.list_jobs("ai-intern")
     assert jobs["ok"] and len(jobs["jobs"]) == 2 and jobs["jobs"][0]["fit"] == 88
 
-    # 3. Approve >= 80% -> 1 approved -> next_step says packs
+    # 3. Approve >= 80% -> 1 approved -> next_step says documents (Prepare packs)
     app_res = api.approve_jobs({"min_ats": 80})
     assert app_res == {"ok": True, "approved": 1}
-    assert api.next_step()["stage"] == "packs"
+    assert api.next_step()["stage"] == "documents"
 
     # Approve and revoke by ID
     assert api.approve_jobs({"ids": ["2"]}) == {"ok": True, "approved": 1}

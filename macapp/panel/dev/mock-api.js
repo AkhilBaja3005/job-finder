@@ -167,7 +167,7 @@ Applied AI/ML engineer with 3+ years of experience building production GenAI and
 
     if (!scanned) return { ok: true, stage: "search", title: "No jobs scanned yet", button: "Run a search", goto: "search", counts };
     if (!approved) return { ok: true, stage: "review", title: scanned + " jobs found", button: "Review them", goto: "review", counts };
-    if (notStarted > 0 && needsSignoff === 0 && readyToApply === 0) return { ok: true, stage: "packs", title: notStarted + " approved", button: "Prepare packs", goto: "packs", counts };
+    if (notStarted > 0 && needsSignoff === 0 && readyToApply === 0) return { ok: true, stage: "documents", title: notStarted + " approved", button: "Prepare packs", goto: "documents", counts };
     if (needsSignoff > 0) return { ok: true, stage: "documents", title: needsSignoff + (needsSignoff === 1 ? " pack needs sign-off" : " packs need sign-off"), button: "Review docs", goto: "documents", counts };
     if (readyToApply > 0) return { ok: true, stage: "apply", title: readyToApply + " ready to apply", button: "Apply", goto: "apply", counts };
     return { ok: true, stage: "done", title: "All caught up (" + applied + " applied)", button: "New search", goto: "search", counts };
