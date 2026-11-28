@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
-from . import cv_tailor, fit_scorer
+from . import cv_master, cv_model_runner, cv_tailor, fit_scorer, jd_analyzer
 
 _COVER_LETTER_CUES = re.compile(r"cover[\s-]*letter|covering[\s-]*letter|letter of (?:motivation|interest)|motivation letter|personal statement",
                                 re.I)
@@ -104,7 +104,10 @@ def render_cv_html(cv: Dict[str, Any]) -> str:
         tech = f" ({', '.join(p.get('technologies') or [])})" if p.get("technologies") else ""
         p["title"] = _esc(f"{p.get('title', '')}{tech}")
         p["description"] = [_esc(d) for d in p.get("description", [])]
-    return render_html_resume(c)
+    rendered = render_html_resume(c)
+    rendered = re.sub(r'<span class="edu-dates">\s*(?:–|&ndash;|-)?\s*</span>', '<span class="edu-dates"></span>', rendered)
+    screen_css = "<style>@media screen{body{max-width:210mm;margin:16px auto;padding:11mm 14mm;box-shadow:0 1px 6px rgba(0,0,0,.12)}}</style>"
+    return rendered.replace("</head>", screen_css + "</head>", 1) if "</head>" in rendered else rendered
 
 
 def letter_html(name: str, company: str, text: str) -> str:
@@ -291,12 +294,16 @@ def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Opt
         warnings.append("The job description could not be fetched (site blocked it?), so the CV and cover letter are NOT tailored. "
                         "Paste the posting into job_description.txt and run `./jf prepare --redo --ids %s`." % row.get("ID"))
 
+    # JD & master analysis (Phases 1-2)
+    jd_info = jd_analyzer.analyze_jd(jd_text, title=title, company=company)
+    provider_name, model_name = cv_model_runner.resolve_tailor_provider_and_model()
+
     # CV
     tailored: Optional[cv_tailor.TailoredCV] = None
+    master = cv_master.build_structured_master(candidate)
     if os.path.isfile(cv_path) and not redo:
         cv = json.load(open(cv_path, encoding="utf-8"))                     # keep the user's edits
     else:
-        master = cv_tailor.master_cv_from_profile(candidate)
         try:
             tailored = cv_tailor.tailor_cv(master, jd_text, title, company, level, llm=llm)
             cv = tailored.cv
@@ -361,11 +368,48 @@ def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Opt
         else "Needs attention"
     res = PackResult(folder=folder, status=status, cv_tailored=bool(tailored and tailored.tailored) or (tailored is None and os.path.isfile(os.path.join(folder, "cv_changes.md"))),
                      cv_pdf=cv_pdf if ok else None, cover_letter=cl_status, warnings=warnings)
+    # Evidence panel & manifest metadata (Phases 1, 2, 6, 7)
+    reqs = jd_info.get("requirements", {})
+    all_req_terms = list(reqs.get("must_have", [])) + list(reqs.get("strong", [])) + list(reqs.get("nice_to_have", []))
+    kw_found, kw_missing, alias_matches = [], [], []
+    for term in all_req_terms:
+        ev = cv_master.has_evidence(term, master)
+        if ev.get("evidenced"):
+            kw_found.append(term)
+            if ev.get("alias_used"):
+                alias_matches.append(f"{ev['alias_used']} -> {term}")
+        else:
+            kw_missing.append(term)
+
+    cl_status_norm = "ready" if cl_status == "Yes" else "failed" if cl_status == "Failed" else ("not_asked" if not wanted else "not_generated")
+    tailoring_status = "tailored" if res.cv_tailored else "not_tailored"
+
     _write(os.path.join(folder, "REVIEW.md"), _review_md(row, res, tailored, cl_status, cl_warn, facts))
     _write(os.path.join(folder, "manifest.json"), json.dumps({
         "id": row.get("ID"), "company": company, "role": title, "url": row.get("Job URL"),
         "generated_at": datetime.now().isoformat(timespec="seconds"), "status": res.status,
         "cv_tailored": res.cv_tailored, "cv_pdf": os.path.basename(cv_pdf) if ok else None, "pdf": facts,
-        "cover_letter": cl_status, "warnings": warnings, "files": sorted(os.listdir(folder)),
+        "cover_letter": cl_status,
+        "cover_letter_status": cl_status_norm,
+        "tailoring_status": tailoring_status,
+        "tailor_provider": provider_name,
+        "tailor_model": model_name,
+        "prompt_version": getattr(cv_tailor, "PROMPT_VERSION", "v2"),
+        "evidence_panel": {
+            "keywords_found": kw_found,
+            "keywords_missing": kw_missing,
+            "requirements_gap": [jd_info["seniority"]["gap_note"]] if jd_info.get("seniority", {}).get("gap_note") else [],
+            "knockouts": [f"{k['category']}: {k['evidence']}" for k in jd_info.get("knockouts", [])],
+            "alias_matches": alias_matches,
+            "entailment_results": [],
+        },
+        "scores": {
+            "master_score": getattr(tailored, "master_score", None) if tailored else None,
+            "tailored_score": getattr(tailored, "tailored_score", None) if tailored else None,
+            "coverage_before": f"{len(kw_found)}/{len(all_req_terms)}" if all_req_terms else "0/0",
+            "coverage_after": f"{len(kw_found)}/{len(all_req_terms)}" if all_req_terms else "0/0",
+        },
+        "unresolved_flags": [],
+        "warnings": warnings, "files": sorted(os.listdir(folder)),
     }, indent=2, default=str))
     return res
