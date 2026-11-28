@@ -1568,6 +1568,7 @@ class Api:
                     "role": str(r.get("Job Role") or ""),
                     "company": str(r.get("Company") or ""),
                     "state": self._pack_state(s, r),
+                    "cv_edited": self._latex_in_use(self._pack_folder(s, r)),
                     "error": "",
                 })
             return {"ok": True, "packs": packs}
@@ -1835,6 +1836,58 @@ class Api:
                 except FileNotFoundError:
                     pass
         return self.get_pack_latex(job_id)
+
+    def use_standard_cv_pdf(self, job_id: str) -> Dict[str, Any]:
+        """Switch back from an edited LaTeX PDF to the standard CV rendered from cv.json."""
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import application_pack as ap
+            folder = self._pack_dir(job_id)
+            if not folder:
+                return {"ok": False, "error": f"Approved job #{job_id} not found."}
+            cv_path = folder / "cv.json"
+            if not cv_path.is_file():
+                return {"ok": False, "error": "cv.json not found for this pack."}
+            cv = json.loads(cv_path.read_text(encoding="utf-8"))
+            html_str = ap.render_cv_html(cv)
+            (folder / "cv.html").write_text(html_str, encoding="utf-8")
+            ok = ap.render_cv_pdf(html_str, str(folder / "cv.pdf"))
+            if not ok:
+                return {"ok": False, "error": "Could not render the standard CV PDF."}
+            man_path = folder / "manifest.json"
+            try:
+                man = json.loads(man_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                man = {}
+            man["cv_source"] = "standard"
+            man["cv_edited_by_user"] = False
+            man_path.write_text(json.dumps(man, indent=2, ensure_ascii=False), encoding="utf-8")
+            return {"ok": True}
+
+    def import_latex_template(self, tex_or_path: str) -> Dict[str, Any]:
+        """Save the user's own .tex file as the template for future LaTeX CV generation."""
+        raw = str(tex_or_path or "").strip()
+        if not raw:
+            return {"ok": False, "error": "Provide a .tex file path or LaTeX source."}
+        if "\\begin{document}" not in raw and os.path.isfile(raw):
+            raw = Path(raw).read_text(encoding="utf-8", errors="replace")
+        if len(raw) > 400_000 or "\\begin{document}" not in raw:
+            return {"ok": False, "error": "That does not look like a LaTeX template (\\begin{document} is missing)."}
+        ws = workspace_dir()
+        dest = ws / "data" / "custom_resume_template.tex"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(raw, encoding="utf-8")
+        return {"ok": True, "path": str(dest)}
+
+    def clear_latex_template(self) -> Dict[str, Any]:
+        """Remove the custom .tex template and fall back to the built-in resume.cls template."""
+        ws = workspace_dir()
+        dest = ws / "data" / "custom_resume_template.tex"
+        try:
+            dest.unlink()
+        except FileNotFoundError:
+            pass
+        return {"ok": True}
 
     def revert_pack_change(self, job_id: str, change_id: str) -> Dict[str, Any]:
         ws = workspace_dir()

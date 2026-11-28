@@ -220,9 +220,9 @@ Applied AI/ML engineer with 3+ years of experience building production GenAI and
     },
     list_packs: async () => {
       await wait(80);
-      const packs = mockJobs.filter((j) => j.approved).map((j) => {
+      const packs = mockJobs.filter((j) => j.approved).map((j, idx) => {
         const p = mockPacks[j.id] || { state: "not_started", error: "" };
-        return { id: j.id, role: j.role, company: j.company, state: p.state, error: p.error || "" };
+        return { id: j.id, role: j.role, company: j.company, state: p.state, cv_edited: Boolean(p.cv_edited || idx === 0), error: p.error || "" };
       });
       return { ok: true, packs };
     },
@@ -270,6 +270,9 @@ Applied AI/ML engineer with 3+ years of experience building production GenAI and
       return { ok: true, pages: ["data:image/svg+xml;utf8," + encodeURIComponent(svg)], page_count: 1, fill: 0.97, warnings: edited, tightened: false };
     },
     use_pack_latex_pdf: async (id) => { await wait(150); return { ok: true }; },
+    use_standard_cv_pdf: async (id) => { await wait(150); return { ok: true }; },
+    import_latex_template: async () => ({ ok: true, path: "/tmp/custom_resume_template.tex" }),
+    clear_latex_template: async () => ({ ok: true }),
     pack_documents: async (id) => {
       await wait(80);
       const d = mockDocs[id];

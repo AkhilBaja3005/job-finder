@@ -613,7 +613,7 @@
       pk.list.map((p) => "<tr>" +
         '<td class="chk-col"><input type="checkbox" data-pk-chk="' + esc(p.id) + '"' + (pk.selected.has(p.id) ? " checked" : "") + ' aria-label="Select ' + esc(p.role) + '"></td>' +
         '<td class="job"><div class="co">' + esc(p.company) + '</div><div class="ro">' + esc(p.role) + '<span class="src"> · #' + esc(p.id) + "</span></div></td>" +
-        "<td>" + packBadge(p.state) + "</td>" +
+        "<td>" + packBadge(p.state) + (p.cv_edited ? ' <span class="badge warn" title="Uses your hand-edited LaTeX PDF">Hand-edited CV</span>' : "") + "</td>" +
         '<td style="color:var(--bad);font-size:12px">' + (p.error ? esc(p.error) : "—") + "</td>" +
         '<td class="acts">' +
           (p.state === "not_started" || p.error ? '<button class="btn quiet" data-prep-one="' + esc(p.id) + '">Prepare</button>' : "") +
@@ -742,6 +742,7 @@
               '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">' +
                 '<button class="btn primary" data-act="latex-compile" data-id="' + esc(sel.id) + '"' + (lt.busy ? " disabled" : "") + ">" + (lt.busy ? "Compiling…" : "Compile preview") + "</button>" +
                 '<button class="btn" data-act="latex-use" data-id="' + esc(sel.id) + '"' + (lt.pages && lt.pages.length ? "" : " disabled") + ">Use this PDF for applications</button>" +
+                (lt.in_use ? '<button class="btn" data-act="latex-use-standard" data-id="' + esc(sel.id) + '">Use the standard CV again</button>' : "") +
                 '<button class="btn quiet" data-act="latex-reset" data-id="' + esc(sel.id) + '">Reset to generated</button>' +
                 (lt.in_use ? '<span class="badge">Used for applications</span>' : "") + "</div>" +
               (lt.warnings && lt.warnings.length ? '<div class="banner warn" role="status"><strong>Check these before you apply:</strong><ul>' + lt.warnings.map((w) => "<li>" + esc(w) + "</li>").join("") + "</ul></div>" : "") +
@@ -1341,6 +1342,12 @@
       case "latex-use": {
         const r = await call("use_pack_latex_pdf", d.id);
         if (r && r.ok) { toast("This LaTeX PDF will be used for applications."); S.docs.latex = { ...S.docs.latex, in_use: true }; renderDocuments(); }
+        return;
+      }
+      case "latex-use-standard": {
+        const r = await call("use_standard_cv_pdf", d.id);
+        if (r && r.ok) { toast("Switched back to the standard CV PDF."); S.docs.latex = { ...S.docs.latex, in_use: false }; await loadPackDocs(d.id); }
+        else toast((r && r.error) || "Could not switch back to the standard CV.");
         return;
       }
       case "revert-change": {
