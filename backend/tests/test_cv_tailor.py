@@ -219,3 +219,21 @@ def test_selector_protects_highest_scoring_must_have_bullet():
     kept = r.cv["experience"][0]["description"]
     assert any("AgentSDK" in b and "LangGraph" in b for b in kept)
     assert any("KEPT highest-scoring must-have bullet" in c for c in r.changes)
+
+
+def test_selector_leads_role_with_highest_scoring_bullet_and_preapproved_headline():
+    prof = json.loads(json.dumps(PROFILE))
+    prof["approved_headlines"] = ["Principal ML Scientist"]
+    master = ct.master_cv_from_profile(prof)
+    # Model puts bullet 2 first and bullet 0 second; bullet 0 scores higher on LangGraph + 89%
+    # Summary uses pre-approved headline "Principal ML Scientist"
+    headline_sum = "Principal ML Scientist building multi-agent systems and guardrails for 100+ production agents at a large bank."
+    r = ct.tailor_cv(
+        master,
+        "Required: LangGraph, Python, vLLM.\n" + JD,
+        title="Principal ML Scientist",
+        llm=lambda p: plan(summary=headline_sum, experience=[{"exp_index": 0, "keep": [2, 0, 1]}, {"exp_index": 1, "keep": [0]}]),
+    )
+    assert r.cv["summary"] == headline_sum
+    assert "AgentSDK" in r.cv["experience"][0]["description"][0]
+    assert any("LED Senior Engineer at Bank" in c for c in r.changes)

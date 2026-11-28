@@ -48,3 +48,15 @@ Ran `scripts/manual/cv_live_check.py` against all 23 jobs in `scanned_jobs.xlsx`
 
 1. **Page fill < 92% (6 jobs)**: IDs `1` (GIOS Technology Limited), `5` (Allianz Partners), `14` (Salt), `17` (Kruncher), `20` (VIQU IT Recruitment), `21` (Women in Data®) all measured `91.6%` (0.4% below the 92% target).
 2. **Cover letter `ThinkingBlock` leak (all 23 jobs)**: `cover_letter.txt` begins with `ThinkingBlock(signature='...', thinking='', type='thinking')` from Anthropic's response content blocks, inflating `letter_chars` to 8,842–16,286 and triggering `unsupported number` false positives in `cv_verifier.check_facts`. Fixing `gemini_client._execute_anthropic` to extract only `type == "text"` blocks will resolve this.
+
+## Post-Fix Verification Runs
+
+### Anthropic (`ThinkingBlock` fix verified — 3 jobs)
+- `ID 1` (Anson McCade): `tailored: True`, `1 page`, `fill: 94.1%`, `ats_ok: True`, `new_numbers: 0`, `new_tech: 0`, `letter_chars: 1350` (down from 14,158; zero `ThinkingBlock` leak).
+- `ID 2` (Just Eat Takeaway.com): `tailored: True`, `1 page`, `fill: 94.1%`, `ats_ok: True`, `new_numbers: 0`, `new_tech: 0`, `letter_chars: 1437`.
+- `ID 3` (Arm): `tailored: True`, `1 page`, `fill: 94.1%`, `ats_ok: True`, `new_numbers: 0`, `new_tech: 0`, `letter_chars: 1566`.
+
+### OpenAI GPT (`gpt-6.1-terra`, Section 3.2)
+- `ID 1` (Anson McCade): `tailored: True`, `1 page`, `fill: 87.2%`, `ats_ok: True`, `new_numbers: 0`, `new_tech: 0`, `letter_chars: 1820`.
+- `ID 2` (Just Eat Takeaway.com): `tailored: True`, `1 page`, `fill: 94.1%`, `ats_ok: True`, `new_numbers: 0`, `new_tech: 0`, `letter_chars: 1538`.
+- Jobs `3–5` hit OpenAI's daily RPD quota (`429: Limit 50, Used 50`); `_execute_openai` structured output succeeded on the 2 jobs before the cap.

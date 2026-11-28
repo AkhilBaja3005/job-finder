@@ -658,7 +658,7 @@
     const prepBusy = S.run.running && S.run.kind === "prepare";
     const unprepped = (packs || []).filter((p) => p.state === "not_started");
     const prepBtn = '<button class="btn primary" data-act="prepare-packs"' + (!(packs && packs.length) || prepBusy ? " disabled" : "") + ">" +
-      icon("play") + (unprepped.length ? "Prepare packs (" + unprepped.length + ")" : "Prepare all") + "</button>";
+      icon("play") + (S.packs.selected.size ? "Prepare selected (" + S.packs.selected.size + ")" : unprepped.length ? "Prepare packs (" + unprepped.length + ")" : "Prepare all") + "</button>";
     const progressCard = (prepBusy || (S.run.started && S.run.kind === "prepare"))
       ? '<section class="card card-pad"><div class="status-line"><span class="dot" id="run-dot"></span><span class="state" id="run-state"></span><span class="detail" id="run-detail"></span></div>' +
         '<div class="progress" id="run-bar"><i></i></div>' +
@@ -771,10 +771,12 @@
           (doc.cv_html ? '<iframe title="Tailored CV preview" sandbox="" srcdoc="' + esc(doc.cv_html) + '" style="width:100%;height:520px;border:.5px solid var(--line);border-radius:8px;background:#fff"></iframe>' : "");
       }
 
+      const allChecked = packs.length > 0 && packs.every((p) => S.packs.selected.has(p.id));
       bodyHtml = '<div class="docs-layout">' +
-        '<section class="card"><div class="doc-list" role="listbox" aria-label="Approved packs">' +
-          packs.map((p) => '<button class="doc-item" role="option" data-doc-sel="' + esc(p.id) + '" aria-selected="' + (sel && sel.id === p.id) + '">' +
-            '<div class="di-role">' + esc(p.role) + '</div><div class="di-co"><span>' + esc(p.company) + "</span>" + packBadge(p.state) + (p.cv_edited ? ' <span class="badge warn" title="Uses your hand-edited LaTeX PDF">Hand-edited CV</span>' : "") + "</div></button>").join("") +
+        '<section class="card"><div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:.5px solid var(--line);font-size:12px;color:var(--text-2)"><input type="checkbox" id="pk-all"' + (allChecked ? " checked" : "") + ' aria-label="Select all packs"><label for="pk-all" style="cursor:pointer">Select all</label></div><div class="doc-list" role="listbox" aria-label="Approved packs">' +
+          packs.map((p) => '<div class="doc-item" style="display:flex;flex-direction:row;align-items:flex-start;gap:8px" role="option" data-doc-sel="' + esc(p.id) + '" aria-selected="' + (sel && sel.id === p.id) + '">' +
+            '<input type="checkbox" data-pk-chk="' + esc(p.id) + '"' + (S.packs.selected.has(p.id) ? " checked" : "") + ' aria-label="Select ' + esc(p.role) + '" style="width:auto;margin-top:3px;flex:none">' +
+            '<div style="min-width:0;flex:1"><div class="di-role">' + esc(p.role) + '</div><div class="di-co"><span>' + esc(p.company) + "</span>" + packBadge(p.state) + (p.cv_edited ? ' <span class="badge warn" title="Uses your hand-edited LaTeX PDF">Hand-edited CV</span>' : "") + "</div></div></div>").join("") +
         "</div></section>" +
         '<section class="card doc-viewer">' +
           '<div class="doc-head"><div class="dh-info"><div class="dh-title">' + esc(sel.role) + " @ " + esc(sel.company) + '</div><div class="dh-sub">Pack #' + esc(sel.id) + " · " + (isUnprepared ? "Not prepared yet" : isSigned ? "Signed off for Apply" : "Waiting for your sign-off") + "</div></div>" +
@@ -1137,15 +1139,15 @@
       renderReview(); return;
     }
     if (t.id === "pk-all") {
-      const list = S.packs.list || [];
+      const list = S.docs.packs || [];
       if (t.checked) list.forEach((p) => S.packs.selected.add(p.id));
       else S.packs.selected.clear();
-      renderPacks(); return;
+      renderDocuments(); return;
     }
     if (t.dataset && t.dataset.pkChk) {
       const id = t.dataset.pkChk;
       if (t.checked) S.packs.selected.add(id); else S.packs.selected.delete(id);
-      renderPacks(); return;
+      renderDocuments(); return;
     }
     if (t.id === "f-ai") { S.form.primary_ai = t.value; call("save_app_prefs", { primary_ai: t.value }); }
     else if (t.id === "f-headless") { S.form.headless = t.checked; call("save_app_prefs", { headless: t.checked }); }
@@ -1202,6 +1204,7 @@
       return;
     }
     if (d.viewDoc) { S.docs.selectedId = d.viewDoc; go("documents"); return; }
+    if (e.target && e.target.matches && e.target.matches('input[type="checkbox"][data-pk-chk]')) return;
     if (d.docSel) {
       S.docs.selectedId = d.docSel;
       const p = (S.docs.packs || []).find((x) => x.id === d.docSel);
@@ -1272,10 +1275,12 @@
         return;
       }
       case "prepare-packs": {
+        const picked = [...S.packs.selected];
         const unprepped = (S.docs.packs || []).filter((p) => p.state === "not_started").map((p) => p.id);
-        const ids = unprepped.length ? unprepped : (S.docs.packs || []).map((p) => p.id);
+        const ids = picked.length ? picked : (unprepped.length ? unprepped : (S.docs.packs || []).map((p) => p.id));
         const r = await call("prepare_packs", { ids });
         if (r && r.ok) {
+          S.packs.selected.clear();
           Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: ids.length || 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
           S.stick = true; renderDocuments(); watchRun();
         }

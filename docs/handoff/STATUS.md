@@ -1,16 +1,14 @@
 # Handoff status
 
-Last updated by: Antigravity on branch `feat/cv-live-check`
+Last updated by: Antigravity on branch `feat/anthropic-thinking-tailor-ui-polish`
 
 ## CV tailoring, LaTeX and release (latest)
-- Merged: PR 167, PR 168, PR 169, PR 170 (`fix/cv-guards-new-draft`).
-- Combined PR on `feat/cv-live-check` (supersedes PRs #171–#175):
-  - **Section 1**: Verified `main` build `46140999138` (`Mac arm64` & `Windows` green with `"bundled": true, "ok": true`; `Mac x86_64` `cryptography`/`libssl.3.dylib` fix from PR #174 included).
-  - **Section 3.1**: Ran 23-job `scripts/manual/cv_live_check.py` (Anthropic); results in `docs/handoff/CV_LIVE_CHECK.md`. Found `ThinkingBlock(signature=...)` leak in `cover_letter.txt` (`gemini_client._execute_anthropic`).
-  - **Section 3.3**: Wired `cv_writer.check_title_honesty`, `apply_candidate_term_controls` (`never_say`/`always_keep`), and `cv_selector.score_item` must-have protection into `cv_tailor._apply_plan`; removed unused `cv_renderer_ats`, `cv_eval`, and `offline_tailor`.
-  - **Section 3.4**: Added `cv_master.extract_master_from_resume` (verbatim verification + SHA-256 cache + diff) and `Api.preview_resume_master` / `confirm_resume_master`.
-  - **Sections 3.5 & 3.6**: Added `Api.import_latex_template` / `clear_latex_template` (`cv_latex.cv_to_latex` via `inject_tailored_slots`), `Api.use_standard_cv_pdf`, and `Hand-edited CV` badge in Packs UI.
-  - **Sections 4.1 & 4.3**: Logged post-LinkedIn discovery/filter gaps in `discovery_tools.py` & `scheduled_job_scanner.py`; skipped the 4 env-gated tests cleanly on Python 3.14.
+- Merged: PR 167–170, PR 174, PR 176, PR 177 (`v1.9.6`), PR 178 (merged Packs into Documents, added `/app` page, updated READMEs). Open: PR 179 (parallel `prepare_jobs` + `scan --auto-apply / --direct`).
+- Current branch `feat/anthropic-thinking-tailor-ui-polish`:
+  - Fixed `gemini_client._execute_anthropic` `ThinkingBlock` leak (verified on 3 live jobs: cover letters 1,350–1,566 chars).
+  - Wired `jd_analyzer` bullet-leading + primary-role 3-bullet floor + `approved_headlines` in `cv_tailor.py`.
+  - Added per-row checkboxes + `Prepare selected (N)` in Documents (`macapp/panel/app.js`) and widened macOS `curl` box on `/app` (`DesktopAppPage.jsx`).
+  - Verified `_execute_openai` structured output on 2 live jobs (`gpt-6.1-terra`) before hitting 50/50 daily RPD 429 limit.
 - How to run: `python3 -m pytest backend/tests/test_cv_*.py backend/tests/test_mac_app.py backend/tests/test_fetch_tectonic.py -q` (296 passed, 4 skipped across targeted suite).
 - Next step: Wait for CI (`CI Verification & Tests`, `Mac arm64`, `Windows`, `Mac x86_64`) on the combined PR, merge, and fix `gemini_client._execute_anthropic` `ThinkingBlock` leak for cover letters.
 

@@ -10,14 +10,10 @@ name: Release
 #   5. publish     only when 3 and 4 succeeded: turns the pre-release into the latest release, so installed apps see the update
 # If anything fails the release stays a pre-release; fix it and run again, or delete the pre-release and its tag.
 #
-# Starts by itself when a `release: X.Y.Z` commit has passed CI on main ("Prepare release" merges that PR for you), or by hand:
+# Starts when "Prepare release" merges & dispatches it, or by hand:
 # Actions -> Release -> Run workflow. PyPI is included on a manual run when the box is ticked, and on an automatic run when
 # the repository variable AUTO_PUBLISH_PYPI is "true".
 on:
-  workflow_run:
-    workflows: ["CI Verification & Tests", "Build desktop apps"]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -43,12 +39,7 @@ jobs:
   checks:
     name: Check the release
     runs-on: ubuntu-latest
-    # Automatic runs only for a successful push CI on a commit whose subject is "release: X.Y.Z".
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       startsWith(github.event.workflow_run.head_commit.message, 'release: '))
+    timeout-minutes: 30
     outputs:
       go: ${{ steps.check.outputs.go }}
       version: ${{ steps.v.outputs.version }}
@@ -56,24 +47,18 @@ jobs:
       pypi: ${{ steps.v.outputs.pypi }}
     env:
       GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-      COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || 'main' }}
+          ref: main
           fetch-depth: 0
 
       - name: Work out the version
         id: v
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-            PYPI="${{ inputs.publish_pypi }}"
-          else
-            VERSION=$(printf '%s\n' "$COMMIT_MESSAGE" | head -1 | sed -nE 's/^release: ([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
-            PYPI="${{ vars.AUTO_PUBLISH_PYPI == 'true' }}"
-          fi
+          VERSION="${{ inputs.version }}"
+          PYPI="${{ inputs.publish_pypi }}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "::error::Version must look like 1.9.5"; exit 1; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "pypi=$PYPI" >> "$GITHUB_OUTPUT"
@@ -99,22 +84,23 @@ jobs:
           fi
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           # The tests and the Mac arm64 and Windows builds must all have passed on that commit (Mac Intel may fail). Cancelled runs
-          # say nothing about the code and are ignored; the newest other result per check counts. Two
-          # workflows trigger this one; whichever finishes last finds everything green, the earlier one waits.
-          STATE=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100" --jq '
-            [.check_runs[] | select(.name=="Distribution & Test Suite" or .name=="Mac arm64" or .name=="Windows")
-                           | select(.conclusion != "cancelled")]
-            | group_by(.name) | map(max_by(.id)) as $c
-            | if ([$c[].name] | unique | length) < 3 then "waiting"
-              elif any($c[]; .status != "completed") then "waiting"
-              elif all($c[]; .conclusion == "success") then "success"
-              else "failed" end')
-          echo "Checks on ${SHA:0:7}: $STATE"
-          if [ "$STATE" = "success" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "::error::Checks on ${SHA:0:7} are '$STATE'. Wait for them to pass, then run again."; exit 1
-          fi
-          echo "::notice::Checks on ${SHA:0:7} are '$STATE'; not releasing now."
+          # say nothing about the code and are ignored; the newest other result per check counts. Poll while main CI finishes.
+          STATE="waiting"
+          for i in $(seq 1 40); do
+            STATE=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100" --jq '
+              [.check_runs[] | select(.name=="Distribution & Test Suite" or .name=="Mac arm64" or .name=="Windows")
+                             | select(.conclusion != "cancelled")]
+              | group_by(.name) | map(max_by(.id)) as $c
+              | if ([$c[].name] | unique | length) < 3 then "waiting"
+                elif any($c[]; .status != "completed") then "waiting"
+                elif all($c[]; .conclusion == "success") then "success"
+                else "failed" end')
+            echo "Checks on ${SHA:0:7} (attempt $i): $STATE"
+            if [ "$STATE" = "success" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+            if [ "$STATE" = "failed" ]; then echo "::error::Checks on ${SHA:0:7} failed."; exit 1; fi
+            sleep 30
+          done
+          echo "::error::Timed out waiting for checks on ${SHA:0:7} ($STATE)."; exit 1
 
   release:
     name: Create the pre-release
