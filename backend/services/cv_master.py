@@ -116,6 +116,12 @@ def skill_groups_from_resume_text(text: str) -> Dict[str, List[str]]:
     return result
 
 
+def resume_text(resume_path: Optional[str] = None) -> str:
+    """The text of the candidate's resume file (MASTER_RESUME_PATH unless a path is given); empty when there is none."""
+    path = resume_path or os.environ.get("MASTER_RESUME_PATH", "")
+    return _extract_resume_text(path) if path else ""
+
+
 def resume_skill_groups(resume_path: Optional[str] = None) -> Dict[str, List[str]]:
     path = resume_path or os.environ.get("MASTER_RESUME_PATH", "")
     return skill_groups_from_resume_text(_extract_resume_text(path)) if path else {}

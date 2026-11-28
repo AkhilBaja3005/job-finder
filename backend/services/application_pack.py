@@ -327,6 +327,12 @@ def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Opt
     if not ok:
         warnings.append("cv.pdf could not be rendered (is Playwright Chromium installed? `playwright install chromium`).")
     facts = pdf_facts(cv_pdf) if ok else {}
+    if ok:
+        try:
+            from .pdf_preview import fill_ratio
+            facts["page_fill"] = fill_ratio(cv_pdf)            # 0..1: how far down the page the CV reaches
+        except Exception:
+            pass
 
     # fit analysis (cached; skipped when re-rendering)
     if not render_only and jd_text:

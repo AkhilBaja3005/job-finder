@@ -121,3 +121,33 @@ def test_call_tailor_model_records_what_really_ran(monkeypatch):
     monkeypatch.setattr(gc, "_execute_anthropic", lambda prompt, schema, key, model: seen.update(model=model) or "{}")
     assert cv_model_runner.call_tailor_model("p", None) == "{}"
     assert seen["model"] == "sonnet" and cv_model_runner.LAST_TAILOR_CALL["provider"] == "claude"
+
+
+def test_same_inputs_reuse_the_models_plan(monkeypatch, tmp_path):
+    from backend.services import fit_scorer
+    monkeypatch.setattr(fit_scorer, "_cache_path", lambda: str(tmp_path / "data" / "fit_cache.db"))
+    monkeypatch.delenv("JOB_FINDER_NO_TAILOR_CACHE", raising=False)
+    monkeypatch.setenv("JOB_FINDER_TAILOR_PROVIDER", "gemini")
+    calls = []
+    plan = {"summary": "s", "experience": [], "rewrites": [], "project_order": [], "skills": [], "keywords": []}
+    monkeypatch.setattr(cv_model_runner, "call_tailor_model", lambda prompt, schema: calls.append(prompt) or json.dumps(plan))
+    m = cv_master.build_structured_master(PROFILE, resume_path="/nonexistent")
+    first = cv_tailor._call_plan(m, "job text", "Engineer", "Co", "any", None)
+    second = cv_tailor._call_plan(m, "job text", "Engineer", "Co", "any", None)
+    assert first == second == plan and len(calls) == 1                       # the second answer came from the cache
+    cv_tailor._call_plan(m, "a different job text", "Engineer", "Co", "any", None)
+    assert len(calls) == 2                                                    # a different job asks the model again
+    monkeypatch.setenv("JOB_FINDER_NO_TAILOR_CACHE", "1")
+    cv_tailor._call_plan(m, "job text", "Engineer", "Co", "any", None)
+    assert len(calls) == 3                                                    # the escape hatch asks again
+
+
+def test_a_custom_model_is_never_cached(monkeypatch, tmp_path):
+    from backend.services import fit_scorer
+    monkeypatch.setattr(fit_scorer, "_cache_path", lambda: str(tmp_path / "data" / "fit_cache.db"))
+    calls = []
+    m = cv_master.build_structured_master(PROFILE, resume_path="/nonexistent")
+    llm = lambda prompt: calls.append(1) or json.dumps({"summary": "s", "experience": [], "rewrites": [], "project_order": [], "skills": [], "keywords": []})
+    cv_tailor._call_plan(m, "job text", "E", "C", "any", llm)
+    cv_tailor._call_plan(m, "job text", "E", "C", "any", llm)
+    assert len(calls) == 2
