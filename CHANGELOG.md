@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.9.6
+
+### Added
+- Combined CV tailoring, LaTeX sync, live check, and scan/test fixes
+- Pack lock, not-a-fit and ATS checks, New draft, confirmed skills list, resume gaps, audit, hand-over
+- Bundle Tectonic with the app; skills you confirm yourself; more verified rewrites
+- LaTeX CV editor with in-app PDF preview, repeatable tailoring, page fill in the manifest
+- Master keeps everything on the resume; grouped skills, CPI, links render; validator and gate stop false alarms; tailor uses the chosen AI
+- Wire Phase 1-10 pipeline into application_pack & fix CV preview margins/dates
+- Phase 10 edge-case guards, checklist suite & pack #16 DoD test
+- Phase 9 golden-set eval, baseline comparison, pack metrics & property tests
+- Phase 8 cover letter ledger, cross-doc consistency & SHA-256 apply log
+- Phase 7 review diff, evidence/risk panel, honest status & sign-off gate
+- Phase 6 model routing, determinism cache, 2-pass repair, backoff & offline mode
+- Phase 5 ATS layout, font floor, page-fill loop, region rules, metadata & fallbacks
+- Phase 4 honest CV writer (multiset checks, summary builder, title honesty, style/escaping/links)
+- Phase 3 content selector (scoring, floors, page fill, section order, skills/projects/education)
+- Phase 2 JD analyzer (sections, weights, archetype, seniority, knockouts, quality)
+- Phase 1 source of truth, structured master, bullet metadata, alias map & evidence
+- Phase 0 hard gates, claim ledger, and 30+ adversarial hallucination suite
+
+### Fixed
+- Keep the Intel Mac app on a prebuilt cryptography wheel
+
 ## 1.9.5
 
 - Maintenance release.

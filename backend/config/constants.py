@@ -10,7 +10,7 @@ from typing import List, Dict, Optional, Tuple, Any
 
 # ── Application Version ──────────────────────────────────────────────────────────
 # Single source of truth for application & extension version
-APP_VERSION = "1.9.5"
+APP_VERSION = "1.9.6"
 APP_NAME = "AI Job Finder Agent"
 
 # ── Workspace & User Data Root Resolution ─────────────────────────────────────────
