@@ -44,18 +44,33 @@ def fetch_descriptions(urls: List[str], timeout: float = 45.0) -> Dict[str, str]
 
 
 def prepare_jobs(rows: List[Dict[str, Any]], scanned, approved, candidate: dict, level: Optional[str] = None,
-                 cover_letter: str = "auto", redo: bool = False, render_only: bool = False) -> List[Any]:
-    """Build packs for `rows` (approved-workbook rows) and record the result in both workbooks. Returns PackResults."""
+                 cover_letter: str = "auto", redo: bool = False, render_only: bool = False,
+                 max_workers: Optional[int] = None) -> List[Any]:
+    """Build packs for `rows` (approved-workbook rows) in parallel and record the result in both workbooks. Returns PackResults."""
+    from concurrent.futures import ThreadPoolExecutor
     from backend.services import application_pack as ap
 
     descs = {} if render_only else fetch_descriptions([r["Job URL"] for r in rows if r.get("Job URL")])
-    results, updates_a, updates_s = [], [], []
-    for r in rows:
+    workers = max_workers or max(1, min(int(os.getenv("JOB_FINDER_PREPARE_WORKERS", "4")), len(rows) or 1))
+
+    def _build_one(r: Dict[str, Any]):
         try:
             res = ap.build_pack(r, candidate, descs.get(r.get("Job URL"), ""), level=level, cover_letter=cover_letter,
                                 redo=redo, render_only=render_only)
+            return r, res, None
         except Exception as e:                       # one bad job must not stop the rest
-            ui.warn(f"#{r.get('ID')} {r.get('Company')}: could not build the pack ({type(e).__name__}: {e})")
+            return r, None, e
+
+    if workers <= 1 or len(rows) <= 1:
+        built = [_build_one(r) for r in rows]
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            built = list(pool.map(_build_one, rows))
+
+    results, updates_a, updates_s = [], [], []
+    for r, res, err in built:
+        if err is not None:
+            ui.warn(f"#{r.get('ID')} {r.get('Company')}: could not build the pack ({type(err).__name__}: {err})")
             continue
         results.append((r, res))
         note = f"Pack {res.status.lower()}"
