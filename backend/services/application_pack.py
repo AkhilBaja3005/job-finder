@@ -93,16 +93,20 @@ def render_cv_html(cv: Dict[str, Any]) -> str:
     c["links"] = [_html.escape(str(l), quote=True) for l in c.get("links", [])]
     c["summary"] = _esc(c.get("summary"))
     c["skills"] = [_esc(s) for s in c.get("skills", [])]
+    if c.get("skill_groups"):
+        c["skill_groups"] = {_esc(g): [_esc(x) for x in items] for g, items in c["skill_groups"].items()}
     for e in c.get("experience", []):
         for k in ("company", "role", "technologies", "start_date", "end_date"):
             e[k] = _esc(e.get(k))
         e["description"] = [_esc(b) for b in e.get("description", [])]
     for e in c.get("education", []):
-        for k in ("institution", "degree", "field_of_study", "start_date", "graduation_date"):
+        for k in ("institution", "degree", "field_of_study", "start_date", "graduation_date", "location", "grade"):
             e[k] = _esc(e.get(k))
+        e["highlights"] = [_esc(h) for h in e.get("highlights", [])]
     for p in c.get("projects", []):
         tech = f" ({', '.join(p.get('technologies') or [])})" if p.get("technologies") else ""
         p["title"] = _esc(f"{p.get('title', '')}{tech}")
+        p["url"] = _html.escape(str(p.get("url") or ""), quote=True)
         p["description"] = [_esc(d) for d in p.get("description", [])]
     rendered = render_html_resume(c)
     rendered = re.sub(r'<span class="edu-dates">\s*(?:–|&ndash;|-)?\s*</span>', '<span class="edu-dates"></span>', rendered)
@@ -392,8 +396,8 @@ def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Opt
         "cover_letter": cl_status,
         "cover_letter_status": cl_status_norm,
         "tailoring_status": tailoring_status,
-        "tailor_provider": provider_name,
-        "tailor_model": model_name,
+        "tailor_provider": cv_model_runner.LAST_TAILOR_CALL.get("provider", provider_name),
+        "tailor_model": cv_model_runner.LAST_TAILOR_CALL.get("model", model_name),
         "prompt_version": getattr(cv_tailor, "PROMPT_VERSION", "v2"),
         "evidence_panel": {
             "keywords_found": kw_found,

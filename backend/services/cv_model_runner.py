@@ -192,3 +192,36 @@ def offline_tailor(
     selected["mode"] = "offline_rule_based"
     selected["jd_analysis"] = jd_analysis
     return selected
+
+
+LAST_TAILOR_CALL: Dict[str, str] = {}
+
+
+def pick_tailor_provider() -> str:
+    """The AI to tailor with. JOB_FINDER_TAILOR_PROVIDER wins; otherwise the first provider in the user's order
+    (BROWSER_USE_PROVIDERS, set from the app's "AI that drives the browser" choice) that has a key; otherwise Gemini."""
+    import os
+    keys = {"claude": "ANTHROPIC_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}
+    wanted = [os.getenv("JOB_FINDER_TAILOR_PROVIDER", "")] + [p for p in os.getenv("BROWSER_USE_PROVIDERS", "").replace(";", ",").split(",")]
+    for prov in wanted:
+        prov = prov.strip().lower()
+        if prov in keys and os.getenv(keys[prov]):
+            return "claude" if prov == "anthropic" else prov
+    return "gemini"
+
+
+def call_tailor_model(prompt: str, schema: Any) -> str:
+    """One structured-output call to the chosen provider, with a strong (not "lite") model. Records what really ran."""
+    import os
+    from backend.services import gemini_client as gc
+    provider = pick_tailor_provider()
+    if provider == "claude":
+        model = os.getenv("JOB_FINDER_TAILOR_MODEL") or "sonnet"
+        LAST_TAILOR_CALL.update(provider="claude", model=model)
+        return gc._execute_anthropic(prompt, schema, os.environ["ANTHROPIC_API_KEY"], model)
+    if provider == "openai":
+        model = os.getenv("JOB_FINDER_TAILOR_MODEL") or "terra"
+        LAST_TAILOR_CALL.update(provider="openai", model=model)
+        return gc._execute_openai(prompt, schema, os.environ["OPENAI_API_KEY"], model)
+    LAST_TAILOR_CALL.update(provider="gemini", model="strong tier (non-lite Gemini models)")
+    return gc.generate_content_with_fallback(prompt, schema, model_tier="strong")

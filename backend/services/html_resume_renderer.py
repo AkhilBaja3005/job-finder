@@ -97,6 +97,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     color: #222222;
     font-style: italic;
   }
+  .edu-extra {
+    font-size: 9pt;
+    color: #334155;
+    margin-top: 1px;
+  }
+  .edu-extra a { color: #334155; }
   .tech-line {
     font-size: 8.5pt;
     color: #333333;
@@ -197,7 +203,7 @@ def render_html_resume(resume_data: Dict[str, Any]) -> str:
 
     # Skills
     skills_sec = ""
-    skills_data = resume_data.get("skills", {})
+    skills_data = resume_data.get("skill_groups") or resume_data.get("skills", {})
     if skills_data:
         skills_sec = '<div class="section-title">Technical Skills</div>'
         if isinstance(skills_data, dict):
@@ -218,6 +224,12 @@ def render_html_resume(resume_data: Dict[str, Any]) -> str:
             field = edu.get("field_of_study", "")
             dates = f"{edu.get('start_date', '')} – {edu.get('graduation_date', '')}"
             deg_full = f"{deg} in {field}" if field else deg
+            highlights = [h for h in edu.get("highlights", []) if h]
+            short = [h for h in highlights if h.lower().startswith(("relevant coursework", "coursework", "thesis", "honours", "honors"))]
+            notes_list = [h for h in highlights if h not in short]
+            extras = " | ".join(x for x in [edu.get("location", ""), edu.get("grade", "")] + short if x)   # one line, as on the resume
+            extra_line = f'<div class="edu-extra">{extras}</div>' if extras else ""
+            notes = "".join(f'<div class="edu-extra">{h}</div>' for h in notes_list)
             edu_sec += f"""
 <div class="edu-item">
   <div class="edu-header">
@@ -225,6 +237,7 @@ def render_html_resume(resume_data: Dict[str, Any]) -> str:
     <div class="edu-dates">{dates}</div>
   </div>
   <div class="edu-degree">{deg_full}</div>
+  {extra_line}{notes}
 </div>"""
 
     # Projects
@@ -235,9 +248,13 @@ def render_html_resume(resume_data: Dict[str, Any]) -> str:
         for p in proj_items:
             title = p.get("title", "")
             bullets = "".join([f"<li>{b}</li>" for b in p.get("description", [])])
+            url = p.get("url", "")
+            link = (f'<div class="edu-extra"><a href="{url}">{url.replace("https://", "").replace("http://", "").replace("www.", "")}</a></div>'
+                    if url else "")
             proj_sec += f"""
 <div class="proj-item">
   <div style="font-weight: 700; color: #0f172a; font-size: 9.5pt; margin-top: 4px;">{title}</div>
+  {link}
   <ul class="bullets">{bullets}</ul>
 </div>"""
 

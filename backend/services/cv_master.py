@@ -65,6 +65,62 @@ def _extract_resume_text(resume_path: str) -> str:
     return p.read_text(encoding="utf-8", errors="replace")
 
 
+_SKILL_HEADER = re.compile(r"(?im)^\s*(?:technical\s+)?skills(?:\s*(?:&|and)\s*[a-z ]+)?\s*$")
+_NEXT_SECTION = re.compile(r"^[A-Z][A-Z &/]{3,}$")
+_GROUP_LINE = re.compile(r"^([A-Z][A-Za-z0-9/&,+ \-]{1,44}?):\s*(.*)$")
+
+
+def _split_items(text: str) -> List[str]:
+    out, depth, cur = [], 0, ""
+    for ch in text:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        if ch == "," and depth == 0:
+            out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    out.append(cur)
+    return [i.strip().rstrip(".").strip() for i in out if i.strip().rstrip(".").strip()]
+
+
+def skill_groups_from_resume_text(text: str) -> Dict[str, List[str]]:
+    """The labelled skill lines of a resume ("Languages: Python, C++ ..."), in order. Every label and item is copied from the
+    resume text; nothing here is generated. Wrapped lines are joined to the group they belong to."""
+    lines = (text or "").splitlines()
+    start = next((i for i, l in enumerate(lines) if _SKILL_HEADER.match(l)), None)
+    if start is None:
+        return {}
+    groups: Dict[str, str] = {}
+    current = None
+    for line in lines[start + 1:]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _NEXT_SECTION.match(stripped) and ":" not in stripped:
+            break
+        m = _GROUP_LINE.match(stripped)
+        if m and not stripped.lower().startswith(("http", "opensource")):
+            current = m.group(1).strip()
+            groups[current] = m.group(2)
+        elif current:
+            groups[current] += " " + stripped
+    flat = re.sub(r"\s+", " ", text)
+    result: Dict[str, List[str]] = {}
+    for label, body in groups.items():
+        items = [i for i in _split_items(re.sub(r"\s+", " ", body)) if i in flat]     # drop anything not literally in the resume
+        if items:
+            result[label] = list(dict.fromkeys(items))
+    return result
+
+
+def resume_skill_groups(resume_path: Optional[str] = None) -> Dict[str, List[str]]:
+    path = resume_path or os.environ.get("MASTER_RESUME_PATH", "")
+    return skill_groups_from_resume_text(_extract_resume_text(path)) if path else {}
+
+
 def diff_resume_and_profile(resume_path: str, profile: Dict[str, Any]) -> Dict[str, Any]:
     """1.1: Diff the candidate's real resume file against candidate_profile.json."""
     raw = _extract_resume_text(resume_path)
@@ -125,9 +181,16 @@ def compute_bullet_metadata(bullet_text: str, role_idx: int, bullet_idx: int, sk
     }
 
 
-def build_structured_master(candidate: Dict[str, Any]) -> Dict[str, Any]:
-    """1.3: Build full structured master CV schema with optional sections and bullet metadata."""
+def build_structured_master(candidate: Dict[str, Any], resume_path: Optional[str] = None) -> Dict[str, Any]:
+    """1.3: Build full structured master CV schema with optional sections and bullet metadata.
+    The skill groups come from the real resume file when there is one (MASTER_RESUME_PATH): it is the source of truth for
+    what the candidate lists, and the profile may hold only part of it."""
     master = cv_tailor.master_cv_from_profile(candidate)
+    from_resume = resume_skill_groups(resume_path)
+    if len(from_resume) >= 2:
+        master["skill_groups"] = from_resume
+        merged = [s for items in from_resume.values() for s in items]
+        master["skills"] = list(dict.fromkeys(merged + list(master.get("skills") or [])))
     skills = master.get("skills") or []
     for i, exp in enumerate(master.get("experience") or []):
         exp["id"] = f"exp:{i}"

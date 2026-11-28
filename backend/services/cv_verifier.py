@@ -35,6 +35,24 @@ _COMMON_CAP_WORDS = {
     "with", "work", "worked",
 }
 
+_COMPOUND_SUFFIXES = {"based", "driven", "powered", "native", "level", "scale", "grade", "ready", "first", "enabled", "aware", "centric", "backed"}
+_SENTENCE_OPENERS = {
+    "also", "additionally", "previously", "currently", "recently", "notably", "overall", "meanwhile", "furthermore", "moreover",
+    "alongside", "together", "beyond", "outside", "both", "each", "every", "other", "another", "this", "these", "those", "their",
+    "his", "her", "its", "our", "my", "most", "many", "some", "several", "across", "after", "before", "since", "while", "when",
+    "where", "whether", "within", "throughout", "following", "including", "specifically", "particularly", "primarily", "mainly",
+    "focused", "focusing", "based", "backed", "known", "proven", "seeking", "strong", "deep", "broad", "hands-on", "handson",
+}
+
+
+def _is_ordinary_sentence_opener(text: str, pos: int, word: str) -> bool:
+    """True for a plain lower-case English word that is only capitalised because it begins a sentence."""
+    if not word.isalpha() or (pos != 0 and not re.search(r"[.!?]\s+$", text[:pos])):
+        return False
+    low = word.lower()
+    return low in _SENTENCE_OPENERS or low.endswith(("ly", "ing", "ed"))
+
+
 _ESCALATION_PAIRS = (
     (re.compile(r"\baligned\s+with\b", re.I), re.compile(r"\b(?:ensuring\s+compliance|enforced|guaranteed|mandated)\b", re.I),
      "escalates 'aligned with' to stronger compliance claim"),
@@ -153,9 +171,15 @@ def check_facts(new_text: str, source_text: str, master: Optional[Dict[str, Any]
     for tok in _TECH_RE.findall(new_text):
         if not _has_token(src_low, tok):
             issues.append(f"unsupported tech '{tok}'")
-    for prop in _PROPER_RE.findall(new_text):
+    for m in _PROPER_RE.finditer(new_text):
+        prop = m.group(0)
         if prop.lower() in _COMMON_CAP_WORDS:
             continue
+        if _is_ordinary_sentence_opener(new_text, m.start(), prop):
+            continue          # "Also", "Previously": capitalised only because they start a sentence, not a name
+        if "-" in prop and all(_has_token(src_low, part) or part.lower() in _COMMON_CAP_WORDS or part.lower() in _COMPOUND_SUFFIXES
+                               for part in prop.split("-") if part):
+            continue          # "XGBoost-based": a name from the source plus an ordinary suffix
         if not _has_token(src_low, prop):
             issues.append(f"unsupported entity '{prop}'")
 
