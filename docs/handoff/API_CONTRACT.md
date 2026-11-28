@@ -30,3 +30,13 @@ Every method returns JSON. On failure: `{"ok": false, "error": "plain-language m
 
 ## Applications (existing screen)
 Same shape as today, now read from the Excel tracker (`backend/services/excel_tracker.get_tracker()`); CSV only as a fallback when no workbook exists.
+
+## LaTeX CV (Documents tab, Tailored CV)
+| Method | Returns |
+|---|---|
+| `get_pack_latex(id)` | `{ok, tex, source: "saved"\|"generated", available, pages: [png data URIs], in_use}`. Nothing is compiled. |
+| `compile_pack_latex(id, tex)` | Saves `cv.tex`, compiles to `cv_latex.pdf` (tightens spacing and font until one page). `{ok, pages, page_count, fill, warnings, tightened}` or `{ok: false, error}`. `warnings` lists numbers, tools or names not found in the resume or profile; they never block. |
+| `use_pack_latex_pdf(id)` | Copies `cv_latex.pdf` over `cv.pdf` (what applications upload) and sets `cv_source: "latex"` in `manifest.json`. |
+| `reset_pack_latex(id)` | Deletes `cv.tex` and `cv_latex.pdf`; returns the freshly generated source like `get_pack_latex`. |
+
+Compiling needs Tectonic on the computer (`available: false` otherwise; the standard HTML CV keeps working). Page previews need `pypdfium2`.

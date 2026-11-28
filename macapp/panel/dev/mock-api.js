@@ -59,6 +59,14 @@
     "15": { state: "not_started", error: "" },
   };
 
+  const mockTex = String.raw`\documentclass[11pt]{resume}
+\usepackage{times}
+\name{AKHIL BAJA}
+\begin{document}
+\begin{rSection}{Professional Summary}
+Applied AI/ML engineer with 3+ years of experience building production GenAI and ML systems at Qualcomm and Axis Bank. Built LLM and data systems used by 1,000+ engineers and 1,300+ bank employees.
+\end{rSection}
+\end{document}`;
   const mockDocs = {
     "12": {
       cv_pdf: "/Users/akhil/Documents/Job Finder/applications/ai-intern/0012_acme-ai_ai-engineer-intern/cv.pdf",
@@ -241,6 +249,17 @@
       }, 2800);
       return { ok: true };
     },
+    get_pack_latex: async (id) => { await wait(120); return { ok: true, tex: mockTex, source: "generated", available: true, pages: [], in_use: false }; },
+    reset_pack_latex: async (id) => { await wait(120); return { ok: true, tex: mockTex, source: "generated", available: true, pages: [], in_use: false }; },
+    compile_pack_latex: async (id, tex) => {
+      await wait(900);
+      if (!/\\begin\{document\}/.test(tex)) return { ok: false, error: "That does not look like a LaTeX CV (\\begin{document} is missing)." };
+      if (/oops/.test(tex)) return { ok: false, error: "error: Undefined control sequence | l.42 \\oops" };
+      const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='760' height='980'><rect width='760' height='980' fill='#fff'/><text x='380' y='60' font-family='Times' font-size='34' font-weight='bold' text-anchor='middle'>AKHIL BAJA</text><g font-family='Times' font-size='13' fill='#222'><text x='40' y='110'>PROFESSIONAL SUMMARY</text><text x='40' y='134'>Applied AI/ML engineer with 3+ years of experience building production GenAI and ML systems...</text><text x='40' y='190'>EDUCATION</text><text x='40' y='214'>Imperial College London - MSc in Artificial Intelligence Applications and Innovation</text><text x='40' y='234'>Aug 2019 - May 2023 | CPI: 8.04 / 10.0</text><text x='40' y='290'>WORK EXPERIENCE</text><text x='40' y='314'>Qualcomm | Software Engineer (GenAI / Systems) | Dec 2024 - Aug 2026</text></g></svg>";
+      const edited = /1,300\+ bank employees/.test(tex) ? [] : ["Not found in your resume or profile: unsupported number '2,500'"];
+      return { ok: true, pages: ["data:image/svg+xml;utf8," + encodeURIComponent(svg)], page_count: 1, fill: 0.97, warnings: edited, tightened: false };
+    },
+    use_pack_latex_pdf: async (id) => { await wait(150); return { ok: true }; },
     pack_documents: async (id) => {
       await wait(80);
       const d = mockDocs[id];

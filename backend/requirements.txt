@@ -4,6 +4,8 @@ uvloop; sys_platform != "win32"
 httptools
 pydantic
 pypdf
+pypdfium2
+pillow
 python-docx
 playwright
 google-genai

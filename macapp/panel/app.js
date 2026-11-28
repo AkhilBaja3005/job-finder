@@ -718,9 +718,24 @@
           '<div class="field"><label for="cv-sum">Professional Summary</label><textarea class="input" id="cv-sum" rows="3">' + esc(cj.summary || "") + '</textarea></div>' +
           (cj.experience || []).map((ex, idx) => '<div class="field"><label>' + esc((ex.role || "") + " @ " + (ex.company || "")) + ' (one bullet per line)</label><textarea class="input" data-cv-exp="' + idx + '" rows="3">' + esc((ex.description || []).join("\n")) + '</textarea></div>').join("") +
           '<div><button class="btn primary" data-act="save-cv-json" data-id="' + esc(sel.id) + '">Save &amp; Re-render PDF</button></div></div></details>' : "";
+        const lt = S.docs.latex && S.docs.latex.id === sel.id ? S.docs.latex : null;
+        const latexHtml = '<details class="disclosure" style="margin-bottom:12px"' + (lt ? " open" : "") + '><summary>' + icon("chevron") + 'LaTeX source (advanced): edit, compile, preview</summary><div class="inner">' +
+          (!lt ? '<p class="help">Opens the CV as LaTeX in your resume style. You can change any line, compile it and use that PDF for applications.</p><div><button class="btn" data-act="latex-open" data-id="' + esc(sel.id) + '">Open LaTeX</button></div>'
+            : (lt.error ? '<div class="banner bad" role="alert">' + esc(lt.error) + "</div>" : "") +
+              (lt.available === false ? '<p class="help">LaTeX is not installed on this computer, so it cannot be compiled. The standard CV keeps working.</p>' : "") +
+              '<textarea class="input" id="cv-tex" spellcheck="false" rows="16" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre">' + esc(lt.tex || "") + "</textarea>" +
+              '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">' +
+                '<button class="btn primary" data-act="latex-compile" data-id="' + esc(sel.id) + '"' + (lt.busy ? " disabled" : "") + ">" + (lt.busy ? "Compiling…" : "Compile preview") + "</button>" +
+                '<button class="btn" data-act="latex-use" data-id="' + esc(sel.id) + '"' + (lt.pages && lt.pages.length ? "" : " disabled") + ">Use this PDF for applications</button>" +
+                '<button class="btn quiet" data-act="latex-reset" data-id="' + esc(sel.id) + '">Reset to generated</button>' +
+                (lt.in_use ? '<span class="badge">Used for applications</span>' : "") + "</div>" +
+              (lt.warnings && lt.warnings.length ? '<div class="banner warn" role="status"><strong>Check these before you apply:</strong><ul>' + lt.warnings.map((w) => "<li>" + esc(w) + "</li>").join("") + "</ul></div>" : "") +
+              (lt.meta ? '<p class="help">' + esc(lt.meta) + "</p>" : "") +
+              (lt.pages && lt.pages.length ? '<div class="latex-preview">' + lt.pages.map((src, i) => '<img alt="CV page ' + (i + 1) + '" src="' + src + '">').join("") + "</div>" : "")) +
+          "</div></details>";
         content = '<div class="doc-path" style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span>' + esc(doc.cv_pdf || "No cv.pdf path") + '</span>' +
           '<button class="btn primary" data-open-pack="' + esc(sel.id) + ':cv" style="flex:none">' + icon("external") + "Open CV PDF</button></div>" +
-          editorHtml +
+          editorHtml + latexHtml +
           (doc.cv_html ? '<iframe title="Tailored CV preview" sandbox="" srcdoc="' + esc(doc.cv_html) + '" style="width:100%;height:520px;border:.5px solid var(--line);border-radius:8px;background:#fff"></iframe>' : "");
       }
 
@@ -1254,6 +1269,33 @@
           Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
           S.stick = true; watchRun();
         }
+        return;
+      }
+      case "latex-open": case "latex-reset": {
+        S.docs.latex = { id: d.id, busy: true, tex: "", pages: [] }; renderDocuments();
+        const r = await call(d.act === "latex-reset" ? "reset_pack_latex" : "get_pack_latex", d.id);
+        S.docs.latex = r && r.ok ? { id: d.id, tex: r.tex, pages: r.pages || [], available: r.available, in_use: r.in_use, meta: r.source === "saved" ? "Your saved LaTeX." : "Generated from your CV." }
+                                 : { id: d.id, tex: "", pages: [], error: (r && r.error) || "Could not open the LaTeX." };
+        renderDocuments();
+        return;
+      }
+      case "latex-compile": {
+        const tex = ($("#cv-tex") || {}).value || "";
+        const prev = S.docs.latex || { id: d.id };
+        S.docs.latex = { ...prev, id: d.id, tex, busy: true, error: "" }; renderDocuments();
+        const r = await call("compile_pack_latex", d.id, tex);
+        if (r && r.ok) {
+          S.docs.latex = { ...prev, id: d.id, tex, busy: false, error: "", pages: r.pages || [], warnings: r.warnings || [],
+            meta: r.page_count + (r.page_count === 1 ? " page" : " pages") + (r.fill != null ? ", " + Math.round(r.fill * 100) + "% full" : "") + (r.tightened ? ", spacing tightened to fit one page" : "") };
+        } else {
+          S.docs.latex = { ...prev, id: d.id, tex, busy: false, error: (r && r.error) || "Compile failed." };
+        }
+        renderDocuments();
+        return;
+      }
+      case "latex-use": {
+        const r = await call("use_pack_latex_pdf", d.id);
+        if (r && r.ok) { toast("This LaTeX PDF will be used for applications."); S.docs.latex = { ...S.docs.latex, in_use: true }; renderDocuments(); }
         return;
       }
       case "revert-change": {

@@ -20,6 +20,10 @@ Rules enforced:
 """
 
 import copy
+import time
+import sqlite3
+import os
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -282,9 +286,48 @@ CANDIDATE CV (numbers in brackets are the indices to use):
 {feedback}"""
 
 
-def _call_plan(master, jd_text, title, company, level, llm, feedback=""):
+def _plan_cache_path() -> str:
+    return os.path.join(os.path.dirname(fit_scorer._cache_path()), "tailor_plan_cache.db")
+
+
+def _plan_cache_key(prompt: str) -> str:
+    from . import cv_model_runner
+    ident = f"{PROMPT_VERSION}|{cv_model_runner.pick_tailor_provider()}|{os.getenv('JOB_FINDER_TAILOR_MODEL', '')}"
+    return hashlib.sha256((ident + "\n" + prompt).encode("utf-8")).hexdigest()
+
+
+def _plan_cache_get(key: str) -> Optional[str]:
     try:
-        raw = (llm or _default_llm)(_build_prompt(master, jd_text, title, company, level, feedback))
+        with sqlite3.connect(_plan_cache_path()) as db:
+            db.execute("CREATE TABLE IF NOT EXISTS plans (key TEXT PRIMARY KEY, created REAL, raw TEXT)")
+            row = db.execute("SELECT raw FROM plans WHERE key=?", (key,)).fetchone()
+            return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _plan_cache_set(key: str, raw: str) -> None:
+    try:
+        os.makedirs(os.path.dirname(_plan_cache_path()), exist_ok=True)
+        with sqlite3.connect(_plan_cache_path()) as db:
+            db.execute("CREATE TABLE IF NOT EXISTS plans (key TEXT PRIMARY KEY, created REAL, raw TEXT)")
+            db.execute("INSERT OR REPLACE INTO plans VALUES (?,?,?)", (key, time.time(), raw))
+    except Exception:
+        pass
+
+
+def _call_plan(master, jd_text, title, company, level, llm, feedback=""):
+    """The model's plan. With the default model, the same CV, job and prompt give the same plan every time (it is cached by
+    hash), so a re-run reproduces a CV you already reviewed. JOB_FINDER_NO_TAILOR_CACHE=1 asks the model again."""
+    try:
+        prompt = _build_prompt(master, jd_text, title, company, level, feedback)
+        use_cache = llm is None and os.getenv("JOB_FINDER_NO_TAILOR_CACHE") != "1"
+        key = _plan_cache_key(prompt) if use_cache else ""
+        raw = _plan_cache_get(key) if use_cache else None
+        if raw is None:
+            raw = (llm or _default_llm)(prompt)
+            if use_cache and str(raw or "").strip():
+                _plan_cache_set(key, str(raw))
         if not str(raw or "").strip():
             raise ValueError("empty response from model")
         plan = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", str(raw).strip()))

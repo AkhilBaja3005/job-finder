@@ -60,7 +60,7 @@ hiddenimports += local_modules(ROOT / "job_finder", "job_finder") + ["job_finder
 hiddenimports += local_modules(ROOT / "applications_tracker", "applications_tracker") + ["applications_tracker"]
 
 # Packages that load files or metadata at run time.
-for pkg in ("browser_use", "playwright", "cdp_use", "bubus", "webview", "google.genai", "tiktoken", "certifi"):
+for pkg in ("browser_use", "playwright", "cdp_use", "bubus", "webview", "google.genai", "tiktoken", "certifi", "pypdfium2"):
     try:
         d, b, h = collect_all(pkg)
         datas += d

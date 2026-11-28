@@ -1672,6 +1672,103 @@ class Api:
                 args += ["--search", s.name]
         return self._runner.start(args, {**build_run_env({}, ws), **self._dock_env()}, ws, "prepare")
 
+    # ── LaTeX CV: edit the source, compile it, preview it as images, use it for applications ──
+    def _pack_dir(self, job_id: str) -> Optional[Path]:
+        from services import searches
+        s = searches.resolve_current()
+        row = self._find_approved_row(s, str(job_id))
+        return self._pack_folder(s, row) if row else None
+
+    def get_pack_latex(self, job_id: str) -> Dict[str, Any]:
+        """The pack's LaTeX source (the saved, edited one, or generated from cv.json in the candidate's resume style) and the
+        last compiled preview. Nothing is compiled here."""
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import cv_latex, pdf_preview
+            folder = self._pack_dir(job_id)
+            if not folder:
+                return {"ok": False, "error": f"Approved job #{job_id} not found."}
+            tex_path, pdf_path, cv_path = folder / "cv.tex", folder / "cv_latex.pdf", folder / "cv.json"
+            if tex_path.is_file():
+                tex, source = tex_path.read_text(encoding="utf-8"), "saved"
+            elif cv_path.is_file():
+                tex, source = cv_latex.cv_to_latex(json.loads(cv_path.read_text(encoding="utf-8"))), "generated"
+            else:
+                return {"ok": False, "error": "The CV has not been generated yet. Prepare the pack first."}
+            return {"ok": True, "tex": tex, "source": source, "available": cv_latex.tectonic_available(),
+                    "pages": pdf_preview.render_pages(str(pdf_path)) if pdf_path.is_file() else [],
+                    "in_use": self._latex_in_use(folder)}
+
+    def _latex_in_use(self, folder: Path) -> bool:
+        try:
+            return json.loads((folder / "manifest.json").read_text(encoding="utf-8")).get("cv_source") == "latex"
+        except (OSError, ValueError):
+            return False
+
+    def compile_pack_latex(self, job_id: str, tex: str) -> Dict[str, Any]:
+        """Save the LaTeX the user edited, compile it (tightening to one page when it is too long) and return the preview pages.
+        Claims in the result that are not in the resume are returned as warnings; they never block."""
+        if not isinstance(tex, str) or len(tex) > 400_000 or "\\begin{document}" not in tex:
+            return {"ok": False, "error": "That does not look like a LaTeX CV (\\begin{document} is missing)."}
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import cv_latex, pdf_preview, cv_master
+            folder = self._pack_dir(job_id)
+            if not folder:
+                return {"ok": False, "error": f"Approved job #{job_id} not found."}
+            if not cv_latex.tectonic_available():
+                return {"ok": False, "error": "LaTeX is not installed (Tectonic was not found). The standard CV keeps working."}
+            (folder / "cv.tex").write_text(tex, encoding="utf-8")
+            pdf_path = folder / "cv_latex.pdf"
+            ok, err, pages, used = cv_latex.compile_fit_one_page(tex, str(pdf_path))
+            if not ok:
+                return {"ok": False, "error": err}
+            warnings = [err] if err else []
+            try:
+                from pypdf import PdfReader
+                text = "\n".join(p.extract_text() or "" for p in PdfReader(str(pdf_path)).pages)
+                source = profile_path(ws).read_text(encoding="utf-8") + "\n" + cv_master.resume_text(None)
+                warnings += [f"Not found in your resume or profile: {w}" for w in cv_latex.unsupported_claims(text, source)]
+            except Exception:
+                log.debug("claim check skipped", exc_info=True)
+            return {"ok": True, "pages": pdf_preview.render_pages(str(pdf_path)), "page_count": pages,
+                    "fill": pdf_preview.fill_ratio(str(pdf_path)), "warnings": warnings, "tightened": used != tex}
+
+    def use_pack_latex_pdf(self, job_id: str) -> Dict[str, Any]:
+        """Make the compiled LaTeX PDF the CV that applications upload (it replaces cv.pdf; cv.json and the HTML CV stay)."""
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            folder = self._pack_dir(job_id)
+            if not folder:
+                return {"ok": False, "error": f"Approved job #{job_id} not found."}
+            src = folder / "cv_latex.pdf"
+            if not src.is_file():
+                return {"ok": False, "error": "Compile the LaTeX first."}
+            shutil.copyfile(src, folder / "cv.pdf")
+            man_path = folder / "manifest.json"
+            try:
+                man = json.loads(man_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                man = {}
+            man["cv_source"] = "latex"
+            man["cv_edited_by_user"] = True
+            man_path.write_text(json.dumps(man, indent=2, ensure_ascii=False), encoding="utf-8")
+            return {"ok": True}
+
+    def reset_pack_latex(self, job_id: str) -> Dict[str, Any]:
+        """Throw away the user's LaTeX edits; the source is generated again from cv.json. The CV PDF used for applications is not touched."""
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            folder = self._pack_dir(job_id)
+            if not folder:
+                return {"ok": False, "error": f"Approved job #{job_id} not found."}
+            for name in ("cv.tex", "cv_latex.pdf"):
+                try:
+                    (folder / name).unlink()
+                except FileNotFoundError:
+                    pass
+        return self.get_pack_latex(job_id)
+
     def revert_pack_change(self, job_id: str, change_id: str) -> Dict[str, Any]:
         ws = workspace_dir()
         with self._ws_env(ws):
