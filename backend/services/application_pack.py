@@ -114,6 +114,14 @@ def render_cv_html(cv: Dict[str, Any]) -> str:
     return rendered.replace("</head>", screen_css + "</head>", 1) if "</head>" in rendered else rendered
 
 
+def _manifest_value(folder: str, key: str) -> Any:
+    try:
+        with open(os.path.join(folder, "manifest.json"), encoding="utf-8") as f:
+            return json.load(f).get(key)
+    except (OSError, ValueError):
+        return None
+
+
 def letter_html(name: str, company: str, text: str) -> str:
     paras = "".join(f"<p>{_esc(p).replace(chr(10), '<br>')}</p>" for p in re.split(r"\n\s*\n", text.strip()) if p.strip())
     return ("<!DOCTYPE html><html><head><meta charset='utf-8'><title>Cover letter</title><style>"
@@ -323,7 +331,13 @@ def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Opt
     cv_html = render_cv_html(cv)
     _write(os.path.join(folder, "cv.html"), cv_html)
     cv_pdf = os.path.join(folder, "cv.pdf")
-    ok = render_cv_pdf(cv_html, cv_pdf)
+    keep_latex_pdf = (not redo and os.path.isfile(cv_pdf) and os.path.isfile(os.path.join(folder, "cv_latex.pdf"))
+                      and _manifest_value(folder, "cv_source") == "latex")
+    if keep_latex_pdf:
+        ok = True      # the candidate chose their edited LaTeX PDF for applications: a re-render must not replace it
+        warnings.append("cv.pdf is your edited LaTeX CV and was kept; use --redo to rebuild it from cv.json.")
+    else:
+        ok = render_cv_pdf(cv_html, cv_pdf)
     if not ok:
         warnings.append("cv.pdf could not be rendered (is Playwright Chromium installed? `playwright install chromium`).")
     facts = pdf_facts(cv_pdf) if ok else {}
@@ -399,6 +413,7 @@ def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Opt
         "id": row.get("ID"), "company": company, "role": title, "url": row.get("Job URL"),
         "generated_at": datetime.now().isoformat(timespec="seconds"), "status": res.status,
         "cv_tailored": res.cv_tailored, "cv_pdf": os.path.basename(cv_pdf) if ok else None, "pdf": facts,
+        **({"cv_source": "latex", "cv_edited_by_user": True} if keep_latex_pdf else {}),
         "cover_letter": cl_status,
         "cover_letter_status": cl_status_norm,
         "tailoring_status": tailoring_status,
