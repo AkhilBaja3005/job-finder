@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.7
+
+### Added
+- Update banner, boards progress, bulk sign-off, saved answers count & follow-up drafts
+- Parallel pack building and direct scan --auto-apply / --direct bypassing Excel
+- Merge Packs tab into Documents
+
+### Fixed
+- ThinkingBlock fix, JD bullet leading, Documents Prepare selected & /app polish
+
 ## 1.9.6
 
 ### Added
