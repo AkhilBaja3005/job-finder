@@ -179,7 +179,7 @@ Applied AI/ML engineer with 3+ years of experience building production GenAI and
       const waiting = window.__signin === "waiting";
       const out = q.has("signedout") && window.__signin !== "done";
       const session = out ? { signed_in: false, reason: q.has("offline") ? "offline" : q.has("expired") ? "expired" : "none", signing_in: waiting, error: "" } : { signed_in: true, reason: "", email: "me@example.com" };
-      return { ...state, running, session };
+      return { ...state, running, session, boards: { ready: true, updated: "2026-11-28", indexing: false, done: 0, total: 0 }, update: { available: false, latest: "", url: "https://github.com/AkhilBaja3005/job-finder/releases" }, saved_answers_count: savedAnswers.length };
     },
     next_step: async () => computeNextStep(),
     list_searches: async () => ({ ok: true, current: currentSearch, searches: searches.slice() }),
@@ -426,6 +426,26 @@ Applied AI/ML engineer with 3+ years of experience building production GenAI and
     save_pack_cv: async () => ({ ok: true }),
     open_pack_folder: async () => ({ ok: true }),
     refresh_boards: async () => { activeTask = "scan"; activeScript = ["[Boards] Refreshing Greenhouse/Lever/Ashby index...", "[Boards] Indexed 8,412 company boards."]; running = true; started = Date.now(); lineIndex = 0; return { ok: true }; },
+    signoff_ready_packs: async () => {
+      let signedOff = 0;
+      Object.keys(mockPacks).forEach((id) => {
+        if (mockPacks[id].state === "needs_signoff" || mockPacks[id].state === "ready") {
+          mockPacks[id].state = "signed_off";
+          signedOff++;
+        }
+      });
+      return { ok: true, signed_off: signedOff, skipped: 0 };
+    },
+    draft_followup: async (url, jobId) => {
+      const r = rows.find((x) => (jobId && x.id === jobId) || (url && x.url === url)) || { company: "Acme AI", title: "AI Engineer Intern" };
+      return {
+        ok: true,
+        company: r.company,
+        title: r.title,
+        subject: "Following up: " + r.title + " application",
+        body: "Hi " + r.company + " Recruiting Team, I recently applied for the " + r.title + " role and wanted to reiterate my strong interest. My recent work building production RAG pipelines and LLM evaluation suites aligns closely with your team's focus. I would welcome the chance to discuss how I can contribute.",
+      };
+    },
   } };
   window.dispatchEvent(new Event("pywebviewready"));
 })();

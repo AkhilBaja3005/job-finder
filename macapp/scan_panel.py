@@ -285,15 +285,34 @@ def portal_password_status(ws: Path) -> Dict[str, Any]:
 
 
 def boards_status(ws: Path) -> Dict[str, Any]:
-    db = ws / "data" / "board_index.db"
+    data_dir = ws / "data"
+    db = data_dir / "board_index.db"
+    lock = data_dir / ".boards_refresh.lock"
+    prog_file = data_dir / ".boards_progress.json"
+    indexing = False
+    done, total = 0, 0
+    try:
+        if lock.is_file() and (time.time() - lock.stat().st_mtime) < 1800:
+            indexing = True
+    except OSError:
+        pass
+    try:
+        if prog_file.is_file() and (time.time() - prog_file.stat().st_mtime) < 1800:
+            pdata = json.loads(prog_file.read_text(encoding="utf-8"))
+            done = int(pdata.get("done") or 0)
+            total = int(pdata.get("total") or 0)
+            if total > 0:
+                indexing = True
+    except (OSError, ValueError, TypeError):
+        pass
     if not db.is_file():
-        return {"ready": False, "updated": ""}
+        return {"ready": False, "updated": "", "indexing": indexing, "done": done, "total": total}
     try:
         import datetime as _dt
         ts = _dt.datetime.fromtimestamp(db.stat().st_mtime).strftime("%Y-%m-%d")
-        return {"ready": True, "updated": ts}
+        return {"ready": True, "updated": ts, "indexing": indexing, "done": done, "total": total}
     except OSError:
-        return {"ready": False, "updated": ""}
+        return {"ready": False, "updated": "", "indexing": indexing, "done": done, "total": total}
 
 
 def known_search(name: Any) -> str:
@@ -847,6 +866,39 @@ def _version_tuple(text: str) -> tuple:
     return tuple(int(n) for n in re.findall(r"\d+", text)[:3])
 
 
+_UPDATE_CACHE: Dict[str, Any] = {"ts": 0.0, "inflight": False, "data": {"available": False, "latest": "", "url": "https://github.com/AkhilBaja3005/job-finder/releases"}}
+_UPDATE_TTL = 6 * 3600
+
+
+def _cached_update_state(fetch: Any = None) -> Dict[str, Any]:
+    """Non-blocking cached update check (at most once per 6 hours). Never fails offline or blocks get_state."""
+    now = time.time()
+    if (now - _UPDATE_CACHE["ts"]) >= _UPDATE_TTL and not _UPDATE_CACHE["inflight"] and os.environ.get("JOB_FINDER_APP_SELFTEST") != "1":
+        if os.environ.get("JOB_FINDER_SKIP_BROWSER_INSTALL") != "1" or fetch is not None:
+            _UPDATE_CACHE["inflight"] = True
+
+            def _worker() -> None:
+                try:
+                    res = check_for_update(_app_version(), fetch=fetch)
+                    if res.get("ok"):
+                        _UPDATE_CACHE["data"] = {
+                            "available": bool(res.get("newer")),
+                            "latest": str(res.get("latest") or ""),
+                            "url": str(res.get("url") or "https://github.com/AkhilBaja3005/job-finder/releases"),
+                        }
+                    _UPDATE_CACHE["ts"] = time.time()
+                except Exception:
+                    _UPDATE_CACHE["ts"] = time.time()
+                finally:
+                    _UPDATE_CACHE["inflight"] = False
+
+            if fetch is not None:
+                _worker()
+            else:
+                threading.Thread(target=_worker, daemon=True).start()
+    return dict(_UPDATE_CACHE["data"])
+
+
 def check_for_update(current: str, fetch: Any = None) -> Dict[str, Any]:
     """Asks GitHub for the latest release. Sends nothing about you; it is a plain request for a public page."""
     try:
@@ -1252,7 +1304,17 @@ class Api:
             "running": self._runner.running, "version": _app_version(), "platform": platform_support.NAME, "mailbox": mailbox_status(ws), "stages": stage_counts(read_tracker(ws, 5000)), "usage_today": usage_today_for(ws), "cloud": cloud_status(ws), "session": {**session_status(ws), "signing_in": _signin_state.get("state") == "waiting", "error": _signin_state.get("error", "") if _signin_state.get("state") == "error" else ""}, "profile_check": profile_check(ws), "about_you": _about_state(ws),
             "browser": {"ready": browser_ready(), **self._browser}, "boards": boards_status(ws),
             "app_prefs": load_app_prefs(), "chrome_found": chrome_found(),
+            "update": _cached_update_state(),
+            "saved_answers_count": self._saved_answers_count(ws),
         }
+
+    @staticmethod
+    def _saved_answers_count(ws: Path) -> int:
+        try:
+            from services.saved_answers import load_saved_answers
+            return len(load_saved_answers(str(ws)))
+        except Exception:
+            return 0
 
     def live_view(self) -> Dict[str, Any]:
         """What the agent's browser shows right now, for the Run page. Only while a run is going."""
@@ -1302,7 +1364,8 @@ class Api:
         ws = workspace_dir()
         db = ws / "data" / "board_index.db"
         lock = ws / "data" / ".boards_refresh.lock"
-        if db.is_file():
+        stale = db.is_file() and (time.time() - db.stat().st_mtime) > 7 * 86400
+        if db.is_file() and not stale:
             return
         try:
             if lock.is_file() and (time.time() - lock.stat().st_mtime) < 1800:
@@ -2033,6 +2096,92 @@ class Api:
             if not ok:
                 return {"ok": False, "error": f"Approved job #{job_id} not found."}
             return {"ok": True}
+
+    def signoff_ready_packs(self) -> Dict[str, Any]:
+        """Signs off all prepared, approved, un-applied packs that pass signoff checks."""
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import searches
+            from services.excel_tracker import ExcelTracker
+            s = searches.resolve_current()
+            if not os.path.isfile(s.approved):
+                return {"ok": False, "error": "No approved jobs workbook found."}
+            tracker = ExcelTracker(s.approved)
+            rows = tracker.rows()
+            updates: List[Any] = []
+            skipped = 0
+            for r in rows:
+                if str(r.get("Status") or "") != "Approved" or str(r.get("Applied") or "No") == "Yes":
+                    continue
+                if str(r.get("Docs OK") or "").strip().lower() == "yes":
+                    continue
+                folder = self._pack_folder(s, r)
+                if not folder.is_dir() or not ((folder / "REVIEW.md").is_file() or (folder / "cv.pdf").is_file()):
+                    continue
+                allowed, _ = check_signoff_allowed(folder)
+                if not allowed:
+                    skipped += 1
+                    continue
+                try:
+                    rid = int(r.get("ID"))
+                except (TypeError, ValueError):
+                    continue
+                updates.append(({"row_id": rid}, {"docs_ok": "Yes"}, None))
+            signed_off = tracker.update_many(updates) if updates else 0
+            return {"ok": True, "signed_off": signed_off, "skipped": skipped}
+
+    def draft_followup(self, url: str = "", job_id: str = "") -> Dict[str, Any]:
+        """Drafts a concise 3-sentence recruiter follow-up for an application."""
+        ws = workspace_dir()
+        target_url = str(url or "").strip()
+        target_id = str(job_id or "").strip()
+        row = None
+        for r in read_tracker(ws):
+            if (target_id and str(r.get("id") or "") == target_id) or (target_url and str(r.get("url") or "") == target_url):
+                row = r
+                break
+        if row is None:
+            with self._ws_env(ws):
+                from services import searches
+                from services.excel_tracker import ExcelTracker
+                s = searches.resolve_current()
+                if os.path.isfile(s.approved):
+                    for r in ExcelTracker(s.approved).rows():
+                        if (target_id and str(r.get("ID") or "") == target_id) or (target_url and str(r.get("Job URL") or "") == target_url):
+                            row = {"company": r.get("Company"), "title": r.get("Job Role"), "pack": str(self._pack_folder(s, r))}
+                            break
+        company = str((row or {}).get("company") or "the hiring team")
+        title = str((row or {}).get("title") or "the role")
+        pack_dir = Path(str((row or {}).get("pack") or "")) if (row or {}).get("pack") else None
+        cover_snippet = ""
+        if pack_dir and pack_dir.is_dir():
+            cl = pack_dir / "cover_letter.txt"
+            if cl.is_file():
+                cover_snippet = cl.read_text(encoding="utf-8", errors="ignore")[:800]
+        candidate = read_preferences(ws).get("candidate_name") or ""
+        prompt = (
+            f"Write a polite, concise 3-sentence follow-up email/InMail to a recruiter at {company} "
+            f"about the {title} application.\n"
+            f"Keep it specific, confident, and under 80 words. No placeholders like [Your Name].\n"
+            + (f"Candidate name: {candidate}\n" if candidate else "")
+            + (f"Context from cover letter:\n{cover_snippet}\n" if cover_snippet else "")
+            + "Return plain text only (no subject line prefix)."
+        )
+        body = ""
+        with self._ws_env(ws):
+            try:
+                from services.gemini_client import generate_content_with_fallback
+                body = str(generate_content_with_fallback(prompt) or "").strip()
+            except Exception:
+                body = ""
+        if not body:
+            sign = f"\n\nBest,\n{candidate}" if candidate else ""
+            body = (
+                f"Hi {company} Recruiting Team, I recently applied for the {title} position and wanted to express my strong interest. "
+                f"My background aligns closely with the role's requirements, and I would welcome the chance to discuss how I can contribute. "
+                f"Thank you for your time and consideration.{sign}"
+            )
+        return {"ok": True, "subject": f"Following up: {title} application", "body": body, "company": company, "title": title}
 
     def list_ready(self) -> Dict[str, Any]:
         ws = workspace_dir()

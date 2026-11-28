@@ -179,9 +179,22 @@
     if (S.update && S.update.newer) chip.textContent = "Version " + S.update.latest + " is available";
   }
 
+  function updateBannerHtml() {
+    if (S.updateDismissed) return "";
+    const u = S.update && S.update.newer ? { available: true, latest: S.update.latest, url: S.update.url } : (S.info && S.info.update);
+    if (!u || !u.available) return "";
+    return '<div class="next-banner" role="region" aria-label="App update">' +
+      '<span class="nb-dot"></span>' +
+      '<div class="nb-body"><span class="nb-title">Job Finder ' + esc(u.latest) + ' is available</span></div>' +
+      '<button class="btn primary" data-url="' + esc(u.url) + '">Download</button>' +
+      '<button class="btn quiet" data-act="dismiss-update" aria-label="Dismiss update banner">Dismiss</button>' +
+      "</div>";
+  }
+
   function nextBannerHtml() {
+    const up = updateBannerHtml();
     const ns = S.next;
-    if (!ns || !ns.ok) return "";
+    if (!ns || !ns.ok) return up;
     const c = ns.counts || {};
     const bits = [];
     if (c.scanned) bits.push(c.scanned + " scanned");
@@ -190,7 +203,7 @@
     if (c.ready_to_apply) bits.push(c.ready_to_apply + " ready");
     if (c.applied) bits.push(c.applied + " applied");
     const showBtn = ns.button && ns.goto && ns.goto !== S.view;
-    return '<div class="next-banner' + (ns.stage === "done" ? " done" : "") + '" role="region" aria-label="Next step">' +
+    return up + '<div class="next-banner' + (ns.stage === "done" ? " done" : "") + '" role="region" aria-label="Next step">' +
       '<span class="nb-dot"></span>' +
       '<div class="nb-body"><span class="nb-title">' + esc(ns.title) + "</span>" +
       (bits.length ? '<span class="nb-counts num">' + esc(bits.join(" · ")) + "</span>" : "") + "</div>" +
@@ -657,8 +670,13 @@
     const packs = d.packs;
     const prepBusy = S.run.running && S.run.kind === "prepare";
     const unprepped = (packs || []).filter((p) => p.state === "not_started");
-    const prepBtn = '<button class="btn primary" data-act="prepare-packs"' + (!(packs && packs.length) || prepBusy ? " disabled" : "") + ">" +
-      icon("play") + (S.packs.selected.size ? "Prepare selected (" + S.packs.selected.size + ")" : unprepped.length ? "Prepare packs (" + unprepped.length + ")" : "Prepare all") + "</button>";
+    const needsSignoff = (packs || []).filter((p) => p.state === "needs_signoff" || p.state === "ready");
+    const signoffAllBtn = needsSignoff.length
+      ? '<button class="btn" data-act="signoff-ready"' + (prepBusy ? " disabled" : "") + ">" + icon("check") + "Sign off all ready (" + needsSignoff.length + ")</button>"
+      : "";
+    const prepBtn = '<div style="display:flex;gap:8px;align-items:center">' + signoffAllBtn +
+      '<button class="btn primary" data-act="prepare-packs"' + (!(packs && packs.length) || prepBusy ? " disabled" : "") + ">" +
+      icon("play") + (S.packs.selected.size ? "Prepare selected (" + S.packs.selected.size + ")" : unprepped.length ? "Prepare packs (" + unprepped.length + ")" : "Prepare all") + "</button></div>";
     const progressCard = (prepBusy || (S.run.started && S.run.kind === "prepare"))
       ? '<section class="card card-pad"><div class="status-line"><span class="dot" id="run-dot"></span><span class="state" id="run-state"></span><span class="detail" id="run-detail"></span></div>' +
         '<div class="progress" id="run-bar"><i></i></div>' +
@@ -867,10 +885,19 @@
         "</tbody></table></div>";
     }
 
+    const inf = S.info || {};
+    const preflightHtml = '<div class="score-strip" style="margin-bottom:4px">' +
+      '<span class="score-pill">Ready: <strong>' + esc(jobs ? plural(jobs.length, "pack") : "—") + "</strong></span>" +
+      '<span class="score-pill">Google session: <strong>' + (inf.session && inf.session.signed_in ? "Active" : "Sign-in needed") + "</strong></span>" +
+      '<span class="score-pill">Chrome dock: <strong>' + (inf.app_prefs && inf.app_prefs.dock_browser ? "On" : "Off") + "</strong></span>" +
+      '<span class="score-pill">Daily cap: <strong>' + cap.used + "/" + cap.limit + "</strong></span>" +
+      "</div>";
+
     $("#view").innerHTML = head("Apply", (jobs ? plural(jobs.length, "signed-off job") : "Loading…") + " · Daily cap " + cap.used + "/" + cap.limit, '<span id="run-btn">' + applyButton() + "</span>") +
       nextBannerHtml() +
       '<div class="scroll"><div class="stack">' +
       '<section class="card card-pad form">' +
+        preflightHtml +
         '<div class="cap-bar"><span class="label">Daily cap</span><div class="progress"><i style="width:' + pct + '%"></i></div>' +
           '<span class="num" style="font-size:12px;color:var(--text-2);display:inline-flex;align-items:center;gap:6px">' + cap.used + " / " +
           '<input class="input num inline-num" id="ap-cap" type="number" min="1" max="200" value="' + esc(cap.limit) + '" aria-label="Daily cap limit" style="height:24px"> used today</span></div>' +
@@ -982,6 +1009,7 @@
           '<td class="acts">' + (r.grounding ? '<button class="btn quiet" data-audit-idx="' + idx + '">Audit</button>' : "") +
           (r.pack ? '<button class="btn quiet" data-pack-dir="' + esc(r.pack) + '">Pack</button>' : "") +
           (r.url ? '<button class="btn quiet" data-url="' + esc(r.url) + '" aria-label="Open ' + esc(r.title) + '">Open</button>' : "") +
+          '<button class="btn quiet" data-followup="' + esc(r.url || "") + '" data-followup-id="' + esc(r.id || "") + '">Follow-up</button>' +
           (r.url && k === "review" ? '<button class="btn quiet" data-detail="' + esc(r.url) + '">Why</button><button class="btn quiet" data-review="' + esc(r.url) + '">Review</button>' : "") +
           (r.url ? '<select class="select stage" data-stage="' + esc(r.url) + '" aria-label="Update status of ' + esc(r.title) + '"><option value="">Update…</option>' + STAGES.map(([v, l]) => '<option value="' + v + '">' + l + "</option>").join("") + "</select>" : "") + "</td></tr>";
       }).join("") + "</tbody></table></div>" +
@@ -1044,12 +1072,12 @@
           (S.sched && S.sched.enabled ? '<button class="btn" data-act="sched-on">Change time</button><button class="btn" data-act="sched-off">Turn off</button>' : '<button class="btn primary" data-act="sched-on">Turn on</button>')) +
         row("About you", (i.about_you && i.about_you.unanswered && i.about_you.unanswered.length && i.about_you.exists) ? "Still needed: where you can work, visa sponsorship, when you can start and the levels you want. Without them the agent cannot answer those questions." : "Work rights, start date, salary and the levels you want. The agent types your answers instead of guessing.",
           ((i.about_you && i.about_you.exists && i.about_you.unanswered.length) ? badge("Needs answers", "warn") : "") + '<button class="btn" data-act="edit-about">' + ((i.about_you && i.about_you.exists && i.about_you.unanswered.length) ? "Answer…" : "Edit…") + "</button>") +
-        row("Saved answers", "Answers to questions your profile does not cover, such as why you want the job. The agent uses them word for word instead of guessing.", '<button class="btn" data-act="edit-answers">Edit…</button>') +
+        row("Saved answers", "Answers to questions your profile does not cover, such as why you want the job. The agent uses them word for word instead of guessing.", (i.saved_answers_count ? badge(i.saved_answers_count + " saved") : "") + '<button class="btn" data-act="edit-answers">Edit…</button>') +
         row("Job site sign-ins", "Opens the agent's Chrome so you can sign in to LinkedIn, Indeed, Reed and MyGreenhouse once. Runs reuse the sign-ins.", '<button class="btn" data-act="open-signin">Open Chrome to sign in</button>') +
         row("Portal sign-up password", "Optional. Used when a job portal (like Workday or Reed) requires creating an account or signing in with email + password. Stored in .env only.",
           (pp.set ? badge("Saved" + (pp.hint ? " ···" + pp.hint : ""), "good") : badge("Not set")) + '<button class="btn" data-act="edit-portal-pw">' + (pp.set ? "Replace…" : "Add password…") + "</button>", "c-portal-pw") +
         row("Page scraper browser", br.ready ? "Installed" : br.installing ? "Downloading, about 150 MB…" : (br.error ? esc(br.error) : "Needed for some job sources. Downloaded once."), br.ready ? badge("Ready", "good") : br.installing ? badge("Installing", "accent") : '<button class="btn" data-act="install-browser">' + icon("download") + "Install</button>") +
-        row("Company boards index", (i.boards && i.boards.ready) ? "Indexed local Greenhouse/Lever/Ashby boards (updated " + esc(i.boards.updated) + ")." : "Not built yet. Indexes ~8,500 company boards for fast direct-link searches.", ((i.boards && i.boards.ready) ? badge("Ready", "good") : badge("Not built")) + '<button class="btn" data-act="refresh-boards">' + icon("refresh") + "Refresh</button>") +
+        row("Company boards index", (i.boards && i.boards.indexing) ? (i.boards.total ? "Indexing company boards: " + i.boards.done + " / " + i.boards.total + "…" : "Indexing company boards in the background…") : (i.boards && i.boards.ready) ? "Indexed local Greenhouse/Lever/Ashby boards (updated " + esc(i.boards.updated) + ")." : "Not built yet. Indexes ~8,500 company boards for fast direct-link searches.", ((i.boards && i.boards.indexing) ? badge("Indexing", "accent") : (i.boards && i.boards.ready) ? badge("Ready", "good") : badge("Not built")) + '<button class="btn" data-act="refresh-boards"' + ((i.boards && i.boards.indexing) ? " disabled" : "") + ">" + icon("refresh") + "Refresh</button>") +
       "</section>" +
       '<div class="sect-title">About</div><section class="card">' +
         row("Job Finder " + esc(i.version), S.update && S.update.newer ? "Version " + esc(S.update.latest) + " is available." : S.update ? "You are up to date." : "Check for a newer version.", '<button class="btn" data-act="check-update">Check for updates</button>' + (S.update && S.update.newer ? '<button class="btn primary" data-url="' + esc(S.update.url) + '">Download</button>' : "")) +
@@ -1219,6 +1247,21 @@
       return;
     }
     if (d.applyMode) { S.apply.mode = d.applyMode; renderApply(); return; }
+    if ("followup" in d) {
+      toast("Drafting follow-up…");
+      const r = await call("draft_followup", d.followup || "", d.followupId || "");
+      if (!r || !r.ok) { toast((r && r.error) || "Could not draft follow-up.", "bad"); return; }
+      const ok = await dialog({
+        title: "Follow-up: " + (r.company || ""),
+        confirm: "Copy message",
+        body: '<p class="help"><strong>Subject:</strong> ' + esc(r.subject || "") + '</p><textarea class="input" id="fu-body" rows="6">' + esc(r.body || "") + "</textarea>",
+      });
+      if (ok && navigator.clipboard) {
+        const txt = (($("#fu-body") || {}).value || r.body || "");
+        navigator.clipboard.writeText(txt).then(() => toast("Copied follow-up to clipboard.")).catch(() => {});
+      }
+      return;
+    }
     if (d.auditIdx !== undefined) {
       const row = filteredApps()[Number(d.auditIdx)];
       if (row && row.grounding) {
@@ -1295,6 +1338,20 @@
           await loadDocuments(nextNeed ? nextNeed.id : id);
           await refreshNextStep();
         }
+        return;
+      }
+      case "signoff-ready": {
+        const r = await call("signoff_ready_packs");
+        if (r && r.ok) {
+          toast(r.signed_off ? "Signed off " + plural(r.signed_off, "pack") + "." : "No ready packs to sign off.");
+          await loadDocuments(S.docs.selectedId);
+          await refreshNextStep();
+        }
+        return;
+      }
+      case "dismiss-update": {
+        S.updateDismissed = true;
+        renderView();
         return;
       }
       case "redo-pack": case "new-draft": {
