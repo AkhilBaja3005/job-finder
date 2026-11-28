@@ -106,3 +106,18 @@ def test_api_rejects_empty_or_thin_confirmations(api, skill, evidence):
     r = a.confirm_experience(skill, evidence)
     assert r["ok"] is False and r["error"]
     assert not json.loads(panel.profile_path(ws).read_text())["candidate"].get("confirmed_experience")
+
+
+def test_a_new_draft_asks_the_model_again_but_a_plain_regenerate_does_not(api, monkeypatch):
+    a, panel, ws = api
+    seen = {}
+    monkeypatch.setattr(a._runner, "start", lambda args, env, ws_, kind: seen.update(args=args, env=env, kind=kind) or {"ok": True})
+    monkeypatch.setattr(panel.Api, "_ws_env", lambda self, w: __import__("contextlib").nullcontext(), raising=False)
+    import types, sys as _sys
+    fake = types.SimpleNamespace(resolve_current=lambda: types.SimpleNamespace(is_main=True, name="main"))
+    monkeypatch.setitem(_sys.modules, "services.searches", fake)
+    monkeypatch.setattr(__import__("services"), "searches", fake, raising=False)
+    a.prepare_packs({"ids": [3], "redo": True})
+    assert "JOB_FINDER_NO_TAILOR_CACHE" not in seen["env"] and "--redo" in seen["args"]
+    a.prepare_packs({"ids": [3], "redo": True, "fresh": True})
+    assert seen["env"]["JOB_FINDER_NO_TAILOR_CACHE"] == "1"

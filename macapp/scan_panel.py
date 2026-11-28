@@ -1586,7 +1586,10 @@ class Api:
             s = searches.resolve_current()
             if not s.is_main:
                 args += ["--search", s.name]
-        return self._runner.start(args, {**build_run_env({}, ws), **self._dock_env()}, ws, "prepare")
+        env = {**build_run_env({}, ws), **self._dock_env()}
+        if data.get("fresh"):
+            env["JOB_FINDER_NO_TAILOR_CACHE"] = "1"      # a new draft: ask the AI again instead of reusing its saved answer
+        return self._runner.start(args, env, ws, "prepare")
 
     def _find_approved_row(self, s: Any, job_id: str) -> Optional[Dict[str, Any]]:
         from services.excel_tracker import ExcelTracker
@@ -1671,6 +1674,19 @@ class Api:
             if not s.is_main:
                 args += ["--search", s.name]
         return self._runner.start(args, {**build_run_env({}, ws), **self._dock_env()}, ws, "prepare")
+
+    def check_resume_gaps(self) -> Dict[str, Any]:
+        """Numbers and tool names in the candidate's resume file that the CV data does not have (they would be missing from every CV)."""
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import cv_master
+            text = cv_master.resume_text(None)
+            if not text:
+                return {"ok": True, "has_resume": False, "numbers": [], "names": []}
+            prof = self._read_profile(ws)
+            master = cv_master.build_structured_master(prof.get("candidate") or {})
+            gaps = cv_master.resume_gaps(text, master)
+            return {"ok": True, "has_resume": True, **gaps}
 
     # ── skills the candidate confirms themselves (the only way a skill the resume lacks can reach the CV) ──
     def _read_profile(self, ws: Path) -> Dict[str, Any]:

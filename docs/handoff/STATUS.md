@@ -1,10 +1,11 @@
 # Handoff status
 
-Last updated by: Claude Code on branch `feat/bundle-tectonic-and-honest-gaps` (PR 169)
+Last updated by: Claude Code on branch `fix/cv-guards-new-draft`
 
 ## CV tailoring, LaTeX and release (latest)
 - Merged: PR 167 (master keeps everything from the resume, grouped skills, CPI and links render, validator and gate false alarms fixed, tailoring follows the chosen AI), PR 168 (LaTeX CV editor with in-app PDF preview, repeatable tailoring cache, page fill in the manifest).
-- PR 169 (open): Tectonic bundled with the app, "I have this" confirmed skills, prompt t3, rebuild keeps a chosen LaTeX PDF.
+- Merged PR 169: Tectonic bundled with the app, "I have this" confirmed skills, prompt t3, rebuild keeps a chosen LaTeX PDF.
+- Open (branch `fix/cv-guards-new-draft`): pack lock, not-a-fit warning, ATS check on the real PDF, New draft, confirmed-skills list, resume-gaps banner, pipeline audit, `scripts/manual/cv_live_check.py`.
 - Not done and how to continue: see `docs/handoff/REMAINING_TASKS.md`. Next step: wait for PR 169 CI (Intel Mac and Windows download Tectonic for the first time), merge, then run Actions, "Prepare release".
 - How to run: `python macapp/fetch_tectonic.py` then the tests with `python -m pytest backend/tests -q`. Known local failures on Python 3.14: browser-use (3) and clean-venv (1); CI is green.
 

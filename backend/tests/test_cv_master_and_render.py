@@ -151,3 +151,29 @@ def test_a_custom_model_is_never_cached(monkeypatch, tmp_path):
     cv_tailor._call_plan(m, "job text", "E", "C", "any", llm)
     cv_tailor._call_plan(m, "job text", "E", "C", "any", llm)
     assert len(calls) == 2
+
+
+RESUME_FOR_GAPS = """AKHIL BAJA
++44 7414646921 akhil@example.org linkedin.com/in/akhil
+TECHNICAL SKILLS
+Built a RAG assistant for 1,300+ bank employees, cutting time by 70%. IIT Hyderabad Aug 2019 - May 2023 CPI: 9.21 / 10.0
+Skills: Python, PostgreSQL, PySpark, FastAPI, CI/CD. Placement Cell: outreach to 100+ firms. https://github.com/x/y
+"""
+
+
+def test_resume_gaps_find_facts_the_cv_data_lacks_and_ignore_dates_and_contacts():
+    m = cv_master.build_structured_master(PROFILE, resume_path="/nonexistent")
+    g = cv_master.resume_gaps(RESUME_FOR_GAPS, m)
+    assert g["numbers"] == ["9.21"]                                            # 100+, 1,300+ and 70% are in the CV data already
+    assert "PostgreSQL" in g["names"] and "PySpark" in g["names"]
+    assert not any(n in g["numbers"] for n in ("2019", "2023", "7414646921")) and "x/y" not in " ".join(g["names"])
+    assert "1,300+" not in g["numbers"] and "70%" not in g["numbers"]          # these are in the CV data already
+
+
+def test_a_complete_master_has_no_gaps():
+    prof = dict(PROFILE, education=[{"institution": "IIT", "degree": "B.Tech", "timeline": "Aug 2019 - May 2023", "cpi": "CPI: 9.21 / 10.0",
+                                     "highlights": ["Placement Cell: outreach to 100+ firms."]}],
+                skill_categories={"Skills": ["Python", "PostgreSQL", "PySpark", "FastAPI", "CI/CD"]})
+    m = cv_master.build_structured_master(prof, resume_path="/nonexistent")
+    g = cv_master.resume_gaps(RESUME_FOR_GAPS, m)
+    assert g["numbers"] == [] and g["names"] == []

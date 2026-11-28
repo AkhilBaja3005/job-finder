@@ -250,6 +250,7 @@ Applied AI/ML engineer with 3+ years of experience building production GenAI and
       }, 2800);
       return { ok: true };
     },
+    check_resume_gaps: async () => ({ ok: true, has_resume: true, numbers: q.has("gaps") ? ["8.04", "100+"] : [], names: q.has("gaps") ? ["PostgreSQL", "PySpark"] : [] }),
     list_confirmed_experience: async () => ({ ok: true, items: mockConfirmed.slice() }),
     confirm_experience: async (skill, evidence) => {
       await wait(150);

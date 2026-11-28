@@ -201,3 +201,36 @@ def test_a_rebuild_does_not_replace_the_latex_pdf_the_candidate_chose(tmp_path, 
     assert rendered == [] and (folder / "cv.pdf").read_bytes() == b"%PDF-LATEX-CHOICE"
     assert json.loads((folder / "manifest.json").read_text())["cv_source"] == "latex"
     assert any("edited LaTeX" in w for w in res.warnings)
+
+
+def _ap():
+    import services.application_pack as ap
+    return ap
+
+
+def test_the_ats_check_reads_the_pdf_text(tmp_path):
+    from pypdf import PdfWriter
+    w = PdfWriter()
+    w.add_blank_page(width=595, height=842)
+    pdf = tmp_path / "blank.pdf"
+    with open(pdf, "wb") as f:
+        w.write(f)
+    r = _ap()._ats_text_check(str(pdf), "Ada Lovelace", "ada@example.org")
+    assert r["ok"] is False and any("almost no text" in p for p in r["problems"])
+    assert _ap()._ats_text_check(str(tmp_path / "nope.pdf"), "A", "b@c.d")["ok"] is False
+
+
+def test_a_second_run_on_the_same_pack_is_refused_and_a_stale_lock_is_cleared(tmp_path, monkeypatch):
+    import os, time
+    ap = _ap()
+    row = {"ID": 7, "Company": "Acme", "Job Role": "Engineer"}
+    folder = Path(ap.pack_folder_for(row, str(tmp_path)))
+    folder.mkdir(parents=True)
+    (folder / ".tailor.lock").write_text("123")
+    monkeypatch.setattr(ap, "_build_pack", lambda *a, **k: "built")
+    with pytest.raises(RuntimeError, match="Another run"):
+        ap.build_pack(row, {}, "jd", base_dir=str(tmp_path))
+    old = time.time() - 3600
+    os.utime(folder / ".tailor.lock", (old, old))
+    assert ap.build_pack(row, {}, "jd", base_dir=str(tmp_path)) == "built"
+    assert not (folder / ".tailor.lock").exists()                     # released after the run
