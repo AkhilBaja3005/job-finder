@@ -177,3 +177,45 @@ def test_a_summary_must_keep_the_original_headline_number():
     generic = "Software engineer building agentic systems and guardrails for production agents at a large bank, contributing to frameworks."
     r = tailor(summary=generic)
     assert r.cv["summary"] == PROFILE["experience_summary"] and "drops the proof point" in " ".join(r.warnings)
+
+
+def test_title_honesty_rejects_unsupported_target_role_claim():
+    bad_summary = "Principal ML Scientist with 4 years building AgentSDK and guardrails for 1200 engineers in banking."
+    r = ct.tailor_cv(
+        ct.master_cv_from_profile(PROFILE),
+        JD,
+        title="Principal ML Scientist",
+        llm=lambda p: plan(summary=bad_summary),
+    )
+    assert r.cv["summary"] == PROFILE["experience_summary"]
+    assert any("target role" in w for w in r.warnings)
+
+
+def test_never_say_and_always_keep_controls_in_selection():
+    prof = json.loads(json.dumps(PROFILE))
+    prof["never_say"] = ["telemetry"]
+    prof["always_keep"] = ["AgentSDK"]
+    master = ct.master_cv_from_profile(prof)
+    # Model tries to keep bullet 1 (telemetry) and drop bullet 0 (AgentSDK)
+    r = ct.tailor_cv(
+        master,
+        JD,
+        llm=lambda p: plan(experience=[{"exp_index": 0, "keep": [1, 2]}]),
+    )
+    kept = r.cv["experience"][0]["description"]
+    assert not any("telemetry" in b.lower() for b in kept)
+    assert any("AgentSDK" in b for b in kept)
+
+
+def test_selector_protects_highest_scoring_must_have_bullet():
+    master = ct.master_cv_from_profile(PROFILE)
+    # Bullet 0 mentions LangGraph & guardrails (must-haves in JD). Model drops bullet 0 and only keeps bullet 1 & 2.
+    r = ct.tailor_cv(
+        master,
+        "Required: LangGraph, Python, vLLM.\n" + JD,
+        title="AI Engineer",
+        llm=lambda p: plan(experience=[{"exp_index": 0, "keep": [1, 2]}, {"exp_index": 1, "keep": [0]}]),
+    )
+    kept = r.cv["experience"][0]["description"]
+    assert any("AgentSDK" in b and "LangGraph" in b for b in kept)
+    assert any("KEPT highest-scoring must-have bullet" in c for c in r.changes)
