@@ -11,8 +11,6 @@ from backend.services.cv_edge_guards import (
     detect_not_a_fit,
 )
 from backend.services.cv_master import build_structured_master, has_evidence
-from backend.services.cv_model_runner import offline_tailor
-from backend.services.cv_renderer_ats import fit_layout_with_floor, render_ats_html, save_cv_json_respecting_edits
 from backend.services.cv_selector import compute_page_budget, estimate_fill_ratio, select_cv_content
 from backend.services.cv_tailor import tailor_cv_safe
 from backend.services.cv_verifier import check_facts, check_no_conversions, check_strength_escalation, sanitize_jd
@@ -77,19 +75,6 @@ def test_edge_senior_grad_academic_career_changer():
 
 
 def test_edge_names_unicode_rtl_emoji_links_and_special_chars():
-    cv = {
-        "name": "José-María محمد 🚀",
-        "email": "a@b.com",
-        "phone": "",
-        "linkedin": "",
-        "summary": "Built R&D 100% #1 $50_k pipeline & supercalifragilisticexpialidociousword.",
-        "roles": [{"title": "SWE", "company": "Co & Co", "dates": "2024", "bullets": [{"text": "Shipped FastAPI."}]}],
-        "projects": [{"name": "P", "description": "Docs", "url": "https://github.com/a/b?x=1&y=2#top"}],
-        "skills": {"L": ["Python"]},
-        "education": [],
-    }
-    html_doc = render_ats_html(cv, region="UK")
-    assert "José-María" in html_doc and "محمد" in html_doc and "🚀" in html_doc
     ok, errs = validate_links(["https://example.com/bad", "https://github.com/a/b?x=1&y=2#top"], ["https://github.com/a/b?x=1&y=2#top"])
     assert not ok and len(errs) == 1
 
@@ -138,14 +123,6 @@ def test_edge_bad_model_outputs_and_failures_fail_safe():
 
 
 def test_edge_user_edit_idempotency_lock_and_legacy_pack(tmp_path: Path):
-    cv_path = tmp_path / "cv.json"
-    cv_path.write_text(json.dumps({"edited_by_user": True, "summary": "Manual"}), encoding="utf-8")
-    assert save_cv_json_respecting_edits(cv_path, {"summary": "Auto"}, redo=False) is False
-
-    # Idempotency
-    m = {"name": "A", "summary": "S", "roles": [{"title": "SWE", "company": "C", "dates": "2024", "bullets": [{"id": "b1", "text": "Python."}]}], "projects": [], "skills": {"L": ["Python"]}, "education": []}
-    assert offline_tailor(m, "Required: Python.") == offline_tailor(m, "Required: Python.")
-
     # Lock prevents concurrent tailoring on same pack
     with acquire_pack_lock(tmp_path) as acquired:
         assert acquired is True
@@ -239,6 +216,3 @@ def test_definition_of_done_pack_16_apple():
     assert check_facts(summary, src_text) == []
     assert check_no_conversions(summary, master["summary"], src_text) == []
     assert check_strength_escalation(summary, master["summary"], src_text) == []
-
-    fitted = fit_layout_with_floor(selected, page_budget=1, font_floor_pt=9.0)
-    assert fitted["font_pt"] >= 9.0

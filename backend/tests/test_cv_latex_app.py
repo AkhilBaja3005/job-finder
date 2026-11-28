@@ -234,3 +234,44 @@ def test_a_second_run_on_the_same_pack_is_refused_and_a_stale_lock_is_cleared(tm
     os.utime(folder / ".tailor.lock", (old, old))
     assert ap.build_pack(row, {}, "jd", base_dir=str(tmp_path)) == "built"
     assert not (folder / ".tailor.lock").exists()                     # released after the run
+
+
+def test_import_custom_latex_template_and_clear(api, tmp_path, monkeypatch):
+    a, _, panel = api
+    monkeypatch.setattr(panel, "workspace_dir", lambda: tmp_path)
+    monkeypatch.setenv("JOB_FINDER_ROOT", str(tmp_path))
+    custom_tex = (
+        "\\documentclass{resume}\n"
+        "\\name{Old Name}\n"
+        "\\begin{document}\n"
+        "\\begin{rSection}{Professional Summary}\nOld summary.\n\\end{rSection}\n"
+        "\\begin{rSection}{Work Experience}\n"
+        "\\begin{rSubsection}{Bank}{2024 -- 2026}{Engineer}{London}\n"
+        "\\begin{itemize}\n\\item Old bullet.\n\\end{itemize}\n"
+        "\\end{rSubsection}\n"
+        "\\end{rSection}\n"
+        "\\end{document}\n"
+    )
+    r = a.import_latex_template(custom_tex)
+    assert r["ok"] and Path(r["path"]).is_file()
+    out = cv_latex.cv_to_latex(CV)
+    assert "Ada Lovelace" in out and "1,300+ employees" in out and "Old summary." not in out and "Old bullet." not in out
+    assert a.clear_latex_template()["ok"]
+    assert not Path(r["path"]).exists()
+
+
+def test_use_standard_cv_pdf_reverts_hand_edited_state(api, tmp_path, monkeypatch):
+    import services.application_pack as ap
+    a, pack, _ = api
+    (pack / "cv.json").write_text(json.dumps(CV))
+    (pack / "cv.pdf").write_bytes(b"%PDF-LATEX")
+    (pack / "manifest.json").write_text(json.dumps({"cv_source": "latex", "cv_edited_by_user": True}))
+
+    assert a._latex_in_use(pack) is True
+
+    monkeypatch.setattr(ap, "render_cv_pdf", lambda html, path: Path(path).write_bytes(b"%PDF-STD") or True)
+    r = a.use_standard_cv_pdf("1")
+    assert r["ok"]
+    assert (pack / "cv.pdf").read_bytes() == b"%PDF-STD"
+    assert json.loads((pack / "manifest.json").read_text())["cv_source"] == "standard"
+    assert a._latex_in_use(pack) is False

@@ -1179,7 +1179,11 @@ async def run_scan(
             by_key[key] = job
             fresh.append(job)
 
+    _t_filter = time.perf_counter()
     _filter_into(jobs)
+    _filter_secs = time.perf_counter() - _t_filter
+    if _filter_secs >= 2.0:
+        print(f"[Sources] Filtered and deduplicated {len(jobs)} postings into {len(fresh)} matches in {_filter_secs:.0f}s.")
 
     # ── expansion: search the job titles the results actually contain, to find related roles you did not type ──
     all_jobs = list(jobs)
