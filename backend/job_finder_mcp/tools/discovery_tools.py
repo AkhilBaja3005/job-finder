@@ -177,6 +177,10 @@ async def handle_search_jobs(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         else:
                             jobs = partial_jobs
                         est_jobs = data.get("est_jobs", [])
+                    elif data.get("type") == "log" and data.get("message"):
+                        msg = str(data["message"])
+                        if any(k in msg for k in ("Scoring", "timed out", "Scanned", "Indeed", "Computing ATS")):
+                            print(f"[Discovery] {msg}")
                     elif data.get("type") == "partial_result" and "job" in data:
                         partial_jobs.append(data["job"])
                 except Exception:
