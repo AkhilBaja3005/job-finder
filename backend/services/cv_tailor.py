@@ -455,12 +455,26 @@ def _apply_plan(master: Dict[str, Any], plan: Dict[str, Any],
     if cv["skills"][: len(master["skills"])] != master["skills"][: len(cv["skills"])]:
         changes.append("SKILLS reordered so the job's key skills come first: " + ", ".join(cv["skills"][:8]) + ", …")
 
-    # ── keyword visibility before / after (evidence is decided by code, not the model) ──
+    # ── keyword visibility before / after (evidence is decided by code + alias map, not the model) ──
+    try:
+        from . import cv_master
+    except ImportError:  # pragma: no cover
+        import cv_master
     before_text, after_text = base_text.lower(), cv_text(cv).lower()
+    before_master = {"summary": master.get("summary", ""), "experience": master.get("experience", []), "projects": master.get("projects", []), "skills": master.get("skills", [])}
+    after_master = {"summary": cv.get("summary", ""), "experience": cv.get("experience", []), "projects": cv.get("projects", []), "skills": cv.get("skills", [])}
     kws = []
     for term in dict.fromkeys(str(k).strip() for k in plan.get("keywords") or [] if str(k).strip()):
-        kws.append({"term": term, "evidenced": _mentions(profile_low, term),
-                    "before": _mentions(before_text, term), "after": _mentions(after_text, term)})
+        ev = cv_master.has_evidence(term, before_master)
+        af = cv_master.has_evidence(term, after_master)
+        kws.append({
+            "term": term,
+            "evidenced": bool(ev["evidenced"]),
+            "before": bool(ev["evidenced"]),
+            "after": bool(af["evidenced"]),
+            "snippet": ev["snippet"],
+            "alias_used": ev["alias_used"],
+        })
     return TailoredCV(cv=cv, changes=changes, warnings=warnings, keywords=kws[:20], tailored=True), problems
 
 
