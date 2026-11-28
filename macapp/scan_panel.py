@@ -1287,11 +1287,47 @@ class Api:
 
     def ensure_browser(self) -> Dict[str, Any]:
         """Downloads the page scraper's Chromium if it is missing (about 150 MB, once). Safe to call again."""
+        self._maybe_refresh_boards_bg()
         if browser_ready() or self._browser["installing"] or os.environ.get("JOB_FINDER_SKIP_BROWSER_INSTALL") == "1":
             return {"ok": True}
         self._browser.update(installing=True, error="")
         threading.Thread(target=self._install_browser, daemon=True).start()
         return {"ok": True}
+
+    def _maybe_refresh_boards_bg(self) -> None:
+        if not getattr(sys, "frozen", False) or getattr(self, "_boards_bg_started", False):
+            return
+        if os.environ.get("JOB_FINDER_SKIP_BROWSER_INSTALL") == "1" or os.environ.get("JOB_FINDER_APP_SELFTEST") == "1":
+            return
+        ws = workspace_dir()
+        db = ws / "data" / "board_index.db"
+        lock = ws / "data" / ".boards_refresh.lock"
+        if db.is_file():
+            return
+        try:
+            if lock.is_file() and (time.time() - lock.stat().st_mtime) < 1800:
+                return
+        except OSError:
+            pass
+        self._boards_bg_started = True
+        threading.Thread(target=self._run_boards_bg, args=(ws, lock), daemon=True).start()
+
+    def _run_boards_bg(self, ws: Path, lock: Path) -> None:
+        try:
+            lock.parent.mkdir(parents=True, exist_ok=True)
+            lock.touch()
+            subprocess.run(
+                [a for a in self._launcher if a != "--cli"] + ["--cli", "boards", "refresh"],
+                env={**os.environ, **build_run_env({}, ws), **self._dock_env(), "JOB_FINDER_ROOT": str(ws)},
+                capture_output=True, text=True, timeout=900,
+            )
+        except Exception:
+            log.debug("background boards refresh failed", exc_info=True)
+        finally:
+            try:
+                lock.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def _install_browser(self) -> None:
         tail = ""

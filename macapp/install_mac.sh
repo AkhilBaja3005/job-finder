@@ -47,5 +47,15 @@ rm -rf "$DEST"
 ditto "${MNT}/${APP_NAME}" "$DEST"
 xattr -cr "$DEST" 2>/dev/null || true
 
+APP_SUPPORT="$HOME/Library/Application Support/Job Finder"
+BOARD_DB="$APP_SUPPORT/data/board_index.db"
+if [ ! -f "$BOARD_DB" ]; then
+  echo "Indexing job boards in the background (~6 min)..."
+  mkdir -p "$APP_SUPPORT/data"
+  LOCK="$APP_SUPPORT/data/.boards_refresh.lock"
+  touch "$LOCK"
+  nohup sh -c 'trap "rm -f \"$1\"" EXIT; JOB_FINDER_ROOT="$2" "$3" --cli boards refresh >/dev/null 2>&1' _ "$LOCK" "$APP_SUPPORT" "$DEST/Contents/MacOS/Job Finder" >/dev/null 2>&1 &
+fi
+
 echo "Installed ${APP_NAME} to ${DEST}."
 echo "Run: open -a \"Job Finder\""
