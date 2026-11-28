@@ -709,12 +709,19 @@ def _execute_anthropic(prompt: str, response_schema, api_key: str, model: Option
     }
     print(f"[LLM Client] Anthropic generation with: {claude_model}")
     completion: Any = anthropic_client.messages.create(**call_kwargs)
-    c0 = completion.content[0]
-    try:
-        from anthropic.types import TextBlock  # type: ignore[import]
-        return c0.text if isinstance(c0, TextBlock) else str(c0)
-    except ImportError:
-        return c0.text if hasattr(c0, 'text') else str(c0)  # type: ignore[union-attr]
+    blocks = getattr(completion, "content", None) or []
+    texts = []
+    for blk in blocks:
+        if getattr(blk, "type", None) == "text" and hasattr(blk, "text"):
+            texts.append(str(blk.text))
+        elif isinstance(blk, dict) and blk.get("type") == "text":
+            texts.append(str(blk.get("text") or ""))
+    if texts:
+        return "\n".join(texts).strip()
+    for blk in blocks:
+        if hasattr(blk, "text") and not hasattr(blk, "thinking"):
+            texts.append(str(blk.text))
+    return "\n".join(texts).strip()
 
 
 def _execute_groq(prompt: str, response_schema, api_key: str) -> str:

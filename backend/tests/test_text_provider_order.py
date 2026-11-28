@@ -108,3 +108,23 @@ def test_model_list_cache_is_per_key(monkeypatch):
     assert calls == ["key-a", "key-b"]
     assert all("key-" not in k for k in c._PROVIDER_MODEL_CACHE)
     c._PROVIDER_MODEL_CACHE.clear()
+
+
+def test_execute_anthropic_skips_thinking_blocks(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    import config.constants as c
+
+    monkeypatch.setattr(c, "resolve_provider_model", lambda *a, **k: "claude-sonnet-5-5")
+
+    thinking_blk = SimpleNamespace(type="thinking", thinking="", signature="sig123")
+    text_blk = SimpleNamespace(type="text", text="Dear Hiring Manager,\n\nI built LLM agents.")
+    fake_client = SimpleNamespace(
+        messages=SimpleNamespace(create=lambda **_kw: SimpleNamespace(content=[thinking_blk, text_blk]))
+    )
+    fake_anthropic = SimpleNamespace(Anthropic=lambda **_kw: fake_client)
+    monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic)
+
+    out = g._execute_anthropic("Write cover letter", None, "sk-ant-test")
+    assert out == "Dear Hiring Manager,\n\nI built LLM agents."
+    assert "ThinkingBlock" not in out and "sig123" not in out

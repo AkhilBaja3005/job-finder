@@ -111,6 +111,7 @@ def master_cv_from_profile(candidate: dict) -> Dict[str, Any]:
         "skills": list(dict.fromkeys(skills)),
         "never_say": [str(x).strip() for x in (candidate.get("never_say") or []) if str(x).strip()],
         "always_keep": [str(x).strip() for x in (candidate.get("always_keep") or []) if str(x).strip()],
+        "approved_headlines": [str(x).strip() for x in (candidate.get("approved_headlines") or []) if str(x).strip()],
     }
 
 
@@ -472,11 +473,15 @@ def _apply_plan(master: Dict[str, Any], plan: Dict[str, Any],
     if cv_verifier.is_non_english(new_sum):
         raise TailorUnavailable("model returned non-English output")
     words = len(new_sum.split())
-    sum_probs = _problems_with_prose(new_sum, base_text, unevidenced, master=master) if new_sum else []
-    if title and new_sum and cv_writer.check_title_honesty(title, new_sum) and not cv_writer.check_title_honesty(title, base_text):
+    approved_list = [str(h).strip() for h in (master.get("approved_headlines") or []) if str(h).strip()]
+    approved_headlines = {h.lower() for h in approved_list}
+    title_approved = bool(title and title.strip().lower() in approved_headlines)
+    sum_base = base_text + ("\n" + "\n".join(approved_list) if approved_list else "")
+    sum_probs = _problems_with_prose(new_sum, sum_base, unevidenced, master=master) if new_sum else []
+    if title and new_sum and not title_approved and cv_writer.check_title_honesty(title, new_sum) and not cv_writer.check_title_honesty(title, base_text):
         sum_probs.insert(0, f"summary claims target role '{title}' which your profile does not support")
     if new_sum and master.get("summary"):
-        sum_probs += cv_verifier.check_strength_escalation(new_sum, master["summary"], base_text)
+        sum_probs += cv_verifier.check_strength_escalation(new_sum, master["summary"], sum_base)
     headline = _numbers(master["summary"])
     if new_sum and headline and not (headline & _numbers(new_sum)):
         sum_probs.append("drops the proof point in your original summary (" + ", ".join(sorted(headline)) + ")")   # keep the strongest evidence
@@ -547,6 +552,21 @@ def _apply_plan(master: Dict[str, Any], plan: Dict[str, Any],
                 if len(keep) < room:
                     keep.insert(0, best_j)
                     changes.append(f"KEPT highest-scoring must-have bullet in {exp['role']} at {exp['company']} (model plan had dropped it).")
+            # Top up the primary role (to 3 bullets when available and room permits) so page fill stays rich
+            min_floor = min(len(allowed_indices), 3, room) if i == 0 else 0
+            if len(keep) < min_floor:
+                for _, _, cand_j in sorted(scored, reverse=True):
+                    if len(keep) >= min_floor:
+                        break
+                    if cand_j not in keep:
+                        keep.append(cand_j)
+            # Ensure the highest-scoring bullet leads the role
+            if len(keep) > 1:
+                lead_j = max(keep, key=lambda k: (cv_selector.score_item(orig[k], jd_analysis), -k))
+                if cv_selector.score_item(orig[lead_j], jd_analysis) > cv_selector.score_item(orig[keep[0]], jd_analysis):
+                    keep.remove(lead_j)
+                    keep.insert(0, lead_j)
+                    changes.append(f"LED {exp['role']} at {exp['company']} with highest-scoring JD bullet.")
         keep = keep[:room]
         new_bullets = []
         for j in keep:

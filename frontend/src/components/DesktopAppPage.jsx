@@ -110,26 +110,24 @@ export default function DesktopAppPage({ onBack, onLaunchPlatform }) {
           paddingTop: '16px',
           borderTop: '1px solid var(--border-color)',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          flexWrap: 'wrap',
+          flexDirection: 'column',
+          gap: '8px',
         }}>
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
             macOS Terminal install (no Gatekeeper warning):
           </span>
           <div style={{
-            flex: '1 1 380px',
+            width: '100%',
+            boxSizing: 'border-box',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            padding: '7px 10px',
+            padding: '8px 12px',
             borderRadius: '8px',
             background: 'rgba(15, 23, 42, 0.7)',
             border: '1px solid var(--border-color)',
-            minWidth: 0,
           }}>
-            <code style={{ fontSize: '0.74rem', color: '#e2e8f0', whiteSpace: 'nowrap', overflowX: 'auto', flex: 1 }}>
+            <code style={{ fontSize: '0.76rem', color: '#e2e8f0', wordBreak: 'break-all', flex: 1 }}>
               {MAC_CURL_CMD}
             </code>
             <button
