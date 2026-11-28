@@ -24,6 +24,7 @@ import copy
 import html as _html
 import json
 import os
+import time
 import re
 import shutil
 from dataclasses import dataclass, field
@@ -112,6 +113,30 @@ def render_cv_html(cv: Dict[str, Any]) -> str:
     rendered = re.sub(r'<span class="edu-dates">\s*(?:–|&ndash;|-)?\s*</span>', '<span class="edu-dates"></span>', rendered)
     screen_css = "<style>@media screen{body{max-width:210mm;margin:16px auto;padding:11mm 14mm;box-shadow:0 1px 6px rgba(0,0,0,.12)}}</style>"
     return rendered.replace("</head>", screen_css + "</head>", 1) if "</head>" in rendered else rendered
+
+
+def _ats_text_check(pdf_path: str, name: str, email: str) -> Dict[str, Any]:
+    """What an applicant-tracking parser sees: the PDF's own text. The name and email must be readable, the standard sections
+    present, and the name must come first."""
+    try:
+        from pypdf import PdfReader
+        text = "\n".join(p.extract_text() or "" for p in PdfReader(pdf_path).pages)
+    except Exception:
+        return {"ok": False, "problems": ["the PDF text could not be read"]}
+    low = text.lower()
+    problems = []
+    if len(text.strip()) < 200:
+        problems.append("almost no text in the PDF (an image-only PDF cannot be read by parsers)")
+    if name and name.lower() not in low:
+        problems.append("the name is not readable")
+    if email and email.lower() not in low:
+        problems.append("the email is not readable")
+    for label, words in (("summary", ("summary", "profile")), ("experience", ("experience", "employment")), ("education", ("education",)), ("skills", ("skills",))):
+        if not any(w in low for w in words):
+            problems.append(f"no '{label}' heading")
+    if name and name.lower() in low and low.find(name.lower()) > 200:
+        problems.append("the name is not at the top")
+    return {"ok": not problems, "problems": problems}
 
 
 def _manifest_value(folder: str, key: str) -> Any:
@@ -279,7 +304,31 @@ def read_cover_letter(folder: Optional[str]) -> Dict[str, Optional[str]]:
 
 
 # ─── the builder ──────────────────────────────────────────────────────────────
-def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Optional[str] = None,
+def _remove_stale_lock(folder: str, max_age_seconds: int = 900) -> None:
+    """A lock left behind by a crashed run must not block this pack forever."""
+    lock = os.path.join(folder, ".tailor.lock")
+    try:
+        if os.path.isfile(lock) and time.time() - os.path.getmtime(lock) > max_age_seconds:
+            os.remove(lock)
+    except OSError:
+        pass
+
+
+def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, **kwargs: Any) -> "PackResult":
+    """Create or refresh the pack for one approved job. Two runs on the same pack at once would overwrite each other, so the
+    second one is refused with a clear message (a lock older than 15 minutes is treated as left over from a crash)."""
+    from pathlib import Path
+    from .cv_edge_guards import acquire_pack_lock
+    folder = pack_folder_for(row, kwargs.get("base_dir"))
+    os.makedirs(folder, exist_ok=True)
+    _remove_stale_lock(folder)
+    with acquire_pack_lock(Path(folder)) as got:
+        if not got:
+            raise RuntimeError(f"Another run is already preparing the pack for #{row.get('ID')} {row.get('Company')}. Wait for it to finish.")
+        return _build_pack(row, candidate, jd_text, **kwargs)
+
+
+def _build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Optional[str] = None,
                cover_letter: str = "auto", redo: bool = False, render_only: bool = False,
                llm: Optional[Callable[[str], str]] = None, base_dir: Optional[str] = None) -> PackResult:
     """Create or refresh the pack for one approved job. Existing edits to cv.json / cover_letter.txt are kept unless `redo`."""
@@ -341,6 +390,16 @@ def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Opt
     if not ok:
         warnings.append("cv.pdf could not be rendered (is Playwright Chromium installed? `playwright install chromium`).")
     facts = pdf_facts(cv_pdf) if ok else {}
+    ats_check = _ats_text_check(cv_pdf, cv.get("name", ""), cv.get("email", "")) if ok else {}
+    if ats_check and not ats_check["ok"]:
+        warnings.append("ATS check: " + "; ".join(ats_check["problems"]))
+    fit_check = {}
+    if jd_text:
+        from .cv_edge_guards import detect_not_a_fit
+        fit_check = detect_not_a_fit(candidate_text=cv_tailor.cv_text(master), jd_title=title, jd_text=jd_text)
+        fit_check["not_a_fit"] = bool(fit_check["not_a_fit"] and fit_check["overlap_ratio"] < 0.07)   # warn only for a clear mismatch
+        if fit_check["not_a_fit"]:
+            warnings.append(f"This job looks unrelated to your CV (only {round(fit_check['overlap_ratio'] * 100)}% of its wording appears in it). Check it before you apply.")
     if ok:
         try:
             from .pdf_preview import fill_ratio
@@ -415,6 +474,7 @@ def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Opt
         "cv_tailored": res.cv_tailored, "cv_pdf": os.path.basename(cv_pdf) if ok else None, "pdf": facts,
         **({"cv_source": "latex", "cv_edited_by_user": True} if keep_latex_pdf else {}),
         "cover_letter": cl_status,
+        "ats_check": ats_check, "fit_check": fit_check,
         "cover_letter_status": cl_status_norm,
         "tailoring_status": tailoring_status,
         "tailor_provider": cv_model_runner.LAST_TAILOR_CALL.get("provider", provider_name),

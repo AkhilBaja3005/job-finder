@@ -122,6 +122,34 @@ def resume_text(resume_path: Optional[str] = None) -> str:
     return _extract_resume_text(path) if path else ""
 
 
+_LABELS = {"OpenSource", "LinkedIn", "GitHub"}
+_YEAR = re.compile(r"^(?:19|20)\d\d$")
+
+
+def resume_gaps(resume_text: str, master: Dict[str, Any]) -> Dict[str, List[str]]:
+    """Facts that appear in the candidate's resume file but not in the CV data the app builds from: numbers (proof points, grades)
+    and tool or product names. Dates, years, phone numbers and web addresses are ignored. Empty lists mean nothing is lost."""
+    text = re.sub(r"https?://\S+|\S+@\S+|\+?\d[\d ]{8,}\d|\b[\w.-]+\.(?:com|io|org|net|dev|ai|co\.uk)\b\S*", " ", resume_text or "")
+    name_parts = {w.lower() for w in re.findall(r"[A-Za-z]{3,}", str(master.get("name") or ""))}
+    # all-capital lines are the name and the section headings, not facts
+    text = "\n".join(l for l in text.splitlines() if not (len(re.findall(r"[A-Za-z]", l)) >= 4 and l.upper() == l and not re.search(r"\d", l)))
+    have = cv_tailor.cv_text(master) + "\n" + "\n".join(f"{c['skill']} {c['evidence']}" for c in master.get("confirmed_experience", []))
+    have_low = have.lower()
+    numbers = []
+    for n in re.findall(r"\d[\d,.]*[+%]?", text):
+        core = n.strip(".,")
+        if len(core.strip("+%,.")) < 2 or _YEAR.match(core.strip("+%")) or core in have:
+            continue
+        numbers.append(core)
+    names = []
+    for tok in re.findall(r"\b(?:[A-Z]{2,}[A-Za-z0-9]*|[A-Za-z]+[A-Z][A-Za-z0-9]+|[A-Za-z]+\d[A-Za-z0-9.\-]*|[A-Za-z0-9]+(?:\+\+|#))", text):
+        glued = bool(re.match(r"^[a-z][A-Za-z]*[A-Z]", tok) or re.match(r"^[A-Za-z][a-z]+\d", tok))   # "theBIU", "by60": PDF text runs words together
+        if glued or tok in _LABELS or tok.lower() in have_low or tok.lower() in name_parts or tok in names:
+            continue
+        names.append(tok)
+    return {"numbers": list(dict.fromkeys(numbers))[:15], "names": names[:15]}
+
+
 def resume_skill_groups(resume_path: Optional[str] = None) -> Dict[str, List[str]]:
     path = resume_path or os.environ.get("MASTER_RESUME_PATH", "")
     return skill_groups_from_resume_text(_extract_resume_text(path)) if path else {}

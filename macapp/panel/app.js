@@ -646,6 +646,10 @@
     if (S.view === "documents") renderDocuments();
     const r = await call("pack_documents", id);
     S.docs.data = r && r.ok ? r : null;
+    const gp = await call("check_resume_gaps");
+    S.docs.gaps = gp && gp.ok && gp.has_resume ? { numbers: gp.numbers || [], names: gp.names || [] } : null;
+    const cf = await call("list_confirmed_experience");
+    S.docs.confirmed = cf && cf.ok ? cf.items || [] : [];
     S.docs.loading = false;
     if (S.view === "documents") renderDocuments();
   }
@@ -697,7 +701,14 @@
           : '<div class="ev-card"><h4>' + lbl + "</h4>" +
           (Array.isArray(items) && items.length ? "<ul>" + items.map((x) => "<li>" + esc(x) + "</li>").join("") + "</ul>" : '<span class="help">None</span>') +
           "</div>").join("");
-        content = scoreHtml + flagsHtml + '<div class="evidence-grid">' + evCards + "</div>";
+        const mine = (S.docs.confirmed || []).length
+          ? '<div class="ev-card"><h4>Skills you confirmed (all CVs)</h4><ul>' + S.docs.confirmed.map((c) => "<li><strong>" + esc(c.skill) + "</strong> <span class=\"help\">" + esc(c.evidence) + "</span> " +
+              '<button class="btn quiet" data-act="unconfirm-skill" data-skill="' + esc(c.skill) + '" data-id="' + esc(sel.id) + '">Remove</button></li>').join("") + "</ul></div>" : "";
+        const g = S.docs.gaps;
+        const gapHtml = g && (g.numbers.length || g.names.length)
+          ? '<div class="flag-banner"><strong>Your resume file has facts that are missing from your CV data:</strong> ' + esc(g.numbers.concat(g.names).slice(0, 12).join(", ")) +
+            '. Add them to your profile (Settings, Build profile from resume) or they will not appear on any CV.</div>' : "";
+        content = gapHtml + scoreHtml + flagsHtml + '<div class="evidence-grid">' + evCards + mine + "</div>";
       } else if (d.tab === "diff") {
         const chgs = doc.changes || [];
         content = chgs.length
@@ -755,7 +766,8 @@
             (doc && doc.cover_letter ? '<button class="btn" data-open-pack="' + esc(sel.id) + ':cover">' + icon("external") + "Cover</button>" : "") +
             '<button class="btn" data-open-pack="' + esc(sel.id) + ':jd">' + icon("external") + "JD</button>" +
             '<button class="btn" data-open-pack="' + esc(sel.id) + ':review">' + icon("external") + "REVIEW</button>" +
-            '<button class="btn" data-act="redo-pack" data-id="' + esc(sel.id) + '">Regenerate</button>' +
+            '<button class="btn" data-act="redo-pack" data-id="' + esc(sel.id) + '" title="Rebuild from the AI\'s saved answer (same result, picks up profile changes)">Regenerate</button>' +
+            '<button class="btn" data-act="new-draft" data-id="' + esc(sel.id) + '" title="Ask the AI again for a different draft">New draft</button>' +
             '<button class="btn" data-act="revoke-pack" data-id="' + esc(sel.id) + '">Revoke</button>' +
             '<button class="btn ' + (isSigned ? "" : "primary") + '" data-act="signoff-pack" data-id="' + esc(sel.id) + '"' + (isSigned || signoffBlocked ? " disabled" : "") + ' title="' + esc((doc && doc.signoff_blocked_reason) || "") + '">' + icon("check") + (isSigned ? "Signed off" : "Docs OK") + "</button>" +
           "</div></div>" +
@@ -1256,8 +1268,8 @@
         }
         return;
       }
-      case "redo-pack": {
-        const r = await call("prepare_packs", { ids: [d.id], redo: true });
+      case "redo-pack": case "new-draft": {
+        const r = await call("prepare_packs", { ids: [d.id], redo: true, fresh: d.act === "new-draft" });
         if (r && r.ok) {
           Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
           S.stick = true; go("packs"); watchRun();
@@ -1285,8 +1297,23 @@
         });
         if (!ok) return;
         const r = await call("confirm_experience", d.skill, ok.evidence, "");
-        if (r && r.ok) { toast(d.skill + " added to your profile. Regenerate the pack to use it."); await loadDocuments(d.id); }
+        if (r && r.ok) {
+          const again = await dialog({ title: "Rebuild this CV now?", icon: "alert", confirm: "Rebuild",
+            body: "<p>" + esc(d.skill) + " is saved. Rebuild this pack to put it on the CV. Your edits to this pack's cv.json are replaced.</p>" });
+          if (again) {
+            const q = await call("prepare_packs", { ids: [d.id], redo: true });
+            if (q && q.ok) { Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } }); S.stick = true; go("packs"); watchRun(); }
+          } else { await loadDocuments(d.id); }
+        }
         else toast((r && r.error) || "Could not save.", "bad");
+        return;
+      }
+      case "unconfirm-skill": {
+        const ok = await dialog({ title: "Remove " + d.skill + "?", confirm: "Remove", danger: true,
+          body: "<p>It will no longer be listed on CVs built from now on. CVs already built keep it until you rebuild them.</p>" });
+        if (!ok) return;
+        const r = await call("remove_confirmed_experience", d.skill);
+        if (r && r.ok) { toast(d.skill + " removed."); await loadPackDocs(d.id); }
         return;
       }
       case "latex-open": case "latex-reset": {
