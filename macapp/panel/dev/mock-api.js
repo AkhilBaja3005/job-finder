@@ -245,8 +245,41 @@
       await wait(80);
       const d = mockDocs[id];
       if (!d) return { ok: false, error: "Pack documents not prepared yet." };
-      return { ok: true, ...d };
+      return {
+        ok: true,
+        cover_letter_status: d.cover_letter ? "ready" : "not_asked",
+        cover_letter_message: d.cover_letter ? "Cover letter ready." : "Cover letter not requested for this posting.",
+        tailoring_status: "tailored",
+        tailoring_message: "CV tailored and verified.",
+        scores: { master_score: 74, tailored_score: 86, coverage_before: "2/5", coverage_after: "5/5" },
+        evidence_panel: {
+          keywords_found: ["Python", "LLMs (Large Language Models)", "LangGraph (agentic workflows)"],
+          keywords_missing: ["Swift"],
+          requirements_gap: ["5+ years (dates show 3 years)"],
+          knockouts: [],
+          alias_matches: ["LLMs → Large Language Models", "LangGraph → agentic workflows"],
+          entailment_results: ["All 2 rewrites entailed"],
+        },
+        changes: [
+          {
+            id: "chg_0",
+            section: "experience",
+            role_index: 0,
+            bullet_index: 0,
+            original: "Built multi-agent validation pipeline in Python.",
+            new_text: "Built 7 LangGraph agentic workflows with 4 validation gates in Python.",
+            reason: "Surface LangGraph evidence for agentic workflows",
+            reverted: false,
+          },
+        ],
+        unresolved_flags: [],
+        signoff_allowed: true,
+        signoff_blocked_reason: "",
+        ...d,
+      };
     },
+    revert_pack_change: async () => ({ ok: true }),
+    save_pack_cv: async () => ({ ok: true }),
     open_pack_file: async () => ({ ok: true }),
     signoff_pack: async (id) => {
       if (mockPacks[id]) mockPacks[id].state = "signed_off";
