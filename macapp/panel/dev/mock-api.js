@@ -251,6 +251,8 @@ Applied AI/ML engineer with 3+ years of experience building production GenAI and
       return { ok: true };
     },
     check_resume_gaps: async () => ({ ok: true, has_resume: true, numbers: q.has("gaps") ? ["8.04", "100+"] : [], names: q.has("gaps") ? ["PostgreSQL", "PySpark"] : [] }),
+    preview_resume_master: async () => ({ ok: true, hash: "mockhash", already_confirmed: true, extracted: {}, diff: { has_changes: false } }),
+    confirm_resume_master: async () => ({ ok: true, hash: "mockhash" }),
     list_confirmed_experience: async () => ({ ok: true, items: mockConfirmed.slice() }),
     confirm_experience: async (skill, evidence) => {
       await wait(150);

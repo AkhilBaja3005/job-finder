@@ -149,3 +149,80 @@ def test_17_user_approved_extras_never_auto_add_from_jd():
     assert "CKA" in updated["certifications"]
     joined = str(updated).lower()
     assert "rust" not in joined and "swift" not in joined
+
+
+def test_18_extract_master_from_resume_rejects_ungrounded_and_caches(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setenv("JOB_FINDER_ROOT", str(tmp_path))
+    resume = tmp_path / "resume.txt"
+    resume.write_text(
+        "Applied AI engineer building LLM systems.\n"
+        "EXPERIENCE\n"
+        "Acme Corp - ML Engineer (2023 - Present)\n"
+        "Built RAG pipeline in Python reducing latency by 30%.\n"
+        "PROJECTS\n"
+        "Graphite: Multi-agent workflow in LangGraph.\n"
+        "EDUCATION\n"
+        "Imperial College London - MSc AI (2025 - 2026)\n"
+        "SKILLS\n"
+        "Languages: Python, SQL\n"
+        "AI: LangGraph, RAG\n",
+        encoding="utf-8",
+    )
+
+    def fake_llm(_prompt: str) -> str:
+        return json.dumps({
+            "summary": "Applied AI engineer building LLM systems.",
+            "work_experience": [
+                {
+                    "company": "Acme Corp",
+                    "role": "ML Engineer",
+                    "start_date": "2023",
+                    "end_date": "Present",
+                    "highlights": [
+                        "Built RAG pipeline in Python reducing latency by 30%.",
+                        "Invented 99% accuracy with Kubernetes.",  # NOT in resume -> must be rejected
+                    ],
+                },
+                {
+                    "company": "FakeCo",  # NOT in resume -> must be rejected
+                    "role": "Staff Engineer",
+                    "highlights": ["Led 50 engineers."],
+                },
+            ],
+            "projects": [
+                {"title": "Graphite", "description": ["Multi-agent workflow in LangGraph."]},
+                {"title": "HallucinatedProj", "description": ["Built Rust OS."]},
+            ],
+            "education": [
+                {"institution": "Imperial College London", "degree": "MSc AI"},
+                {"institution": "Fake University", "degree": "PhD"},
+            ],
+        })
+
+    extracted = cm.extract_master_from_resume(str(resume), llm=fake_llm)
+    assert extracted["summary"] == "Applied AI engineer building LLM systems."
+    assert len(extracted["work_experience"]) == 1
+    assert extracted["work_experience"][0]["company"] == "Acme Corp"
+    assert extracted["work_experience"][0]["highlights"] == ["Built RAG pipeline in Python reducing latency by 30%."]
+    assert [p["title"] for p in extracted["projects"]] == ["Graphite"]
+    assert [e["institution"] for e in extracted["education"]] == ["Imperial College London"]
+    assert "Languages" in extracted["skill_groups"]
+
+    # Cache by hash when llm is None
+    cache_file = cm._master_cache_file(extracted["resume_hash"])
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(json.dumps(extracted), encoding="utf-8")
+    cached = cm.extract_master_from_resume(str(resume))
+    assert cached["resume_hash"] == extracted["resume_hash"]
+
+    # Diff against sparse profile
+    diff = cm.diff_extracted_master_and_profile(extracted, {"work_experience": [], "projects": [], "education": []})
+    assert diff["has_changes"] is True
+    assert diff["new_companies"] == ["Acme Corp"]
+    assert diff["new_projects"] == ["Graphite"]
+
+    # build_structured_master uses confirmed master_from_resume
+    master = cm.build_structured_master({"name": "Test", "master_from_resume": extracted})
+    assert master["experience"][0]["company"] == "Acme Corp"
+    assert master["projects"][0]["title"] == "Graphite"

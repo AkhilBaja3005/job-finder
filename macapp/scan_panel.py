@@ -1688,6 +1688,44 @@ class Api:
             gaps = cv_master.resume_gaps(text, master)
             return {"ok": True, "has_resume": True, **gaps}
 
+    def preview_resume_master(self) -> Dict[str, Any]:
+        """Extract roles, bullets, projects and education from MASTER_RESUME_PATH (cached by hash) and diff against profile."""
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import cv_master
+            text = cv_master.resume_text(None)
+            if not text:
+                return {"ok": False, "error": "No master resume file configured."}
+            prof = self._read_profile(ws)
+            cand = prof.get("candidate") or {}
+            extracted = cv_master.extract_master_from_resume(None)
+            diff = cv_master.diff_extracted_master_and_profile(extracted, cand)
+            confirmed_hash = str(cand.get("master_resume_hash") or "")
+            return {
+                "ok": True,
+                "hash": extracted.get("resume_hash", ""),
+                "already_confirmed": confirmed_hash == extracted.get("resume_hash", ""),
+                "extracted": extracted,
+                "diff": diff,
+            }
+
+    def confirm_resume_master(self) -> Dict[str, Any]:
+        """Save the resume-extracted master (verified against resume text) into candidate_profile.json."""
+        ws = workspace_dir()
+        with self._ws_env(ws):
+            from services import cv_master
+            extracted = cv_master.extract_master_from_resume(None)
+            if not extracted:
+                return {"ok": False, "error": "No master resume file configured."}
+            prof = self._read_profile(ws)
+            cand = prof.setdefault("candidate", {})
+            cand["master_from_resume"] = {
+                k: extracted[k] for k in ("summary", "work_experience", "projects", "education") if k in extracted
+            }
+            cand["master_resume_hash"] = extracted.get("resume_hash", "")
+            self._write_profile(ws, prof)
+            return {"ok": True, "hash": cand["master_resume_hash"]}
+
     # ── skills the candidate confirms themselves (the only way a skill the resume lacks can reach the CV) ──
     def _read_profile(self, ws: Path) -> Dict[str, Any]:
         try:
