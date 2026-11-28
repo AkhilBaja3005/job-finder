@@ -10,7 +10,8 @@ VENV=".macbuild/venv"
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
 pip install -q --upgrade pip
-pip install -q -r backend/requirements.txt -r macapp/requirements-app.txt
+# --only-binary: a compiled-from-source cryptography links the build machine's OpenSSL, which breaks inside the app
+pip install -q --only-binary=cryptography -r backend/requirements.txt -r macapp/requirements-app.txt
 
 python macapp/fetch_tectonic.py          # the LaTeX engine and its warmed cache go inside the app
 export JOB_FINDER_REQUIRE_TECTONIC=1

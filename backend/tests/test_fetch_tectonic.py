@@ -114,3 +114,18 @@ def test_the_build_scripts_fetch_the_engine_and_the_spec_ships_it():
     spec = (root / "job_finder.spec").read_text()
     assert "vendor" in spec and "JOB_FINDER_REQUIRE_TECTONIC" in spec
     assert "latex-check" in (root.parent / ".github" / "workflows" / "build_desktop_apps.yml").read_text()
+
+
+def test_intel_mac_builds_are_kept_on_a_cryptography_wheel():
+    """cryptography >= 49 has no Intel-Mac wheel; pip would compile it against Homebrew's OpenSSL and the app would crash on import."""
+    from packaging.requirements import Requirement
+    root = Path(__file__).resolve().parents[2]
+    reqs = [Requirement(l.split("#")[0].strip()) for l in (root / "backend" / "requirements.txt").read_text().splitlines()
+            if l.strip().startswith("cryptography")]
+    def pins(env):
+        return [str(r.specifier) for r in reqs if r.marker is None or r.marker.evaluate(env)]
+    intel = pins({"sys_platform": "darwin", "platform_machine": "x86_64"})
+    assert any("<49" in p for p in intel)
+    assert not any("<49" in p for p in pins({"sys_platform": "darwin", "platform_machine": "arm64"}))
+    assert not any("<49" in p for p in pins({"sys_platform": "win32", "platform_machine": "AMD64"}))
+    assert "--only-binary=cryptography" in (root / "macapp" / "build_mac.sh").read_text()

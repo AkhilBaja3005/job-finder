@@ -24,5 +24,8 @@ browser-use>=0.1.0,<1.0.0
 pydantic-settings
 zstandard
 cryptography>=42.0.0
+# cryptography stopped publishing Intel-Mac wheels at 49.0.0. Without one, pip compiles it against Homebrew's OpenSSL and the
+# Intel desktop app then fails to start the AI library ("Symbol not found: _SSL_get0_group_name"). Keep Intel Macs on a wheel.
+cryptography<49; sys_platform == "darwin" and platform_machine == "x86_64"
 rich>=13.0.0
 openpyxl>=3.1.0
