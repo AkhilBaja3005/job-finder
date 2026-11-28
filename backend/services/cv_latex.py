@@ -70,8 +70,52 @@ def prepare_cache(bundle: Optional[str] = None) -> Optional[str]:
     return dest
 
 
-def cv_to_latex(cv: Dict[str, Any]) -> str:
-    """cv.json (tailored or master) -> LaTeX in the resume.cls style."""
+def custom_template_path() -> Optional[str]:
+    """Path to the user's imported .tex template, if one was saved."""
+    explicit = os.environ.get("JOB_FINDER_LATEX_TEMPLATE")
+    if explicit and os.path.isfile(explicit):
+        return explicit
+    try:
+        from config.constants import resolve_workspace_root
+    except ImportError:  # pragma: no cover
+        from backend.config.constants import resolve_workspace_root
+    p = os.path.join(resolve_workspace_root(), "data", "custom_resume_template.tex")
+    return p if os.path.isfile(p) else None
+
+
+def cv_to_latex(cv: Dict[str, Any], template_tex: Optional[str] = None) -> str:
+    """cv.json (tailored or master) -> LaTeX. Uses the user's imported .tex template if present, else resume.cls."""
+    tpl = template_tex
+    if tpl is None:
+        tpath = custom_template_path()
+        if tpath:
+            try:
+                with open(tpath, encoding="utf-8") as f:
+                    tpl = f.read()
+            except OSError:
+                tpl = None
+    if tpl:
+        try:
+            from utils.latex_utils import inject_tailored_slots
+        except ImportError:  # pragma: no cover
+            from backend.utils.latex_utils import inject_tailored_slots
+        links = cv.get("links") or []
+        linkedin = next((u for u in links if "linkedin.com" in str(u).lower()), "")
+        portfolio = next((u for u in links if "linkedin.com" not in str(u).lower()), "")
+        return inject_tailored_slots(
+            master_latex=tpl,
+            summary=cv.get("summary") or "",
+            experience_bullets=[list(e.get("description") or []) for e in cv.get("experience") or []],
+            project_bullets=[list(p.get("description") or []) for p in cv.get("projects") or []],
+            user_selected_skills=list(cv.get("skills") or []),
+            candidate_info={
+                "name": cv.get("name") or "",
+                "email": cv.get("email") or "",
+                "phone": cv.get("phone") or "",
+                "linkedin": linkedin,
+                "portfolio": portfolio,
+            },
+        )
     try:
         from utils.latex_utils import generate_latex_from_json
     except ImportError:  # pragma: no cover

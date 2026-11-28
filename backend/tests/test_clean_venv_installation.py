@@ -33,6 +33,8 @@ def test_clean_venv_and_entrypoints(tmp_path):
     scanner_bin = os.path.join(bin_dir, "job-finder-scanner.exe" if sys.platform == "win32" else "job-finder-scanner")
 
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if not os.path.isdir(os.path.join(repo_root, "backend", "static_frontend")):
+        pytest.skip("backend/static_frontend is not built in this checkout")
 
     # 1. Install package in isolated venv without external dependencies (no build isolation for offline/sandboxed environments)
     install_res = subprocess.run(

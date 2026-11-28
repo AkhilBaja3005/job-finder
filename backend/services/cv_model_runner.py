@@ -8,9 +8,6 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from backend.services.cv_selector import select_cv_content
-from backend.services.jd_analyzer import analyze_jd
-
 
 DEFAULT_TAILOR_MODELS: Dict[str, str] = {
     "gemini": "gemini-2.5-flash",
@@ -176,22 +173,6 @@ def redact_secrets(text: str) -> str:
     s = re.sub(r"sk-[A-Za-z0-9_\-]{10,}", "[REDACTED_KEY]", text or "")
     s = re.sub(r"AIza[A-Za-z0-9_\-]{10,}", "[REDACTED_KEY]", s)
     return s
-
-
-def offline_tailor(
-    master: Dict[str, Any],
-    jd_text: str,
-    *,
-    title: str = "",
-    company: str = "",
-    page_budget: int = 1,
-) -> Dict[str, Any]:
-    """Rule-based tailoring with zero model/network calls (selection, ordering, aliases)."""
-    jd_analysis = analyze_jd(jd_text, title=title, company=company)
-    selected = select_cv_content(master, jd_analysis, page_budget=page_budget)
-    selected["mode"] = "offline_rule_based"
-    selected["jd_analysis"] = jd_analysis
-    return selected
 
 
 LAST_TAILOR_CALL: Dict[str, str] = {}

@@ -29,7 +29,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from . import cv_verifier, fit_scorer
+from . import cv_verifier, cv_writer, fit_scorer, jd_analyzer
 from .resume_audit import _mentions
 
 PROMPT_VERSION = "t3"
@@ -109,6 +109,8 @@ def master_cv_from_profile(candidate: dict) -> Dict[str, Any]:
         "summary": candidate.get("experience_summary") or candidate.get("summary") or "",
         "experience": experience, "education": education, "projects": projects,
         "skills": list(dict.fromkeys(skills)),
+        "never_say": [str(x).strip() for x in (candidate.get("never_say") or []) if str(x).strip()],
+        "always_keep": [str(x).strip() for x in (candidate.get("always_keep") or []) if str(x).strip()],
     }
 
 
@@ -411,13 +413,14 @@ def tailor_cv(master: Dict[str, Any], jd_text: str, title: str = "", company: st
     if len((jd_text or "").strip()) < 100:
         raise TailorUnavailable("job description too short to tailor to")
     clean_jd, injection_hits = cv_verifier.sanitize_jd(jd_text)
+    jd_analysis = jd_analyzer.analyze_jd(clean_jd, title=title, company=company)
     plan = _call_plan(master, clean_jd, title, company, level, llm)
-    result, problems = _apply_plan(master, plan, entailment_llm=entailment_llm)
+    result, problems = _apply_plan(master, plan, entailment_llm=entailment_llm, title=title, jd_analysis=jd_analysis)
     if problems:
         feedback = ("\nYOUR PREVIOUS PLAN HAD THESE PROBLEMS; fix them (or omit that part):\n" + "\n".join(f"- {p}" for p in problems))
         try:
             plan2 = _call_plan(master, clean_jd, title, company, level, llm, feedback)
-            result2, problems2 = _apply_plan(master, plan2, entailment_llm=entailment_llm)
+            result2, problems2 = _apply_plan(master, plan2, entailment_llm=entailment_llm, title=title, jd_analysis=jd_analysis)
             if len(problems2) < len(problems):
                 result, problems = result2, problems2
         except TailorUnavailable:
@@ -453,7 +456,9 @@ def tailor_cv_safe(master: Dict[str, Any], jd_text: str, title: str = "", compan
 
 
 def _apply_plan(master: Dict[str, Any], plan: Dict[str, Any],
-                entailment_llm: Optional[Callable[[str], str]] = None):
+                entailment_llm: Optional[Callable[[str], str]] = None,
+                title: str = "",
+                jd_analysis: Optional[Dict[str, Any]] = None):
     """Verify `plan` against the profile and build the tailored CV. Returns (TailoredCV, list of problems found)."""
     base_text = cv_text(master) + "\n" + "\n".join(f"{c['skill']}: {c['evidence']}" for c in master.get("confirmed_experience") or [])
     cv = copy.deepcopy(master)
@@ -468,6 +473,8 @@ def _apply_plan(master: Dict[str, Any], plan: Dict[str, Any],
         raise TailorUnavailable("model returned non-English output")
     words = len(new_sum.split())
     sum_probs = _problems_with_prose(new_sum, base_text, unevidenced, master=master) if new_sum else []
+    if title and new_sum and cv_writer.check_title_honesty(title, new_sum) and not cv_writer.check_title_honesty(title, base_text):
+        sum_probs.insert(0, f"summary claims target role '{title}' which your profile does not support")
     if new_sum and master.get("summary"):
         sum_probs += cv_verifier.check_strength_escalation(new_sum, master["summary"], base_text)
     headline = _numbers(master["summary"])
@@ -490,15 +497,56 @@ def _apply_plan(master: Dict[str, Any], plan: Dict[str, Any],
     for r in plan.get("rewrites") or []:
         if isinstance(r, dict) and isinstance(r.get("exp_index"), int) and isinstance(r.get("bullet_index"), int):
             rewrites[(r["exp_index"], r["bullet_index"])] = str(r.get("new_text") or "").strip()
+    never_say = [str(x).strip() for x in (master.get("never_say") or []) if str(x).strip()]
+    always_keep = [str(x).strip() for x in (master.get("always_keep") or []) if str(x).strip()]
+    keep_low_list = [t.lower() for t in always_keep]
     used = 0
     for i, exp in enumerate(cv["experience"]):
         orig = master["experience"][i]["description"]
-        keep = [j for j in (plans.get(i) or []) if isinstance(j, int) and 0 <= j < len(orig)]
-        keep = list(dict.fromkeys(keep)) or list(range(min(len(orig), 3)))      # never leave a role empty
         if not orig:
             continue
+        if never_say or always_keep:
+            filtered = cv_writer.apply_candidate_term_controls(
+                [{"idx": j, "text": b} for j, b in enumerate(orig)],
+                never_say=never_say,
+                always_keep=always_keep,
+            )
+            allowed_indices = [item["idx"] for item in filtered]
+        else:
+            allowed_indices = list(range(len(orig)))
+        allowed_set = set(allowed_indices)
+        keep = [j for j in (plans.get(i) or []) if isinstance(j, int) and j in allowed_set]
+        keep = list(dict.fromkeys(keep)) or allowed_indices[:min(len(allowed_indices), 3)]
         remaining_roles = len(cv["experience"]) - i - 1
         room = max(1, total_cap - used - remaining_roles)
+        for j in allowed_indices:
+            if j not in keep and any(ak in orig[j].lower() for ak in keep_low_list):
+                if len(keep) >= room and keep:
+                    droppable = [k for k in keep if not any(ak in orig[k].lower() for ak in keep_low_list)]
+                    if droppable:
+                        keep.remove(droppable[-1])
+                if len(keep) < room:
+                    keep.append(j)
+        if jd_analysis and allowed_indices:
+            from . import cv_selector
+            must_haves = (jd_analysis.get("requirements") or {}).get("must_have") or []
+            scored = [(cv_selector.score_item(orig[j], jd_analysis), -j, j) for j in allowed_indices]
+            best_score, _, best_j = max(scored)
+            best_low = orig[best_j].lower()
+            has_must = any(
+                re.search(rf"(?<![a-z0-9]){re.escape(v)}(?![a-z0-9])", best_low)
+                for mh in must_haves
+                for v in cv_selector._expand_aliases(mh)
+            )
+            if best_score > 0 and has_must and best_j not in keep:
+                if len(keep) >= room and keep:
+                    droppable = [k for k in keep if not any(ak in orig[k].lower() for ak in keep_low_list)]
+                    if droppable:
+                        worst_k = min(droppable, key=lambda k: (cv_selector.score_item(orig[k], jd_analysis), -k))
+                        keep.remove(worst_k)
+                if len(keep) < room:
+                    keep.insert(0, best_j)
+                    changes.append(f"KEPT highest-scoring must-have bullet in {exp['role']} at {exp['company']} (model plan had dropped it).")
         keep = keep[:room]
         new_bullets = []
         for j in keep:

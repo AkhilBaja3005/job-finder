@@ -1,13 +1,18 @@
 # Handoff status
 
-Last updated by: Claude Code on branch `fix/cv-guards-new-draft`
+Last updated by: Antigravity on branch `feat/cv-live-check`
 
 ## CV tailoring, LaTeX and release (latest)
-- Merged: PR 167 (master keeps everything from the resume, grouped skills, CPI and links render, validator and gate false alarms fixed, tailoring follows the chosen AI), PR 168 (LaTeX CV editor with in-app PDF preview, repeatable tailoring cache, page fill in the manifest).
-- Merged PR 169: Tectonic bundled with the app, "I have this" confirmed skills, prompt t3, rebuild keeps a chosen LaTeX PDF.
-- Open (branch `fix/cv-guards-new-draft`): pack lock, not-a-fit warning, ATS check on the real PDF, New draft, confirmed-skills list, resume-gaps banner, pipeline audit, `scripts/manual/cv_live_check.py`.
-- Not done and how to continue: see `docs/handoff/REMAINING_TASKS.md`. Next step: wait for PR 169 CI (Intel Mac and Windows download Tectonic for the first time), merge, then run Actions, "Prepare release".
-- How to run: `python macapp/fetch_tectonic.py` then the tests with `python -m pytest backend/tests -q`. Known local failures on Python 3.14: browser-use (3) and clean-venv (1); CI is green.
+- Merged: PR 167, PR 168, PR 169, PR 170 (`fix/cv-guards-new-draft`).
+- Combined PR on `feat/cv-live-check` (supersedes PRs #171–#175):
+  - **Section 1**: Verified `main` build `46140999138` (`Mac arm64` & `Windows` green with `"bundled": true, "ok": true`; `Mac x86_64` `cryptography`/`libssl.3.dylib` fix from PR #174 included).
+  - **Section 3.1**: Ran 23-job `scripts/manual/cv_live_check.py` (Anthropic); results in `docs/handoff/CV_LIVE_CHECK.md`. Found `ThinkingBlock(signature=...)` leak in `cover_letter.txt` (`gemini_client._execute_anthropic`).
+  - **Section 3.3**: Wired `cv_writer.check_title_honesty`, `apply_candidate_term_controls` (`never_say`/`always_keep`), and `cv_selector.score_item` must-have protection into `cv_tailor._apply_plan`; removed unused `cv_renderer_ats`, `cv_eval`, and `offline_tailor`.
+  - **Section 3.4**: Added `cv_master.extract_master_from_resume` (verbatim verification + SHA-256 cache + diff) and `Api.preview_resume_master` / `confirm_resume_master`.
+  - **Sections 3.5 & 3.6**: Added `Api.import_latex_template` / `clear_latex_template` (`cv_latex.cv_to_latex` via `inject_tailored_slots`), `Api.use_standard_cv_pdf`, and `Hand-edited CV` badge in Packs UI.
+  - **Sections 4.1 & 4.3**: Logged post-LinkedIn discovery/filter gaps in `discovery_tools.py` & `scheduled_job_scanner.py`; skipped the 4 env-gated tests cleanly on Python 3.14.
+- How to run: `python3 -m pytest backend/tests/test_cv_*.py backend/tests/test_mac_app.py backend/tests/test_fetch_tectonic.py -q` (296 passed, 4 skipped across targeted suite).
+- Next step: Wait for CI (`CI Verification & Tests`, `Mac arm64`, `Windows`, `Mac x86_64`) on the combined PR, merge, and fix `gemini_client._execute_anthropic` `ThinkingBlock` leak for cover letters.
 
 ## Where things stand
 - **Phase 0 (PR #133)**: Merged on `main` (`build_scan_args`, `build_apply_args`, Excel tracker read/write, `scheduler.py`).

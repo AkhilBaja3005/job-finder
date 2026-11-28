@@ -3,16 +3,18 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 try:
-    from . import cv_tailor
+    from . import cv_tailor, fit_scorer
     from .resume_audit import _mentions
 except ImportError:  # pragma: no cover
     import cv_tailor
+    import fit_scorer
     from resume_audit import _mentions
 
 
@@ -231,11 +233,220 @@ def confirmed_evidence_text(master: Dict[str, Any]) -> str:
     return "\n".join(f"{c['skill']}: {c['evidence']}" for c in master.get("confirmed_experience") or [])
 
 
+def _resume_hash(text: str) -> str:
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
+def _master_cache_file(file_hash: str) -> Path:
+    return Path(os.path.dirname(fit_scorer._cache_path())) / f"master_resume_{file_hash[:16]}.json"
+
+
+def _verify_extracted_against_resume(parsed: Dict[str, Any], raw_text: str) -> Dict[str, Any]:
+    """Keep only extracted strings that appear verbatim (whitespace-normalized) in raw_text."""
+    norm_raw = re.sub(r"\s+", " ", raw_text or "").strip().lower()
+
+    def _keep(val: Any) -> str:
+        s = str(val or "").strip()
+        if not s:
+            return ""
+        return s if re.sub(r"\s+", " ", s).lower() in norm_raw else ""
+
+    summary = _keep(parsed.get("summary"))
+    work_experience: List[Dict[str, Any]] = []
+    for r in parsed.get("work_experience") or []:
+        if not isinstance(r, dict):
+            continue
+        company = _keep(r.get("company"))
+        if not company:
+            continue
+        role = _keep(r.get("role"))
+        start_date = _keep(r.get("start_date"))
+        end_raw = str(r.get("end_date") or "").strip()
+        end_date = "Present" if end_raw.lower() == "present" and "present" in norm_raw else _keep(end_raw)
+        location = _keep(r.get("location"))
+        techs = [_keep(t) for t in (r.get("technologies") or []) if _keep(t)]
+        bullets = [_keep(b) for b in (r.get("highlights") or r.get("description") or []) if _keep(b)]
+        if bullets or role:
+            work_experience.append({
+                "company": company,
+                "role": role,
+                "start_date": start_date,
+                "end_date": end_date,
+                "location": location,
+                "technologies": techs,
+                "highlights": bullets,
+            })
+
+    projects: List[Dict[str, Any]] = []
+    for p in parsed.get("projects") or []:
+        if not isinstance(p, dict):
+            continue
+        title = _keep(p.get("title"))
+        if not title:
+            continue
+        techs = [_keep(t) for t in (p.get("technologies") or []) if _keep(t)]
+        url = _keep(p.get("url"))
+        raw_desc = p.get("description")
+        desc_list = raw_desc if isinstance(raw_desc, list) else ([raw_desc] if raw_desc else [])
+        desc = [_keep(d) for d in desc_list if _keep(d)]
+        projects.append({"title": title, "technologies": techs, "url": url, "description": desc})
+
+    education: List[Dict[str, Any]] = []
+    for e in parsed.get("education") or []:
+        if not isinstance(e, dict):
+            continue
+        inst = _keep(e.get("institution"))
+        if not inst:
+            continue
+        education.append({
+            "institution": inst,
+            "degree": _keep(e.get("degree")),
+            "start_date": _keep(e.get("start_date")),
+            "graduation_date": _keep(e.get("graduation_date")),
+            "location": _keep(e.get("location")),
+            "grade": _keep(e.get("grade")),
+            "highlights": [_keep(h) for h in (e.get("highlights") or []) if _keep(h)],
+        })
+
+    return {
+        "summary": summary,
+        "work_experience": work_experience,
+        "projects": projects,
+        "education": education,
+    }
+
+
+def _extract_schema():
+    from pydantic import BaseModel
+
+    class RoleItem(BaseModel):
+        company: str
+        role: str
+        start_date: str = ""
+        end_date: str = ""
+        location: str = ""
+        technologies: List[str] = []
+        highlights: List[str] = []
+
+    class ProjectItem(BaseModel):
+        title: str
+        technologies: List[str] = []
+        url: str = ""
+        description: List[str] = []
+
+    class EduItem(BaseModel):
+        institution: str
+        degree: str = ""
+        start_date: str = ""
+        graduation_date: str = ""
+        location: str = ""
+        grade: str = ""
+        highlights: List[str] = []
+
+    class ResumeMaster(BaseModel):
+        summary: str = ""
+        work_experience: List[RoleItem] = []
+        projects: List[ProjectItem] = []
+        education: List[EduItem] = []
+
+    return ResumeMaster
+
+
+def extract_master_from_resume(
+    resume_path: Optional[str] = None,
+    llm: Optional[Callable[[str], str]] = None,
+) -> Dict[str, Any]:
+    """Split MASTER_RESUME_PATH text into roles, bullets, projects, education; verify every string is in the resume; cache by hash."""
+    raw = resume_text(resume_path)
+    if not raw.strip():
+        return {}
+    h = _resume_hash(raw)
+    cache_path = _master_cache_file(h)
+    if llm is None and cache_path.is_file():
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            if isinstance(cached, dict) and cached.get("resume_hash") == h:
+                return cached
+        except (OSError, ValueError):
+            pass
+
+    prompt = (
+        "Split the resume text below into JSON (summary, work_experience, projects, education).\n"
+        "CRITICAL: Copy every string VERBATIM from the resume text. Do not paraphrase, fix grammar, or invent anything.\n\n"
+        f"RESUME TEXT:\n{raw[:14000]}"
+    )
+    if llm is None:
+        from . import cv_model_runner
+        raw_out = cv_model_runner.call_tailor_model(prompt, _extract_schema())
+    else:
+        raw_out = llm(prompt)
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", str(raw_out or "").strip())
+    parsed = json.loads(cleaned)
+    if not isinstance(parsed, dict):
+        raise ValueError("extracted resume master is not a JSON object")
+    verified = _verify_extracted_against_resume(parsed, raw)
+    verified["skill_groups"] = skill_groups_from_resume_text(raw)
+    verified["resume_hash"] = h
+    if llm is None:
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps(verified, indent=2, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+    return verified
+
+
+def diff_extracted_master_and_profile(extracted: Dict[str, Any], candidate: Dict[str, Any]) -> Dict[str, Any]:
+    """Summarize differences between the resume-extracted master and candidate_profile.json."""
+    ext_roles = extracted.get("work_experience") or []
+    prof_roles = candidate.get("work_experience") or candidate.get("experience") or []
+    ext_bullets = sum(len(r.get("highlights") or []) for r in ext_roles)
+    prof_bullets = sum(len(fit_scorer._bullets(r)) for r in prof_roles if isinstance(r, dict))
+    ext_projs = extracted.get("projects") or []
+    prof_projs = candidate.get("projects") or []
+    ext_edu = extracted.get("education") or []
+    prof_edu = candidate.get("education") or []
+
+    prof_companies = {str(r.get("company") or "").strip().lower() for r in prof_roles if isinstance(r, dict)}
+    new_companies = [r["company"] for r in ext_roles if r.get("company", "").strip().lower() not in prof_companies]
+    prof_proj_titles = {str(p.get("title") or p.get("name") or "").strip().lower() for p in prof_projs if isinstance(p, dict)}
+    new_projects = [p["title"] for p in ext_projs if p.get("title", "").strip().lower() not in prof_proj_titles]
+
+    has_changes = bool(
+        new_companies
+        or new_projects
+        or len(ext_roles) != len(prof_roles)
+        or ext_bullets != prof_bullets
+        or len(ext_edu) != len(prof_edu)
+    )
+    return {
+        "roles_resume": len(ext_roles),
+        "roles_profile": len(prof_roles),
+        "bullets_resume": ext_bullets,
+        "bullets_profile": prof_bullets,
+        "projects_resume": len(ext_projs),
+        "projects_profile": len(prof_projs),
+        "education_resume": len(ext_edu),
+        "education_profile": len(prof_edu),
+        "new_companies": new_companies,
+        "new_projects": new_projects,
+        "has_changes": has_changes,
+    }
+
+
 def build_structured_master(candidate: Dict[str, Any], resume_path: Optional[str] = None) -> Dict[str, Any]:
     """1.3: Build full structured master CV schema with optional sections and bullet metadata.
     The skill groups come from the real resume file when there is one (MASTER_RESUME_PATH): it is the source of truth for
     what the candidate lists, and the profile may hold only part of it."""
-    master = cv_tailor.master_cv_from_profile(candidate)
+    effective = dict(candidate or {})
+    if isinstance(effective.get("master_from_resume"), dict):
+        mfr = effective["master_from_resume"]
+        for k in ("work_experience", "projects", "education"):
+            if mfr.get(k):
+                effective[k] = mfr[k]
+        if mfr.get("summary"):
+            effective["experience_summary"] = mfr["summary"]
+    master = cv_tailor.master_cv_from_profile(effective)
     from_resume = resume_skill_groups(resume_path)
     if len(from_resume) >= 2:
         master["skill_groups"] = from_resume

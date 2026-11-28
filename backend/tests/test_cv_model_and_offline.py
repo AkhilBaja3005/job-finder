@@ -11,7 +11,6 @@ from backend.services.cv_model_runner import (
     call_with_backoff,
     compare_candidates,
     compute_tailor_cache_key,
-    offline_tailor,
     redact_secrets,
     resolve_tailor_provider_and_model,
     run_two_pass_repair,
@@ -118,35 +117,3 @@ def test_at_6_6_privacy_no_secrets_and_no_full_cv_logged(caplog):
     redacted = redact_secrets(prompt)
     assert "sk-secret" not in redacted
     assert "AIzaSy" not in redacted
-
-    with caplog.at_level(logging.INFO):
-        offline_tailor(
-            {"name": "SecretName", "summary": "UniquePrivateSummaryText", "roles": [], "skills": {"ML": ["Python"]}},
-            "Required: Python.",
-        )
-    assert "UniquePrivateSummaryText" not in caplog.text
-
-
-def test_at_6_7_offline_mode_works_without_model():
-    master = {
-        "name": "Akhil",
-        "summary": "Applied AI/ML engineer.",
-        "roles": [
-            {
-                "title": "AI Engineer",
-                "company": "Acme",
-                "dates": "2023 – Present",
-                "bullets": [
-                    {"id": "b1", "text": "Built LLM pipelines with Python and LangGraph.", "has_metric": False},
-                    {"id": "b2", "text": "Attended weekly standups.", "has_metric": False},
-                ],
-            }
-        ],
-        "projects": [{"name": "Graphite", "description": "LangGraph agents", "url": "https://github.com/a/b", "open_source": True}],
-        "skills": {"AI": ["LLMs", "Python", "LangGraph"]},
-        "education": [],
-    }
-    res = offline_tailor(master, "Required: Large Language Models, Python, agentic workflows.", title="Applied ML Engineer")
-    assert res["mode"] == "offline_rule_based"
-    assert res["roles"][0]["bullets"][0]["text"] == "Built LLM pipelines with Python and LangGraph."
-    assert res["skills"]["AI"]
