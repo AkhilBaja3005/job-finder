@@ -90,4 +90,6 @@ jobs:
           done
           gh pr checks "$BRANCH" --watch --interval 30
           gh pr merge "$BRANCH" --squash --delete-branch
-          echo "Merged $BRANCH. Release starts by itself once CI on main passes." >> "$GITHUB_STEP_SUMMARY"
+          PYPI="${{ vars.AUTO_PUBLISH_PYPI == 'true' && 'true' || 'false' }}"
+          gh workflow run release.yml --ref main -f version="$VERSION" -f publish_pypi="$PYPI"
+          echo "Merged $BRANCH and dispatched Release for v$VERSION (publish_pypi=$PYPI)." >> "$GITHUB_STEP_SUMMARY"
