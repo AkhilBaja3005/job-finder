@@ -1672,6 +1672,57 @@ class Api:
                 args += ["--search", s.name]
         return self._runner.start(args, {**build_run_env({}, ws), **self._dock_env()}, ws, "prepare")
 
+    # ── skills the candidate confirms themselves (the only way a skill the resume lacks can reach the CV) ──
+    def _read_profile(self, ws: Path) -> Dict[str, Any]:
+        try:
+            return json.loads(profile_path(ws).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _write_profile(self, ws: Path, prof: Dict[str, Any]) -> None:
+        path = profile_path(ws)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(prof, indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+
+    def list_confirmed_experience(self) -> Dict[str, Any]:
+        prof = self._read_profile(workspace_dir())
+        return {"ok": True, "items": (prof.get("candidate") or {}).get("confirmed_experience") or []}
+
+    def confirm_experience(self, skill: str, evidence: str, group: str = "") -> Dict[str, Any]:
+        """The candidate says: "I do have this skill, and here is where I used it". Saved to the profile; the next CV built for any
+        job can list the skill, and the sentence is what claims about it are checked against. Nothing is added without this call."""
+        skill, evidence, group = str(skill or "").strip(), str(evidence or "").strip(), str(group or "").strip()
+        if not (2 <= len(skill) <= 60) or "\n" in skill:
+            return {"ok": False, "error": "Write the skill as a short name, for example Swift."}
+        if len(evidence) < 20:
+            return {"ok": False, "error": "Say in a sentence where you used it (at least 20 characters). It is kept as your own evidence."}
+        if len(evidence) > 500 or len(group) > 60:
+            return {"ok": False, "error": "Keep the sentence under 500 characters."}
+        ws = workspace_dir()
+        prof = self._read_profile(ws)
+        if not prof.get("candidate"):
+            return {"ok": False, "error": "Build your profile first."}
+        items = [i for i in prof["candidate"].get("confirmed_experience") or [] if str(i.get("skill", "")).lower() != skill.lower()]
+        items.append({"skill": skill, "evidence": evidence, "group": group, "confirmed_on": date.today().isoformat()})
+        prof["candidate"]["confirmed_experience"] = items
+        self._write_profile(ws, prof)
+        return {"ok": True, "items": items}
+
+    def remove_confirmed_experience(self, skill: str) -> Dict[str, Any]:
+        ws = workspace_dir()
+        prof = self._read_profile(ws)
+        cand = prof.get("candidate") or {}
+        cand["confirmed_experience"] = [i for i in cand.get("confirmed_experience") or [] if str(i.get("skill", "")).lower() != str(skill or "").lower()]
+        if prof:
+            prof["candidate"] = cand
+            self._write_profile(ws, prof)
+        return {"ok": True, "items": cand["confirmed_experience"]}
+
     # ── LaTeX CV: edit the source, compile it, preview it as images, use it for applications ──
     def _pack_dir(self, job_id: str) -> Optional[Path]:
         from services import searches

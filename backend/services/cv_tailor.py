@@ -32,7 +32,7 @@ from typing import Any, Callable, Dict, List, Optional
 from . import cv_verifier, fit_scorer
 from .resume_audit import _mentions
 
-PROMPT_VERSION = "t2"
+PROMPT_VERSION = "t3"
 MAX_BULLETS_TOTAL = 14
 MAX_SKILLS = 24
 MAX_PROJECTS = 4
@@ -266,9 +266,11 @@ Return JSON:
   unless the CV says so. Do not mention job keywords the candidate has no evidence for.
 - experience: for EVERY role (exp_index 0..N) the list `keep` of bullet indices to show, most relevant to the job first.
   Keep up to 3–4 strong bullets per role so the 1-page resume stays rich and balanced; only drop bullets that are clearly off-topic.
-- rewrites: optional, at most 3. Re-phrase ONE existing bullet (exp_index, bullet_index) only to put the job's relevant
+- rewrites: optional, at most 6. Re-phrase ONE existing bullet (exp_index, bullet_index) only to put the job's relevant
   terms first, and only when it stays exactly as true and specific. KEEP every number and tool name of the original, add
   no new claim or soft-skill wording, and use only words already in the CV. When in doubt, do not rewrite.
+  Use rewrites where they help most: for each of the job's must-haves that the CV already supports, make sure a bullet near
+  the top of its role leads with that term (using the CV's own wording for it). Never write a requirement the CV does not show.
 - project_order: indices of the projects most relevant to this job, best first (max {MAX_PROJECTS}); omit irrelevant ones.
 - skills: the CV's skills reordered so the ones this job asks for come first. Use only skills from the SKILLS list.
 - keywords: the 10-15 most important skills/tools/terms THIS JOB asks for (whether or not the candidate has them).
@@ -453,7 +455,7 @@ def tailor_cv_safe(master: Dict[str, Any], jd_text: str, title: str = "", compan
 def _apply_plan(master: Dict[str, Any], plan: Dict[str, Any],
                 entailment_llm: Optional[Callable[[str], str]] = None):
     """Verify `plan` against the profile and build the tailored CV. Returns (TailoredCV, list of problems found)."""
-    base_text = cv_text(master)
+    base_text = cv_text(master) + "\n" + "\n".join(f"{c['skill']}: {c['evidence']}" for c in master.get("confirmed_experience") or [])
     cv = copy.deepcopy(master)
     changes: List[str] = []
     warnings: List[str] = []

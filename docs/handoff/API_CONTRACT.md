@@ -40,3 +40,12 @@ Same shape as today, now read from the Excel tracker (`backend/services/excel_tr
 | `reset_pack_latex(id)` | Deletes `cv.tex` and `cv_latex.pdf`; returns the freshly generated source like `get_pack_latex`. |
 
 Compiling needs Tectonic on the computer (`available: false` otherwise; the standard HTML CV keeps working). Page previews need `pypdfium2`.
+
+## Skills the candidate confirms (Documents tab, Evidence & Risk)
+| Method | Returns |
+|---|---|
+| `confirm_experience(skill, evidence, group="")` | Saves `{skill, evidence, group, confirmed_on}` under `candidate.confirmed_experience` in the profile. `skill` is 2-60 characters, `evidence` is the candidate's own sentence (20-500 characters). `{ok, items}` or `{ok: false, error}`. |
+| `list_confirmed_experience()` | `{ok, items}` |
+| `remove_confirmed_experience(skill)` | `{ok, items}` |
+
+This is the only path by which a skill that the resume does not show can reach a CV. The skill is listed in the chosen skill group (default "Additional skills") on CVs built afterwards; the evidence sentence is used to check claims and is never printed on the CV. The pack's `evidence_panel.keywords_confirmed` lists the job keywords that are met this way.

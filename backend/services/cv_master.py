@@ -187,6 +187,22 @@ def compute_bullet_metadata(bullet_text: str, role_idx: int, bullet_idx: int, sk
     }
 
 
+def confirmed_experience(candidate: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Skills the candidate confirmed themselves, each with their own sentence about where they used it. This is the ONLY way a
+    skill the resume does not show can reach the CV: the candidate states it, in their own words, with an explicit action."""
+    out = []
+    for item in candidate.get("confirmed_experience") or []:
+        if isinstance(item, dict) and str(item.get("skill") or "").strip() and len(str(item.get("evidence") or "").strip()) >= 20:
+            out.append({"skill": str(item["skill"]).strip(), "evidence": str(item["evidence"]).strip(),
+                        "group": str(item.get("group") or "").strip()})
+    return out
+
+
+def confirmed_evidence_text(master: Dict[str, Any]) -> str:
+    """The candidate's own sentences, for checking claims against; never printed on the CV."""
+    return "\n".join(f"{c['skill']}: {c['evidence']}" for c in master.get("confirmed_experience") or [])
+
+
 def build_structured_master(candidate: Dict[str, Any], resume_path: Optional[str] = None) -> Dict[str, Any]:
     """1.3: Build full structured master CV schema with optional sections and bullet metadata.
     The skill groups come from the real resume file when there is one (MASTER_RESUME_PATH): it is the source of truth for
@@ -197,6 +213,19 @@ def build_structured_master(candidate: Dict[str, Any], resume_path: Optional[str
         master["skill_groups"] = from_resume
         merged = [s for items in from_resume.values() for s in items]
         master["skills"] = list(dict.fromkeys(merged + list(master.get("skills") or [])))
+    confirmed = confirmed_experience(candidate)
+    if confirmed:
+        known = {x.lower() for x in master.get("skills") or []}
+        for item in confirmed:
+            if item["skill"].lower() not in known:
+                master["skills"] = list(master.get("skills") or []) + [item["skill"]]
+                known.add(item["skill"].lower())
+            groups = master.get("skill_groups")
+            if groups is not None and groups:
+                group = item.get("group") or "Additional skills"
+                if item["skill"].lower() not in {x.lower() for g in groups.values() for x in g}:
+                    groups.setdefault(group, []).append(item["skill"])
+        master["confirmed_experience"] = confirmed
     skills = master.get("skills") or []
     for i, exp in enumerate(master.get("experience") or []):
         exp["id"] = f"exp:{i}"

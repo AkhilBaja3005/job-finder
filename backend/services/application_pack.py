@@ -407,6 +407,7 @@ def build_pack(row: Dict[str, Any], candidate: dict, jd_text: str, *, level: Opt
         "prompt_version": getattr(cv_tailor, "PROMPT_VERSION", "v2"),
         "evidence_panel": {
             "keywords_found": kw_found,
+            "keywords_confirmed": [c["skill"] for c in master.get("confirmed_experience", []) if any(c["skill"].lower() in t.lower() or t.lower() in c["skill"].lower() for t in kw_found)],
             "keywords_missing": kw_missing,
             "requirements_gap": [jd_info["seniority"]["gap_note"]] if jd_info.get("seniority", {}).get("gap_note") else [],
             "knockouts": [f"{k['category']}: {k['evidence']}" for k in jd_info.get("knockouts", [])],

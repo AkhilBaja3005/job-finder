@@ -70,14 +70,14 @@
     $("#toasts").appendChild(el);
     setTimeout(() => el.remove(), kind === "bad" ? 6500 : 3200);
   }
-  function dialog({ title, body, confirm, danger, icon: ic }) {
+  function dialog({ title, body, confirm, danger, icon: ic, collect }) {
     return new Promise((resolve) => {
       const wrap = document.createElement("div");
       wrap.className = "scrim";
       wrap.innerHTML = '<div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-t">' +
         (ic ? '<div class="ic">' + icon(ic) + "</div>" : "") + '<h2 id="dlg-t">' + esc(title) + "</h2>" + body +
         '<div class="btns"><button class="btn" data-r="0">Cancel</button><button class="btn ' + (danger ? "danger" : "primary") + '" data-r="1">' + esc(confirm) + "</button></div></div>";
-      const done = (v) => { document.removeEventListener("keydown", onKey, true); wrap.remove(); resolve(v); };
+      const done = (v) => { if (v && collect) v = collect(wrap); document.removeEventListener("keydown", onKey, true); wrap.remove(); resolve(v); };
       const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); done(false); } };
       wrap.addEventListener("click", (e) => { const r = e.target.closest("[data-r]"); if (r) done(r.dataset.r === "1"); else if (e.target === wrap) done(false); });
       document.addEventListener("keydown", onKey, true);
@@ -685,12 +685,16 @@
           : "";
         const evCards = [
           ["Keywords Found", ev.keywords_found],
+          ["Confirmed by you", ev.keywords_confirmed],
           ["No Evidence (Never Added)", ev.keywords_missing],
           ["Requirements Gap", ev.requirements_gap],
           ["Knockouts", ev.knockouts],
           ["Alias Matches", ev.alias_matches],
           ["Entailment Results", ev.entailment_results],
-        ].map(([lbl, items]) => '<div class="ev-card"><h4>' + lbl + "</h4>" +
+        ].map(([lbl, items]) => lbl === "No Evidence (Never Added)"
+          ? '<div class="ev-card"><h4>' + lbl + '</h4><p class="help">These are not on your CV. If you really have one, say where you used it and it can be listed.</p>' +
+            (Array.isArray(items) && items.length ? "<ul>" + items.map((x) => '<li>' + esc(x) + ' <button class="btn quiet" data-act="confirm-skill" data-skill="' + esc(x) + '" data-id="' + esc(sel.id) + '">I have this</button></li>').join("") + "</ul>" : '<span class="help">None</span>') + "</div>"
+          : '<div class="ev-card"><h4>' + lbl + "</h4>" +
           (Array.isArray(items) && items.length ? "<ul>" + items.map((x) => "<li>" + esc(x) + "</li>").join("") + "</ul>" : '<span class="help">None</span>') +
           "</div>").join("");
         content = scoreHtml + flagsHtml + '<div class="evidence-grid">' + evCards + "</div>";
@@ -1269,6 +1273,20 @@
           Object.assign(S.run, { kind: "prepare", running: true, offset: 0, lines: [], exit: null, started: true, counts: { found: 1, position: 0, submitted: 0, needs_review: 0, skipped: 0 } });
           S.stick = true; watchRun();
         }
+        return;
+      }
+      case "confirm-skill": {
+        const ok = await dialog({
+          title: "Do you have " + d.skill + "?",
+          icon: "alert", confirm: "Add to my profile",
+          body: '<p class="help">Only say yes if it is true. Write one or two sentences about where you used it, in your own words. They are kept in your profile as your evidence, are not printed on the CV, and the skill is then listed on CVs built from now on.</p>' +
+                '<div class="field"><label for="cs-ev">Where did you use ' + esc(d.skill) + '?</label><textarea class="input" id="cs-ev" rows="3" maxlength="500" placeholder="e.g. Built an iOS prototype in ' + esc(d.skill) + ' during my MSc coursework."></textarea></div>',
+          collect: (wrap) => ({ evidence: ($("#cs-ev", wrap) || {}).value || "" }),
+        });
+        if (!ok) return;
+        const r = await call("confirm_experience", d.skill, ok.evidence, "");
+        if (r && r.ok) { toast(d.skill + " added to your profile. Regenerate the pack to use it."); await loadDocuments(d.id); }
+        else toast((r && r.error) || "Could not save.", "bad");
         return;
       }
       case "latex-open": case "latex-reset": {
